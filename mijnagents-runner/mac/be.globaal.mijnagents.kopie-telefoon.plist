@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MacGesprekkenKopie, set telefoon (ontwerp dagvaststelling v2.0, fase 2): het enige programma met Full Disk Access.
+     Geen schema: De Belwacht start deze taak met launchctl kickstart, zodat de helper zelf het
+     verantwoordelijke proces is. Plaatsen en laden: mac/uitrol_mac_gesprekken.sh. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>be.globaal.mijnagents.kopie-telefoon</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/mehdichegini/Library/Application Support/mijnagents/mac-gesprekken/MacGesprekkenKopie</string>
+    <string>telefoon</string>
+  </array>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/kopie-telefoon.log</string>
+  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/kopie-telefoon.log</string>
+</dict></plist>

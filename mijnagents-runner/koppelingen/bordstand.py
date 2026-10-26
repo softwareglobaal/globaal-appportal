@@ -9,17 +9,62 @@ niet lezen. Na zijn ronde vraagt de runner het hier over ssh na; pas als beide v
 
     bordstand.py <naam>           JSON op stdout: status en kennisdatum
     bordstand.py <naam> --ronde   ook twee geëxtraheerde ronde-ID's, nooit detail of kennistekst
+    bordstand.py --gesprekken <kanaal> <van> <tot>
+                                  per rij van dat kanaal in de gesprekkentabel (datum van..tot) een vingerafdruk en
+                                  dubbel_van, nooit de andere velden: zo leest De WhatsApp-wacht of De Belwacht op de
+                                  Mac terug wat ze schreef, zonder dat namen over ssh terugkomen (ontwerp
+                                  dagvaststelling v2.0, fase 2)
 """
+import hashlib
 import json
 import os
 import re
 import sqlite3
 import sys
+from datetime import date
 
 DB = os.environ.get("AGENTS_DB", os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db"))
 NAAM = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 STATUS_RONDE = re.compile(r"(?:^|; )ronde-id:([0-9a-f]{32})$")
 KENNIS_RONDE = re.compile(r"^ronde-id-([0-9a-f]{32}): 0 tekens, e3b0c442$", re.M)
+
+
+# De rijen van een kanaal in de gesprekkentabel, op hun voorvoegsel (contract met dagbundelaar.kanaal_van_dag).
+KANALEN = {"whatsapp": ("whatsapp:", "whatsapp-oproep:", "dekking:whatsapp:"),
+           "telefoon": ("telefoon:", "dekking:telefoon:")}
+VELDEN = ("datum", "start", "minuten", "personen", "thema", "prive", "bron", "dubbel_van")
+
+
+def vingerafdruk(rij):
+    """De velden van een rij zoals /api/gesprekken ze opslaat (minuten en prive als getal, de rest als tekst), als
+    korte hash. De Mac rekent dezelfde hash over wat hij stuurde."""
+    def waarde(v):
+        x = rij.get(v)
+        if v == "minuten":
+            return str(int(x or 0))
+        if v == "prive":
+            return "1" if x else "0"
+        return "" if x is None else str(x)
+    return hashlib.sha256("\x1f".join(waarde(v) for v in VELDEN).encode()).hexdigest()[:16]
+
+
+def gesprekken(kanaal, van, tot, db=None):
+    """{uniek: {"v": vingerafdruk, "d": dubbel_van}} voor de rijen van een kanaal met datum van tot en met tot. dubbel_van
+    draagt geen namen (leeg, buiten:gemist, buiten:dekking, buiten:vervallen)."""
+    if kanaal not in KANALEN:
+        raise ValueError("geen kanaal")
+    van, tot = date.fromisoformat(van).isoformat(), date.fromisoformat(tot).isoformat()
+    voorvoegsels = KANALEN[kanaal]
+    waar = " OR ".join("substr(uniek, 1, ?) = ?" for _ in voorvoegsels)
+    args = [x for v in voorvoegsels for x in (len(v), v)]
+    con = sqlite3.connect(f"file:{db or DB}?mode=ro", uri=True)
+    try:
+        rijen = con.execute("SELECT uniek, datum, start, minuten, personen, thema, prive, bron, "
+                            "COALESCE(dubbel_van, '') FROM gesprek_log WHERE datum BETWEEN ? AND ? AND (" + waar + ")",
+                            (van, tot, *args)).fetchall()
+    finally:
+        con.close()
+    return {r[0]: {"v": vingerafdruk(dict(zip(VELDEN, r[1:]))), "d": r[-1]} for r in rijen}
 
 
 def _enige_ronde(tekst, patroon):
@@ -47,6 +92,9 @@ def stand(naam, db=None, met_ronde=False):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 5 and sys.argv[1] == "--gesprekken":
+        print(json.dumps(gesprekken(*sys.argv[2:5]), sort_keys=True))
+        sys.exit(0)
     if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "--ronde"):
         print(__doc__, file=sys.stderr)
         sys.exit(2)

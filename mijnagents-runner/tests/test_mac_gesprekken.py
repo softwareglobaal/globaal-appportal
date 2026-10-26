@@ -1,0 +1,691 @@
+"""De WhatsApp-wacht en De Belwacht op de Mac (ontwerp docs/ontwerp-dagvaststelling.md v2.0, fase 2).
+
+Legt vast, zonder netwerk, zonder bord en zonder de echte databanken (alles in een tijdelijke map):
+- alleen toegelaten kolommen: geen vraag en geen helper leest ZTEXT, voorbeeldtekst, media of status (Codex P1);
+- WhatsApp: per gesprek per dag een rij met berichten in en uit; groeps-, systeem- en oproepmeldingen tellen niet; een
+  groep heet 'groep: naam'; uitzendlijsten en status tellen niet;
+- WhatsApp-oproepen: met wie (deelnemer, oproepmelding of beller), een gemiste oproep met buiten:gemist, dezelfde
+  oproep-ID kort na elkaar is een oproep, ver uit elkaar twee (P6);
+- iPhone: naam via het adresboek in elk nummerformaat, een onbekend nummer als nummer, WhatsApp en andere apps
+  overgeslagen, FaceTime telt;
+- dekking alleen voor een dag die voorbij is, zelf gegevens toont en waarna de bron nog iets kreeg (P4);
+- het uur dat bij de wintertijd twee keer voorkomt, krijgt de UTC-afstand en De Dagbundelaar leest het juist (P5);
+- na een lange slaap leest een ronde tot zestig dagen terug (P7), en De Dagbundelaar haalt zulke dagen in;
+- schrijven en teruglezen: een verschil is een fout, een verdwenen rij wordt vervallen, te veel verdwenen stopt (P9);
+- de kopie hoort bij de eigen aanvraag (P9), een weigering van macOS is een nood voor Mehdi;
+- het contract met De Dagbundelaar: het overzicht toont 'WhatsApp: N berichten ... gezien' en 'telefoon: ... gezien',
+  zonder een naam; zonder dekking 'onbekend';
+- de runners: door de gedeelde ronde (N12), geen naam of nummer in hartslag of werkverslag, de ronde-ID in kennis en
+  hartslag, N4 vergelijkt die ID bij elke cadans (P8);
+- de helper zelf (alleen op een Mac met cc): leest de WAL mee (P2), schrijft geen tekstkolom, weigert een symlink en
+  meldt een ander schema als onverwacht.
+Draaien: python3 mijnagents-runner/tests/test_mac_gesprekken.py
+"""
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import traceback
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+HIER = Path(__file__).resolve().parent
+RUNNER = HIER.parent
+sys.path.insert(0, str(RUNNER))
+sys.path.insert(0, str(RUNNER / "koppelingen"))
+_argv, sys.argv = sys.argv, [sys.argv[0]]
+import bord  # noqa: E402
+import bordstand  # noqa: E402
+import controle_agenten as CONTROLE  # noqa: E402
+import dagbundelaar as D  # noqa: E402
+import dagvaststelling as V  # noqa: E402
+import mac_gesprekken as M  # noqa: E402
+import belwacht as BEL  # noqa: E402
+import whatsapp_wacht as WA  # noqa: E402
+sys.argv = _argv
+
+BRUSSEL = M.BRUSSEL
+HELPER_C = RUNNER / "mac" / "kopie" / "macgesprekken_kopie.c"
+VERBODEN = ("ZTEXT", "ZLASTMESSAGETEXT", "ZMEDIA", "ZTHUMBNAIL", "ZVCARD", "ZABOUTTEXT", "ZSAVEDINPUT", "ZCONTENT",
+            "ZTITLE", "ZSUMMARY", "ZMATCHEDTEXT", "ZPUSHNAME", "ZNOTES", "ZMETADATA")
+JAN, PIET, GROEP = "Jan Proef", "Piet Proef", "Werfgroep Proef"
+
+
+def bxl(*args):
+    return datetime(*args, tzinfo=BRUSSEL)
+
+
+def a(t):
+    return M.apple(t)
+
+
+def maak_whatsapp(pad, berichten=(), sessies=(), oproepen=(), aggregaten=(), deelnemers=(), contacten=(), nieuwste=None):
+    """Een uitvoer van de helper voor de set whatsapp, met dezelfde tabellen en kolommen."""
+    con = sqlite3.connect(pad)
+    con.executescript("""
+        CREATE TABLE ZWAMESSAGE(ZCHATSESSION, ZMESSAGEDATE, ZISFROMME, ZMESSAGETYPE, ZSTANZAID);
+        CREATE TABLE ZWACHATSESSION(Z_PK, ZCONTACTJID, ZPARTNERNAME, ZSESSIONTYPE);
+        CREATE TABLE ZWACDCALLEVENT(Z_PK, ZCALLIDSTRING, ZDATE, ZDURATION, Z1CALLEVENTS, ZGROUPCALLCREATORUSERJIDSTRING,
+                                    ZGROUPJIDSTRING);
+        CREATE TABLE ZWAAGGREGATECALLEVENT(Z_PK, ZINCOMING, ZMISSED, ZVIDEO);
+        CREATE TABLE ZWACDCALLEVENTPARTICIPANT(Z_PK, Z1PARTICIPANTS, ZJIDSTRING);
+        CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER);
+        CREATE TABLE META(sleutel, waarde);""")
+    con.executemany("INSERT INTO ZWAMESSAGE VALUES(?,?,?,?,?)", berichten)
+    con.executemany("INSERT INTO ZWACHATSESSION VALUES(?,?,?,?)", sessies)
+    con.executemany("INSERT INTO ZWACDCALLEVENT VALUES(?,?,?,?,?,?,?)", oproepen)
+    con.executemany("INSERT INTO ZWAAGGREGATECALLEVENT VALUES(?,?,?,?)", aggregaten)
+    con.executemany("INSERT INTO ZWACDCALLEVENTPARTICIPANT VALUES(?,?,?)", deelnemers)
+    con.executemany("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(?,?,?,?,?)", contacten)
+    con.execute("INSERT INTO META VALUES('nieuwste', ?)", (nieuwste,))
+    con.commit()
+    con.close()
+    return pad
+
+
+def maak_telefoon(pad, oproepen=(), contacten=(), nieuwste=None):
+    con = sqlite3.connect(pad)
+    con.executescript("""
+        CREATE TABLE ZCALLRECORD(ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, ZSERVICE_PROVIDER);
+        CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER);
+        CREATE TABLE META(sleutel, waarde);""")
+    con.executemany("INSERT INTO ZCALLRECORD VALUES(?,?,?,?,?,?,?)", oproepen)
+    con.executemany("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(?,?,?,?,?)", contacten)
+    con.execute("INSERT INTO META VALUES('nieuwste', ?)", (nieuwste,))
+    con.commit()
+    con.close()
+    return pad
+
+
+DAG = "2026-10-22"
+DAGEN = ["2026-10-21", DAG, "2026-10-23"]
+
+
+def whatsapp_wereld(map_):
+    """Een dag met twee gesprekken, een groep, een uitzendlijst, meldingen en vier oproepen."""
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0), (2, "123-456@g.us", GROEP, 1),
+               (3, "status@broadcast", "Status", 3), (4, "900000000000001@lid", "", 0)]
+    berichten = [
+        (1, a(bxl(2026, 10, 22, 9, 14)), 0, 0, None), (1, a(bxl(2026, 10, 22, 9, 20)), 1, 0, None),
+        (1, a(bxl(2026, 10, 22, 18, 2)), 1, 1, None),
+        (1, a(bxl(2026, 10, 22, 12, 0)), 0, 59, "OPROEP2"),          # melding van een oproep: geen bericht
+        (1, a(bxl(2026, 10, 22, 12, 1)), 0, 10, None),               # systeemmelding: geen bericht
+        (2, a(bxl(2026, 10, 22, 10, 0)), 0, 0, None), (2, a(bxl(2026, 10, 22, 10, 5)), 0, 6, None),
+        (3, a(bxl(2026, 10, 22, 11, 0)), 0, 0, None),                # status telt niet
+        (4, a(bxl(2026, 10, 21, 23, 59)), 0, 0, None),               # andere dag (Brussel)
+        (4, a(bxl(2026, 10, 22, 0, 1)), 1, 0, None),
+    ]
+    oproepen = [
+        (11, "OPROEP1", a(bxl(2026, 10, 22, 11, 0)), 300.0, 21, None, None),      # deelnemer, beantwoord
+        (12, "OPROEP2", a(bxl(2026, 10, 22, 12, 0)), 0.0, 22, None, None),        # gemist, via de melding
+        (13, "OPROEP3", a(bxl(2026, 10, 22, 13, 0)), 50.0, 23, "900000000000002@lid", None),   # inkomend, beller
+        (14, "OPROEP3", a(bxl(2026, 10, 22, 13, 5)), 70.0, 23, "900000000000002@lid", None),   # opnieuw verbonden
+        (15, "OPROEP3", a(bxl(2026, 10, 23, 9, 0)), 60.0, 24, "900000000000002@lid", None),    # dezelfde ID, later
+        (16, "OPROEP4", a(bxl(2026, 10, 22, 14, 0)), 600.0, 25, None, "123-456@g.us"),        # groepsoproep
+    ]
+    aggregaten = [(21, 0, 0, 0), (22, 1, 1, 0), (23, 1, 0, 1), (24, 1, 0, 0), (25, 0, 0, 0)]
+    deelnemers = [(31, 11, "900000000000003@lid")]
+    contacten = [(41, PIET, "32470000003@s.whatsapp.net", "900000000000003@lid", "+32470000003"),
+                 (42, "Kees Proef", "32470000002@s.whatsapp.net", "900000000000002@lid", "+32470000002")]
+    return maak_whatsapp(os.path.join(map_, "wa.sqlite"), berichten, sessies, oproepen, aggregaten, deelnemers,
+                         contacten, nieuwste=a(bxl(2026, 10, 23, 20, 0)))
+
+
+def telefoon_wereld(map_):
+    oproepen = [
+        ("U1", a(bxl(2026, 10, 22, 8, 0)), 125.0, 1, 0, "0470000001", "com.apple.Telephony"),
+        ("U2", a(bxl(2026, 10, 22, 9, 0)), 0.0, 0, 0, "+32 470 00 00 02", "com.apple.Telephony"),
+        ("U3", a(bxl(2026, 10, 22, 10, 0)), 60.0, 0, 1, "+32470000099", "com.apple.Telephony"),
+        ("U4", a(bxl(2026, 10, 22, 11, 0)), 300.0, 0, 1, "+32470000001", "net.whatsapp.WhatsApp"),
+        ("U5", a(bxl(2026, 10, 22, 12, 0)), 30.0, 1, 0, "470000002", "com.apple.FaceTime"),
+        ("U6", a(bxl(2026, 10, 22, 13, 0)), 0.0, 1, 0, "", "com.apple.Telephony"),
+    ]
+    contacten = [(1, JAN, "", "", "+32470000001"), (2, PIET, "", "", "+32470000002")]
+    return maak_telefoon(os.path.join(map_, "tel.sqlite"), oproepen, contacten, nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+
+
+# ------------------------------------------------------------------------------------------- kolommen ---
+def test_geen_tekstkolom_in_vragen_of_helper():
+    alles = " ".join(M.SQL)
+    for kolom in VERBODEN:
+        assert kolom not in alles, kolom
+    bron = HELPER_C.read_text(encoding="utf-8")
+    vragen = re.findall(r'"([^"\n]*(?:SELECT|CREATE)[^"\n]*)"', bron)
+    assert vragen, "geen vragen gevonden in de helper"
+    for kolom in VERBODEN:
+        assert not any(kolom in v for v in vragen), kolom
+    # ZSTANZAID alleen van de oproepmelding
+    assert "CASE WHEN ZMESSAGETYPE = 59 THEN ZSTANZAID END" in bron
+    try:
+        M.lees(":memory:", "SELECT ZTEXT FROM ZWAMESSAGE")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("een vreemde vraag werd aanvaard")
+
+
+# ------------------------------------------------------------------------------------------- WhatsApp ---
+def test_whatsapp_berichten_per_gesprek_per_dag():
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, info = M.whatsapp_rijen(whatsapp_wereld(map_), DAGEN)
+    chats = {r["uniek"]: r for r in rijen if r["uniek"].startswith("whatsapp:")}
+    jan = chats["whatsapp:" + hashlib.sha1(b"32470000001@s.whatsapp.net").hexdigest() + ":" + DAG]
+    assert jan["thema"] == "3 berichten (1 in, 2 uit), 09:14 tot 18:02", jan
+    assert jan["personen"] == JAN and jan["start"] == "09:14" and jan["minuten"] == 0 and jan["prive"] == 1
+    assert jan["bron"] == "whatsapp" and jan["dubbel_van"] == ""
+    assert V._berichten(jan) == 3 and V.soort(jan) == "chat"
+    groep = [r for r in chats.values() if r["personen"] == "groep: " + GROEP]
+    assert len(groep) == 1 and groep[0]["thema"].startswith("1 berichten (1 in, 0 uit)"), groep
+    assert not any("Status" in r["personen"] for r in rijen)
+    lid = [r for r in chats.values() if r["uniek"].startswith("whatsapp:" + hashlib.sha1(b"900000000000001@lid").hexdigest())]
+    assert sorted(r["datum"] for r in lid) == ["2026-10-21", DAG], lid
+    assert {r["personen"] for r in lid} == {"onbekend"}, lid
+    assert info["aanwezig"] == {"2026-10-21", DAG, "2026-10-23"}, info
+
+
+def test_whatsapp_oproepen():
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, _ = M.whatsapp_rijen(whatsapp_wereld(map_), DAGEN)
+    op = {r["uniek"]: r for r in rijen if r["uniek"].startswith("whatsapp-oproep:")}
+    een = op["whatsapp-oproep:OPROEP1"]
+    assert een["personen"] == PIET and een["minuten"] == 5 and een["dubbel_van"] == "" and V.soort(een) == "oproep"
+    assert een["thema"] == "WhatsApp-oproep, uitgaand", een
+    twee = op["whatsapp-oproep:OPROEP2"]
+    assert twee["personen"] == JAN and twee["dubbel_van"] == M.GEMIST and twee["thema"].endswith("gemist"), twee
+    drie = op["whatsapp-oproep:OPROEP3"]
+    assert drie["personen"] == "Kees Proef" and drie["minuten"] == 2 and drie["start"] == "13:00", drie
+    assert "video" in drie["thema"]
+    later = op["whatsapp-oproep:OPROEP3-15"]
+    assert later["datum"] == "2026-10-23" and later["minuten"] == 1, later
+    vier = op["whatsapp-oproep:OPROEP4"]
+    assert vier["personen"] == "groep: " + GROEP and vier["minuten"] == 10, vier
+
+
+# ------------------------------------------------------------------------------------------- telefoon ---
+def test_telefoon_namen_nummers_en_diensten():
+    with tempfile.TemporaryDirectory() as map_:
+        pad = telefoon_wereld(map_)
+        rijen, info = M.telefoon_rijen(pad, DAGEN)
+        zonder, _ = M.telefoon_rijen(pad, DAGEN, onbekend_als_nummer=False)
+    op = {r["uniek"]: r for r in rijen}
+    assert op["telefoon:U1"]["personen"] == JAN and op["telefoon:U1"]["minuten"] == 2
+    assert op["telefoon:U1"]["thema"] == "telefoon, uitgaand"
+    assert op["telefoon:U2"]["personen"] == PIET and op["telefoon:U2"]["dubbel_van"] == M.GEMIST
+    assert op["telefoon:U2"]["thema"] == "telefoon, inkomend, gemist"
+    assert op["telefoon:U3"]["personen"] == "+32470000099"
+    assert "telefoon:U4" not in op and info["overgeslagen"] == 1
+    assert op["telefoon:U5"]["personen"] == PIET and op["telefoon:U5"]["thema"] == "FaceTime, uitgaand"
+    assert op["telefoon:U6"]["personen"] == "nummer verborgen" and op["telefoon:U6"]["thema"].endswith("niet beantwoord")
+    assert {r["uniek"]: r["personen"] for r in zonder}["telefoon:U3"] == "onbekend nummer"
+    assert all(r["prive"] == 1 and r["bron"] == "telefoon" for r in rijen)
+    assert DAG in info["aanwezig"] and "2026-10-21" not in info["aanwezig"]
+
+
+def test_nummer_sleutel():
+    for vorm in ("+32 470 00 00 01", "0470000001", "470000001", "0032470000001", "+32-470-00.00.01"):
+        assert M.nummer_sleutel(vorm) == "470000001", vorm
+
+
+# --------------------------------------------------------------------------------------------- dekking ---
+def test_dekking_alleen_met_gegevens_tijdens_de_dag():
+    gekopieerd = bxl(2026, 10, 24, 9, 0)
+    nieuwste = bxl(2026, 10, 23, 20, 0)
+    dagen = ["2026-10-20", "2026-10-21", DAG, "2026-10-23", "2026-10-24"]
+    gedekt = [r["datum"] for r in M.dekking("whatsapp", dagen, gekopieerd, nieuwste, {"2026-10-21", DAG, "2026-10-23"})]
+    # 20-10 zonder gegevens (de Mac sliep): onbekend; 23-10: de bron kreeg daarna niets meer; 24-10: niet voorbij
+    assert gedekt == ["2026-10-21", DAG], gedekt
+    rij = M.dekking("telefoon", [DAG], gekopieerd, nieuwste, {DAG})[0]
+    assert rij["uniek"] == f"dekking:telefoon:{DAG}" and rij["bron"] == "dekking" and rij["dubbel_van"] == M.DEKKING
+    assert M.dekking("whatsapp", dagen, gekopieerd, None, set(dagen)) == []
+
+
+# ------------------------------------------------------------------------------------------ zomertijd ---
+def test_wintertijd_uur_twee_keer():
+    eerste = datetime(2026, 10, 25, 0, 30, tzinfo=timezone.utc)      # 02:30 zomertijd
+    tweede = datetime(2026, 10, 25, 1, 30, tzinfo=timezone.utc)      # 02:30 wintertijd
+    assert M.start_van(eerste) == "02:30+02:00" and M.start_van(tweede) == "02:30+01:00"
+    assert M.start_van(datetime(2026, 10, 25, 13, 0, tzinfo=timezone.utc)) == "14:00"
+    assert M.start_van(datetime(2026, 3, 29, 1, 30, tzinfo=timezone.utc)) == "03:30"   # na de sprong, gewoon
+    g1 = {"datum": "2026-10-25", "start": M.start_van(eerste), "minuten": 5}
+    g2 = {"datum": "2026-10-25", "start": M.start_van(tweede), "minuten": 5}
+    assert V.gesprek_venster(g1)[0] == eerste and V.gesprek_venster(g2)[0] == tweede
+    afspraak = {"start": "2026-10-25T02:30:00+01:00", "einde": "2026-10-25T02:40:00+01:00"}
+    assert not V.overlapt(V.afspraak_venster(afspraak), V.gesprek_venster(g1), marge=timedelta(0))
+    assert V.overlapt(V.afspraak_venster(afspraak), V.gesprek_venster(g2), marge=timedelta(0))
+    assert V.gesprek_tekst({**g2, "bron": "telefoon", "uniek": "telefoon:x", "prive": 1}).startswith("02:30 telefoon")
+
+
+# ------------------------------------------------------------------------------------------ inhalen ---
+def test_dagen_en_inhalen_na_lange_slaap():
+    nu = bxl(2026, 10, 26, 10, 0)
+    assert M.dagen(nu)[0] == "2026-10-13" and M.dagen(nu)[-1] == "2026-10-26" and len(M.dagen(nu)) == 14
+    assert M.dagen(nu, "2026-10-01")[0] == "2026-10-02"
+    assert M.dagen(nu, "2026-07-01")[0] == "2026-08-28" and len(M.dagen(nu, "2026-07-01")) == M.INHAAL
+    assert M.dagen(nu, "2026-10-25")[0] == "2026-10-13"
+    assert M.dagen(nu, "onzin")[0] == "2026-10-13"
+
+
+def test_dagbundelaar_haalt_dagen_in():
+    with tempfile.TemporaryDirectory() as map_:
+        oud_staat, oud_inhaal, oud_lees = D.STAAT, D.INHAALSTAAT, bord.db_lees
+        D.STAAT, D.INHAALSTAAT = os.path.join(map_, "staat.json"), os.path.join(map_, "inhaal.json")
+        nu = datetime(2026, 10, 26, 23, 30, tzinfo=timezone.utc)
+        venster = V.venster(nu, 14)
+        vroeger = (nu - timedelta(days=3)).isoformat()
+        later = (nu - timedelta(hours=1)).isoformat()
+        vragen = []
+
+        def lees(sql, args=()):
+            vragen.append((sql, args))
+            return [{"datum": "2026-10-01", "ts": later}, {"datum": "2026-10-02", "ts": vroeger},
+                    {"datum": "2026-10-03", "ts": later}] + [{"datum": f"2026-09-{d:02d}", "ts": later} for d in range(1, 9)]
+
+        try:
+            bord.db_lees = lees
+            with open(D.STAAT, "w") as f:
+                json.dump({"2026-10-02": {"ts": (nu - timedelta(days=1)).isoformat()},
+                           "2026-10-03": {"ts": (nu - timedelta(days=1)).isoformat()}}, f)
+            with open(D.INHAALSTAAT, "w") as f:
+                json.dump({"2026-10-03": nu.isoformat()}, f)
+            uit = D.inhaaldagen(nu, venster)
+        finally:
+            D.STAAT, D.INHAALSTAAT, bord.db_lees = oud_staat, oud_inhaal, oud_lees
+    assert "bron = 'dekking'" in vragen[0][0] and vragen[0][1][1] == "2026-10-12", vragen
+    # 02-10 al vastgesteld na de dekking, 03-10 al ingehaald; de rest nieuwste eerst, hoogstens zeven
+    assert uit == ["2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08", "2026-10-01"], uit
+
+
+# --------------------------------------------------------------------------------------- het contract ---
+def test_dagoverzicht_toont_gezien_zonder_namen():
+    with tempfile.TemporaryDirectory() as map_:
+        wa, wa_info = M.whatsapp_rijen(whatsapp_wereld(map_), DAGEN)
+        tel, tel_info = M.telefoon_rijen(telefoon_wereld(map_), DAGEN)
+    gekopieerd = bxl(2026, 10, 24, 9, 0)
+    rijen = (wa + M.dekking("whatsapp", DAGEN, gekopieerd, wa_info["nieuwste"], wa_info["aanwezig"])
+             + tel + M.dekking("telefoon", DAGEN, gekopieerd, tel_info["nieuwste"], tel_info["aanwezig"]))
+    # zoals dagbundelaar.vastleggen de dekking leest
+    gedekt = {(x["uniek"].split(":")[1], x["datum"]) for x in rijen if x["uniek"].startswith("dekking:")}
+    kanalen = {k: D.kanaal_van_dag("aangesloten", k, DAG, gedekt) for k in ("whatsapp", "telefoon")}
+    assert kanalen == {"whatsapp": "aangesloten", "telefoon": "aangesloten"}, kanalen
+    v = V.vaststellen(DAG, [], [], rijen, {}, [], "volledig", None, kanalen, lambda a: False, "afgesloten")
+    tekst = V.tekst(v)
+    # Jan Proef 3, de groep 1, het LID-gesprek 1 (00:01 Brussel); de oproepen met duur: 5, 2 en 10 min
+    assert "- WhatsApp: 5 berichten in 3 gesprekken, 3 oproepen, 17 min gezien" in tekst, tekst
+    assert "- telefoon: 3 oproepen, 4 min gezien" in tekst, tekst
+    for naam in (JAN, PIET, GROEP, "Kees Proef", "+32470000099"):
+        assert naam not in tekst, naam
+    # niet gepland: een WhatsApp- of telefoonoproep van minstens twee minuten, als privé
+    assert "11:00 WhatsApp-oproep, 5 min, privé" in tekst and "08:00 telefoon, 2 min, privé" in tekst, tekst
+    # een dag zonder dekking is onbekend, nooit nul
+    leeg = {k: D.kanaal_van_dag("aangesloten", k, "2026-10-20", gedekt) for k in ("whatsapp", "telefoon")}
+    t2 = V.tekst(V.vaststellen("2026-10-20", [], [], rijen, {}, [], "volledig", None, leeg, lambda a: False))
+    assert "- WhatsApp: onbekend (onbekend voor deze dag)" in t2 and "- telefoon: onbekend (onbekend voor deze dag)" in t2
+
+
+# ---------------------------------------------------------------------------------- schrijven en terug ---
+class NepBord:
+    def __init__(self):
+        self.tabel, self.oproepen = {}, []
+
+    def call(self, pad, payload=None):
+        self.oproepen.append(pad)
+        if pad == "/api/gesprekken":
+            for r in payload["rijen"]:
+                self.tabel[r["uniek"]] = dict(r)
+            return {"ok": True, "rijen": len(payload["rijen"])}
+        if pad == "/api/gesprekken/koppel":
+            for k in payload["koppelingen"]:
+                self.tabel[k["uniek"]]["dubbel_van"] = k["dubbel_van"]
+            return {"ok": True}
+        raise AssertionError(pad)
+
+    def terug(self, kanaal, van, tot):
+        return {u: {"v": bordstand.vingerafdruk(r), "d": r.get("dubbel_van") or ""} for u, r in self.tabel.items()
+                if van <= r["datum"] <= tot and u.startswith(bordstand.KANALEN[kanaal])}
+
+
+def rij(uniek, dag=DAG, **x):
+    return {"uniek": uniek, "datum": dag, "start": "10:00", "minuten": 1, "personen": "Jan Proef", "thema": "t",
+            "prive": 1, "bron": "telefoon", "dubbel_van": "", **x}
+
+
+def test_schrijven_teruglezen_en_vervallen():
+    b = NepBord()
+    rijen = [rij(f"telefoon:{i}") for i in range(10)]
+    assert M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug) == 0
+    # een rij die de bron niet meer toont, wordt vervallen; ze komt terug als de bron ze weer toont
+    assert M.schrijf_en_lees_terug("telefoon", rijen[:9], DAG, DAG, b.call, b.terug) == 1
+    assert b.tabel["telefoon:9"]["dubbel_van"] == M.VERVALLEN
+    assert M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug) == 0
+    assert b.tabel["telefoon:9"]["dubbel_van"] == ""
+    # een rij van een ander kanaal of buiten het venster blijft ongemoeid
+    b.tabel["whatsapp:x:" + DAG] = rij("whatsapp:x:" + DAG, bron="whatsapp")
+    b.tabel["telefoon:oud"] = rij("telefoon:oud", dag="2026-09-01")
+    assert M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug) == 0
+    # te veel verdwenen rijen: niets markeren, stoppen (P9)
+    voor = list(b.oproepen)
+    try:
+        M.schrijf_en_lees_terug("telefoon", rijen[:2], DAG, DAG, b.call, b.terug)
+    except M.MacFout as e:
+        assert "niets als vervallen" in e.nood
+    else:
+        raise AssertionError("te veel vervallen rijen werden gemarkeerd")
+    assert "/api/gesprekken/koppel" not in b.oproepen[len(voor):]
+    # het bord bewaart iets anders: een fout
+    slecht = NepBord()
+    slecht.terug = lambda k, v, t: {}
+    try:
+        M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, slecht.call, slecht.terug)
+    except M.MacFout as e:
+        assert e.nood == "Gesprekkentabel gaf de rijen niet terug zoals geschreven"
+    else:
+        raise AssertionError("verschil niet gezien")
+
+
+def test_bordstand_gesprekken_uit_de_databank():
+    with tempfile.TemporaryDirectory() as map_:
+        db = os.path.join(map_, "bord.db")
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE gesprek_log(uniek TEXT PRIMARY KEY, datum, start, minuten INTEGER, personen, thema, "
+                    "prive INTEGER, bron, ts, dubbel_van TEXT DEFAULT '')")
+        geschreven = [rij("telefoon:1"), rij("dekking:telefoon:" + DAG, bron="dekking", dubbel_van=M.DEKKING),
+                      rij("whatsapp-oproep:9", bron="whatsapp")]
+        for r in geschreven:
+            con.execute("INSERT INTO gesprek_log VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (r["uniek"], r["datum"], r["start"], r["minuten"], r["personen"], r["thema"],
+                         r["prive"], r["bron"], "nu", r["dubbel_van"]))
+        con.commit()
+        con.close()
+        uit = bordstand.gesprekken("telefoon", DAG, DAG, db)
+        uitvoer = subprocess.run([sys.executable, str(RUNNER / "koppelingen" / "bordstand.py"), "--gesprekken",
+                                  "telefoon", DAG, DAG], env={**os.environ, "AGENTS_DB": db}, capture_output=True,
+                                 text=True, check=True).stdout
+    assert set(uit) == {"telefoon:1", "dekking:telefoon:" + DAG}, uit
+    assert uit["telefoon:1"]["v"] == bordstand.vingerafdruk(geschreven[0]) and uit["dekking:telefoon:" + DAG]["d"] == M.DEKKING
+    assert json.loads(uitvoer) == uit and "Jan Proef" not in uitvoer
+
+
+# ---------------------------------------------------------------------------------------------- kopie ---
+def test_kopie_hoort_bij_de_eigen_aanvraag():
+    with tempfile.TemporaryDirectory() as map_:
+        klok = [1000.0]
+
+        def tik(_):
+            klok[0] += 1
+
+        def helper(uitkomst="ok", bronnen=None, aanvraag=None):
+            def start():
+                id_ = aanvraag or Path(map_, "telefoon", "aanvraag").read_text()
+                Path(map_, "telefoon", "status.json").write_text(json.dumps(
+                    {"ts": 1000, "set": "telefoon", "aanvraag": id_, "uitkomst": uitkomst,
+                     "bronnen": bronnen or {"oproepen": uitkomst, "contacten": "ok"}}))
+                return True
+            return start
+
+        pad, ts = M.kopie_vragen("telefoon", kopie=map_, klok=lambda: klok[0], slaap=tik, start=helper())
+        assert pad == Path(map_, "telefoon", "gesprekken.sqlite") and ts == datetime.fromtimestamp(1000, timezone.utc)
+        assert os.stat(Path(map_, "telefoon", "aanvraag")).st_mode & 0o077 == 0
+        assert os.stat(Path(map_, "telefoon")).st_mode & 0o077 == 0
+        for start, nood, wie in ((helper(aanvraag="b" * 32), "MacGesprekkenKopie gaf geen verse kopie", "claude-code"),
+                                 (helper("geweigerd"), "MacGesprekkenKopie heeft geen volledige schijftoegang", "mehdi"),
+                                 (helper("onverwacht"), "Kopie van de databank op de Mac mislukt", "claude-code"),
+                                 (lambda: False, "MacGesprekkenKopie staat niet in launchd op de Mac", "claude-code")):
+            try:
+                M.kopie_vragen("telefoon", kopie=map_, klok=lambda: klok[0], slaap=tik, start=start)
+            except M.MacFout as e:
+                assert e.nood.startswith(nood) and e.wie == wie, (e.nood, e.wie)
+            else:
+                raise AssertionError(nood)
+
+
+# ---------------------------------------------------------------------------------------------- runners ---
+class NepRonde:
+    def __init__(self, werkwijze):
+        self.werkwijze, self.noden, self.bronnen, self.detail = werkwijze, [], {}, ""
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append((tekst, wie))
+
+    def bron(self, naam, inhoud):
+        self.bronnen[naam] = inhoud
+
+
+def _draai(module, wereld, kanaal):
+    werkwijze = (RUNNER / "werkwijze" / f"{module.NAAM}.md").read_text(encoding="utf-8")
+    b = NepBord()
+    hartslagen, log = [], []
+    with tempfile.TemporaryDirectory() as map_:
+        pad = wereld(map_)
+        r = NepRonde(werkwijze)
+        echt_call, echt_hartslag, echt_log = bord.call, module.ag.hartslag, module.ag.log
+        bord.call = b.call
+        module.ag.log = lambda *x, **k: log.append(module.ag.maskeer(" ".join(map(str, x))))
+        try:
+            uit = io.StringIO()
+            with redirect_stdout(uit):
+                gedekt = module.werk(r, "c" * 32, None, kopie_vragen=lambda k: (pad, bxl(2026, 10, 24, 9, 0)),
+                                     terug=b.terug)
+            hartslagen.append(module.ag.maskeer(r.detail))
+        finally:
+            bord.call, module.ag.log = echt_call, echt_log
+        assert not os.path.exists(pad), "de uitvoer van de helper blijft niet staan"
+    return r, b, gedekt, " ".join(hartslagen + log)
+
+
+def test_whatsapp_wacht_ronde_zonder_namen():
+    r, b, gedekt, gemeld = _draai(WA, whatsapp_wereld, "whatsapp")
+    assert r.detail.endswith("; ronde-id:" + "c" * 32) and r.bronnen["ronde-id-" + "c" * 32] == ""
+    assert gedekt == DAG and f"dekking:whatsapp:{DAG}" in b.tabel
+    assert any(u.startswith("whatsapp-oproep:") for u in b.tabel)
+    for naam in (JAN, PIET, GROEP, "Kees Proef", "32470000001"):
+        assert naam not in gemeld, naam
+    assert "gisteren" in r.detail and "berichten" in r.detail
+
+
+def test_belwacht_ronde_zonder_namen():
+    r, b, gedekt, gemeld = _draai(BEL, telefoon_wereld, "telefoon")
+    assert r.detail.endswith("; ronde-id:" + "c" * 32) and gedekt == DAG
+    assert "1 van andere apps overgeslagen" in r.detail
+    for naam in (JAN, PIET, "+32470000099", "0470000001"):
+        assert naam not in gemeld, naam
+    assert all(x["bron"] in ("telefoon", "dekking") for x in b.tabel.values())
+
+
+def test_zonder_grenzen_geen_kopie():
+    for module in (WA, BEL):
+        gevraagd = []
+        r = NepRonde("# Werkwijze zonder grenzen\n\nIk doe maar wat.\n")
+        try:
+            module.werk(r, "d" * 32, None, kopie_vragen=lambda k: gevraagd.append(k))
+        except M.MacFout:
+            pass
+        else:
+            raise AssertionError("ronde zonder grenzen ging door")
+        assert not gevraagd and r.noden == [("Werkwijze op het bord mist de veiligheidsgrenzen", "mehdi")]
+
+
+def test_taak_noemt_de_databank_en_runners_gaan_door_de_ronde():
+    for module in (WA, BEL):
+        assert "databank" in module.TAAK
+        bron = Path(module.__file__).read_text(encoding="utf-8")
+        assert "with ag.ronde(" in bron
+        assert CONTROLE._runnerpad(module.NAAM) == str(Path(module.__file__))
+        assert CONTROLE.n12_gebruikt_de_ronde({"naam": module.NAAM, "draait_op": "Mac"}, None)[0]
+    stand = D.kanaalstand({"status": "klaar", "taak": WA.TAAK, "ts": datetime.now(timezone.utc).isoformat()},
+                          datetime.now(timezone.utc))
+    assert stand == "aangesloten"
+    assert not (RUNNER / "mac" / "whatsapp_wacht.py").exists()
+
+
+def test_n4_vergelijkt_de_ronde_id_bij_elke_cadans():
+    vers = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    for naam in ("whatsapp-wacht", "belwacht"):
+        rij_ = {"naam": naam, "cadans": "elk uur als de Mac wakker is", "kennis_ts": vers, "draait_op": "Mac",
+                "kennis": f"werkwijze op het bord: 10 tekens, abcdef12\nronde-id-{'a' * 32}: 0 tekens, e3b0c442"}
+        con = sqlite3.connect(":memory:")
+        con.execute("CREATE TABLE status(naam TEXT PRIMARY KEY, status TEXT, ts TEXT, taak TEXT, detail TEXT)")
+        con.execute("INSERT INTO status VALUES(?,?,?,?,?)", (naam, "klaar", vers, "databank", f"x; ronde-id:{'a' * 32}"))
+        assert CONTROLE.n4_kennis_gemeld(rij_, con)[0]
+        con.execute("UPDATE status SET detail=?", (f"x; ronde-id:{'b' * 32}",))
+        assert not CONTROLE.n4_kennis_gemeld(rij_, con)[0]
+        con.execute("UPDATE status SET detail=?, status='fout'", (f"x; ronde-id:{'a' * 32}",))
+        assert not CONTROLE.n4_kennis_gemeld(rij_, con)[0]
+        oud = (datetime.now(timezone.utc) - timedelta(days=9)).isoformat()
+        con.execute("UPDATE status SET status='klaar'")
+        assert not CONTROLE.n4_kennis_gemeld({**rij_, "kennis_ts": oud}, con)[0]
+        assert CONTROLE.n4_kennis_gemeld({**rij_, "kennis_ts": oud, "cadans": "op verzoek"}, con)[0]
+    andere = {"naam": "andere-agent", "cadans": "op verzoek", "kennis_ts": vers, "kennis": "werkwijze gemeld"}
+    assert CONTROLE.n4_kennis_gemeld(andere, sqlite3.connect(":memory:"))[0]
+
+
+def test_bevestiging_met_de_ronde_id():
+    juist = {"status": "klaar", "status_ronde": "a" * 32, "kennis_ronde": "a" * 32}
+    assert M.bevestigd(juist, "a" * 32)
+    assert not M.bevestigd(None, "a" * 32)
+    assert not M.bevestigd({**juist, "kennis_ronde": "b" * 32}, "a" * 32)
+    assert not M.bevestigd({**juist, "status": "fout"}, "a" * 32)
+
+
+def test_masker_laat_een_ronde_id_heel():
+    # 'Cafe' en 'beef' zijn zuivere hexcode: in het masker zouden ze een ronde-ID kunnen breken
+    woorden = M.maskerwoorden([{"personen": "groep: Cafe"}, {"personen": "groep: Familie Proef"},
+                               {"personen": "Jan Proef, Piet Proef"}, {"personen": "+32470000099"}, {"personen": "beef"}])
+    assert woorden == {"Familie Proef", "Jan Proef", "Piet Proef", "+32470000099"}, woorden
+
+
+def test_werkwijzen_hebben_grenzen():
+    for naam in ("whatsapp-wacht", "belwacht"):
+        tekst = (RUNNER / "werkwijze" / f"{naam}.md").read_text(encoding="utf-8")
+        nooit, beslist = bord.grenzen(tekst)
+        assert len(tekst) >= 500 and nooit and beslist, naam
+        assert "–" not in tekst and "—" not in tekst
+
+
+# ----------------------------------------------------------------------------------- de helper zelf ---
+def _bouw_helper(map_):
+    """De testbouw leest onder map_/thuis. map_ zonder symlink (op macOS is /var een symlink): de helper weigert er een."""
+    if sys.platform != "darwin" or not shutil.which("cc"):
+        return None
+    uit = os.path.join(map_, "kopie")
+    r = subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", f'-DBASIS_TEST="{map_}/thuis"', "-o", uit,
+                        str(HELPER_C), "-lsqlite3"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return uit
+
+
+def _bron_wa(thuis, met_wal=True, schema_fout=False):
+    wa = Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
+    wa.mkdir(parents=True)
+    Path(thuis, "Library/Caches").mkdir(mode=0o700)
+    chat = sqlite3.connect(wa / "ChatStorage.sqlite")
+    chat.execute("PRAGMA journal_mode=WAL")
+    chat.execute("PRAGMA wal_autocheckpoint=0")
+    chat.executescript(f"""
+        CREATE TABLE ZWAMESSAGE(Z_PK INTEGER PRIMARY KEY, ZCHATSESSION, ZMESSAGEDATE, ZISFROMME, ZMESSAGETYPE,
+                                {'ZSTANZA' if schema_fout else 'ZSTANZAID'}, ZTEXT);
+        CREATE TABLE ZWACHATSESSION(Z_PK INTEGER PRIMARY KEY, ZCONTACTJID, ZPARTNERNAME, ZSESSIONTYPE,
+                                    ZLASTMESSAGETEXT);""")
+    nu = M.apple(datetime.now(timezone.utc))
+    chat.execute("INSERT INTO ZWACHATSESSION VALUES(1, 'x@s.whatsapp.net', 'Jan Proef', 0, 'GEHEIM VOORBEELD')")
+    chat.execute("INSERT INTO ZWAMESSAGE VALUES(1, 1, ?, 0, 0, NULL, 'GEHEIME TEKST')", (nu - 3600,))
+    chat.commit()
+    if met_wal:
+        # een transactie die alleen in de WAL staat (P2): de verbinding blijft open, zonder checkpoint
+        chat.execute("INSERT INTO ZWAMESSAGE VALUES(2, 1, ?, 1, 0, NULL, 'NOG GEHEIMER')", (nu - 60,))
+        chat.commit()
+    oproepen = sqlite3.connect(wa / "CallHistory.sqlite")
+    oproepen.executescript("""
+        CREATE TABLE ZWACDCALLEVENT(Z_PK, ZCALLIDSTRING, ZDATE, ZDURATION, Z1CALLEVENTS, ZGROUPCALLCREATORUSERJIDSTRING,
+                                    ZGROUPJIDSTRING, ZBYTESSENT);
+        CREATE TABLE ZWAAGGREGATECALLEVENT(Z_PK, ZINCOMING, ZMISSED, ZVIDEO, ZLINKTOKEN);
+        CREATE TABLE ZWACDCALLEVENTPARTICIPANT(Z_PK, Z1PARTICIPANTS, ZJIDSTRING);""")
+    oproepen.close()
+    kont = sqlite3.connect(wa / "ContactsV2.sqlite")
+    kont.execute("CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER, ZABOUTTEXT)")
+    kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(1, 'Jan Proef', 'x@s.whatsapp.net', NULL, '+3247', 'STATUS')")
+    kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(2, 'Piet Proef', 'y@s.whatsapp.net', NULL, '+3248', 'S')")
+    kont.commit()
+    kont.close()
+    return chat
+
+
+def test_helper_leest_wal_en_schrijft_geen_tekst():
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        open_ = _bron_wa(thuis)
+        doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken/whatsapp")
+        doel.mkdir(parents=True, mode=0o700)
+        os.chmod(doel.parent, 0o700)
+        os.chmod(doel.parent.parent, 0o755)
+        (doel / "aanvraag").write_text("e" * 32)
+        r = subprocess.run([helper, "whatsapp"], capture_output=True, text=True)
+        open_.close()
+        status = json.loads((doel / "status.json").read_text())
+        assert r.returncode == 0 and status["uitkomst"] == "ok" and status["aanvraag"] == "e" * 32, (r, status)
+        uit = doel / "gesprekken.sqlite"
+        assert os.stat(uit).st_mode & 0o077 == 0 and os.stat(doel).st_mode & 0o077 == 0
+        ruw = uit.read_bytes()
+        for geheim in (b"GEHEIME TEKST", b"NOG GEHEIMER", b"GEHEIM VOORBEELD", b"STATUS", b"Piet Proef"):
+            assert geheim not in ruw, geheim
+        rijen, info = M.whatsapp_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert sum(int(x["thema"].split()[0]) for x in rijen) == 2, rijen      # ook het bericht uit de WAL
+        assert rijen[0]["personen"] == "Jan Proef"
+        assert "Jan Proef" not in r.stdout                                     # stdout is alleen de status
+
+
+def test_helper_weigert_symlink_en_meldt_ander_schema():
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        _bron_wa(thuis, met_wal=False, schema_fout=True).close()
+        r = subprocess.run([helper, "whatsapp"], capture_output=True, text=True)
+        status = json.loads(r.stdout)
+        assert status["uitkomst"] == "onverwacht" and r.returncode == 1, status
+        doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken/whatsapp")
+        assert not (doel / "gesprekken.sqlite").exists()
+        # een symlink in het bronpad
+        wa = Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
+        os.rename(wa / "ChatStorage.sqlite", wa / "ander.sqlite")
+        os.symlink(wa / "ander.sqlite", wa / "ChatStorage.sqlite")
+        status = json.loads(subprocess.run([helper, "whatsapp"], capture_output=True, text=True).stdout)
+        assert status["bronnen"]["chat"] == "onverwacht", status
+        # een bron die ontbreekt (telefoon: geen CallHistoryDB in de proefmap)
+        status = json.loads(subprocess.run([helper, "telefoon"], capture_output=True, text=True).stdout)
+        assert status["bronnen"]["oproepen"] == "ontbreekt" and status["uitkomst"] == "ontbreekt", status
+        # een vreemde aanvraag wordt niet herhaald
+        (doel / "aanvraag").write_text("../../etc " + "a" * 22)
+        status = json.loads(subprocess.run([helper, "whatsapp"], capture_output=True, text=True).stdout)
+        assert status["aanvraag"] == "", status
+
+
+if __name__ == "__main__":
+    goed = fout = 0
+    for naam, f in list(globals().items()):
+        if naam.startswith("test_") and callable(f):
+            try:
+                with redirect_stderr(io.StringIO()):
+                    f()
+                goed += 1
+                print(f"   geslaagd  {naam}")
+            except Exception:  # noqa: BLE001
+                fout += 1
+                print(f"   FOUT      {naam}")
+                traceback.print_exc()
+    print(f"{goed} goed, {fout} fout")
+    sys.exit(1 if fout else 0)

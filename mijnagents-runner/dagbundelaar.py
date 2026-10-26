@@ -70,6 +70,11 @@ DAGBOEK = os.path.join(DATA, "dagboek")                       # gaat naar Dropbo
 STAAT = os.path.join(DATA, "dagvaststelling-staat.json")      # per dag versie en hash; niet in de map dagboek
 ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de kopie in Dropbox, van de Mac-sync
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
+# Codex P7 (fase 2): een Mac die langer dan het venster sliep, leest bij het ontwaken tot zestig dagen terug. Een dag
+# buiten het venster met een nieuwere dekkingsrij dan zijn laatste vaststelling haalt de nacht in, hoogstens zeven.
+INHAAL = 60
+INHAAL_PER_NACHT = 7
+INHAALSTAAT = os.path.join(DATA, "dagvaststelling-inhaal.json")  # per ingehaalde dag het tijdstip
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
@@ -259,6 +264,13 @@ def main():
         dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
         try:
             delen.append(vastleggen(r, dagen, zoom_gelezen=zoom_gelezen))
+            if NACHT and not DAG_GEGEVEN:
+                inhaal = inhaaldagen(nu, dagen)
+                if inhaal:
+                    delen.append("ingehaald: " + vastleggen(r, inhaal, zoom_gelezen=zoom_gelezen))
+                    gedaan = lees_json(INHAALSTAAT)
+                    gedaan.update({d: nu.isoformat() for d in inhaal})
+                    _schrijf(INHAALSTAAT, json.dumps(gedaan, indent=1, sort_keys=True))
         except Exception as e:  # noqa: BLE001
             if NACHT:
                 raise
@@ -321,6 +333,38 @@ def ontvangst():
         if len(delen) == 2 and delen[1].endswith(".md") and "/versies/" not in delen[1]:
             uit[os.path.basename(delen[1])[:-3]] = delen[0]
     return uit
+
+
+def inhaaldagen(nu, venster):
+    """Codex P7: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
+    dekkingsrij schreef die nieuwer is dan de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
+    hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
+    oudste = date.fromisoformat(min(venster))
+    vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
+    if vroegste >= oudste:
+        return []
+    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' AND datum BETWEEN ? AND ? "
+                         "GROUP BY datum", (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
+    try:
+        staat = json.loads(_lees(STAAT) or "{}")
+    except ValueError:
+        staat = {}
+    gedaan = lees_json(INHAALSTAAT)
+
+    def tijd(x):
+        try:
+            t = datetime.fromisoformat(str(x))
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    uit = []
+    for x in sorted(rijen, key=lambda x: x["datum"], reverse=True):
+        nieuw = tijd(x["ts"])
+        vorige = [v for v in (tijd((staat.get(x["datum"]) or {}).get("ts")), tijd(gedaan.get(x["datum"]))) if v]
+        if nieuw is not None and (not vorige or nieuw > max(vorige)):
+            uit.append(x["datum"])
+    return sorted(uit[:INHAAL_PER_NACHT])
 
 
 def kanaalstand(rij, nu):
