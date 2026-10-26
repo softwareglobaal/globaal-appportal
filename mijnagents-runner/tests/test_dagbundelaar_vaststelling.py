@@ -426,8 +426,9 @@ def test_g3_zoom_uit_de_dagregel():
 
 
 def test_k1_zoom_voorlopig_binnen_de_terugblik():
-    """K1: tot zes dagen na de dag kan De Zoomwacht een volledige dagregel nog herzien; tot dan is Zoom voorlopig (minstens)
-    en daarna exact. De nachtronde herberekent veertien dagen, dus de dag krijgt dan een nieuwe versie."""
+    """K1, L1, L2, L3: tot zes dagen na de dag heet de lezing van De Zoomwacht 'nog niet afgesloten', daarna geeft ze haar
+    eigen oordeel. De vaststelling zelf telt altijd wat gezien is; een late Fathom-rij of een dagregel die na zeven dagen
+    nog verandert (een item dat nog klaarstond), geeft een nieuwe versie, nooit een exact totaal."""
     with tempfile.TemporaryDirectory() as m:
         w = Wereld(m)
         pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
@@ -445,6 +446,11 @@ def test_k1_zoom_voorlopig_binnen_de_terugblik():
                         "afdeling": "", "thema": "", "prive": 0, "bron": "fathom", "dubbel_van": ""})
         ronde(w, gisteren="2026-11-01")
         assert "gesprekken gezien in Zoom, Fathom en Plaud: 2, 18 min" in regel() and "versie 3" in lees(pad), regel()
+        # L3: een dagregel die na zeven dagen nog verandert (nog klaar, dus herzienbaar) geeft een nieuwe versie met het
+        # oordeel van De Zoomwacht zoals het dan is
+        w.dagregel = json.dumps({"telling": "ondergrens", "stand": "definitief", "bronnen": {"rapport": "ok", "chat": "ok"}})
+        ronde(w, gisteren="2026-11-02")
+        assert "De Zoomwacht: onvolledig gelezen" in regel() and "versie 4" in lees(pad), regel()
 
 
 def test_g3_zoomstand_uit_de_dagregel():

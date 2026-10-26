@@ -582,13 +582,12 @@ def _telling(t):
 def zoomstand(inhoud, dag=None, vandaag=None):
     """(gesprekken, chat) uit de Zoom-dagregel van De Zoomwacht (dagvaststelling v1.7, Codex G3 en J2). De dagregel is het
     bewijs: De Zoomwacht schrijft ze alleen voor een afgelopen dag, met de bronstanden van de ronde die ze schreef
-    (zoom_wacht.dag_inhoud), en verlaagt een opgepakte regel nooit tijdens een ronde met uitval (ZOO-01). Gesprekken zijn
-    dus volledig als de telling volledig is, de stand definitief en elke bron 'ok': dan schreef een volledige ronde na
-    het einde van de dag ze. Anders een ondergrens of onbekend. De chat heeft haar eigen telling (meestal ondergrens).
-    K1: 'ok' zegt dat een bron antwoordde, niet dat elke opname er al was; een later gevonden gesprek kan een dag nog tot
-    ondergrens herzien, tot ZOOM_TERUGBLIK dagen na de dag (zoom_wacht.TERUGBLIK). Tot dan is een volledige regel
-    'voorlopig' (een ondergrens); daarna herziet De Zoomwacht hem nooit meer. De nachtronde herberekent veertien dagen, dus
-    de dag krijgt dan een nieuwe versie met het exacte getal."""
+    (zoom_wacht.dag_inhoud), en verlaagt een opgepakte regel nooit tijdens een ronde met uitval (ZOO-01). Haar lezing heet
+    dus 'volledig' als de telling volledig is, de stand definitief en elke bron 'ok'; anders een ondergrens of onbekend. De
+    chat heeft haar eigen telling (meestal ondergrens). K1: 'ok' zegt dat een bron antwoordde, niet dat elke opname er al
+    was; tot ZOOM_TERUGBLIK dagen na de dag (zoom_wacht.TERUGBLIK) heet een volledige regel 'voorlopig'. Dit is het oordeel
+    van De Zoomwacht over haar eigen lezing; de vaststelling belooft zelf geen volledigheid (v1.9): ze telt wat gezien is,
+    en een later gevonden gesprek geeft een nieuwe versie."""
     try:
         d = json.loads(inhoud or "{}") or {}
     except ValueError:
