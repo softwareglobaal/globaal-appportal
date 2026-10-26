@@ -44,7 +44,7 @@ KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("p
 MET_DUUR = ("video", "ter plaatse")   # chat en mail hebben geen duur: weggelaten, nooit 0
 
 # Alleen deze kolommen; thema, waarom, link, archief en project zijn inhoud en lees ik nooit.
-SQL = ("SELECT uniek, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling, "
+SQL = ("SELECT uniek, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling, COALESCE(sessie, '') AS sessie, "
        "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?")
 
 HAAKJES = re.compile(r"\s*\([^)]*\)?")
@@ -112,6 +112,15 @@ def bundel(rijen, eerste, laatste, herken):
     p = Personen(herken)
     opgevallen = {"onbekend_kanaal": 0, "telt_niet": 0, "kanalen": set()}
     bekend = set()   # personen uit gesprekken die geen privé zijn, en collega's
+    # Privé is de OF over alle rijen van een gesprek, dubbels inbegrepen (De Regisseur, _prive_sessies, M1 en BAS-02):
+    # een Fathom-rij die zelf niet privé is, met een Zoom-dubbel die het wel is, is privé. Buiten:<reden> hoort niet bij
+    # Mehdi's gesprek en telt niet mee. Codex, ontwerplezing 26-10-2026.
+    prive_sessies, prive_uniek = set(), set()
+    for r in rijen:
+        if is_prive(r) and not str(r.get("dubbel_van") or "").startswith("buiten:"):
+            if r.get("sessie"):
+                prive_sessies.add(r["sessie"])
+            prive_uniek.add(r.get("dubbel_van") or r.get("uniek"))
     tellen = []
     for r in rijen:
         if r.get("dubbel_van"):
@@ -121,7 +130,7 @@ def bundel(rijen, eerste, laatste, herken):
         if k is None:
             opgevallen["onbekend_kanaal"] += 1
             continue
-        prive = is_prive(r)
+        prive = is_prive(r) or r.get("uniek") in prive_uniek or (r.get("sessie") or "") in prive_sessies - {""}
         if not prive and k != "mail":
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
@@ -197,7 +206,7 @@ def venster(vandaag=None):
     vandaag = vandaag or datetime.now(BRUSSEL).date()
     laatste = vandaag - timedelta(days=1)
     return (laatste - timedelta(days=VENSTER_DAGEN - 1)).isoformat(), laatste.isoformat(), \
-        (laatste - timedelta(days=BEKEND_DAGEN - 1)).isoformat()
+        (laatste - timedelta(days=BEKEND_DAGEN - 1)).isoformat(), vandaag.isoformat()
 
 
 def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, herken=organisatie.herken, zet=None):
@@ -207,9 +216,10 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, herk
         r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return None
-    eerste, laatste, van = venster(vandaag)
+    eerste, laatste, van, tot = venster(vandaag)
     try:
-        rijen = lees(SQL, (van, laatste))
+        # Tot en met vandaag: een rij van vandaag telt niet, maar kan een gesprek van gisteren privé maken.
+        rijen = lees(SQL, (van, tot))
     except bord.BordOnbekend:
         # Onbekend is niet leeg (L29): geen item, want een leeg item zou zeggen dat er geen contact was.
         r.nood("Gesprekkentabel niet leesbaar", wie="claude-code")

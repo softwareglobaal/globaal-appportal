@@ -45,9 +45,9 @@ def herken(tekst):
     return None
 
 
-def rij(uniek, personen, minuten=0, prive=0, afdeling="", dubbel_van="", datum=DAG):
+def rij(uniek, personen, minuten=0, prive=0, afdeling="", dubbel_van="", datum=DAG, sessie=""):
     return {"uniek": uniek, "datum": datum, "minuten": minuten, "personen": personen, "prive": prive,
-            "afdeling": afdeling, "dubbel_van": dubbel_van}
+            "afdeling": afdeling, "dubbel_van": dubbel_van, "sessie": sessie}
 
 
 RIJEN = [
@@ -120,6 +120,24 @@ def test_prive_alleen_aantal_nooit_naam():
     assert d["overige_mail"] == 3, "de privénaam maakt de afzender niet bekend; firma en adres zijn overige mail"
 
 
+def test_prive_geldt_voor_het_hele_gesprek():
+    """Codex, ontwerplezing 26-10-2026, zoals De Regisseur (_prive_sessies): een Fathom-rij die zelf niet privé is, met
+    een Zoom-dubbel die het wel is (via dubbel_van of dezelfde sessie, ook van vandaag), is privé. Een rij buiten:<reden>
+    maakt niets privé."""
+    rijen = [rij("fathom:7", "Mehdi, Proefgeheim Sigma", 30),
+             rij("zoom:meeting:c3", "Mehdi, Proefgeheim Sigma", 31, prive=1, dubbel_van="fathom:7"),
+             rij("fathom:8", "Mehdi, Proefgeheim Tau", 12, sessie="zoom:meeting:d4"),
+             rij("zoom:meeting:d4", "Mehdi, Proefgeheim Tau", 12, afdeling="prive", datum="2026-10-26",
+                 sessie="zoom:meeting:d4"),
+             rij("fathom:9", "Mehdi, Klant Omega", 5),
+             rij("fathom:10", "Mehdi, Klant Omega", 5, prive=1, dubbel_van="buiten:andere-ruimte")]
+    _, gezet, dagen, _ = ronde(rijen=rijen)
+    d = dagen[DAG]
+    assert d["prive_per_kanaal"] == {"video": {"aantal": 2, "minuten": 42}}, d["prive_per_kanaal"]
+    assert list(personen(d)) == ["Klant Omega"]
+    assert "Sigma" not in json.dumps(gezet) and "Tau" not in json.dumps(gezet)
+
+
 def test_mehdi_en_onbekende_sprekers_geen_persoon():
     _, _, dagen, _ = ronde()
     p = personen(dagen[DAG])
@@ -139,8 +157,8 @@ def test_item_zonder_namen_in_titel_en_zonder_prive_sleutel():
 
 def test_venster_zeven_dagen_voor_vandaag():
     _, _, _, gelezen = ronde()
-    assert gelezen[0][1] == ("2026-07-28", "2026-10-25"), gelezen[0][1]
-    assert C.venster(VANDAAG)[:2] == ("2026-10-19", "2026-10-25")
+    assert gelezen[0][1] == ("2026-07-28", "2026-10-26"), gelezen[0][1]
+    assert C.venster(VANDAAG) == ("2026-10-19", "2026-10-25", "2026-07-28", "2026-10-26")
 
 
 def test_namen_haakjes_met_komma_en_label_na_dubbelepunt():
