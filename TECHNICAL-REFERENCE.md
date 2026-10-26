@@ -153,6 +153,11 @@ cutover niet geraakt:
   (`factuurrouter-dashboard.service`, `0.0.0.0:8787`).
 - **Stagebeoordeling** - stagiaire-beoordelingsdashboard op de host (zie §6B),
   `~/stagebeoordeling`, `0.0.0.0:8088`, SQLite, systemd-service.
+- **Chunker van Mehdi** - `~/chunker-van-mehdi` (repo `chunker-van-mehdi`, auto-deploy
+  per 2 min), systemd `chunker-van-mehdi.service` op `172.17.0.1:8460`, data in
+  `~/chunker-van-mehdi-data` (0700), database `kennis_mehdi` (rol `chunker_mehdi`) op de
+  host-Postgres, backup naar `~/backups/chunker-van-mehdi`. Raakt de Chunker van
+  agents.globaal.be (database `kennis`, `~/kb-werk`) niet aan; leest alleen diens OCR-cache.
 - **cloudflared-tunnel** - routeert alleen `ha-customgpt.globaal.be` (ongebruikt).
 - **Host-PostgreSQL** - `127.0.0.1:5432` (los van de Authentik-DB in Docker).
 - Overige projecten in `/home/ubuntu` (barsten_en_scheuren, Finance/Schuldentracker,
@@ -171,7 +176,8 @@ cutover niet geraakt:
 | `stage.globaal.be` | Stagebeoordeling op de host, `http://172.17.0.1:8088` | forward auth (Raisha = bewerken, rest = lezen) |
 | `kosten.globaal.be` | Kosten-dashboard, stack-app `app-kosten:3012` (oude host-app op 8090 is alleen nog invoerpijplijn) | forward auth (groep `kosten`) |
 | `uitgaven.globaal.be` | AI-abonnementen-dashboard, stack-app `app-uitgaven:3013`; toont alleen AI-diensten (Claude, ChatGPT, ElevenLabs, Wispr). Twee lagen: verwachting (mail/boekhouding) naast realiteit (kaart) | forward auth (groep `uitgaven`) |
-| `agents.globaal.be` | Agents-besturingscentrum, stack-app `app-agents:3020`; `/seo-team` toont het statische SEO-teambord. Kaart-checklist en hartslag-contract: `agents/README.md` | forward auth (groepen `admin`, `manager`, `agents`); alleen `POST /agent-status` passeert met eigen token |
+| `agents.globaal.be` | Agents-besturingscentrum, stack-app `app-agents:3020`; `/seo-team` toont het statische SEO-teambord. Kaart-checklist en hartslag-contract: `agents/README.md` | forward auth (groepen `admin`, `manager`, `agents`); `POST /agent-status` passeert met eigen token. Let op (gemeten 26-10-2026): ook `POST /ingestie/aanleveren` en `POST /website-aanvraag` passeren zonder login (`52-agents.conf.template`); de eerste is een open punt bij Mehdi |
+| `chunker.globaal.be` | De chunker van Mehdi (repo `softwareglobaal/chunker-van-mehdi`, opvolger van de Chunker op agents.globaal.be), host-dienst `chunker-van-mehdi` op `http://172.17.0.1:8460`; eigen database `kennis_mehdi` op de host-Postgres. Uitrol en grenzen: `ONTWERP.md` in die repo | forward auth (groepen `admin`, `manager`), zonder uitzonderingen; ook de upload loopt door de login |
 | `locatie.globaal.be` | Locatielogboek, stack-app `app-locatie:3031` en ontvanger `app-locatie-tracker` (buiten poort 5000). Sinds 03-10-2026 meet alleen de tracker in de auto; de telefoon (OwnTracks) is uit gebruik. `/api/beweging` geeft direct een kort geldig oordeel per bron aan De Agendawacht, zonder coördinaten; de toekomstige GL320MG blijft uit tot een fysieke proef. Bronbeleid en beheer: `locatie/README.md` (handleiding v2.4) | forward auth (groep `locatie`, bewust niet `admin`/`manager`); alleen `POST /pub`, `/gebeurtenis` en `/gezondheid` passeren, met eigen wachtwoord (`LOCATIE_WACHTWOORD`) |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
