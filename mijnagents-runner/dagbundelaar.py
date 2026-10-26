@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """De Dagbundelaar (Privé): legt per dag samen wat de bronnen-agents klaarzetten,
-zegt per bundel bij welk dossier het hoort, en geeft het door.
+zegt per bundel bij welk dossier het hoort, en geeft het door. Sinds 26-10-2026 legt hij ook elke nacht de dag vast
+(de dagvaststelling, ontwerp docs/ontwerp-dagvaststelling.md v1.2): wat gepland stond en of het doorging, wat er gebeurde
+zonder gepland te zijn, en de communicatie. Nacht: --nacht om 23:30 UTC (planning/dagvaststelling.cron), alleen de
+vaststelling over veertien dagen. Ochtend: hieronder, de bundels en daarna de vaststelling van gisteren. Beide gaan door
+de gedeelde ronde (N12); de nachttaak geeft het ochtendbericht nooit vrij (koppelingen/ochtend.py, NACHTTAAK).
 
 Elke werkdag (maandag tot vrijdag in Brussel), voor gisteren, als laatste stap van de ochtendketen: keten.py start me
 om 07:00 UTC binnen /tmp/gesprekken.lock (planning/gesprekken.cron), na De Fathomwacht en De Zoomwacht, ook als een van
