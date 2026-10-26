@@ -138,21 +138,24 @@ wb = dict(w, categorieen=[{"naam": "Ramen", "punten": [{"nummer": "3.1", "titel"
 mdh = sj.naar_markdown(wb)
 import re as _re  # noqa: E402
 zichtbaar = _re.sub(r"\s*<!--.*?-->", "", mdh)
-check("V11 werfverslag: Herkomst V zonder opnametijdstip in de zichtbare tekst", "Herkomst: V" in zichtbaar and "00:22" not in zichtbaar and "transcript" not in zichtbaar, mdh[-900:])
+check("V11 werfverslag: Herkomst zonder opnametijdstip in de zichtbare tekst (18e review: geen geraden V)",
+      "Herkomst: transcript.txt" in zichtbaar and "00:22" not in zichtbaar, mdh[-900:])
 check("V11 werfverslag: de bron blijft bewaard achter de V en komt terug bij van_markdown",
       sj.van_markdown(mdh)["categorieen"][0]["punten"][0]["bron"] == "transcript.txt 00:22:30-00:23:16", mdh[-400:])
 xml = zipfile.ZipFile(io.BytesIO(sj.naar_docx(wb))).read("word/document.xml").decode("utf8")
-check("V11 werfverslag Word zonder opnametijdstip", "00:22" not in xml and "transcript.txt" not in xml)
+check("V11 werfverslag Word zonder opnametijdstip", "00:22" not in xml)
 check("V11 bron in de gegevens ongewijzigd", wb["categorieen"][0]["punten"][0]["bron"] == "transcript.txt 00:22:30-00:23:16")
 check("V11/zeventiende review: herkomst-codes, nooit een onjuiste V",
       [sj.herkomst(x) for x in ("IMG_1.jpg", "lastenboek.pdf", "verklaring bouwheer, transcript.txt 00:03:10", "V + B", "vast punt kantoor", "",
                                "transcript.txt 00:22:30", "opname 00:12:00", "transcript aannemer.txt 00:05:10",
                                "WhatsApp Image 2026-09-30 at 18.04.11.jpeg")]
-      == ["IMG_1.jpg", "S", "B", "V + B", "vast punt kantoor", "", "V", "V", "transcript aannemer.txt", "WhatsApp Image 2026-09-30 at 18.04.11.jpeg"],
+      == ["IMG_1.jpg", "lastenboek.pdf", "verklaring bouwheer, transcript.txt", "V + B", "vast punt kantoor", "", "transcript.txt",
+          "(na te kijken)", "transcript aannemer.txt", "WhatsApp Image 2026-09-30 at 18.04.11.jpeg"],
       [sj.herkomst(x) for x in ("IMG_1.jpg", "transcript aannemer.txt 00:05:10")])
 bvw = vb.uit_werfproef(dict(wb, categorieen=[{"naam": "Ramen", "punten": [dict(wb["categorieen"][0]["punten"][0], nummer="VB1.1")]}]))
 mdb = vb.naar_markdown(bvw)
-check("V11 bevindingen: herkomst eigen vaststelling, geen opnametijdstip", "herkomst: eigen vaststelling ter plaatse" in mdb and "00:22" not in mdb, mdb)
+check("V11 bevindingen: herkomst zonder opnametijdstip en zonder geraden 'eigen vaststelling'",
+      "herkomst: transcript.txt" in mdb and "00:22" not in mdb and "eigen vaststelling ter plaatse - " not in mdb.split("Bevindingen")[-1], mdb)
 check("V11 bevindingen: bron met tijdstip blijft in de gegevens", bvw["onderdelen"][0]["bevindingen"][0]["bron"] == "transcript.txt 00:22:30-00:23:16")
 
 # V7: fotonummers in de bevindingen-tekst zoals in de fotobijlage (alleen de foto's die er echt in staan)
@@ -234,8 +237,9 @@ check("vaste zin blijft in een oudere bewoording en de bron blijft heel",
       not S.wacht(oud, vast=["Andere bewoording van het punt. " + vgp]) and vgp in oud["punten"][0]["tekst_nl"]
       and "00:22:30" in oud["punten"][0]["bron"], oud)
 check("een eigen S5-zin van de schrijver gaat nog altijd weg", S.wacht({"t": "De aannemer is aansprakelijk."}, vast=[vgp]))
-for b, code in [("EPB startverklaring.pdf", "S"), ("Prestatieverklaring PIR-isolatie.pdf", "S"), ("verklaring bouwheer", "B"),
-                ("mondeling", "B"), ("transcript.txt 00:22:30", "V"), ("Lastenboek.pdf", "S")]:
+for b, code in [("EPB startverklaring.pdf", "EPB startverklaring.pdf"), ("Prestatieverklaring PIR-isolatie.pdf", "Prestatieverklaring PIR-isolatie.pdf"),
+                ("verklaring bouwheer", "B"), ("mondeling", "B"), ("transcript.txt 00:22:30", "transcript.txt"), ("Lastenboek.pdf", "Lastenboek.pdf"),
+                ("offerte bouwheer.pdf", "offerte bouwheer.pdf"), ("transcript.txt 12m30s", "transcript.txt")]:
     check(f"herkomst '{b}' is {code}", sj.herkomst(b) == code, sj.herkomst(b))
 
 t4, ing4 = S.toepassen("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.")
@@ -433,18 +437,6 @@ terug = sj.van_markdown(sj.naar_markdown(pl))["categorieen"][0]["punten"][0]["te
 check("van_markdown houdt de regels van een punt apart", terug == pl["categorieen"][0]["punten"][0]["tekst_nl"], repr(terug))
 check("na het teruglezen grijpt de grendel niet in op een schone lijst", not S.wacht({"t": terug}), S.wacht({"t": terug}))
 
-# Bevestigingsronde 26-10-2026: grendel_in_md werkt regel per regel op de bewaarde markdown, verliesvrij
-vgp_zin = next(z for z in sj.VASTE_TEKSTEN if "niet aansprakelijk" in z)
-mdg = ("## Status werf\nRuwbouw loopt.\nDe dakwerken starten volgende week (opname 00:10:00).\n\n## Rol van H-Architects\n"
-       "**1.1 Veiligheid** - 1 oktober 2026\n\n" + vgp_zin + "\n\nHerkomst: V <!-- bron: transcript.txt 00:12:00 -->\n\n"
-       "| Wie | Wat | Tegen |\n|---|---|---|\n| Aannemer | De aannemer is aansprakelijk. | 21-10 |\n\n## Volgend werfbezoek\nDinsdag.\nSleutel bij de buren.")
-uit = sj.grendel_in_md(mdg)
-check("grendel_in_md: alle regels blijven, opname weg, vaste tekst en verborgen bron ongemoeid, tabel per cel",
-      "Ruwbouw loopt.\nDe dakwerken starten volgende week." in uit and "00:10" not in uit and vgp_zin in uit
-      and "<!-- bron: transcript.txt 00:12:00 -->" in uit and "## Rol van H-Architects" in uit
-      and "| Aannemer | " + S.MARKERING.format(regel="S5") + " | 21-10 |" in uit and "Sleutel bij de buren." in uit
-      and uit.count("\n") == mdg.count("\n"), uit)
-
 # Zestiende review 26-10-2026
 t16, _ = S.toepassen("De dorpel ligt 3 cm te laag en de architect sprak zijn vaststellingen ter plaatse in.")
 check("ingesproken-zin met een vaststelling ervoor: zichtbaar gemarkeerd, niet stil weg", t16 == S.MARKERING.format(regel="S4"), t16)
@@ -460,13 +452,5 @@ twee = dict(w, categorieen=[{"naam": "Vocht", "punten": [{"nummer": "3.1", "tite
           "tekst_en": "The contractor is liable for the moisture damage (recording 00:12:00)."}]}])
 md2 = sj.naar_markdown(twee)
 check("tweetalig werfverslag: ook het Engels gaat door de grendel", "liable" not in md2 and "00:12" not in md2.split("<!--")[0], md2[-300:])
-oud_md = ("## Waarnemingen\n### Dak\n**2.1 Latei** - 14 oktober 2026\n\nDe latei ontbreekt.\n\n"
-          "**2.2 Aannemer in gebreke voor de goot** - 14 oktober 2026 - Belangrijk\n\nDe architect sprak zijn vaststellingen\nter plaatse in.\nDe goot lekt.")
-uit = sj.grendel_in_md(oud_md)
-punten = sj.van_markdown("# x\n\n" + uit)["categorieen"][0]["punten"] if "### Dak" in uit else []
-check("grendel_in_md: een puntkop blijft een puntkop (alleen de titel gemarkeerd), opnamezin over twee regels weg",
-      "**2.2 " + S.MARKERING.format(regel="S5") + "** - 14 oktober 2026 - Belangrijk" in uit and "sprak" not in uit and "ter plaatse in" not in uit
-      and "De goot lekt." in uit and len(punten) == 2, (uit, len(punten)))
-
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

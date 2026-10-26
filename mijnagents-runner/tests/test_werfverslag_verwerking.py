@@ -356,7 +356,7 @@ def _oude_proef(p):
               "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei", "tekst_nl": "De latei ontbreekt.",
                                                                               "vlag": "dringend", "bron": "transcript.txt 00:12:00", "fotos": []}]}]}
     md = p.sjab.naar_markdown(schoon)
-    assert "Herkomst: V" in md
+    assert "Herkomst: transcript.txt <!-- bron: transcript.txt 00:12:00 -->" in md
     return md.replace("De latei ontbreekt.", "De latei ontbreekt (opname 00:12:00). De architect is eerder niet geweest.")
 
 
@@ -364,14 +364,17 @@ def test_herlayout_van_een_oude_proef_past_de_grendel_toe_en_logt(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
     p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
-    p.bronnen.upload = lambda pad, data: pad
+    word = []
+    p.bronnen.upload = lambda pad, data: word.append(data) or pad
     ag = Agent()
     p.herlayout(ag, "9999", 1)
     assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
     laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
     assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1}
-    assert "De latei ontbreekt." in laatste["verslag_md"]
-    assert "opname" not in laatste["verslag_md"] and "eerder niet geweest" not in laatste["verslag_md"]
+    # Word is gefilterd; de bewaarde markdown blijft zoals ze was (18e review: zoals productie, geen verliesgevende omweg)
+    tekst = " ".join(par.text for par in __import__("docx").Document(io.BytesIO(word[-1])).paragraphs)
+    assert "De latei ontbreekt." in tekst and "opname" not in tekst and "eerder niet geweest" not in tekst
+    assert "verslag_md" not in laatste
 
 
 def test_herlayout_bevindingen_zet_een_ruwe_herkomst_om_maar_laat_na_te_kijken_staan(runtime):
@@ -388,7 +391,7 @@ def test_herlayout_bevindingen_zet_een_ruwe_herkomst_om_maar_laat_na_te_kijken_s
     p.herlayout(Agent(), "9999", 1)
     laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
     b1, b2, b3 = laatste["proef_info"]["bevindingen"]["onderdelen"][0]["bevindingen"]
-    assert (b1["herkomst"], b1["bron"]) == ("V", "transcript.txt 12m30s")
+    assert (b1["herkomst"], b1["bron"]) == ("transcript.txt", "transcript.txt 12m30s")   # geen geraden V (18e review)
     assert b2["herkomst"] == "(na te kijken)" and not b2.get("bron")
     assert b3["herkomst"] == "V" and not b3.get("bron")
     assert "12m30s" not in laatste["verslag_md"] and "(na te kijken)" in laatste["verslag_md"]
@@ -409,7 +412,7 @@ def test_herlayout_zet_alleen_de_herkomstregels_om_en_laat_de_rest_letterlijk(ru
     p.bronnen.upload = lambda pad, data: pad
     p.herlayout(Agent(), "9999", 1)
     laatste = [w[1]["rijen"][0] for w in runtime.writes if "verslag_md" in w[1]["rijen"][0]][-1]["verslag_md"]
-    assert laatste == oud.replace("Herkomst: transcript.txt 00:12:00", "Herkomst: V <!-- bron: transcript.txt 00:12:00 -->")
+    assert laatste == oud.replace("Herkomst: transcript.txt 00:12:00", "Herkomst: transcript.txt <!-- bron: transcript.txt 00:12:00 -->")
 
 
 def test_herlayout_van_een_proces_verbaal_geeft_een_duidelijke_melding(runtime):
@@ -420,20 +423,19 @@ def test_herlayout_van_een_proces_verbaal_geeft_een_duidelijke_melding(runtime):
         p.herlayout(Agent(), "9999", 1)
 
 
-def test_herlayout_en_werfapp_met_ingreep_verliezen_geen_regels(runtime):
-    """Bevestigingsronde 26-10-2026: grijpt de grendel in bij een oude proef, dan blijft een status of volgend werfbezoek
-    over meer regels volledig in de bewaarde markdown (productie schreef verslag_md hier nooit terug)."""
+def test_herlayout_en_werfapp_met_ingreep_laten_de_bewaarde_markdown_staan(runtime):
+    """Bevestigingsronde en 18e review 26-10-2026: grijpt de grendel in bij een oude proef, dan blijft verslag_md zoals ze
+    was (productie schreef ze hier nooit terug): geen regel van een status over meer regels gaat verloren."""
     p, rij = runtime.p, runtime.rij
     oud = _oude_proef(p)
     oud = oud.replace("Ruwbouw", "Ruwbouw loopt.\nDe dakwerken starten volgende week.\nDe stelling blijft staan tot eind november.", 1)
     p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
     p.bronnen.upload = lambda pad, data: pad
     for route in (p.herlayout, p.werfapp_uit_proef):
+        voor = len(runtime.writes)
         rij.update(verslag_md=oud, proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
         route(Agent(), "9999", 1)
-        laatste = [w[1]["rijen"][0] for w in runtime.writes if "verslag_md" in w[1]["rijen"][0]][-1]["verslag_md"]
-        assert "De dakwerken starten volgende week." in laatste and "eind november" in laatste, route.__name__
-        assert "opname" not in laatste and "eerder niet geweest" not in laatste and "De latei ontbreekt" in laatste, route.__name__
+        assert not [w for w in runtime.writes[voor:] if "verslag_md" in w[1]["rijen"][0]], route.__name__
 
 
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
@@ -447,7 +449,7 @@ def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     assert tekst.startswith("De latei ontbreekt.") and "opname" not in tekst and "eerder niet geweest" not in tekst
     assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
     laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
-    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1} and "opname" not in laatste["verslag_md"]
+    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1} and "verslag_md" not in laatste
 
 
 def test_eigen_tekst_alleen_de_naamvormen_van_mehdis_eigen_hulpmiddelen(runtime):

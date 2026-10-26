@@ -43,13 +43,12 @@ of nalatig was.
 
 **S4. Geen verwijzing naar de opname in de tekst.** Geen "(opname 00:22:30)", geen zin dat de architect zijn
 vaststellingen insprak of dat een tijdstip naar de opname verwijst. Het tijdstip blijft in de brongegevens (het veld
-bron op de bezoekpagina), voor de controle, nooit in het verslag. Herkomst wordt in het verslag alleen aangeduid als
-V (eigen vaststelling ter plaatse), B (verklaring van de bouwheer) of S (blijkt uit de stukken), ook in de regel
-"Herkomst" van een werfverslag. V staat er alleen bij je eigen transcript of de opname van het bezoek; bij een foto of
-een bestand waarvan de naam niet zegt of het van jou is (een foto van de bouwheer, een transcript van de aannemer) staat
-de bestandsnaam zonder tijdstip, zodat het verslag nooit ten onrechte "eigen vaststelling" zegt. De volledige bron (bestand en tijdstip) blijft daar onzichtbaar achter bewaard, zodat
-een nieuwe opmaak niets verliest; een EPB-startverklaring of prestatieverklaring is een stuk (S), geen verklaring van
-de bouwheer.
+bron op de bezoekpagina), voor de controle, nooit in het verslag. De herkomst toont nooit een tijdstip of de opname:
+V (eigen vaststelling ter plaatse), B (verklaring van de bouwheer) of S (blijkt uit de stukken) als de schrijver die
+code zelf geeft of uitdrukkelijk "verklaring bouwheer" schrijft; anders de bestandsnaam zonder tijdstip. De code wordt
+niet uit de bestandsnaam geraden: een foto van de bouwheer of een verklaring van de bouwheer in je eigen transcript is
+geen eigen vaststelling, en een verslag mag dat nooit ten onrechte zeggen. Bij een werfverslag blijft de volledige bron
+onzichtbaar achter de regel "Herkomst" bewaard, zodat een nieuwe opmaak niets verliest.
 
 Wat de grendel doet: een tijdstip tussen haakjes valt weg en de zin blijft. Een zin met een vaststelling "volgens de
 opname ..." wordt zichtbaar vervangen door "(geschrapt: schrijfregel S4, ...)". Een zin die alleen over de opname
@@ -100,7 +99,9 @@ kastlijntjes. Naslag Buildwise alleen als toelichting met bron. Wat onzeker is k
 
 - Code: `mijnagents-runner/schrijfregels.py` (de grendel), toegepast in `sjabloon_werfverslag.py`,
   `sjabloon_bevindingen.py` en `werfverslag_proef.py` (ook in de instructie aan de schrijver). De grendel loopt bij
-  Maak concept, bij Herlayout en bij naar de werfapp, zodat ook een oudere proef gefilterd wordt.
+  Maak concept, bij Herlayout en bij naar de werfapp: Word, PDF en de werfapp zijn ook bij een oudere proef gefilterd.
+  De bewaarde tekst op de bezoekpagina blijft bij een oudere proef zoals ze was (alleen de regel Herkomst wordt
+  omgezet), zodat er bij een nieuwe opmaak nooit tekst verloren gaat.
 - Test: `mijnagents-runner/tests/test_schrijfregels.py` (S1 tot S5, en elk voorbeeld Fout en Goed uit dit document)
   en `tests/test_aankoopkeuring.py` (S6, S7), in de CI (werfverslag-grendels).
 - Claude-sessies: `runner/schrijfcontrole.py` in globaal-werfverslag controleert een concept met deze code

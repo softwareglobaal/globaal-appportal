@@ -1008,8 +1008,10 @@ def werfapp_uit_proef(ag, dossier, volgnr):
                 p["doorlopend"] = True   # de markdown bewaart de vlag niet; de titel en het nummer 1.x wel
     info = dict(rij.get("proef_info") or {})
     # een proef van vóór de grendel kan nog opnameverwijzingen of S1-zinnen bevatten: die gaan niet naar de werfapp
-    # de bewaarde tekst: de grendel regel per regel op de markdown zelf (de omweg via van_markdown verliest regels)
-    nieuw = {"verslag_md": sjab.grendel_in_md(sjab.herkomst_omzetten(md))} if _grendel(ag, dossier, volgnr, v, info) else {}
+    # Word en de werfapp krijgen de gefilterde gegevens; de bewaarde markdown blijft zoals ze was (de omweg via
+    # van_markdown is niet verliesvrij), alleen een oude regel 'Herkomst: <bron met tijdstip>' wordt verliesvrij omgezet
+    _grendel(ag, dossier, volgnr, v, info)
+    nieuw = {"verslag_md": sjab.herkomst_omzetten(md)} if sjab.toont_ruwe_bron(md) else {}
     _, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
     werf = naar_werfapp(ag, dossier, volgnr, rij, v, fotos, rij["proef_pad"], bronnen=(rij.get("proef_info") or {}).get("bronnen") or [])
     info["werfapp"] = werf
@@ -1064,9 +1066,9 @@ def herlayout(ag, dossier, volgnr):
     info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, verslag_pdf.fotolijst_werfverslag(v, beelden),
                                         voettekst_van(dossier, v, None))
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
-    # de bewaarde tekst alleen herschrijven als de grendel ingreep of de herkomst nog een ruwe bron toonde, en dan
-    # verliesvrij: de grendel regel per regel op de markdown zelf; anders blijft de markdown van Mehdi zoals ze was
-    nieuw_md = sjab.grendel_in_md(omgezet) if ingrepen else (omgezet if ruwe_bron else None)
+    # de bewaarde markdown blijft zoals ze was (zoals productie: Word, PDF en werfapp zijn gefilterd); alleen een oude regel
+    # 'Herkomst: <bron met tijdstip>' wordt verliesvrij omgezet
+    nieuw_md = omgezet if ruwe_bron else None
     _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info,
             **({"verslag_md": nieuw_md} if nieuw_md is not None else {}))
     return pad_docx

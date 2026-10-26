@@ -26,10 +26,6 @@ from datetime import date
 
 import schrijfregels
 
-import sys as _sys
-_sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
-import werfnamen  # noqa: E402  (de naamvormen van Mehdi's eigen bezoekmateriaal, dezelfde regel als voorbereider en schrijver)
-
 HIER = os.path.dirname(os.path.abspath(__file__))
 MASTER = os.path.join(HIER, "sjabloon_HA_master.docx")
 
@@ -169,26 +165,22 @@ VASTE_TEKSTEN = frozenset([t for p in VASTE_PUNTEN for t in (p["nl"], p["en"])] 
 
 
 def herkomst(bron):
-    """De herkomst zoals het verslag ze toont (schrijfregel S4): nooit het tijdstip van de opname, dat blijft in het veld bron.
-    V alleen voor Mehdi's eigen tekst (werfnamen.eigen_tekst: zijn transcript, 00 verslag.md), B voor een verklaring van de
-    bouwheer, S voor een document. Bij een foto of een bestand waarvan de naam niet zegt of het eigen is (een foto van de
-    bouwheer, een transcript van de aannemer) de naam zonder tijdstip, zoals vroeger: nooit een onjuiste V."""
+    """De herkomst zoals het verslag ze toont (schrijfregel S4): nooit het tijdstip of een verwijzing naar de opname, dat
+    blijft in het veld bron van de gegevens. Een code V, B of S als de schrijver die zelf geeft; anders de bron zonder
+    tijdstip. De code wordt niet uit de bestandsnaam geraden: een foto van de bouwheer of een verklaring in het eigen
+    transcript is geen "eigen vaststelling", en een onjuiste V is erger dan een bestandsnaam (17e en 18e review)."""
     b = (bron or "").strip()
     code = re.match(r"[VBS](?:\s*[+,/]\s*[VBS])*(?![\w.])", b)
     if not b or b == "vast punt kantoor":
         return b
     if code:
         return code.group(0)
-    if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I):
-        return "B"
-    zonder_tijd = re.sub(r"\s*\((?:opname|transcript)?[^)]*\d{1,2}:\d{2}[^)]*\)|\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?",
-                         "", b).strip(" ,;:-")
-    naam = re.match(r"(.+?\.(?:txt|docx|md))\b", zonder_tijd, re.I)
-    if (naam and werfnamen.eigen_tekst(naam.group(1))) or re.fullmatch(r"(?:de\s+)?(?:geluids)?opname|transcript|audio", zonder_tijd, re.I):
-        return "V"   # zijn eigen transcript, of "opname 00:12:00" van het bezoek zelf
-    if re.search(r"\.(?:pdf|docx?|xlsx?|dwg|eml|msg|pptx?)\b", zonder_tijd, re.I):
-        return "S"
-    return zonder_tijd or "S"
+    if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I) and not re.search(r"\.\w{2,4}\b", b):
+        return "B"   # de schrijver zegt zelf dat het een verklaring is (geen bestand met 'bouwheer' in de naam)
+    zonder = re.sub(r"\s*\((?:opname|transcript)?[^)]*\d{1,2}:\d{2}[^)]*\)|(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio)\s*)?"
+                    r"(?:\d{1,2}:\d{2}(?::\d{2})?|\b\d{1,2}m\d{2}s\b)(?:\s*(?:-|–|tot)\s*(?:\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}m\d{2}s\b))?",
+                    "", b)
+    return re.sub(r"\s{2,}", " ", zonder).strip(" ,;:-") or "(na te kijken)"
 
 
 # verslag_md is bij een werfverslag de enige plek waar de bron per punt (bestand en opnametijdstip) bewaard blijft. Het
@@ -218,46 +210,6 @@ def herkomst_omzetten(md):
             return r
         return "Herkomst: " + herkomst(zicht) + _bron_noot(zicht)
     return "\n".join(regel(r) for r in (md or "").split("\n"))
-
-
-def grendel_in_md(md):
-    """De schrijfregels op een bewaarde markdown, zonder de omweg via van_markdown (die houdt van een status of een volgend
-    werfbezoek over meer regels alleen de eerste regel over). Per blok aaneensluitende tekstregels, zodat een opnamezin over
-    twee regels gezien wordt; koppen, puntkoppen (alleen de titel wordt getoetst), tabelscheidingen en de regel Herkomst
-    blijven staan; een tabel per cel; de vaste kantoorteksten zijn vrij."""
-    regels = (md or "").split("\n")
-    uit, blok = [], []
-
-    def toets(tekst):
-        stuk = [tekst]
-        schrijfregels.wacht(stuk, vast=VASTE_TEKSTEN)
-        return stuk[0]
-
-    def sluit():
-        if blok:
-            uit.extend(toets("\n".join(blok)).split("\n"))
-            blok.clear()
-
-    for r in regels:
-        s = r.strip()
-        kop = re.match(r"(\*\*\S+ )(.*?)(\*\* - .*)$", s)
-        if kop:
-            sluit()
-            uit.append(kop.group(1) + toets(kop.group(2)) + kop.group(3))
-        elif not s or s.startswith("#") or s.startswith("Herkomst: ") or re.fullmatch(r"\|?[\s:|-]+\|?", s):
-            sluit()
-            uit.append(r)
-        elif s.startswith("|"):
-            sluit()
-            cellen = r.split("|")
-            for j in range(1, len(cellen) - 1):
-                nieuw = toets(cellen[j]).strip()
-                cellen[j] = " " + nieuw + " " if nieuw else " "
-            uit.append("|".join(cellen))
-        else:
-            blok.append(r)
-    sluit()
-    return "\n".join(uit)
 
 
 def toont_ruwe_bron(md):
