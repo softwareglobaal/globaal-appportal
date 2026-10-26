@@ -758,22 +758,25 @@ def test_q2_grens_van_vervallen():
         raise AssertionError("bron met alleen dekking markeerde rijen als vervallen")
 
 
-def test_s1_overstap_van_oude_sleutels_en_rem_voor_het_schrijven():
+def test_s1_t1_rem_voor_het_schrijven_ook_bij_andere_sleutels():
+    """Codex S1 en T1: rijen met een andere sleutelvorm (er staan er live geen) tellen gewoon mee in de rem; een volle,
+    lege of halve bron tegenover vijf zulke rijen schrijft en markeert niets. Nooit een dubbele telling of stil verlies."""
+    for bron in ([rij(tel(i)) for i in range(5)], [], [rij(tel(1))]):
+        b = NepBord()
+        for u in ("telefoon:U1", "telefoon:U2", "telefoon:ID-42", "telefoon:U4", "telefoon:U5"):
+            b.tabel[u] = rij(u)
+        voor = dict(b.tabel)
+        try:
+            M.schrijf_en_lees_terug("telefoon", bron, DAG, DAG, b.call, b.terug)
+        except M.MacFout as e:
+            assert e.nood == "De bron toont veel minder rijen dan het bord kent: niets geschreven of gemarkeerd"
+        else:
+            raise AssertionError(len(bron))
+        assert b.tabel == voor and not b.oproepen, (len(bron), b.oproepen)
+    # een enkele verdwenen rij van honderd: gewoon vervallen
     b = NepBord()
-    for i in range(5):                      # vijf rijen van een oudere versie, zonder tijdstip in de sleutel
-        b.tabel[f"telefoon:U{i}"] = rij(f"telefoon:U{i}")
-    assert M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(5)], DAG, DAG, b.call, b.terug) == 5
-    tellend = [u for u, r in b.tabel.items() if not r["dubbel_van"]]
-    assert sorted(tellend) == sorted(tel(i) for i in range(5)), tellend          # geen dubbele telling
-    # de rem gaat voor het schrijven: een halve bron schrijft niets
-    voor = len(b.oproepen)
-    try:
-        M.schrijf_en_lees_terug("telefoon", [rij(tel(9))], DAG, DAG, b.call, b.terug)
-    except M.MacFout:
-        pass
-    else:
-        raise AssertionError("halve bron ging door")
-    assert "/api/gesprekken" not in b.oproepen[voor:] and tel(9) not in b.tabel
+    M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(100)], DAG, DAG, b.call, b.terug)
+    assert M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(99)], DAG, DAG, b.call, b.terug) == 1
 
 
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():
@@ -981,6 +984,12 @@ def test_r6_drie_uitrollen_en_terug():
                 os.close(fd)
             assert git("rev-parse", "HEAD", cwd=werk) == shas[2], slotpad
         assert (basis / "belwacht" / "ronde.lock").exists()           # lockf -k laat het slot van de wacht staan
+        # T2: een interne opdracht rechtstreeks, met UITROL_SLOT maar zonder sloten: geweigerd
+        for intern in ("__installeer", "__terug"):
+            r = subprocess.run(["zsh", str(script), intern], env={**omgeving, "UITROL_SLOT": "1", "REF": shas[0]},
+                               capture_output=True, text=True)
+            assert r.returncode == 64 and "niet vast" in r.stderr, (intern, r.stderr)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[2]
         # aan zonder proef: geweigerd
         assert "eerst" in uitrol("aan", ok=False)
         # terug: versie 2 als geheel

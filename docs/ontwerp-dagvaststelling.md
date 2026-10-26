@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.4, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r4 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.5, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r5 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -463,3 +463,12 @@ Vooruitgang: R1 tot R6 waren in hun gewone paden opgelost; S1 tot S4 zijn randge
 | S2 | `ruim_op` herkent alleen de eigen namen (`gesprekken.sqlite`, `gesprekken-<32 hex>.sqlite`, `.lezen-<32 hex>.sqlite`). Test: `gesprekken-archief.sqlite` blijft staan |
 | S3 | `wachten_echt_uit`: na de bootout moet elke wacht echt uit launchd zijn, anders wisselt niets; de wissel loopt met de rondesloten van beide wachten vast (`lockf`, hetzelfde flock als `mac_gesprekken.slot`). Test met een wacht die geladen blijft en met een vastgehouden rondeslot |
 | S4 | een slot voor alle opdrachten behalve controleer (`.uitrol.lock`): installeer, proef, aan, uit en terug lopen nooit samen. Test met een vastgehouden uitrolslot |
+
+### Antwoord op de bouwcontrole r5 (v2.5, docs/codex/dagvaststelling-fase2-bouw-r5.md, "live: nee")
+
+Vooruitgang: S2, S3 en S4 opgelost; T1 (middel) en T2 (laag) blijven.
+
+| punt | antwoord in de code |
+|---|---|
+| T1 | geen uitzondering meer voor een andere sleutelvorm: elke verdwenen rij telt in de rem, die voor het schrijven staat. Er staat live geen enkele WhatsApp-, telefoon- of dekkingsrij (gemeten 26-10-2026), dus een overstap is er niet; verschijnt ooit zo'n rij, dan stopt de ronde met de nood en beslist een mens. Test: vijf rijen met een andere vorm (ook `telefoon:ID-42`) tegenover een volle, lege en halve bron schrijven en markeren niets; een verdwenen rij van honderd wordt gewoon vervallen |
+| T2 | `UITROL_SLOT` alleen volstaat niet meer: elke opdracht behalve controleer kijkt of het uitrolslot echt vastzit (`lockf -t 0` moet falen), en de interne wissel ook of beide rondesloten vastzitten. Test: `__installeer` en `__terug` rechtstreeks met `UITROL_SLOT=1` worden geweigerd |

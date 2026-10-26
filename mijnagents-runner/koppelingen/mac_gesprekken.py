@@ -588,30 +588,25 @@ def wis(pad):
         os.unlink(pad)
 
 
-# De sleutelvorm van deze versie (Codex R1). Een rij van dit kanaal met een andere vorm komt van een oudere versie en
-# kan niet meer terugkomen: bij de overstap wordt ze vervallen, zonder dat de rem op verdwenen rijen haar meetelt (S1).
-HUIDIGE_SLEUTEL = re.compile(r"^(?:whatsapp:[0-9a-f]{40}:\d{4}-\d{2}-\d{2}|whatsapp-oproep:[A-Za-z0-9-]+-\d+"
-                             r"|telefoon:[A-Za-z0-9-]+-\d+|dekking:(?:whatsapp|telefoon):\d{4}-\d{2}-\d{2})$")
-
-
 def schrijf_en_lees_terug(kanaal, rijen, van, tot, call, terug=None):
     """Schrijf de rijen naar /api/gesprekken en lees ze terug langs een andere weg (bordstand.py over ssh): elke rij moet
     er staan zoals geschreven. Een rij van dit kanaal in het venster die de bron niet meer toont, wordt vervallen
     (dubbel_van buiten:vervallen); komt ze terug, dan zet de upsert dubbel_van weer leeg. De rem gaat voor het schrijven
     (Codex S1): toont de bron veel minder dan het bord kent, dan schrijft en markeert de ronde niets en stopt ze (Q2).
-    Geeft het aantal vervallen rijen."""
+    Elke verdwenen rij telt mee, ook een met een andere sleutelvorm (T1): op 26-10-2026 stond er geen enkele
+    WhatsApp-, telefoon- of dekkingsrij op het bord, dus een overstap is er niet; komt er ooit een, dan beslist een
+    mens na de nood, nooit de ronde stil. Geeft het aantal vervallen rijen."""
     terug = terug or bord_rijen
     if len({r["uniek"] for r in rijen}) != len(rijen):
         raise MacFout("twee rijen met dezelfde sleutel", "Twee rijen met dezelfde sleutel: niets geschreven")
     verwacht = {r["uniek"]: vingerafdruk(r) for r in rijen}
     voor = terug(kanaal, van, tot)
     extra = sorted(u for u, x in voor.items() if u not in verwacht and (x or {}).get("d") != VERVALLEN)
-    verdacht = [u for u in extra if HUIDIGE_SLEUTEL.match(u)]
     # Codex Q2: een bron die niets meer toont terwijl het bord rijen kent, of die in een keer minstens vijf rijen en
     # meer dan een vijfde van het bord kwijt is, is verdacht (een lege of halve databank).
     gegevens = [r for r in rijen if r["bron"] != "dekking"]
-    if verdacht and (not gegevens or (len(verdacht) >= MIN_VERVALLEN and len(verdacht) * 5 > len(voor))):
-        raise MacFout(f"bron toont veel minder rijen dan het bord ({len(verdacht)} zouden vervallen)",
+    if extra and (not gegevens or (len(extra) >= MIN_VERVALLEN and len(extra) * 5 > len(voor))):
+        raise MacFout(f"bron toont veel minder rijen dan het bord ({len(extra)} zouden vervallen)",
                       "De bron toont veel minder rijen dan het bord kent: niets geschreven of gemarkeerd")
     for i in range(0, len(rijen), PER_KEER):
         antwoord = call("/api/gesprekken", {"rijen": rijen[i:i + PER_KEER]})

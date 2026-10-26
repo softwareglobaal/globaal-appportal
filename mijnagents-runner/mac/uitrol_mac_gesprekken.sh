@@ -103,7 +103,18 @@ if [[ $modus != controleer && -z ${UITROL_SLOT:-} ]]; then
     export UITROL_SLOT=1
     exec "$LOCKF" -k -t 0 "$HMAP/.uitrol.lock" /bin/zsh "$SCRIPT" "$@"
 fi
-[[ $modus != __* || -n ${UITROL_SLOT:-} ]] || { print -u2 "Gebruik: $0 [proef|aan|uit|terug|controleer]"; exit 64; }
+vast() {
+    # houdt iemand (de lockf boven mij) dit slot vast? lockf -t 0 moet dan meteen falen
+    ! "$LOCKF" -k -t 0 "$1" /usr/bin/true >/dev/null 2>&1
+}
+# Codex T2: UITROL_SLOT alleen zegt niets; het slot moet echt vastzitten, en voor de wissel ook de rondesloten.
+if [[ $modus != controleer ]]; then
+    vast "$HMAP/.uitrol.lock" || { print -u2 "Het uitrolslot zit niet vast; niets gedaan"; exit 64; }
+fi
+if [[ $modus == __* ]]; then
+    vast "$BASIS/whatsapp-wacht/ronde.lock" && vast "$BASIS/belwacht/ronde.lock" ||
+        { print -u2 "De rondesloten zitten niet vast; niets gewisseld"; exit 64; }
+fi
 
 case $modus in
     installeer)
