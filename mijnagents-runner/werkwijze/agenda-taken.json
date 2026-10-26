@@ -979,11 +979,11 @@
    "optioneel": "de donderdag bij oma is optioneel (zo afgesproken met Leen): als Mehdi kan gaat hij, anders niet. Daarom draagt de titel '(optioneel)'; dat blijft staan"
   },
   "schoolvakantie": {
-   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen ophaalafspraak, geen rit, en de marker 'Geen buiten afspraken Lara ophalen' hoort er die dag ook niet (dan mogen collega's wel buiten-afspraken plannen)",
-   "bron": "de agent leest de vakantie- en feestdagen uit de agenda van Lara (all-day items met 'vakantie' of 'feestdag'); die horen als volledige weken in de agenda te staan",
-   "grendel": "lara_vakantiedagen() -> geen rit voor een Lara-afspraak op zo'n dag",
+   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit. De vaste Lara-afspraken en de marker 'Geen buiten afspraken Lara ophalen' blijven staan en Bezet tot Mehdi zegt welke vervallen; wat vervalt krijgt 'vervalt (vakantie)' vooraan en Beschikbaar. Nooit wissen, ook geen instantie van een reeks (driehoeksoverleg 27-10-2026, L4; FR-210)",
+   "bron": "alleen de officiële Vlaamse kalender in werkwijze/schoolvakanties.json (vlaanderen.be). Een blok in de Lara-agenda telt niet; wijkt het af, dan een vraag in de privé-agenda (L2)",
+   "grendel": "lara_vakantiedagen(), lara_vakantie_afwijkingen(), lara_vakantieweken(), lara_vervalt() en in agenda_signaal lara_wissing_kandidaat(); tests/test_lara_vakanties.py",
    "per_schooljaar": "deze Lara-regelingen (ophalen, oma, zwemles, vakanties) gelden per schooljaar en moeten elk jaar opnieuw bijgesteld worden; ze staan niet voor altijd vast",
-   "mehdi": "22-09-2026"
+   "mehdi": "22-09-2026; bron en markeren 27-10-2026"
   },
   "maandag_na_werfbezoek": "op maandag komt Mehdi na werfbezoek 2145 (tot 11:30) naar huis voor de online afspraak van 12:00; afspraak C is voor die maandag bevestigd (22-09-2026)",
   "google_alleen_dichtbij": "Google live verkeer alleen voor ritten die binnen 48 uur vertrekken; verder vooruit de gratis routeplanner maal de filefactor. Gezien 23-09-2026: de dagteller stond om de middag al op 100/100 door verre ritten, zodat de rit van morgen naar Genk geen echt verkeer kreeg",

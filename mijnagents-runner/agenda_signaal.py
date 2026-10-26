@@ -17,12 +17,13 @@ import fcntl
 import http.client
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 HIER = Path(__file__).resolve().parent
@@ -75,7 +76,7 @@ BEZET_ALARM = 10
 # nextPageToken moet in de velden staan, anders laat Google het weg en lijkt de eerste pagina alles (A4).
 # originalStartTime geeft de dag waar een reeksinstantie oorspronkelijk stond (A7, A8).
 VELDEN = ("nextPageToken,items(id,summary,status,updated,description,start/dateTime,start/date,end/dateTime,end/date,"
-          "originalStartTime/dateTime,originalStartTime/date,location,attendees(email,responseStatus,self))")
+          "originalStartTime/dateTime,originalStartTime/date,recurringEventId,location,attendees(email,responseStatus,self))")
 
 
 def vorige():
@@ -121,9 +122,30 @@ def vingerafdruk(ev):
                        W.bellen.afgezegd(ev)], ensure_ascii=False)
 
 
+def _lara_reeks(kal, ev):
+    """De reeks van een instantie in de Lara-agenda, of ''. Google geeft bij een geschrapte instantie vaak alleen id,
+    recurringEventId en originalStartTime; zonder recurringEventId volstaat het deel van het id voor '_JJJJMMDD'."""
+    if W.KALENDERS.get(kal) != "Lara":
+        return ""
+    if ev.get("recurringEventId"):
+        return ev["recurringEventId"]
+    m = re.match(r"^(.+)_\d{8}(?:T\d{6}Z?)?$", ev.get("id") or "")
+    return m.group(1) if m else ""
+
+
+def _is_rit(ev, vorig):
+    return W.lees_titel(ev.get("summary") or _oude_titel(vorig) or "")["reistijd"]
+
+
 def annulering_kandidaat(kal, ev, vorig, nu):
-    """Een nieuwe, expliciete afzegging met een herleidbaar tijdstip; geen herhaalde eigen wijziging."""
+    """Een nieuwe, expliciete afzegging met een herleidbaar tijdstip; geen herhaalde eigen wijziging.
+    Een vaste Lara-afspraak (een instantie van een reeks) of een ritblok is nooit een afzegging om 'niet vertrekken' voor
+    te bellen. Gezien 22-10-2026: een assistent wiste de Lara-afspraken van een week die ten onrechte als vakantie
+    stond, en om 06:00 belde de agent zes keer 'afgezegd, niet vertrekken' voor ophaalmomenten die gewoon doorgingen
+    (FR-210). Een gewiste Lara-afspraak op een schooldag wordt een vraag (lara_wissing_kandidaat)."""
     if not (ev.get("status") == "cancelled" or W.bellen.afzegging_tekst(ev)):
+        return None
+    if _lara_reeks(kal, ev) or _is_rit(ev, vorig):
         return None
     oud = []
     if vorig:
@@ -146,6 +168,49 @@ def annulering_kandidaat(kal, ev, vorig, nu):
         return None
     titel = _toonbare_titel(kal, ev.get("summary") or _oude_titel(vorig) or "afspraak")
     return {"sleutel": f"{kal}:{ev.get('id', '')}:{start}", "titel": titel[:80], "start": begint}
+
+
+def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
+    """Een instantie van een vaste Lara-reeks die nu geschrapt is, op een komende schooldag volgens de officiële bron
+    (maandag tot vrijdag, geen vakantie of feestdag, binnen de dekking). Dan is het waarschijnlijk een fout: een vraag
+    in de privé-agenda, de agent zet niets terug (driehoeksoverleg 27-10-2026, L3; FR-210). Geeft None of
+    {sleutel, dag, uur, titel}; de titel blijft privé en komt in geen uitvoer."""
+    if ev.get("status") != "cancelled":
+        return None
+    reeks = _lara_reeks(kal, ev)
+    if not reeks or _is_rit(ev, vorig):
+        return None
+    oud = []
+    if vorig:
+        try:
+            oud = json.loads(vorig[0])
+        except (ValueError, TypeError):
+            pass
+    if len(oud) > 1 and oud[1] == "cancelled":
+        return None                                   # al eerder geschrapt gezien: geen tweede vraag
+    o = ev.get("originalStartTime") or (oud[2] if len(oud) > 2 and isinstance(oud[2], dict) else {}) or {}
+    dag, uur = _dag(o), (o.get("dateTime") or "")[11:16]
+    try:
+        d = date.fromisoformat(dag)
+    except ValueError:
+        return None
+    if d < nu.astimezone(W.TIJDZONE).date() or d.weekday() >= 5 or dag in officieel or (dekking and d > dekking):
+        return None
+    return {"sleutel": f"{reeks}:{dag}", "dag": dag, "uur": uur, "titel": ev.get("summary") or _oude_titel(vorig) or ""}
+
+
+def meld_lara_wissing(kandidaat, tok):
+    """De vraag in de privé-agenda, daarna een signaal op het bord (zonder titel: privé). Het signaal is bijzaak: lukt het
+    niet, dan staat de vraag er toch."""
+    W.lara_gewist_melden(kandidaat["dag"], kandidaat["uur"], kandidaat["titel"], kandidaat["sleutel"], tok)
+    try:
+        W.ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": kandidaat["dag"],
+                        "uniek": f"agenda-lara-gewist:{kandidaat['sleutel']}",
+                        "titel": "Vaste Lara-afspraak gewist op een schooldag",
+                        "inhoud": "De vraag staat in je privé-agenda op die dag. De agent zet niets terug."}])
+    except Exception as e:  # noqa: BLE001
+        print(f"Lara-signaal niet op het bord ({type(e).__name__}); de vraag staat in de privé-agenda", file=sys.stderr)
+    return True
 
 
 def meld_annulering(kandidaat, nu):
@@ -314,6 +379,13 @@ def ronde(tijd):
     vanaf = (nu - timedelta(days=1)).date().isoformat()
     dagen, wat, niet_gelezen, per_kal, onbekend = set(), [], [], {}, []
     annuleringen = dict(st.get("annulering_open") or {})
+    lara_open = dict(st.get("lara_open") or {})
+    lara_gemeld = dict(st.get("lara_gemeld") or {})
+    officieel = W.lara_vakantiedagen()
+    dekking = W.schoolvakantie_dekking() if officieel is not None else None
+    if officieel is None:
+        print(f"{tijd} officiële schoolvakanties niet te lezen: gewiste Lara-afspraken deze ronde niet nagekeken",
+              file=sys.stderr)
     oud = st.get("vinger") or {}
     vinger = dict(oud)
     for kal in kals:
@@ -328,10 +400,24 @@ def ronde(tijd):
             kandidaat = annulering_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu)
             if kandidaat:
                 annuleringen[kandidaat["sleutel"]] = {**kandidaat, "start": kandidaat["start"].isoformat()}
+            lk = officieel is not None and lara_wissing_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu,
+                                                                  officieel, dekking)
+            if lk and lk["sleutel"] not in lara_gemeld:
+                lara_open[lk["sleutel"]] = lk
         dagen |= per_kal[kal]
         wat += w_
 
-    melding_mislukt = False
+    melding_mislukt = officieel is None
+    for sleutel, k in list(lara_open.items()):
+        try:
+            meld_lara_wissing(k, A._toegang())
+            lara_gemeld[sleutel] = k["dag"]
+            lara_open.pop(sleutel, None)
+            print(f"{tijd} vaste Lara-afspraak gewist op schooldag {k['dag']}: vraag in de privé-agenda gezet")
+        except Exception as e:  # noqa: BLE001
+            melding_mislukt = True
+            print(f"{tijd} gewiste Lara-afspraak op {k.get('dag')}: vraag niet gezet ({type(e).__name__}), blijft open",
+                  file=sys.stderr)
     for sleutel, kandidaat in list(annuleringen.items()):
         try:
             kandidaat["start"] = datetime.fromisoformat(kandidaat["start"])
@@ -425,8 +511,10 @@ def ronde(tijd):
         controlepunten_bewaren(cp)
     grens = (nu - timedelta(days=2)).date().isoformat()
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
+    lara_gemeld = {k: d for k, d in lara_gemeld.items() if d >= grens}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
-            "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen})
+            "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen,
+            "lara_open": lara_open, "lara_gemeld": lara_gemeld})
     return 1 if niet_gelezen or gefaald or alarm or melding_mislukt else 0
 
 

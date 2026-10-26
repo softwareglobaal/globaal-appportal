@@ -138,8 +138,8 @@ def bevindingen(items, van, tot, nu):
             if dag in zonder_auto:
                 meld("buiten_zonder_auto", a, "buiten op een dag zonder auto")
                 continue
-            if kal in vaste and vaste[kal].get("naam") == "Lara" and dag in vrij:
-                continue
+            if kal in vaste and vaste[kal].get("naam") == "Lara" and (dag in vrij or W.lara_vervalt(a)):
+                continue          # officiële vakantie, of een ophaalmoment dat Mehdi liet vervallen (L4)
             try:
                 start = datetime.fromisoformat(a["start"])
             except ValueError:
