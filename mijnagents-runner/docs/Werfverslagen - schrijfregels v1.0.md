@@ -51,8 +51,9 @@ de bouwheer.
 
 Wat de grendel doet: een tijdstip tussen haakjes valt weg en de zin blijft. Een zin met een vaststelling "volgens de
 opname ..." wordt zichtbaar vervangen door "(geschrapt: schrijfregel S4, ...)". Een zin die alleen over de opname
-gaat ("sprak zijn vaststellingen ter plaatse in") valt weg; wat na een dubbelpunt volgt, is de vaststelling en blijft
-staan. Elke weggevallen zin staat in het logboek. "De opname van de bestaande toestand" is een opmeting en blijft staan.
+gaat ("sprak zijn vaststellingen ter plaatse in", eventueel met een tijdstip) valt weg. Staat er in dezelfde zin ook
+een vaststelling, dan wordt de zin zichtbaar gemarkeerd: zet de vaststelling dan zelf terug. Elke weggevallen of
+gemarkeerde zin staat volledig in het logboek. "De opname van de bestaande toestand" is een opmeting en blijft staan.
 
 - Fout: "Er blijft water staan (opname 00:22:30-00:23:16)."
 - Fout: "Volgens de opname is de dorpel 3 cm te laag."

@@ -203,5 +203,17 @@ check("Word ontbreekt op schijf: 404, geen fout", c.get(f"/werfverslag/2145/1/be
 check("ander bestand in de map is niet bereikbaar", c.get(f"/werfverslag/2145/1/bestand/txt?rij_id={rid}", headers=BEHEER).status_code == 404)
 check("zonder beheerrecht: 403", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}").status_code in (401, 403))
 
+# Vijfde review 26-10-2026: na een verhuisde projectmap draagt een rij met een ander id de proef; de bestanden staan nog in de
+# map van de rij die ze maakte (proef_info.bestanden.map)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag", "bestanden": {
+    "pdf": "2145-1 werfverslag (concept).pdf", "map": "999999"}})]}, headers=K)
+oud = os.path.join(os.path.dirname(A.DB_PAD), "werfbezoek", "999999"); os.makedirs(oud, exist_ok=True)
+open(os.path.join(oud, "2145-1 werfverslag (concept).pdf"), "wb").write(b"%PDF-oude-map")
+r = c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER)
+check("na een verhuizing komt de PDF uit de map van de rij die hem maakte", r.status_code == 200 and r.data == b"%PDF-oude-map", r.status_code)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag", "bestanden": {
+    "pdf": "2145-1 werfverslag (concept).pdf", "map": "../geheim"}})]}, headers=K)
+check("een map die geen rijnummer is: 404", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER).status_code == 404)
+
 print(f"\n{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

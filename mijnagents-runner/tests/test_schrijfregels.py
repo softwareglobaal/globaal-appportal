@@ -123,7 +123,8 @@ t, ing = S.toepassen("Volgens de opname is de dorpel 3 cm te laag. De goot lekt.
 check("V12 'volgens de opname' zichtbaar gemarkeerd, zin in de ingrepen",
       t.startswith("(geschrapt: schrijfregel S4") and t.endswith("De goot lekt.") and ("S4", "Volgens de opname is de dorpel 3 cm te laag.") in ing, (t, ing))
 t, ing = S.toepassen("De architect sprak zijn vaststellingen ter plaatse in: de dorpel is 3 cm te laag.")
-check("V12 vaststelling na 'sprak ... in:' blijft", t == "De dorpel is 3 cm te laag." and ing == [("S4", "De architect sprak zijn vaststellingen ter plaatse in:")], (t, ing))
+check("V12 een vaststelling na 'sprak ... in:' verdwijnt nooit stil: zichtbare markering, volledige zin in het logboek",
+      t == S.MARKERING.format(regel="S4") and ing == [("S4", "De architect sprak zijn vaststellingen ter plaatse in: de dorpel is 3 cm te laag.")], (t, ing))
 t, ing = S.toepassen("De architect nam 18 foto's en sprak zijn vaststellingen ter plaatse in. Het onderzoek was visueel.")
 check("V12 een weggevallen opnamezin staat volledig in de ingrepen (logboek)", ("S4", "De architect nam 18 foto's en sprak zijn vaststellingen ter plaatse in.") in ing, ing)
 
@@ -213,7 +214,7 @@ for zin in ["Het bouwmisdrijf verjaart na tien jaar.", "De overtreding kan niet 
     check(f"S7 elke vorm van verjaren: '{zin[:30]}'", any(r == "S7" for r, _ in S.controleer(zin, "aankoopkeuring")), S.controleer(zin, "aankoopkeuring"))
 check("S7 een verjaardag is geen verjaring", not S.controleer("De verjaardag van de bouwheer viel op het bezoek.", "aankoopkeuring"))
 for zin, verwacht in [("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.", S.MARKERING.format(regel="S4")),
-                      ("De architect sprak zijn vaststellingen ter plaatse in; het kader is 2 cm uit het lood.", "Het kader is 2 cm uit het lood."),
+                      ("De architect sprak zijn vaststellingen ter plaatse in; het kader is 2 cm uit het lood.", S.MARKERING.format(regel="S4")),
                       ("De architect sprak zijn vaststellingen ter plaatse in; de opname en het transcript zitten in de bezoekmap.",
                        S.MARKERING.format(regel="S4")),
                       ("De dorpel is 3 cm te laag; het tijdstip tussen haakjes verwijst naar de opname.", "De dorpel is 3 cm te laag."),
@@ -272,6 +273,16 @@ for zin in ["Volgens de opname van het terreinbezoek is de dorpel 3 cm te laag."
             "Uit de opname van het terreinbezoek blijkt dat de stelling niet verankerd is."]:
     check(f"S4 'terreinbezoek' is geen opmeting: '{zin[:40]}'", any(r == "S4" for r, _ in S.controleer(zin)), S.controleer(zin))
 check("S4 'opname van het terrein' blijft een opmeting", not S.controleer("Volgens de opname van het terrein ligt de tuin 40 cm lager."))
+
+# Vijfde review 26-10-2026: een tijdstip of een nieuwe regel na de ingesproken-zin laat geen brokstukken achter
+for tekst, verwacht in [("De architect sprak zijn vaststellingen in tussen 00:00:00 en 00:45:12. De dorpel ligt te laag.", "De dorpel ligt te laag."),
+                        ("De architect sprak zijn vaststellingen in om 10:15. De barst in de zijgevel is 2 mm breed.", "De barst in de zijgevel is 2 mm breed."),
+                        ("De architect sprak zijn vaststellingen in van 00:02:10 tot 00:41:55.", ""),
+                        ("De architect sprak zijn vaststellingen in om 11:05; de bouwheer was afwezig.", S.MARKERING.format(regel="S4")),
+                        ("De architect sprak zijn vaststellingen ter plaatse in\nDe dakgoot lekt aan de achtergevel.", "De dakgoot lekt aan de achtergevel.")]:
+    t5, _ = S.toepassen(tekst)
+    check(f"S4 ingesproken-zin zonder brokstukken: '{tekst[38:70]}'", t5 == verwacht and not S.controleer(t5), t5)
+check("S5 ook het meervoud ingebrekestellingen", any(r == "S5" for r, _ in S.controleer("De bouwheer stuurde twee ingebrekestellingen naar de aannemer.")))
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

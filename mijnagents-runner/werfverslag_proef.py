@@ -539,7 +539,7 @@ def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettek
             f.write(docx)
         with open(os.path.join(map_, naam + ".md"), "w", encoding="utf8") as f:
             f.write(md)
-        uit = {"docx": naam + ".docx", "md": naam + ".md"}
+        uit = {"docx": naam + ".docx", "md": naam + ".md", "map": str(rij["id"])}   # de map blijft die van deze rij, ook na een verhuizing
         try:
             pdf = verslag_pdf.naar_pdf(md, voettekst, fotolijst)
             with open(os.path.join(map_, naam + ".pdf"), "wb") as f:

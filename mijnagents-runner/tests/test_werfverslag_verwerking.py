@@ -346,6 +346,7 @@ def test_downloads_naar_werf_bestanden_gelezen_bij_gebruik(runtime, monkeypatch,
     # de bezoekpagina biedt alleen de namen aan die in proef_info.bestanden staan (downloadroute in app.py)
     info = next(w[1]["rijen"][0]["proef_info"] for w in reversed(runtime.writes) if w[1]["rijen"][0].get("proef_info"))
     assert info["bestanden"]["docx"] == "9999-1 werfverslag (concept).docx" and info["bestanden"]["md"] == "9999-1 werfverslag (concept).md"
+    assert info["bestanden"]["map"] == "47"   # de map van deze rij, ook als een andere rij de proef later overneemt
 
 
 def _oude_proef(p):

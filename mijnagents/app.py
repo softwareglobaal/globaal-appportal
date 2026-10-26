@@ -2999,10 +2999,15 @@ def werfbezoek_bestand(dossier, volgnr, soort):
         r = _werf_dict(_werf_huidige(conn, dossier, volgnr, request.args.get("rij_id")))
     except werfwerk.Conflict as exc:
         return _werf_fout(exc)
-    naam = ((r.get("proef_info") or {}).get("bestanden") or {}).get(soort)
+    bestanden = (r.get("proef_info") or {}).get("bestanden") or {}
+    naam = bestanden.get(soort)
     if not naam or "/" in naam or naam.startswith("."):
         abort(404)
-    map_ = os.path.join(os.path.dirname(DB_PAD), "werfbezoek", str(r["id"]))
+    # na een verhuisde projectmap draagt een andere rij de proef; de bestanden staan nog onder de rij die ze maakte
+    map_id = str(bestanden.get("map") or r["id"])
+    if not map_id.isdigit():
+        abort(404)
+    map_ = os.path.join(os.path.dirname(DB_PAD), "werfbezoek", map_id)
     if not os.path.exists(os.path.join(map_, naam)):
         abort(404)
     from flask import send_from_directory

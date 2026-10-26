@@ -44,7 +44,7 @@ VERBODEN = [
     ("S1", re.compile(r"\b(architect|bureau)\b[^.]{0,40}\b(verzuim|nalatig|tekortgeschoten|in gebreke|zijn plicht|haar plicht)", re.I)),
     ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I)),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
-    ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke|ingebrekestelling|schuldig)\b", re.I)),
+    ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke|ingebrekestelling\w*|schuldig)\b", re.I)),
 ]
 
 VERBODEN_PROFIEL = {
@@ -74,11 +74,15 @@ _T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
 _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
-# "De architect sprak zijn vaststellingen in." valt weg. Volgt er na een dubbelpunt of puntkomma een gewone vaststelling,
-# dan blijft die staan; na een komma, of als de rest weer over de opname gaat, wordt de zin zichtbaar gemarkeerd (S4).
-SPRAK = re.compile(r"(?:[^.:;\n]|(?<=\d)[.:](?=\d))*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*"
-                   r"(?:(?P<sep>[:;,])(?P<rest>(?:[^.]|(?<=\d)\.(?=\d))*))?\.?", re.I)
-_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|audio|ingesproken|insprak|sprak)\w*", re.I)
+# "De architect sprak zijn vaststellingen in (om 10:15)." valt weg: de zin zegt alleen dat er ingesproken werd. Staat er
+# meer in de zin (een vaststelling, een puntkomma ervoor), dan wordt hij zichtbaar gemarkeerd (S4); de volledige zin staat
+# in de ingrepen, dus in het logboek. Een zin stopt aan een punt of een nieuwe regel, niet aan de punt of dubbelpunt van
+# een tijdstip.
+_ZT = r"(?:[^.\n]|(?<=\d)[.:](?=\d))"
+SPRAK = re.compile(r"(?P<voor>" + _ZT + r"*?)\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b"
+                   r"(?P<rest>" + _ZT + r"*)\.?", re.I)
+_TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
+_VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname)\b", re.I)
 OPNAME_ZINNEN = [
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _T + r"*\.?", re.I),
@@ -105,16 +109,12 @@ def _opname_weg(tekst):
         return voor + MARKERING.format(regel="S4")
 
     def sprak(m):
-        sep, rest = m.group("sep"), (m.group("rest") or "").strip()
-        voor = m.group(0)[:len(m.group(0)) - len(m.group(0).lstrip())]
-        if not rest:
-            ingrepen.append(("S4", m.group(0).strip()))
+        zin = m.group(0)
+        ingrepen.append(("S4", zin.strip()))
+        rest = re.sub(r"\W", "", _VULWOORD.sub("", _TIJD.sub("", m.group("rest"))))
+        if not rest and not re.search(r"[;:](?!\d)", m.group("voor")):
             return ""
-        if sep in ":;" and not _OVER_OPNAME.search(rest):
-            ingrepen.append(("S4", m.group(0)[:m.start("sep") - m.start() + 1].strip()))
-            return voor + rest[0].upper() + rest[1:] + ("." if m.group(0).rstrip().endswith(".") else "")
-        ingrepen.append(("S4", m.group(0).strip()))
-        return voor + MARKERING.format(regel="S4")
+        return zin[:len(zin) - len(zin.lstrip())] + MARKERING.format(regel="S4")
 
     tekst = SPRAK.sub(sprak, tekst)
     for p in OPNAME_ZINNEN:
