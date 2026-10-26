@@ -1,5 +1,5 @@
 """De dagvaststelling van De Dagbundelaar: een vast overzicht van een Brusselse dag (ontwerp docs/ontwerp-dagvaststelling.md
-v1.7, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
+v1.9, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
 en de communicatie langs mail, Zoom, WhatsApp en telefoon.
 
 Pure functies: de runner (dagbundelaar.py) haalt de bronnen op en geeft ze als gewone lijsten door. Geen netwerk, geen
@@ -355,41 +355,38 @@ def tekst(v, prive_postvakken=(), over=None):
         r.append("- niets gevonden")
     r += ["", "## Communicatie", ""]
     z, g = v["zoom"], v["gesprekken"]
-    # F5: een Zoom-stand die niet volledig is, maakt elk getal van Zoom een ondergrens; zonder stand is de chat onbekend
-    minstens = "" if z["stand"] == "volledig" else "minstens "
-    stand = {"volledig": "", "ondergrens": "", "onbekend": " (Zoom-stand onbekend)",
-             "voorlopig": " (voorlopig: De Zoomwacht kan de dag nog aanvullen)"}.get(z["stand"], f" ({z['stand']})")
-    if minstens:
-        # G5: zonder volledige Zoom-stand is elk getal een ondergrens, en de verdeling is niet te kennen
-        r.append(f"- gesprekken in Zoom, Fathom en Plaud: minstens {g['aantal']}, minstens {g['minuten']} min "
-                 f"(verdeling onbekend){stand}")
+    # L1 en L2 (ontwerp v1.9): een volledig aantal is met deze bronnen niet te bewijzen: De Fathomwacht schrijft tot
+    # veertien dagen terug, en een dagregel die nog klaarstaat blijft herzienbaar. Het overzicht telt dus wat gezien is (per
+    # definitie een ondergrens) en zegt apart wat De Zoomwacht over haar eigen lezing zegt. Komt er later iets bij, dan
+    # volgt een nieuwe versie (de nachtronde herberekent veertien dagen). Onbekend blijft onbekend, nooit nul.
+    zoomwacht = {"volledig": "volledig gelezen", "voorlopig": "nog niet afgesloten", "ondergrens": "onvolledig gelezen",
+                 "onbekend": "stand onbekend"}.get(z["stand"], z["stand"])
+    if z["stand"] == "onbekend" and not g["aantal"]:
+        r.append("- gesprekken in Zoom, Fathom en Plaud: onbekend (De Zoomwacht: stand onbekend)")
     else:
-        r.append(f"- gesprekken in Zoom, Fathom en Plaud: {g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
-                 f"opname, {g['alleen_zoom']} alleen in Zoom)")
-    # De chat heeft een eigen telling in de dagregel (meestal een ondergrens: niet elk chatgesprek is leesbaar)
+        r.append(f"- gesprekken gezien in Zoom, Fathom en Plaud: {g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
+                 f"opname, {g['alleen_zoom']} alleen in Zoom); De Zoomwacht: {zoomwacht}")
     cs = z.get("chatstand") or z["stand"]
     if cs == "onbekend" and not z["chats"]:
         r.append("- Zoom-chat: onbekend")
     else:
-        r.append(f"- Zoom-chat: {'' if cs == 'volledig' else 'minstens '}{z['chats']} chatgesprek(ken)"
-                 + (" (stand onbekend)" if cs == "onbekend" else ""))
+        r.append(f"- Zoom-chat: {z['chats']} chatgesprek(ken) gezien")
     w = v["whatsapp"]
     if w["stand"] == "niet aangesloten":
         r.append("- WhatsApp: nog niet aangesloten")
     elif w["stand"] != "aangesloten" and not (w["gesprekken"] or w["oproepen"]):
         r.append(f"- WhatsApp: onbekend ({w['stand']})")
     else:
-        pre, extra = ("", "") if w["stand"] == "aangesloten" else ("minstens ", f" ({w['stand']})")
-        r.append(f"- WhatsApp: {pre}{w['berichten']} berichten in {w['gesprekken']} gesprekken, {w['oproepen']} oproepen, "
-                 f"{w['minuten']} min{extra}")
+        r.append(f"- WhatsApp: {w['berichten']} berichten in {w['gesprekken']} gesprekken, {w['oproepen']} oproepen, "
+                 f"{w['minuten']} min gezien" + ("" if w["stand"] == "aangesloten" else f" ({w['stand']})"))
     t = v["telefoon"]
     if t["stand"] == "niet aangesloten":
         r.append("- telefoon: nog niet aangesloten")
     elif t["stand"] != "aangesloten" and not t["oproepen"]:
         r.append(f"- telefoon: onbekend ({t['stand']})")
     else:
-        pre, extra = ("", "") if t["stand"] == "aangesloten" else ("minstens ", f" ({t['stand']})")
-        r.append(f"- telefoon: {pre}{t['oproepen']} oproepen, {t['minuten']} min{extra}")
+        r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min gezien"
+                 + ("" if t["stand"] == "aangesloten" else f" ({t['stand']})"))
     if v["mail"] is None:
         r.append("- mail: niet gelezen")
     else:

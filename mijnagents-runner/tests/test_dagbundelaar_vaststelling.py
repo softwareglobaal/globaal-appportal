@@ -409,19 +409,19 @@ def test_g3_zoom_uit_de_dagregel():
         pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
 
         def regel():
-            return next(x for x in lees(pad).splitlines() if x.startswith("- gesprekken in Zoom"))
+            return next(x for x in lees(pad).splitlines() if "Zoom, Fathom en Plaud" in x)
         for gelezen in (False, True, None):
             ronde(w, zoom_gelezen=gelezen)
-            assert "minstens" not in regel(), (gelezen, regel())
+            assert "De Zoomwacht: volledig gelezen" in regel(), (gelezen, regel())
         w.dagregel = json.dumps({"telling": "volledig", "stand": "definitief", "bronnen": {"rapport": "fout", "chat": "ok"}})
         ronde(w)
-        assert "minstens" in regel(), "een bron faalde in de ronde die de regel schreef"
+        assert "De Zoomwacht: onvolledig gelezen" in regel(), "een bron faalde in de ronde die de regel schreef"
         w.dagregel = json.dumps({"telling": "volledig", "stand": "voorlopig: 1 wacht", "bronnen": {"rapport": "ok"}})
         ronde(w)
-        assert "minstens" in regel(), "niet definitief"
+        assert "De Zoomwacht: onvolledig gelezen" in regel(), "niet definitief"
         w.dagregel = None
         ronde(w)
-        assert "minstens" in regel() and "Zoom-stand onbekend" in regel(), regel()
+        assert "gesprekken gezien" in regel() and "De Zoomwacht: stand onbekend" in regel(), regel()
         assert D.ZOOM_ONZEKER not in json.load(open(os.path.join(m, "staat.json")))
 
 
@@ -433,13 +433,18 @@ def test_k1_zoom_voorlopig_binnen_de_terugblik():
         pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
 
         def regel():
-            return next(x for x in lees(pad).splitlines() if x.startswith("- gesprekken in Zoom"))
+            return next(x for x in lees(pad).splitlines() if "Zoom, Fathom en Plaud" in x)
         ronde(w, gisteren="2026-10-22")
-        assert "minstens 1" in regel() and "voorlopig" in regel(), regel()
-        ronde(w, gisteren="2026-10-27")                   # vandaag 28-10: zes dagen na de dag, nog voorlopig
-        assert "voorlopig" in regel(), regel()
+        assert "gezien" in regel() and "De Zoomwacht: nog niet afgesloten" in regel(), regel()
+        ronde(w, gisteren="2026-10-27")                   # vandaag 28-10: zes dagen na de dag, nog niet afgesloten
+        assert "nog niet afgesloten" in regel(), regel()
         ronde(w, gisteren="2026-10-28")                   # vandaag 29-10: zeven dagen, de regel is af
-        assert "minstens" not in regel() and "versie 2" in lees(pad), regel()
+        assert "De Zoomwacht: volledig gelezen" in regel() and "versie 2" in lees(pad), regel()
+        # L2: een late Fathom-rij na zeven dagen geeft een nieuwe versie met wat dan gezien is; nooit een exact totaal
+        w.rijen.append({"uniek": "fathom:laat", "datum": DAG, "start": "21:00", "minuten": 12, "personen": "Ruben",
+                        "afdeling": "", "thema": "", "prive": 0, "bron": "fathom", "dubbel_van": ""})
+        ronde(w, gisteren="2026-11-01")
+        assert "gesprekken gezien in Zoom, Fathom en Plaud: 2, 18 min" in regel() and "versie 3" in lees(pad), regel()
 
 
 def test_g3_zoomstand_uit_de_dagregel():

@@ -171,23 +171,27 @@ def test_agenda_en_standen():
     t = V.tekst(v)
     eis("agenda niet gelezen: onbekend" in t and "locatie: niet gelezen" in t and "mail: niet gelezen" in t,
         "niets gelezen is onbekend, geen nul")
-    eis("Zoom-stand onbekend" in t and "Zoom-chat: onbekend" in t and "0 chatgesprek" not in t, f"F5: Zoom onbekend\n{t}")
+    eis("gesprekken in Zoom, Fathom en Plaud: onbekend" in t and "Zoom-chat: onbekend" in t and "0 chatgesprek" not in t,
+        f"F5: Zoom onbekend\n{t}")
     t = V.tekst(V.vaststellen(DAG, [], set(), [rij("zoom:chat:a:2026-10-22", "09:00", 0, "Ruben")], {}, [], "volledig",
                               V.mail_telling(DAG, {}, {}), None, is_prive, chatstand="ondergrens"))
-    eis("Zoom-chat: minstens 1 chatgesprek" in t and "gesprekken in Zoom, Fathom en Plaud: 0, 0 min" in t,
-        f"de chat heeft haar eigen stand\n{t}")
+    eis("Zoom-chat: 1 chatgesprek(ken) gezien" in t and "gesprekken gezien in Zoom, Fathom en Plaud: 0, 0 min" in t
+        and "De Zoomwacht: volledig gelezen" in t, f"de chat apart; Zoom zegt zelf volledig\n{t}")
     eis("WhatsApp: nog niet aangesloten" in t and "telefoon: nog niet aangesloten" in t, "zonder kanaalstand: niet aangesloten")
     t = V.tekst(vast(rijen=[rij("zoom:meeting:a", "09:00", 20, "Ruben")], zoom="ondergrens"))
-    eis("gesprekken in Zoom, Fathom en Plaud: minstens 1, minstens 20 min (verdeling onbekend)" in t
-        and "Zoom-chat: minstens 0" in t and "alleen in Zoom" not in t, f"G5: ondergrens\n{t}")
+    eis("gesprekken gezien in Zoom, Fathom en Plaud: 1, 20 min (0 met opname, 1 alleen in Zoom); De Zoomwacht: "
+        "onvolledig gelezen" in t and "Zoom-chat: 0 chatgesprek(ken) gezien" in t and "minstens" not in t, f"L2: gezien\n{t}")
     t = V.tekst(vast(rijen=[rij("fathom:a", "09:00", 20, "Ruben", bron="fathom")], zoom="onbekend"))
-    eis("minstens 1, minstens 20 min (verdeling onbekend) (Zoom-stand onbekend)" in t and "met opname" not in t,
-        f"G5: onbekend\n{t}")
+    eis("gezien in Zoom, Fathom en Plaud: 1, 20 min (1 met opname, 0 alleen in Zoom); De Zoomwacht: stand onbekend" in t,
+        f"L2: gezien bij onbekende stand\n{t}")
+    eis("volledig gelezen" not in V.tekst(vast(zoom="voorlopig")) and "nog niet afgesloten" in V.tekst(vast(zoom="voorlopig")),
+        "voorlopig")
     # D2: rijen zonder aangesloten wacht tellen niet als aangesloten; een stille wacht is onvolledig
     wa = [rij("whatsapp:abc:2026-10-22", "08:01", 0, "Broer Ali", bron="whatsapp", thema="14 berichten (5 van Mehdi)")]
     eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"})), "rijen alleen")
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "stil sinds 2026-10-20 09:00"}))
-    eis("WhatsApp: minstens 14 berichten in 1 gesprekken" in t and "(stil sinds 2026-10-20 09:00)" in t, f"stille wacht\n{t}")
+    eis("WhatsApp: 14 berichten in 1 gesprekken, 0 oproepen, 0 min gezien (stil sinds 2026-10-20 09:00)" in t,
+        f"stille wacht\n{t}")
     t = V.tekst(vast(kanalen={"whatsapp": "onbekend voor deze dag", "telefoon": "stil sinds 25-10 08:00"}))
     eis("WhatsApp: onbekend (onbekend voor deze dag)" in t and "telefoon: onbekend (stil sinds 25-10 08:00)" in t,
         f"F5: zonder dekking van de dag geen nul\n{t}")

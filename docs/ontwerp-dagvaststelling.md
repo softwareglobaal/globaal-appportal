@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.8, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -291,3 +291,17 @@ Verder: namen zonder accenten vergelijken; de uitleg van een aanwijzing noemt ho
 |---|---|
 | K1 | 'ok' zegt dat een bron antwoordde, niet dat elke opname er al was. De Zoomwacht kan een dagregel nog herzien tot zes dagen na de dag (zoom_wacht.TERUGBLIK) en daarna nooit meer. Tot dan is een volledige regel 'voorlopig': 'minstens N, minstens M min (voorlopig: De Zoomwacht kan de dag nog aanvullen)'. Daarna exact; de nachtronde herberekent veertien dagen, dus de dag krijgt dan vanzelf een nieuwe versie |
 | K2 | de bezoeken zonder afspraak komen niet meer uit de lijsten van De Locatiewacht (die een samengevoegd parkeerstuk aan een ochtendafspraak kan hangen), maar uit haar verblijven met de echte meettijden (eerste en laatste meting binnen 300 m: aankomen en vertrekken) en de eigen koppeling: een verblijf hoort bij een afspraak alleen als die volgens de metingen doorging, binnen 300 m van haar plek en in haar venster |
+
+## Herziening in v1.9 (ronde 9, docs/codex/dagvaststelling-bouw-r9.md): geen belofte van volledigheid meer
+
+K1, L1 en L2 tonen hetzelfde: met deze bronnen is een volledig aantal gesprekken niet te bewijzen. De Fathomwacht schrijft
+tot veertien dagen terug, een dagregel die nog klaarstaat blijft herzienbaar, en elke grens die de vaststelling kiest, kan
+een latere bron doorbreken. Daarom belooft de vaststelling geen volledigheid meer:
+
+- Gesprekken, Zoom-chats, WhatsApp en telefoon heten 'gezien': wat de bronnen tot dan toonden, per definitie een
+  ondergrens. Ernaast staat wat De Zoomwacht over haar eigen lezing zegt ('De Zoomwacht: volledig gelezen', 'nog niet
+  afgesloten', 'onvolledig gelezen', 'stand onbekend'), als haar oordeel, niet als dat van de vaststelling.
+- Onbekend blijft onbekend: zonder bron en zonder iets gezien staat er 'onbekend', nooit 0.
+- Komt er later iets bij, dan maakt de nachtronde (veertien dagen) een nieuwe versie; de vorige blijft in versies/.
+
+De vaststelling is zo een logboek van wat er gezien werd, met datum en versie, wat Mehdi vroeg: terugvinden wat er was.
