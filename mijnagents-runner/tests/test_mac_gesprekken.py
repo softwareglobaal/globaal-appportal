@@ -721,6 +721,9 @@ def test_u1_helper_laat_andere_apps_weg():
         assert b"Andere App Proef" not in ruw and b"W1" not in ruw and b"net.whatsapp" not in ruw
         rijen, info = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
         assert [r["personen"] for r in rijen] == ["Kees Proef"] and info["overgeslagen"] == 1, (rijen, info)
+        # V3: de oproepen van andere apps tellen alleen in het eigen venster (een dag lang geleden: geen)
+        assert M.telefoon_rijen(uit, ["2020-01-01"])[1]["overgeslagen"] == 0
+        assert b"470000002" not in ruw
         assert M.lees(uit, M.SQL_NIEUWSTE)[0][0] == nu - 600
 
 
@@ -819,6 +822,36 @@ def test_s1_t1_rem_voor_het_schrijven_ook_bij_andere_sleutels():
     b = NepBord()
     M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(100)], DAG, DAG, b.call, b.terug)
     assert M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(99)], DAG, DAG, b.call, b.terug) == 1
+
+
+def test_v1_vervallen_dekking_is_geen_bewijs():
+    """Codex V1, de hele route: een dag waarvan alle oproepen uit de bron verdwijnen, verliest ook zijn dekking; De
+    Dagbundelaar toont die dag dan als onbekend, nooit als '0 oproepen gezien'."""
+    dagen = ["2026-10-21", DAG, "2026-10-23"]
+    gekopieerd = bxl(2026, 10, 24, 9, 0)
+
+    def ronde(map_, b, met_dag):
+        oproepen = [(f"U{d}{u}", a(bxl(2026, 10, d, 9 + u, 0)), 120.0, 1, 0, "0470000001", "com.apple.Telephony")
+                    for d in (21, 22, 23) if met_dag or d != 22 for u in range(3)]
+        pad = maak_telefoon(os.path.join(map_, f"tel-{met_dag}.sqlite"), oproepen, nieuwste=a(bxl(2026, 10, 24, 8, 0)))
+        rijen, info = M.telefoon_rijen(pad, dagen)
+        rijen += M.dekking("telefoon", dagen, gekopieerd, info["nieuwste"], info["aanwezig"])
+        return M.schrijf_en_lees_terug("telefoon", rijen, dagen[0], dagen[-1], b.call, b.terug)
+
+    b = NepBord()
+    with tempfile.TemporaryDirectory() as map_:
+        assert ronde(map_, b, True) == 0
+        assert ronde(map_, b, False) == 4                       # drie oproepen en de dekking van 22-10
+    rijen = list(b.tabel.values())
+    assert b.tabel[f"dekking:telefoon:{DAG}"]["dubbel_van"] == M.VERVALLEN
+    gedekt = D.gedekte_dagen(rijen)
+    assert gedekt == {("telefoon", "2026-10-21"), ("telefoon", "2026-10-23")}, gedekt
+    stand = D.kanaal_van_dag("aangesloten", "telefoon", DAG, gedekt)
+    tekst = V.tekst(V.vaststellen(DAG, [], [], rijen, {}, [], "volledig", None, {"whatsapp": "niet aangesloten",
+                                  "telefoon": stand}, lambda x: False))
+    assert "- telefoon: onbekend (onbekend voor deze dag)" in tekst, tekst
+    # de inhaalbeurt van de nacht kijkt ook alleen naar actieve dekking
+    assert "buiten:vervallen" in Path(D.__file__).read_text(encoding="utf-8").split("def inhaaldagen", 1)[1][:900]
 
 
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():

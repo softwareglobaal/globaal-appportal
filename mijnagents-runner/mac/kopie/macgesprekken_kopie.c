@@ -59,7 +59,7 @@ static const Bron TELEFOON[] = {
    gesprek van de oproep aan. Contacten alleen als ze bij een gesprek, oproep of nummer van het venster horen.
    Codex U1: wat de wachten niet tellen, verlaat de bron ook niet. Bij WhatsApp alleen gesprekken met een persoon of
    een groep (ZSESSIONTYPE 0 en 1; geen status, uitzendlijst of kanaal), bij de iPhone alleen gewone oproepen en
-   FaceTime (geen WhatsApp of een andere app; van die alleen het aantal). Zoals mac_gesprekken.PERSOON, GROEP en
+   FaceTime (geen WhatsApp of een andere app; van die alleen het tijdstip, om ze per venster te tellen). Zoals mac_gesprekken.PERSOON, GROEP en
    TEL_DIENSTEN. */
 static const char WHATSAPP_VRAGEN[] =
     "CREATE TEMP TABLE toegelaten AS SELECT Z_PK FROM chat.ZWACHATSESSION WHERE ZSESSIONTYPE IN (0, 1);"
@@ -93,10 +93,10 @@ static const char TELEFOON_VRAGEN[] =
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
     "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
+    "CREATE TABLE ANDERE_APPS AS SELECT ZDATE FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
+    "  AND COALESCE(ZSERVICE_PROVIDER, '') NOT IN ('com.apple.Telephony', 'com.apple.FaceTime');"
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD "
-    "  WHERE ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime')) AS waarde "
-    "  UNION ALL SELECT 'andere_apps', (SELECT COUNT(*) FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
-    "  AND COALESCE(ZSERVICE_PROVIDER, '') NOT IN ('com.apple.Telephony', 'com.apple.FaceTime'));";
+    "  WHERE ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime')) AS waarde;";
 
 static const Set SETS[] = {
     {"whatsapp", WHATSAPP, sizeof WHATSAPP / sizeof *WHATSAPP, WHATSAPP_VRAGEN},

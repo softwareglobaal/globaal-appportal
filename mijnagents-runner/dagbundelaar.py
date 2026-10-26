@@ -343,7 +343,8 @@ def inhaaldagen(nu, venster):
     vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
     if vroegste >= oudste:
         return []
-    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' AND datum BETWEEN ? AND ? "
+    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' "
+                         "AND COALESCE(dubbel_van, '') != 'buiten:vervallen' AND datum BETWEEN ? AND ? "
                          "GROUP BY datum", (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
     try:
         staat = json.loads(_lees(STAAT) or "{}")
@@ -365,6 +366,15 @@ def inhaaldagen(nu, venster):
         if nieuw is not None and (not vorige or nieuw > max(vorige)):
             uit.append(x["datum"])
     return sorted(uit[:INHAAL_PER_NACHT])
+
+
+def gedekte_dagen(rijen):
+    """F5: de (kanaal, dag) die een Mac-wacht als gelezen meldt: een dekkingsrij dekking:<kanaal>:<dag>. Een dekkingsrij
+    die de wacht zelf vervallen verklaarde (de dag toont geen gegevens meer), bewijst niets meer: die dag is onbekend,
+    nooit nul (Codex V1, fase 2)."""
+    return {(str(x["uniek"]).split(":")[1], x["datum"]) for x in rijen
+            if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2
+            and str(x.get("dubbel_van") or "") != "buiten:vervallen"}
 
 
 def kanaalstand(rij, nu):
@@ -660,8 +670,7 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
     rijen = bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
                          "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?", (eerste, laatste))
-    gedekt = {(x["uniek"].split(":")[1], x["datum"]) for x in rijen
-              if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2}
+    gedekt = gedekte_dagen(rijen)
     dagregels = {x["uniek"][9:]: x["inhoud"] or "" for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()

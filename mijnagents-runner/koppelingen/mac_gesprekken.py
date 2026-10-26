@@ -83,7 +83,7 @@ SQL_TELEFOON = ("SELECT ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZA
                 "FROM ZCALLRECORD ORDER BY ZDATE, ZUNIQUE_ID")
 SQL_NIEUWSTE = "SELECT waarde FROM META WHERE sleutel = 'nieuwste'"
 SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
-SQL_ANDERE_APPS = "SELECT waarde FROM META WHERE sleutel = 'andere_apps'"
+SQL_ANDERE_APPS = "SELECT COUNT(*) FROM ANDERE_APPS WHERE ZDATE >= ? AND ZDATE < ?"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
        SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS)
 MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
@@ -364,9 +364,11 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
         # overschrijven elkaar zo nooit, en de sleutel blijft dezelfde als het venster opschuift.
         rijen.append(_rij(f"telefoon:{ident}-{int(apple(moment))}", dag_van(moment), start_van(moment), minuten(duur), persoon, thema,
                           "telefoon", "" if duur > 0 else GEMIST))
-    # de helper laat oproepen van andere apps al weg (Codex U1) en geeft alleen hun aantal
-    andere = lees(pad, SQL_ANDERE_APPS)
-    overgeslagen += int(andere[0][0] or 0) if andere else 0
+    # de helper laat oproepen van andere apps al weg (Codex U1) en geeft alleen hun tijdstip: geteld in het venster (V3)
+    try:
+        overgeslagen += int(lees(pad, SQL_ANDERE_APPS, (van, tot))[0][0] or 0)
+    except sqlite3.OperationalError:
+        pass
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "overgeslagen": overgeslagen}
 
 
