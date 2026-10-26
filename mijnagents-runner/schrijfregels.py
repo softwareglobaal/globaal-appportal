@@ -32,43 +32,17 @@ import re
 
 MARKERING = "(geschrapt: schrijfregel {regel}, zie de schrijfregels van het kantoor)"
 
-# S1 zonder onderwerp ("niet eerder ter plaatse") geldt niet voor een zin die met een derde begint: "De landmeter is
-# eerder niet gekomen" is een vaststelling over iemand anders. Twijfel blijft S1: een zin over het eigen bureau mag nooit
-# door (Mehdi, 23-10-2026), een ten onrechte geschrapte zin staat zichtbaar gemarkeerd.
-_DERDE = (r"(?:de|het|een|onze|uw)\s+(?:[\w-]+[- ])?(?:on)?(?:aannemer|landmeter|veiligheidsco[öo]rdinator|"
-          r"verslaggever|ramenplaatser|dakwerker|dakdekker|keurder|ingenieur|bouwheer|bouwheren|eigenaar|huurder|"
-          r"buur|buren|loodgieter|elektricien|installateur|schrijnwerker|tegelzetter|plafonneerder|metser|"
-          r"studiebureau|nutsmaatschappij|brandweer|gemeente|leverancier|fabrikant|controleorganisme|"
-          r"verzekeraar|expert|syndicus|notaris)s?\b")
-_EIGEN = re.compile(r"\b(?:architect(?:en)?(?:bureau|kantoor)?|bureau|h-architects|ondergetekende|wij|we|ik|ons|onze|mehdi|chegini)\b", re.I)
-_DERDE_BEGIN = re.compile(r"\s*" + _DERDE, re.I)
-_DERDE_BEZOEK = re.compile(r"\b(?:hoogstens|maximaal|slechts|maar)\s+(?:één|een|1)\s+(?:controle)?bezoek\w*\s+(?:van|door)\s+" + _DERDE, re.I)
-_VASTSTELLING = re.compile(r"\s*(?:de\s+)?architect\s+(?:stelt|stelde|merkt|merkte)\s+(?:vast|op),?\s+dat\s+(" + _DERDE + r".*)", re.I | re.S)
-
-
-def DERDE(zin):
-    """Een zin zonder onderwerp ("niet eerder ter plaatse") over een derde: hij begint met die derde en noemt het eigen
-    bureau nergens, of het ene bezoek is dat van een derde ("slechts één bezoek van de keurder")."""
-    return bool((_DERDE_BEGIN.match(zin) and not _EIGEN.search(zin)) or _DERDE_BEZOEK.search(zin))
-
-
-def VASTSTELLING_OVER_DERDE(zin):
-    """"De architect stelt vast dat de dakwerker niet aanwezig was": de rest van de zin gaat over de derde."""
-    m = _VASTSTELLING.match(zin)
-    return bool(m and not _EIGEN.search(m.group(1)))
-
-# (regel, patroon) op zinsniveau; hoofdletterongevoelig. Een zin die matcht, wordt in zijn geheel vervangen.
 VERBODEN = [
     ("S2", re.compile(r"deontolog", re.I)),
     ("S2", re.compile(r"\borde\s+van\s+(de\s+)?architect", re.I)),
     ("S2", re.compile(r"\b(reglement|plichtenleer)\s+van\s+(de\s+)?(orde|architect)", re.I)),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
-    ("S1", re.compile(r"\b(geen|niet)\s+(eerder|vroeger|voordien|tevoren)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I), DERDE),
-    ("S1", re.compile(r"\b(eerder|vroeger|voordien|tevoren)\s+(geen|niet)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I), DERDE),
-    ("S1", re.compile(r"\b(blijkt|bleek)\s+geen\s+(eerder|vroeger)\s+\w*\s*(bezoek|controle|tussenkomst)", re.I), DERDE),
-    ("S1", re.compile(r"\b(de\s+)?(architect|het\s+bureau|h-architects)\b[^.]{0,60}\b(niet|nooit)\s+(geweest|gekomen|aanwezig|langsgekomen|bezocht|gecontroleerd|opgevolgd)", re.I), VASTSTELLING_OVER_DERDE),
+    ("S1", re.compile(r"\b(geen|niet)\s+(eerder|vroeger|voordien|tevoren)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I)),
+    ("S1", re.compile(r"\b(eerder|vroeger|voordien|tevoren)\s+(geen|niet)\s+\w*\s*(bezoek|bezocht|geweest|gekomen|aanwezig|gecontroleerd|opgevolgd|ter plaatse)", re.I)),
+    ("S1", re.compile(r"\b(blijkt|bleek)\s+geen\s+(eerder|vroeger)\s+\w*\s*(bezoek|controle|tussenkomst)", re.I)),
+    ("S1", re.compile(r"\b(de\s+)?(architect|het\s+bureau|h-architects)\b[^.]{0,60}\b(niet|nooit)\s+(geweest|gekomen|aanwezig|langsgekomen|bezocht|gecontroleerd|opgevolgd)", re.I)),
     ("S1", re.compile(r"\b(architect|bureau)\b[^.]{0,40}\b(verzuim|nalatig|tekortgeschoten|in gebreke|zijn plicht|haar plicht)", re.I)),
-    ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I), DERDE),
+    ("S1", re.compile(r"\b(hoogstens|maximaal|slechts|maar)\s+(één|een|1)\s+(controle)?bezoek", re.I)),
     ("S3", re.compile(r"\b(vorige|eerdere|andere|collega)[- ]architect\b[^.]{0,80}\b(niet|nooit|slecht|nalatig|fout)", re.I)),
     ("S5", re.compile(r"\b(aansprakelijk|wanprestatie|contractbreuk|contractuele\s+fout|in\s+gebreke|ingebrekestelling|schuldig)\b", re.I)),
 ]
@@ -99,8 +73,12 @@ _T = r"(?:[^.;:]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
 _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
+# "De architect sprak zijn vaststellingen in." valt weg. Volgt er na een dubbelpunt of puntkomma een gewone vaststelling,
+# dan blijft die staan; na een komma, of als de rest weer over de opname gaat, wordt de zin zichtbaar gemarkeerd (S4).
+SPRAK = re.compile(r"[^.:;]*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*"
+                   r"(?:(?P<sep>[:;,])(?P<rest>(?:[^.]|(?<=\d)\.(?=\d))*))?\.?", re.I)
+_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|audio|ingesproken|insprak|sprak)\w*", re.I)
 OPNAME_ZINNEN = [
-    re.compile(r"[^.:;]*\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b[^.:;,]*(?:[.;]|[:,]\s*(\w)?|$)", re.I),
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _T + r"*\.?", re.I),
 ]
@@ -117,18 +95,27 @@ def _opname_weg(tekst):
     ingrepen = []
 
     def zin_weg(m):
-        zin = m.group(0)
-        volgletter = m.group(1) if m.re.groups else None
-        if volgletter:
-            zin = zin[:-1]
-        ingrepen.append(("S4", zin.strip()))
-        return volgletter.upper() if volgletter else ""
+        ingrepen.append(("S4", m.group(0).strip()))
+        return ""
 
     def zin_gemarkeerd(m):
         ingrepen.append(("S4", m.group(0).strip()))
         voor = m.group(0)[:len(m.group(0)) - len(m.group(0).lstrip())]
         return voor + MARKERING.format(regel="S4")
 
+    def sprak(m):
+        sep, rest = m.group("sep"), (m.group("rest") or "").strip()
+        voor = m.group(0)[:len(m.group(0)) - len(m.group(0).lstrip())]
+        if not rest:
+            ingrepen.append(("S4", m.group(0).strip()))
+            return ""
+        if sep in ":;" and not _OVER_OPNAME.search(rest):
+            ingrepen.append(("S4", m.group(0)[:m.start("sep") - m.start() + 1].strip()))
+            return voor + rest[0].upper() + rest[1:] + ("." if m.group(0).rstrip().endswith(".") else "")
+        ingrepen.append(("S4", m.group(0).strip()))
+        return voor + MARKERING.format(regel="S4")
+
+    tekst = SPRAK.sub(sprak, tekst)
     for p in OPNAME_ZINNEN:
         tekst = p.sub(zin_weg, tekst)
     tekst = OPNAME_VOLGENS.sub(zin_gemarkeerd, tekst)
@@ -145,21 +132,16 @@ def _regels(profiel=None):
     return VERBODEN + (VERBODEN_PROFIEL.get(profiel) or [])
 
 
-def _treft(regel, zin):
-    """(regel, patroon) of (regel, patroon, uitzondering): de uitzondering is een functie op de zin (DERDE)."""
-    return regel[1].search(zin) and not (len(regel) > 2 and regel[2](zin))
-
-
 def controleer(tekst, profiel=None):
     """Alle overtredingen in een tekst: [(regel, zin)]. Opnameverwijzingen tellen als S4."""
     uit = []
     regels = _regels(profiel)
     for zin in _ZIN.findall(tekst or ""):
-        for r in regels:
-            if _treft(r, zin):
-                uit.append((r[0], zin.strip()))
+        for regel, p in regels:
+            if p.search(zin):
+                uit.append((regel, zin.strip()))
                 break
-    for p in OPNAME + OPNAME_ZINNEN + [OPNAME_VOLGENS]:
+    for p in OPNAME + OPNAME_ZINNEN + [SPRAK, OPNAME_VOLGENS]:
         for m in p.finditer(tekst or ""):
             uit.append(("S4", m.group(0).strip()))
     return uit
@@ -177,10 +159,10 @@ def toepassen(tekst, profiel=None, vast=frozenset()):
         if zin.strip() in vast:
             delen.append(zin)
             continue
-        for r in regels:
-            if _treft(r, zin):
-                ingrepen.append((r[0], zin.strip()))
-                delen.append(MARKERING.format(regel=r[0]) + " ")
+        for regel, p in regels:
+            if p.search(zin):
+                ingrepen.append((regel, zin.strip()))
+                delen.append(MARKERING.format(regel=regel) + " ")
                 break
         else:
             delen.append(zin)

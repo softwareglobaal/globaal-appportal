@@ -18,15 +18,16 @@ bureau bleek, noemde de beperking van de eigen opdracht, en verwees bij elke vas
 
 **S1. Niets over de architect of het bureau zelf.** Geen zin over de eigen aanwezigheid, eerdere bezoeken,
 opdrachtomvang, verplichtingen, fouten of verzuim. Het hoofdstuk "Rol van H-Architects in dit dossier" vult alleen
-Mehdi in; de agent laat het op "(in te vullen)". Dit geldt alleen voor het eigen bureau: wat een derde (landmeter,
-veiligheidscoördinator, dakwerker) wel of niet deed, is een gewone vaststelling. Bij twijfel schrapt de grendel: een zin
-die het eigen bureau noemt, gaat altijd weg, ook als een derde hem vertelt ("De aannemer zegt dat de architect niet
-eerder ter plaatse was"). Een ten onrechte geschrapte zin zie je aan de markering en zet je zelf terug.
+Mehdi in; de agent laat het op "(in te vullen)". De regel gaat over het eigen bureau, maar de grendel kiest bij twijfel
+voor schrappen: een zin over het eigen bureau gaat altijd weg, ook als een derde hem vertelt ("De aannemer zegt dat de
+architect niet eerder ter plaatse was"). Een zin zonder onderwerp zoals "De landmeter is niet eerder ter plaatse
+geweest" wordt daardoor ook gemarkeerd; je ziet dat aan de markering en zet hem zelf terug. Schrijf over een derde
+liever met een datum: "De landmeter kwam op 3 juni voor het eerst ter plaatse."
 
 - Fout: "Uit de voorgelegde stukken blijkt geen eerder bezoek van het bureau aan de werken."
 - Fout: "De opdracht is beperkt tot de vergunning, met hoogstens één controlebezoek."
 - Goed: "Het bezoek van 3 juni 2026 vond plaats op vraag van de bouwheren."
-- Goed: "De landmeter is niet eerder ter plaatse geweest."
+- Goed: "De landmeter kwam op 3 juni voor het eerst ter plaatse."
 
 **S2. Nooit de deontologie of de Orde van Architecten.** Geen verwijzing naar de deontologie, het reglement of de Orde,
 en nooit het oordeel dat iets daartegen ingaat. Dat oordeel is aan de Orde, niet aan een verslag.

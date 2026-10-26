@@ -189,7 +189,8 @@ def _bron_noot(bron):
     b = (bron or "").strip()
     if not b or b == herkomst(b):
         return ""
-    return " <!-- bron: " + b.replace("--", "- -") + " -->"
+    # één regel en geen "--" erin: anders breekt het commentaar en komt de bron in de tekst terecht
+    return " <!-- bron: " + re.sub(r"-{2,}", "-", re.sub(r"\s*\n\s*", " / ", b)) + " -->"
 
 
 def _bron_uit(regel):

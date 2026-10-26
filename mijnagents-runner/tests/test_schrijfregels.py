@@ -103,12 +103,16 @@ check("V1 wacht met vast: kantoortekst vrij, eigen S5-zin van de schrijver wel g
 check("V1 wacht zonder vast (verslag_basis) werkt zoals voorheen", S.wacht({"t": "De aannemer is aansprakelijk."}) == [("S5", "De aannemer is aansprakelijk.")])
 check("V1 voorbehoud van het verslag van bevindingen blijft", vb.VOORBEHOUD.split("\n")[2] in vb.naar_markdown(vb.leeg()))
 
-# V4: S1 alleen over het eigen bureau, nooit over derden
+# V4, beslist na drie reviewrondes (26-10-2026): S1 is gelijk aan productie. Elke uitzondering voor derden liet een zin
+# over het eigen bureau door ("... ; wel maar één bezoek van de landmeter", "de projectarchitect", "de keurder" van
+# UNABO). Een zin zonder onderwerp over een derde wordt dus zichtbaar gemarkeerd; Mehdi zet hem zelf terug.
 derden = ["De veiligheidscoördinator is nog niet eerder langsgekomen op de werf.", "De EPB-verslaggever is niet eerder ter plaatse geweest.",
           "De ramenplaatser was vroeger niet aanwezig bij de werfvergadering.", "De landmeter is eerder niet gekomen.",
           "De architect stelt vast dat de dakwerker niet aanwezig was.", "Er is slechts één bezoek van de keurder voorzien."]
 for zin in derden:
-    check(f"V4 S1 laat derden staan: '{zin[:40]}'", S.toepassen(zin) == (zin, []), S.toepassen(zin))
+    nieuw, ing = S.toepassen(zin)
+    check(f"V4 zin over een derde zichtbaar gemarkeerd, nooit stil weg: '{zin[:40]}'",
+          "schrijfregel S1" in nieuw and ing == [("S1", zin)], (nieuw, ing))
 for zin in ("De architect is niet eerder ter plaatse geweest.", "Het bureau heeft de werken nooit gecontroleerd.", "We waren niet eerder ter plaatse."):
     check(f"V4 S1 blijft voor het eigen bureau: '{zin[:40]}'", [r for r, _ in S.toepassen(zin)[1]] == ["S1"], S.toepassen(zin))
 
@@ -186,12 +190,15 @@ for zin in ["De architect was op dat moment niet aanwezig.", "De architect was t
             "De architect werd pas na de werken aangesteld, hij was voordien niet ter plaatse.", "Mehdi Chegini was niet eerder ter plaatse.",
             "Het architectenbureau is niet eerder langsgekomen.", "Ik ben hier niet eerder geweest.",
             "De architectenovereenkomst voorziet slechts één controlebezoek.", "Het ereloon dekt maar één bezoek.",
-            "De aannemer zegt dat de architect niet eerder ter plaatse was.", "De bouwheer meldt dat het bureau voordien niet geweest is."]:
-    check(f"S1 blijft voor het eigen bureau: '{zin[:40]}'", any(r == "S1" for r, _ in S.controleer(zin)), S.controleer(zin))
-for zin in ["De veiligheidscoördinator is nog niet eerder langsgekomen op de werf.", "De EPB-verslaggever is niet eerder ter plaatse geweest.",
-            "De ramenplaatser was vroeger niet aanwezig bij de werfvergadering.", "De landmeter is eerder niet gekomen.",
-            "De architect stelt vast dat de dakwerker niet aanwezig was.", "Er is slechts één bezoek van de keurder voorzien.",
-            "Bij het bezoek van de architect was geen aannemer aanwezig.",
+            "De aannemer zegt dat de architect niet eerder ter plaatse was.", "De bouwheer meldt dat het bureau voordien niet geweest is.",
+            "Uit de stukken blijkt geen eerder bezoek van het bureau; wel was er maar één bezoek van de landmeter.",
+            "De aannemer verklaart dat de projectarchitect niet eerder ter plaatse kwam.",
+            "De bouwheer zegt dat het kantoor niet eerder ter plaatse kwam.", "De aannemer zegt dat hij mij niet eerder ter plaatse heeft gezien.",
+            "De eigenaar verklaart dat de architecte niet eerder ter plaatse was.", "De aannemer zegt dat Mehdi niet eerder ter plaatse was.",
+            "De keurder van UNABO was niet eerder ter plaatse.", "De architect stelt vast dat de bouwheer zegt dat wij niet aanwezig waren."]:
+    check(f"S1 blijft voor het eigen bureau: '{zin[:40]}'", any(r == "S1" for r, _ in S.controleer(zin))
+          and any(r == "S1" for r, _ in S.controleer(zin, "aankoopkeuring")), S.controleer(zin))
+for zin in ["Bij het bezoek van de architect was geen aannemer aanwezig.",
             "Indien de architect niet ter plaatse is, legt de aannemer de wapening fotografisch vast.",
             "Volgens de architect is er geen dampscherm aanwezig.", "Wij hebben de kelder niet bezocht wegens wateroverlast.",
             "Ondergetekende heeft het platte dak niet gecontroleerd wegens het ontbreken van een veilige toegang.",
@@ -205,7 +212,10 @@ for zin in ["De herstelkosten worden geraamd op 4500 tot 6000.", "Richtprijs: 80
 for zin in ["Het bouwmisdrijf verjaart na tien jaar.", "De overtreding kan niet meer verjaren.", "De verjaarde overtreding vraagt geen regularisatie."]:
     check(f"S7 elke vorm van verjaren: '{zin[:30]}'", any(r == "S7" for r, _ in S.controleer(zin, "aankoopkeuring")), S.controleer(zin, "aankoopkeuring"))
 check("S7 een verjaardag is geen verjaring", not S.controleer("De verjaardag van de bouwheer viel op het bezoek.", "aankoopkeuring"))
-for zin, verwacht in [("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.", "Het kader is 2 cm uit het lood."),
+for zin, verwacht in [("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.", S.MARKERING.format(regel="S4")),
+                      ("De architect sprak zijn vaststellingen ter plaatse in; het kader is 2 cm uit het lood.", "Het kader is 2 cm uit het lood."),
+                      ("De architect sprak zijn vaststellingen ter plaatse in; de opname en het transcript zitten in de bezoekmap.",
+                       S.MARKERING.format(regel="S4")),
                       ("De dorpel is 3 cm te laag; het tijdstip tussen haakjes verwijst naar de opname.", "De dorpel is 3 cm te laag."),
                       ("Volgens de opname bestaande toestand is de muur 30 cm dik.", "Volgens de opname bestaande toestand is de muur 30 cm dik."),
                       ("Uit de opname van de landmeter blijkt dat de perceelgrens 20 cm verschuift.",
@@ -222,6 +232,30 @@ check("een eigen S5-zin van de schrijver gaat nog altijd weg", S.wacht({"t": "De
 for b, code in [("EPB startverklaring.pdf", "S"), ("Prestatieverklaring PIR-isolatie.pdf", "S"), ("verklaring bouwheer", "B"),
                 ("mondeling", "B"), ("transcript.txt 00:22:30", "V"), ("Lastenboek.pdf", "S")]:
     check(f"herkomst '{b}' is {code}", sj.herkomst(b) == code, sj.herkomst(b))
+
+t4, ing4 = S.toepassen("De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.")
+check("S4 de gemarkeerde zin staat volledig in het logboek", ing4 == [("S4", "De architect sprak zijn vaststellingen ter plaatse in, het kader is 2 cm uit het lood.")], ing4)
+pm = dict(w, categorieen=[{"naam": "Ramen", "punten": [{"nummer": "3.1", "titel": "Latei", "datum": "2026-10-01", "tekst_nl": "De latei ontbreekt.",
+                                                       "bron": "transcript.txt 00:12:00\ntranscript.txt 00:14:30 ---> map", "fotos": []}]}])
+mdm = sj.naar_markdown(pm)
+pt = sj.van_markdown(mdm)["categorieen"][0]["punten"][0]
+check("een bron over meer regels of met '-->' breekt het verborgen commentaar niet",
+      pt["tekst_nl"] == "De latei ontbreekt." and "00:12:00" in pt["bron"] and "00:14:30" in pt["bron"], (pt, mdm[-300:]))
+
+# De grendel zit ook in Word (naar_docx), niet alleen in de markdown.
+try:
+    import io as _io
+    from docx import Document as _Doc
+    def _woord(data):
+        return " ".join(par.text for par in _Doc(_io.BytesIO(data)).paragraphs)
+    ww = dict(w, categorieen=[{"naam": "Ruwbouw", "punten": [{"nummer": "3.1", "titel": "Metselwerk", "datum": "2026-10-01",
+                                                          "tekst_nl": "Het metselwerk is waterpas (opname 00:12:00). De architect is eerder niet geweest.", "fotos": []}]}])
+    tw = _woord(sj.naar_docx(ww))
+    check("werfverslag-Word zonder opname en zonder S1-zin", "00:12" not in tw and "eerder niet geweest" not in tw and "waterpas" in tw, tw[:300])
+    tb = _woord(vb.naar_docx(v))
+    check("bevindingen-Word zonder opname en zonder deontologie", "opname 00:22" not in tb and "deontolog" not in tb.lower(), tb[:300])
+except ImportError as e:
+    check("python-docx beschikbaar voor de Word-toets", False, repr(e))
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

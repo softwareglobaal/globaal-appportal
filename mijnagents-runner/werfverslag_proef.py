@@ -1029,8 +1029,10 @@ def herlayout(ag, dossier, volgnr):
         teksten, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
         bv = info["bevindingen"]
         for b in (b for o in bv.get("onderdelen", []) for b in o.get("bevindingen", [])):
-            if not b.get("bron") and re.search(r"\d{1,2}:\d{2}", str(b.get("herkomst") or "")):
-                b["bron"], b["herkomst"] = b["herkomst"], sjab.herkomst(b["herkomst"])   # proef van vóór 26-10-2026: S4
+            h = str(b.get("herkomst") or "").strip()
+            # proef van vóór 26-10-2026: de herkomst was de ruwe bron (bestand, tijdstip); die wordt bron, de herkomst V/B/S (S4)
+            if not b.get("bron") and h and not re.fullmatch(r"[VBS](\s*[+,/]\s*[VBS])*", h) and h not in vb.HERKOMST.values():
+                b["bron"], b["herkomst"] = h, sjab.herkomst(h)
         _grendel(ag, dossier, volgnr, bv, info)   # ook de bewaarde gegevens: wat op de bezoekpagina staat, is gefilterd
         beelden = _fotos_verzamelen(teksten, fotos, vb.als_werfverslag(bv))
         docx, md = vb.naar_docx(bv, beelden), vb.naar_markdown(bv, beelden)
