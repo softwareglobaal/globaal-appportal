@@ -724,6 +724,18 @@ def api_gesprekken_zetten():
     return jsonify(ok=True, rijen=n, zonder_bron=zonder_bron)
 
 
+# Een gesprek is een rij van een gespreksbron die geen chat is (D7 en E1, ontwerp dagvaststelling; Codex P3 en Q8 bij
+# fase 2): een mail, een Zoom-chat of een WhatsApp-gesprek per dag (whatsapp:<sha1 jid>:<dag>) telt niet; een
+# WhatsApp-oproep (whatsapp-oproep:) en een telefoonoproep wel. Zoals koppelingen/dagvaststelling.soort.
+GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
+CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
+
+
+def telt_als_gesprek(rij):
+    return (str(rij["bron"] or "") in GESPREKSBRONNEN
+            and not str(rij["uniek"] or "").startswith(CHAT_VOORVOEGSELS))
+
+
 # Een dubbel_van die met buiten: begint, is een merkteken en geen verwijzing naar een rij: de rij telt niet voor Mehdi,
 # bijvoorbeeld een Fathom-opname van een ander account uit een andere ruimte (buiten:andere-ruimte, J10).
 GESPREK_BUITEN = "buiten:"
@@ -749,7 +761,9 @@ def api_gesprekken_koppel():
     geweigerd += [{"uniek": "", "reden": "koppeling zonder uniek"} for k in lijst if not (isinstance(k, dict) and k.get("uniek"))]
     for k in sorted(goed, key=lambda k: bool(k.get("dubbel_van"))):
         uniek = str(k["uniek"])[:200]
-        if not conn.execute("SELECT 1 FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone():
+        huidig = conn.execute("SELECT COALESCE(sessie, '') AS sessie, COALESCE(dubbel_van, '') AS dubbel_van "
+                              "FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone()
+        if not huidig:
             onbekend.append(uniek)
             continue
         velden = {v: str(k.get(v) or "")[:200] for v in ("sessie", "dubbel_van") if v in k}
@@ -768,7 +782,11 @@ def api_gesprekken_koppel():
             if rij["dubbel_van"]:
                 geweigerd.append({"uniek": uniek, "reden": f"doel {doel} is zelf een dubbel"})
                 continue
-        conn.execute(f"UPDATE gesprek_log SET {', '.join(v + '=?' for v in velden)} WHERE uniek=?", (*velden.values(), uniek))
+        # Codex W1 (fase 2 van de dagvaststelling): een koppeling die iets verandert, is een wijziging van de rij en zet
+        # ts, zoals een upsert; zo ziet de inhaalbeurt van De Dagbundelaar ook een dekking die vervallen werd
+        if any(huidig[v] != w for v, w in velden.items()):
+            conn.execute(f"UPDATE gesprek_log SET {', '.join(v + '=?' for v in velden)}, ts=? WHERE uniek=?",
+                         (*velden.values(), nu(), uniek))
         gezet.append(uniek)
     conn.commit()
     return jsonify(ok=True, gezet=gezet, onbekend=onbekend, geweigerd=geweigerd)
@@ -1634,9 +1652,12 @@ def dagen_pagina():
             r["bundels"] += 1
         elif s == "signaal":
             r["signalen"] += 1
-    # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer.
-    for g in conn.execute("SELECT datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling FROM gesprek_log "
-                          "WHERE COALESCE(dubbel_van, '')=''").fetchall():
+    # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer. Een mail of
+    # een chat is geen gesprek (telt_als_gesprek).
+    for g in conn.execute("SELECT uniek, bron, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling "
+                          "FROM gesprek_log WHERE COALESCE(dubbel_van, '')=''").fetchall():
+        if not telt_als_gesprek(g):
+            continue
         r = dagen.setdefault(g["datum"], {"dag": g["datum"], "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
                                           "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
                                           "signalen": 0, "transcripten": 0})
@@ -1743,7 +1764,8 @@ def dag_pagina(datum):
         dagplannen=van_soort("dagplan"), afspraken=van_soort("afspraak"), fotos=van_soort("foto"),
         gezondheid=van_soort("gezondheid"), mails=van_soort("mail"), signalen=van_soort("signaal"),
         transcripten=van_soort("transcript", "werfbezoek"), gesprekken=gesprekken,
-        gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"]),
+        gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"] and telt_als_gesprek(g)),
+        gesprekken_geen=sum(1 for g in gesprekken if not g["dubbel_van"] and not telt_als_gesprek(g)),
     )
 
 

@@ -106,25 +106,32 @@ def n3_kaart_compleet(rij, con):
     return (False, "leeg: " + ", ".join(leeg)) if leeg else (True, "compleet")
 
 
+# De Mac-agents die hun ronde met een ronde-ID bewijzen (de kennis en de eindhartslag dragen dezelfde ID). Bij hen
+# vergelijkt N4 de ID bij elke cadans, niet alleen op verzoek (Codex P8, fase 2 van de dagvaststelling, 26-10-2026).
+RONDE_ID_AGENTS = frozenset({"whatsapp-wacht", "belwacht"})
+
+
 def n4_kennis_gemeld(rij, con):
     """N4 hij heeft de laatste zeven dagen gemeld welk regelboek hij las."""
     d = _ouderdom_dagen(_tekst(rij, "kennis_ts"))
     if d is None:
         return False, "nooit kennis gemeld"
-    if _tekst(rij, "cadans") == "op verzoek":
-        if rij["naam"] != "whatsapp-wacht":
-            return True, "kennis gemeld bij laatste ronde op verzoek"
+    op_verzoek = _tekst(rij, "cadans") == "op verzoek"
+    if rij["naam"] in RONDE_ID_AGENTS:
         try:
             status = con.execute("select status, detail from status where naam=?", (rij["naam"],)).fetchone()
         except sqlite3.Error:
-            return False, "laatste ronde op verzoek is niet controleerbaar"
+            return False, "laatste ronde is niet controleerbaar"
         if not status or status[0] not in ("klaar", "waakt"):
-            return False, "laatste ronde op verzoek is niet geslaagd"
+            return False, "laatste ronde is niet geslaagd"
         status_ids = STATUS_RONDE.findall(status[1] or "")
         kennis_ids = KENNIS_RONDE.findall(_tekst(rij, "kennis"))
         if len(status_ids) != 1 or len(kennis_ids) != 1 or status_ids[0] != kennis_ids[0]:
-            return False, "kennis hoort niet bewezen bij de laatste ronde op verzoek"
-        return True, "kennis hoort bij de laatste ronde op verzoek"
+            return False, "kennis hoort niet bewezen bij de laatste ronde"
+        if op_verzoek:
+            return True, "kennis hoort bij de laatste ronde op verzoek"
+    elif op_verzoek:
+        return True, "kennis gemeld bij laatste ronde op verzoek"
     if d > 7:
         return False, f"laatst {d:.0f} dagen geleden"
     return True, f"{d:.1f} dagen geleden"

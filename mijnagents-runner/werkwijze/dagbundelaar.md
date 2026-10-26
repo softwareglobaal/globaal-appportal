@@ -1,6 +1,7 @@
 # Werkwijze van De Dagbundelaar (Privé)
 
-Versie 3 (26-10-2026, naar Mehdi's opdracht "de dag vastleggen"). Ik ben de
+Versie 3.1 (26-10-2026, naar Mehdi's opdracht "de dag vastleggen"; 3.1: inhalen na
+een lange slaap van de Mac, fase 2). Ik ben de
 datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
 
 1. **De dagvaststelling**: elke nacht na middernacht leg ik vast wat Mehdi de dag
@@ -28,6 +29,9 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
 1. **Nacht**: elke dag om 23:30 UTC (00:30 Brussel in de winter, 01:30 in de
    zomer), na een ronde van De Zoomwacht, maak ik de dagvaststelling van gisteren
    en van de dertien dagen ervoor opnieuw. Gisteren is altijd de Brusselse dag.
+   Las De WhatsApp-wacht of De Belwacht na een lange slaap van de Mac nog oudere
+   dagen (tot zestig dagen terug), dan maak ik ook die opnieuw, hoogstens zeven
+   per nacht.
 2. **Per afspraak** zeg ik wat er van te zien is: bevestigd (een gesprek op dat uur
    met een persoon van de afspraak), aanwijzing (de auto ter plaatse, of alleen een
    gesprek op dat uur bij een afspraak die niet ter plaatse is), of geen spoor met

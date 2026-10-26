@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.8, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r8 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -305,3 +305,197 @@ een latere bron doorbreken. Daarom belooft de vaststelling geen volledigheid mee
 - Komt er later iets bij, dan maakt de nachtronde (veertien dagen) een nieuwe versie; de vorige blijft in versies/.
 
 De vaststelling is zo een logboek van wat er gezien werd, met datum en versie, wat Mehdi vroeg: terugvinden wat er was.
+
+## Fase 2 uitgewerkt (v2.0, 26-10-2026)
+
+### Bronproef (26-10-2026, alleen aantallen, week van 19 tot 26-10)
+
+- **WhatsApp** (ChatStorage.sqlite): 100 tot 450 berichten per dag in 13 tot 41 gesprekken, ongeveer de helft in
+  groepen. Elk gesprek heeft een naam (ZPARTNERNAME). Berichtsoorten: 6 (groepsmelding) en 10 (systeemmelding) zijn
+  geen berichten; 59 is de melding van een oproep in het gesprek (ZSTANZAID is de oproep-ID: 46 van 46).
+- **WhatsApp-oproepen** (CallHistory.sqlite): 99 in een week, een tot negentien per dag, geen groepsoproepen. 62 hebben
+  een deelnemer (altijd een LID-adres, altijd terug te vinden in het adresboek van WhatsApp, ContactsV2.sqlite); voor de
+  rest wijst de oproepmelding in het gesprek of de beller (ZGROUPCALLCREATORUSERJIDSTRING, bij inkomend) de persoon aan.
+  Een oproep met duur nul is gemist of niet beantwoord.
+- **iPhone-oproepen** (CallHistory.storedata): 132 in een week, allemaal com.apple.Telephony, ZNAME altijd leeg,
+  ZUNIQUE_ID uniek. Van de 24 nummers staan er 14 in het adresboek van WhatsApp en 6 in de Mac-contacten (samen 16).
+  74 oproepen waren gemist (twee nummers belden 47 en 32 keer).
+
+### Toegangsproef (D10)
+
+Een launchd-taak die alleen de drie databanken opent: geweigerd voor /usr/bin/python3 ("authorization denied") en voor
+Python 3.14 ("unable to open database file"). Een vaste helper met volledige schijftoegang is dus nodig.
+
+### De helper: MacGesprekkenKopie
+
+Een klein C-programma (`mijnagents-runner/mac/kopie/macgesprekken_kopie.c`), ad hoc ondertekend met hardened runtime,
+het enige programma dat volledige schijftoegang krijgt. Het voert geen andere code uit (geen Python, geen script, geen
+omgevingsvariabelen; de thuismap komt uit getpwuid), zodat de toestemming aan de cdhash vastzit: wie het bestand
+vervangt, verliest de toegang.
+
+- Eén argument, de set: `whatsapp` (ChatStorage, CallHistory en ContactsV2 van WhatsApp) of `telefoon`
+  (CallHistory.storedata en ContactsV2). Vaste bronpaden.
+- Per bron: alleen lezend openen (busy timeout), `sqlite3_serialize` binnen een leestransactie (een samenhangend
+  beeld, met de WAL erbij), de kop op rollback-modus zetten, en schrijven naar
+  `~/Library/Caches/mijnagents/mac-gesprekken/<set>/<bron>.sqlite` met O_CREAT|O_EXCL|O_NOFOLLOW (0600) en rename. De
+  map is 0700, van de gebruiker, geen symlink; anders weigert de helper. Caches gaan niet mee in Time Machine.
+- Daarna `status.json` met het tijdstip en per bron `ok`, `geweigerd` of `fout`, zonder paden of inhoud.
+- Twee launchd-taken zonder schema (`be.globaal.mijnagents.kopie-whatsapp`, `-telefoon`), alleen op vraag: de runner
+  start ze met `launchctl kickstart` en wacht hoogstens 120 s op een status die jonger is dan zijn vraag. Zo is de
+  helper zelf het verantwoordelijke proces (TCC), en de Python-runner heeft geen schijftoegang nodig.
+
+### De twee runners
+
+`mijnagents-runner/whatsapp_wacht.py` en `mijnagents-runner/belwacht.py`, elk door de gedeelde ronde via de
+ssh-tunnel naar 127.0.0.1:3022 (zoals `tekenaar.py`), met een eigen slot, het token uit `~/.config/mijnagents/token`
+en een ronde-ID. Elk uur via launchd (WhatsApp op :07, telefoon op :37); slaapt de Mac, dan bij het ontwaken.
+Taak in de hartslag: `WhatsApp-databank lezen` en `iPhone-oproepen uit de databank lezen` (het woord `databank`, zie
+`dagbundelaar.kanaalstand`). Python 3.14 van python.org, code uit een eigen worktree op origin/main
+(`~/Library/Application Support/mijnagents/repo`), bijgewerkt door `mac/uitrol_mac_gesprekken.sh`, nooit uit de
+werkmap van een sessie.
+
+Ronde, in deze volgorde:
+
+1. Werkwijze van het bord; zonder de koppen "Wat ik nooit doe" en "Wat Mehdi beslist" stopt de ronde (`bord.grenzen`).
+2. Verse kopie vragen; geweigerd of te laat is een nood, en dan wordt niets gelezen of geschreven.
+3. Lezen met vaste kolommen (`koppelingen/mac_gesprekken.py`, pure functies met tests). Nooit ZTEXT, ZLASTMESSAGETEXT,
+   media of bijlagen; een test houdt de lijst van gelezen kolommen vast.
+4. Rijen voor de laatste veertien Brusselse dagen (zelfde venster als de nachtronde), privé, naar `/api/gesprekken`.
+5. Teruglezen van de rijen (`bordstand.py --gesprekken <kanaal> <van> <tot>`: per rij een vingerafdruk, geen namen in
+   de uitvoer); verschil is een fout. Een rij in het venster die de bron niet meer toont (een gewist gesprek), krijgt
+   `dubbel_van = buiten:vervallen`; komt ze terug, dan zet de volgende ronde ze weer leeg.
+6. Na de ronde: hartslag en kennis met de ronde-ID teruglezen (`bordstand.py <naam> --ronde`); zonder dat een
+   foutmelding op de console en exit 1.
+7. De kopie van de berichten (ChatStorage) wordt na het lezen gewist.
+
+### Rijen in de gesprekkentabel (contract met De Dagbundelaar)
+
+| uniek | bron | wat | telt (dubbel_van) |
+|---|---|---|---|
+| `whatsapp:<sha1 jid>:<dag>` | whatsapp | per gesprek per dag: thema "N berichten (x in, y uit), HH:MM tot HH:MM", start = eerste bericht, minuten 0, personen = naam of "groep: naam" | leeg |
+| `whatsapp-oproep:<oproep-ID>` | whatsapp | begin, minuten (afgerond), in of uit, video, met wie | leeg; gemist of zonder antwoord `buiten:gemist` |
+| `telefoon:<ZUNIQUE_ID>` | telefoon | begin, minuten, in of uit, met wie; WhatsApp-oproepen in de iPhone-geschiedenis overgeslagen | leeg; gemist of zonder antwoord `buiten:gemist` |
+| `dekking:<kanaal>:<dag>` | dekking | deze dag is gelezen | `buiten:dekking` |
+
+Alles `prive = 1`, afdeling leeg. Een berichtsoort 6, 10 of 59 telt niet als bericht. Een gemiste oproep staat in de
+tabel maar telt niet als gesprek (zelfde regel als Z10): de dagvaststelling telt alleen oproepen met duur.
+
+**Dekking** van dag D alleen als D voorbij was toen de kopie gemaakt werd, en de bron zelf iets jonger dan het einde
+van D toont (het nieuwste bericht of de nieuwste oproep). Zo is een dag van een Mac waarop WhatsApp niet draaide nooit
+"0 berichten gezien", maar onbekend. Is het nieuwste bericht ouder dan 48 uur, dan een nood (WhatsApp op de Mac
+ontvangt niets nieuws); bij de iPhone-oproepen na zeven dagen.
+
+**Namen**: een gesprek heeft de naam die WhatsApp toont; een oproep de deelnemer, de oproepmelding in het gesprek of de
+beller, opgezocht in het adresboek van WhatsApp (ContactsV2, de kopie van het iPhone-adresboek) of de naam van het
+gesprek. Een iPhone-nummer via hetzelfde adresboek; een onbekend nummer staat er als nummer (Mehdi beslist). De
+Mac-contacten blijven buiten (twee nummers meer, een extra bron met wisselende paden).
+
+### Privé
+
+- Namen alleen in de gesprekkentabel (alleen beheer). Hartslag, nood, werkverslag en kennis dragen geen naam en geen
+  nummer: elke gelezen naam gaat ook in het masker van de agent (`ag.prive`).
+- De klaarzet van De Dagbundelaar toont WhatsApp en telefoon alleen als "privé" met aantal en minuten (D5, ongewijzigd).
+
+### Wat verdwijnt
+
+`mac/whatsapp_wacht.py` (tellen van gekozen exports, v2.0) en zijn test. De exports en het instellingenbestand op de
+Mac blijven staan; Mehdi beslist of ze weg mogen.
+
+### Mehdi beslist (vraag van 26-10-2026)
+
+1. De werkwijzen WhatsApp-wacht v3.0 en Belwacht v2.0 op het bord, met de kaart (label "De WhatsApp-wacht", cadans
+   "elk uur als de Mac wakker is", draait op Mac).
+2. Een onbekend nummer als nummer in de gesprekkentabel (aanbevolen), of alleen "onbekend nummer".
+3. Groepsgesprekken tellen mee, met de naam van de groep (aanbevolen).
+4. Volledige schijftoegang voor MacGesprekkenKopie (System Settings > Privacy & Security > Full Disk Access).
+5. Xelion blijft voorlopig buiten de Belwacht.
+
+### Antwoord op de ontwerplezing (v2.1, docs/codex/dagvaststelling-fase2-ontwerp-r1.md, "bouwen: nee")
+
+| punt | antwoord in de code |
+|---|---|
+| P1 | de helper kopieert geen databank meer: hij leest de bronnen met vaste vragen (ATTACH, alleen lezend) in een databank in het geheugen en schrijft alleen de toegelaten kolommen weg (`gesprekken.sqlite`, 350 kB in plaats van 75 MB): berichten zonder tekst, ZSTANZAID alleen van een oproepmelding, oproepen, deelnemers, de gesprekken van het venster en alleen de contacten die bij een gesprek, oproep of nummer van het venster horen. Venster 62 dagen. De runner wist de uitvoer na het lezen. Test: geen tekstkolom in de vragen van module en helper, en geen geheime tekst in de uitvoer van een proefbouw |
+| P2 | geen serialisatie van de bron meer: de vragen lopen binnen een leestransactie door SQLite, dus met de WAL. Test met een proefbouw (`-DBASIS_TEST`): een bericht dat alleen in de WAL staat (open schrijver, geen checkpoint) komt mee. Zonder -wal naast de bron (app gesloten) leest de helper immutable |
+| P3 | `mijnagents/app.py`: de dagenpagina en de dagpagina tellen een chat (`zoom:chat:`, `whatsapp:`) niet als gesprek; de dagpagina zegt "N chats tellen niet als gesprek". Test met chat, beantwoorde en gemiste oproep en dekking samen |
+| P4 | dekking van dag D alleen als D voorbij was bij de kopie, de bron die dag zelf een bericht of oproep toont, en daarna nog iets nieuws kreeg. Een dag zonder enig gegeven blijft onbekend. Test |
+| P5 | in het uur dat bij de wintertijd twee keer voorkomt, draagt start de UTC-afstand (`02:30+01:00`); `dagvaststelling.gesprek_venster` leest die en geeft de vensters in UTC (Python vergelijkt twee tijden in dezelfde zone zonder fold). Test met beide klokwissels en een afspraak in dat uur |
+| P6 | dezelfde oproep-ID binnen zes uur is een oproep (opnieuw verbonden), verder uit elkaar een andere met een eigen sleutel. Gemeten over de hele iPhone-geschiedenis (641 oproepen): alleen com.apple.Telephony (630) en com.apple.FaceTime (11); de Belwacht neemt alleen die twee, dus een WhatsApp-oproep kan er niet dubbel in |
+| P7 | de stand op de Mac onthoudt de laatste gedekte dag; na een lange slaap leest de ronde vanaf daar, tot zestig dagen. De nachtronde van De Dagbundelaar haalt een dag buiten haar venster in als zijn dekkingsrij nieuwer is dan zijn laatste vaststelling (hoogstens zeven per nacht; `dagvaststelling-inhaal.json`). Werkwijze De Dagbundelaar 3.1 |
+| P8 | N4 vergelijkt de ronde-ID van kennis en eindhartslag bij elke cadans voor whatsapp-wacht en belwacht (`controle_agenten.RONDE_ID_AGENTS`); zonder bevestiging zet de runner zijn hartslag altijd op fout (het slot houdt een tweede ronde op de Mac tegen). `mac/whatsapp_wacht.py` en zijn test zijn weg; de CI draait `tests/test_mac_gesprekken.py` |
+| P9 | elke kopie hoort bij een aanvraag-ID die de runner net voor de vraag schrijft en de helper in zijn status terugzet; een andere ID is geen antwoord. Een ander schema is "onverwacht", een symlink in het bronpad ook, een ontbrekende bron "ontbreekt"; nooit een halve uitvoer. Teruglezen exact met dezelfde vingerafdruk als het bord opslaat (test door de echte `/api/gesprekken`). Toont de bron veel minder rijen dan het bord kent (meer dan een vijfde, minstens vijf), dan markeert de ronde niets als vervallen en stopt ze |
+
+Uitrol op de Mac: `mac/uitrol_mac_gesprekken.sh` (eigen worktree op origin/main, helper alleen opnieuw gebouwd als zijn
+bron verandert, vier LaunchAgents; `aan` zet de twee wachten pas aan na de gecontroleerde eerste ronde).
+
+### Antwoord op de bouwcontrole r2 (v2.2, docs/codex/dagvaststelling-fase2-bouw-r2.md, "live: nee")
+
+| punt | antwoord in de code |
+|---|---|
+| Q1 | een tweede iPhone-oproep met dezelfde ID krijgt haar tijdstip in de sleutel (`telefoon:ID-<seconden>`); `schrijf_en_lees_terug` weigert twee rijen met dezelfde sleutel. Test in de module en door de echte `/api/gesprekken` |
+| Q2 | stoppen zonder te markeren als de bron niets meer toont terwijl het bord rijen kent, of als minstens vijf rijen en meer dan een vijfde van het bord tegelijk verdwijnen; alleen dekking telt niet als gegeven. Test op de grenzen (5 van 5, 1 van 1, 5 van 20, 5 van 100, 4 van 10) |
+| Q3 | de helper opent de bron zelf langs de mappen zonder symlink, onthoudt apparaat en inode, en vergelijkt die na de ATTACH met het bestand dat SQLite echt open heeft (SQLITE_FCNTL_FILE_POINTER); een ander bestand is "onverwacht", veilig dicht. Racetest in de proefbouw (een `.wissel` neemt na de controle de plaats van de bron in) |
+| Q4 | de uitvoer draagt zelf de aanvraag-ID (`META aanvraag`); de runner leest ze alleen als die gelijk is aan zijn vraag. Test met een uitvoer van een andere start |
+| Q5 | `mac_gesprekken.lees_veilig`: een leesfout gaat alleen als soort verder (`ValueError`), nooit met een waarde uit de bron. Test met een naam in een tijdveld |
+| Q6 | `mac_gesprekken.eindcontrole`: zonder bevestiging een hartslag fout met de vaste nood "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt" (de open noden blijven), en ook die fout wordt teruggelezen. Test |
+| Q7 | `uitrol_mac_gesprekken.sh`: de vorige helper en LaunchAgents blijven bewaard (`terug`); een nieuwe helper of gewijzigde wacht zet de wachten uit; `proef` doet de toegangsproef onder launchd met het exacte programma en een eerste ronde van elke wacht en schrijft een proefbewijs voor precies die cdhash en commit; `aan` weigert zonder dat bewijs |
+| Q8 | de dagenpagina en de dagpagina tellen alleen rijen van een gespreksbron die geen chat is (`telt_als_gesprek`): ook mail telt niet meer. De dagpagina zegt "N mails en chats tellen niet als gesprek". Test |
+
+### Antwoord op de bouwcontrole r3 (v2.3, docs/codex/dagvaststelling-fase2-bouw-r3.md, "live: nee")
+
+Vooruitgang: Q2, Q3, Q5 en Q8 waren opgelost; R1 tot R6 gaan dieper op Q1, Q4, Q6 en Q7.
+
+| punt | antwoord in de code |
+|---|---|
+| R1 | elke oproepsleutel draagt haar eigen begin: `telefoon:<ZUNIQUE_ID>-<seconden>` en `whatsapp-oproep:<oproep-ID>-<seconden van het begin>`. De groepering van WhatsApp-gebeurtenissen loopt over alles wat de helper gaf (62 dagen), de rijen alleen over het venster (hoogstens 60): de sleutel verandert niet als het venster opschuift. Test met twee opeenvolgende vensters, ook een oproep die over middernacht opnieuw verbonden werd. Het voorvoegsel (het contract met De Dagbundelaar) blijft |
+| R2 | de helper schrijft per aanvraag een eigen uitvoer (`gesprekken-<aanvraag>.sqlite`) en ruimt wat ouder is dan tien minuten op; de runner zet ze eerst om naar een naam die alleen hij kent (`.lezen-<aanvraag>.sqlite`) en leest dan pas. Test met twee aanvragen na elkaar en de opruiming |
+| R3 | de hartslag fout van de eindcontrole draagt de ronde-ID; `bordstand.py --ronde` geeft ook de open noodteksten van de agent; de eindcontrole bevestigt fout, ronde-ID en nood samen. Test met een fout die niet aankwam, een oude fout en een fout zonder nood |
+| R4 | een uitrol zet eerst de wachten uit (en wist het proefbewijs), elke keer, ook bij alleen gewijzigde Python-code; daarna blijven ze uit tot `proef` en `aan` |
+| R5 | een bezette wacht eindigt met 75; een geslaagde ronde drukt haar ronde-ID af; `proef` eist per wacht exit 0, precies een ronde-ID en die ID in eindhartslag en kennis op het bord (`mac_gesprekken.proefronde`). Test |
+| R6 | de uitrol bewaart de vorige versie als geheel (commit, helper, BRON_SHA256, alle LaunchAgents) en `terug` zet dat geheel terug, ook een LaunchAgent die er toen niet was. Test met nagebootste launchctl, codesign en cc: drie uitrollen na elkaar, `aan` geweigerd zonder proefbewijs, terug naar versie 2, `aan` met een proefbewijs voor precies die versie |
+
+### Antwoord op de bouwcontrole r4 (v2.4, docs/codex/dagvaststelling-fase2-bouw-r4.md, "live: nee")
+
+Vooruitgang: R1 tot R6 waren in hun gewone paden opgelost; S1 tot S4 zijn randgevallen bij overstap en uitrol.
+
+| punt | antwoord in de code |
+|---|---|
+| S1 | gemeten op 26-10-2026: de gesprekkentabel heeft nog geen enkele rij `whatsapp`, `telefoon` of `dekking`, dus live bestaan geen oude sleutels. De overstap is toch expliciet: een rij van het kanaal met een andere sleutelvorm dan `HUIDIGE_SLEUTEL` komt van een oudere versie en wordt vervallen, buiten de rem. En de rem gaat nu voor het schrijven: een halve bron schrijft en markeert niets. Test met vijf oude en vijf nieuwe rijen (geen dubbele telling) en een halve bron (geen schrijfoproep) |
+| S2 | `ruim_op` herkent alleen de eigen namen (`gesprekken.sqlite`, `gesprekken-<32 hex>.sqlite`, `.lezen-<32 hex>.sqlite`). Test: `gesprekken-archief.sqlite` blijft staan |
+| S3 | `wachten_echt_uit`: na de bootout moet elke wacht echt uit launchd zijn, anders wisselt niets; de wissel loopt met de rondesloten van beide wachten vast (`lockf`, hetzelfde flock als `mac_gesprekken.slot`). Test met een wacht die geladen blijft en met een vastgehouden rondeslot |
+| S4 | een slot voor alle opdrachten behalve controleer (`.uitrol.lock`): installeer, proef, aan, uit en terug lopen nooit samen. Test met een vastgehouden uitrolslot |
+
+### Antwoord op de bouwcontrole r5 (v2.5, docs/codex/dagvaststelling-fase2-bouw-r5.md, "live: nee")
+
+Vooruitgang: S2, S3 en S4 opgelost; T1 (middel) en T2 (laag) blijven.
+
+| punt | antwoord in de code |
+|---|---|
+| T1 | geen uitzondering meer voor een andere sleutelvorm: elke verdwenen rij telt in de rem, die voor het schrijven staat. Er staat live geen enkele WhatsApp-, telefoon- of dekkingsrij (gemeten 26-10-2026), dus een overstap is er niet; verschijnt ooit zo'n rij, dan stopt de ronde met de nood en beslist een mens. Test: vijf rijen met een andere vorm (ook `telefoon:ID-42`) tegenover een volle, lege en halve bron schrijven en markeren niets; een verdwenen rij van honderd wordt gewoon vervallen |
+| T2 | `UITROL_SLOT` alleen volstaat niet meer: elke opdracht behalve controleer kijkt of het uitrolslot echt vastzit (`lockf -t 0` moet falen), en de interne wissel ook of beide rondesloten vastzitten. Test: `__installeer` en `__terug` rechtstreeks met `UITROL_SLOT=1` worden geweigerd |
+
+### Antwoord op de bouwcontrole r6 (v2.6, docs/codex/dagvaststelling-fase2-bouw-r6.md, "live: nee")
+
+Vooruitgang: T1 opgelost; U1 (middel, nieuw bij de controle van het geheel) en U2 (laag) blijven.
+
+| punt | antwoord in de code |
+|---|---|
+| U1 | wat de wachten niet tellen, verlaat de bron ook niet: de helper neemt alleen gesprekken met een persoon of een groep (ZSESSIONTYPE 0 en 1, ook voor het nieuwste bericht) en alleen gewone oproepen en FaceTime (ook voor de nieuwste oproep en de contacten bij hun nummers); van andere apps alleen het aantal (`META andere_apps`). Gemeten op de echte databank: alleen sessies 0 en 1 in de uitvoer, 0 oproepen van andere apps. Test met een status met bericht en contact, en een WhatsApp-oproep met contact in de iPhone-geschiedenis: geen van hun namen, nummers of ID's staat in de uitvoer |
+| U2 | elke uitrol maakt een eigen sleutel (`UITROL_SLEUTEL`, 16 willekeurige bytes) die alleen het eigen proces en zijn kinderen kennen; ze staat in `.uitrol.sleutel` zodra het uitrolslot vastzit, en de interne wissel loopt alleen met precies die sleutel en alle sloten vast. Test: een directe interne aanroep terwijl een (nagebootste) andere uitrol alle sloten houdt, wordt geweigerd |
+
+### Antwoord op de bouwcontrole r7 (v2.7, docs/codex/dagvaststelling-fase2-bouw-r7.md, "live: nee")
+
+Vooruitgang: U1 opgelost; V1 (middel, nieuw) en V2, V3 (laag).
+
+| punt | antwoord in de code |
+|---|---|
+| V1 | `dagbundelaar.gedekte_dagen`: een dekkingsrij met `buiten:vervallen` bewijst niets meer; ook de inhaalbeurt van de nacht kijkt alleen naar actieve dekking. Test over de hele route: drie dagen oproepen, dan verdwijnen de oproepen van een dag; de ronde markeert ze en de dekking als vervallen, en het dagoverzicht toont die dag als "telefoon: onbekend (onbekend voor deze dag)" |
+| V2 | laag, bewust zo gelaten: de sleutel en de sloten houden een vergissing tegen (twee uitrollen of een uitrol tijdens een proef). Een proces van dezelfde gebruiker dat dat bewust omzeilt, kan de worktree evengoed rechtstreeks wijzigen; daartegen beschermt geen slot in een script. De echte grens is de helper: die voert geen code uit de worktree uit, en zijn toestemming hangt aan zijn cdhash |
+| V3 | de helper geeft van oproepen van andere apps alleen het tijdstip (`ANDERE_APPS`, geen nummer of dienst); de runner telt ze in zijn eigen venster. Test |
+
+### Antwoord op de bouwcontrole r8 (v2.8, docs/codex/dagvaststelling-fase2-bouw-r8.md, "live: nee")
+
+Vooruitgang: V1 en V3 opgelost, de reden voor V2 (laag) aanvaard; W1 (middel) blijft.
+
+| punt | antwoord in de code |
+|---|---|
+| W1 | `/api/gesprekken/koppel` zet `ts` als een koppeling iets verandert (zoals een upsert), en laat ze staan als er niets verandert; alleen De Dagbundelaar leest die ts (gemeten in de code). De inhaalbeurt kijkt naar elke wijziging van een dekkingsrij, ook een vervallen verklaring: een oudere, al vastgestelde dag die zijn dekking verliest, wordt in de nacht opnieuw vastgesteld en toont dan "onbekend". Tests: de ts in de API (wel en niet veranderd), en de route met een vastgestelde dag van 26 dagen terug (inhaalkeuze met de echte functie, dan de dagtekst) |

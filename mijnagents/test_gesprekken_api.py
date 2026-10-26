@@ -385,7 +385,7 @@ def z12_pagina_en_telling():
 def t_o26_dagenpagina_zonder_privenamen():
     """Controle Codex 26-10-2026: de dagenpagina nam de namen van een privérij over. Ze telt de rij, zonder namen."""
     verse_db("o26")
-    zet([FATHOM, dict(FATHOM, uniek="zoom:chat:kanaal-p:2026-10-20", personen="Familie Proef", prive=True, bron="zoom"),
+    zet([FATHOM, dict(FATHOM, uniek="zoom:meeting:prive-p", personen="Familie Proef", prive=True, bron="zoom"),
          dict(FATHOM, uniek="fathom:3", personen="Kees Proef", afdeling="prive")])
     gevangen = {}
     echt_render, echt_locatie = A.render_template, A._locatie
@@ -402,8 +402,84 @@ def t_o26_dagenpagina_zonder_privenamen():
           and "Jan Proef" in tekst, tekst)
 
 
+def t_p3_chats_tellen_niet():
+    """Codex P3 (fase 2 van de dagvaststelling, 26-10-2026): een WhatsApp-gesprek per dag en een Zoom-chat zijn geen
+    gesprek; een beantwoorde oproep wel, een gemiste oproep en een dekkingsrij niet (dubbel_van buiten:)."""
+    verse_db("p3")
+    zet([FATHOM,
+         {"uniek": "whatsapp:" + "a" * 40 + ":2026-10-20", "datum": "2026-10-20", "start": "08:00", "minuten": 0,
+          "personen": "Jan Proef", "thema": "12 berichten (5 in, 7 uit), 08:00 tot 18:00", "prive": 1, "bron": "whatsapp",
+          "dubbel_van": ""},
+         {"uniek": "zoom:chat:kanaal-q:2026-10-20", "datum": "2026-10-20", "bron": "zoom", "dubbel_van": ""},
+         {"uniek": "whatsapp-oproep:PROEF1", "datum": "2026-10-20", "start": "11:00", "minuten": 4, "prive": 1,
+          "bron": "whatsapp", "dubbel_van": ""},
+         {"uniek": "whatsapp-oproep:PROEF2", "datum": "2026-10-20", "start": "12:00", "minuten": 0, "prive": 1,
+          "bron": "whatsapp", "dubbel_van": "buiten:gemist"},
+         {"uniek": "dekking:whatsapp:2026-10-20", "datum": "2026-10-20", "bron": "dekking", "prive": 1,
+          "dubbel_van": "buiten:dekking"},
+         {"uniek": "mail:<proef@x>", "datum": "2026-10-20", "minuten": 0, "bron": "mail", "dubbel_van": ""}])
+    gevangen = {}
+    echt_render, echt_locatie = A.render_template, A._locatie
+    A.render_template = lambda naam, **kw: gevangen.update(kw) or ""
+    A._locatie = lambda pad, standaard=None: standaard
+    try:
+        C.get("/dagen", headers=BEHEER)
+    finally:
+        A.render_template = echt_render
+    dag = next((d for d in gevangen.get("rijen", []) if d["dag"] == "2026-10-20"), {})
+    check("P3 dagenpagina: Fathom en de beantwoorde oproep tellen, chats, mail (Q8), gemist en dekking niet",
+          dag.get("gesprekken") == 2 and dag.get("gesprek_min") == FATHOM["minuten"] + 4, dag)
+    try:
+        html = C.get("/dag/2026-10-20", headers=BEHEER).get_data(as_text=True)
+    finally:
+        A._locatie = echt_locatie
+    check("P3 dagpagina: twee gesprekken, twee chats en een mail, twee buiten", "2 gesprekken tellen, 3 mails en chats "
+          "tellen niet als gesprek, 2 dubbel of buiten" in html, html[-2500:])
+
+
+def t_p9_teruglezen_van_de_mac():
+    """Codex P9 (fase 2): wat De WhatsApp-wacht en De Belwacht schrijven, leest bordstand.py exact terug: dezelfde
+    vingerafdruk als de Mac over zijn rij rekent, ook na een tweede upsert, en dubbel_van wordt leeg of buiten:."""
+    db = verse_db("p9")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mijnagents-runner",
+                                    "koppelingen"))
+    import bordstand
+    rijen = [{"uniek": "telefoon:U1", "datum": "2026-10-20", "start": "02:30+01:00", "minuten": 3, "personen": "Jan Proef",
+              "thema": "telefoon, uitgaand", "prive": 1, "bron": "telefoon", "dubbel_van": ""},
+             {"uniek": "telefoon:U2", "datum": "2026-10-20", "start": "09:00", "minuten": 0, "personen": "+32470000099",
+              "thema": "telefoon, inkomend, gemist", "prive": 1, "bron": "telefoon", "dubbel_van": "buiten:gemist"},
+             {"uniek": "dekking:telefoon:2026-10-20", "datum": "2026-10-20", "start": "", "minuten": 0, "personen": "",
+              "thema": "gelezen", "prive": 1, "bron": "dekking", "dubbel_van": "buiten:dekking"}]
+    for _ in range(2):
+        check("P9 upsert van de Mac", zet(rijen).get_json().get("rijen") == 3)
+        terug = bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)
+        check("P9 teruglezen: elke vingerafdruk gelijk",
+              {u: x["v"] for u, x in terug.items()} == {r["uniek"]: bordstand.vingerafdruk(r) for r in rijen}, terug)
+        check("P9 dubbel_van terug", terug["telefoon:U2"]["d"] == "buiten:gemist" and terug["telefoon:U1"]["d"] == "")
+    ts_voor = sqlite3.connect(db).execute("SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0]
+    koppel([{"uniek": "telefoon:U1", "dubbel_van": "buiten:vervallen"}])
+    ts_na = sqlite3.connect(db).execute("SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0]
+    check("W1 een koppeling die iets verandert, zet ts", ts_na > ts_voor, (ts_voor, ts_na))
+    koppel([{"uniek": "telefoon:U1", "dubbel_van": "buiten:vervallen"}])
+    check("W1 een koppeling die niets verandert, laat ts staan", sqlite3.connect(db).execute(
+        "SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0] == ts_na)
+    check("P9 vervallen gemarkeerd", bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)["telefoon:U1"]["d"]
+          == "buiten:vervallen")
+    zet(rijen[:1])
+    check("P9 een terugkerende rij telt weer", bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)
+          ["telefoon:U1"]["d"] == "")
+    # Q1: twee oproepen met dezelfde ID krijgen op de Mac twee sleutels (de tweede met haar tijdstip); beide blijven
+    dubbel = [dict(rijen[0], uniek="telefoon:ZELFDE"), dict(rijen[0], uniek="telefoon:ZELFDE-814700000", start="03:30")]
+    zet(dubbel)
+    terug = bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)
+    check("Q1 twee oproepen met dezelfde ID blijven twee rijen", all(terug.get(r["uniek"], {}).get("v")
+          == bordstand.vingerafdruk(r) for r in dubbel), terug)
+
+
 if __name__ == "__main__":
     t_o26_dagenpagina_zonder_privenamen()
+    t_p3_chats_tellen_niet()
+    t_p9_teruglezen_van_de_mac()
     t01_oude_databank()
     t01_twee_verbindingen()
     t02_upsert_wist_koppeling_niet()

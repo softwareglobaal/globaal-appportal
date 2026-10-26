@@ -20,7 +20,7 @@ Een bron die onbekend of onvolledig is, staat er zo; nooit als nul.
 import hashlib
 import re
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 BRUSSEL = ZoneInfo("Europe/Brussels")
@@ -74,9 +74,19 @@ def afspraak_venster(a):
 
 
 def gesprek_venster(g):
-    """Begin en einde van een rij uit de gesprekkentabel: datum en start (HH:MM) in Brussel, minuten (minstens een)."""
-    uur, minuut = (int(x) for x in str(g.get("start") or "00:00")[:5].split(":"))
+    """Begin en einde van een rij uit de gesprekkentabel: datum en start (HH:MM) in Brussel, minuten (minstens een).
+    In het uur dat bij de wintertijd twee keer voorkomt, draagt start de UTC-afstand ('02:30+01:00', De WhatsApp-wacht
+    en De Belwacht, Codex P5 bij fase 2); zonder afstand geldt het eerste van de twee."""
+    start = str(g.get("start") or "00:00")
+    uur, minuut = (int(x) for x in start[:5].split(":"))
     begin = datetime.fromisoformat(str(g["datum"])[:10]).replace(hour=uur, minute=minuut, tzinfo=BRUSSEL)
+    afstand = re.fullmatch(r"([+-])(\d{2}):(\d{2})", start[5:])
+    if afstand:
+        teken = 1 if afstand.group(1) == "+" else -1
+        zone = timezone(teken * timedelta(hours=int(afstand.group(2)), minutes=int(afstand.group(3))))
+        begin = begin.replace(tzinfo=zone)
+    # In UTC: twee tijden in dezelfde zone vergelijkt Python op de klok, zonder fold; zo telt het juiste uur.
+    begin = begin.astimezone(timezone.utc)
     return begin, begin + timedelta(minutes=max(int(g.get("minuten") or 0), 1))
 
 
@@ -168,7 +178,7 @@ def bron_label(g):
 def gesprek_tekst(g):
     begin, _ = gesprek_venster(g)
     wie = "privé" if is_prive(g) else (g.get("personen") or "onbekend")
-    return f"{begin:%H:%M} {bron_label(g)}, {int(g.get('minuten') or 0)} min, {wie}"
+    return f"{begin.astimezone(BRUSSEL):%H:%M} {bron_label(g)}, {int(g.get('minuten') or 0)} min, {wie}"
 
 
 def gesprekken_van_dag(dag, rijen):

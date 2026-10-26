@@ -1,5 +1,7 @@
 # WhatsApp-wacht op de Mac
 
+> Vervangen op 26-10-2026 door werkwijze v3.0: De WhatsApp-wacht leest de databank op de Mac via MacGesprekkenKopie (ontwerp dagvaststelling v2.0, fase 2). `mac/whatsapp_wacht.py` bestaat niet meer.
+
 Versie 2.0, 23-10-2026. De WhatsApp-wacht leest alleen door Mehdi afzonderlijk
 gekozen exports van zijn persoonlijke WhatsApp. Een export blijft een
 momentopname. Nieuwe berichten komen pas mee na een nieuwe export van dat

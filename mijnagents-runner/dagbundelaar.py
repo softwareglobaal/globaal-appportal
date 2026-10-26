@@ -70,6 +70,11 @@ DAGBOEK = os.path.join(DATA, "dagboek")                       # gaat naar Dropbo
 STAAT = os.path.join(DATA, "dagvaststelling-staat.json")      # per dag versie en hash; niet in de map dagboek
 ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de kopie in Dropbox, van de Mac-sync
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
+# Codex P7 (fase 2): een Mac die langer dan het venster sliep, leest bij het ontwaken tot zestig dagen terug. Een dag
+# buiten het venster met een nieuwere dekkingsrij dan zijn laatste vaststelling haalt de nacht in, hoogstens zeven.
+INHAAL = 60
+INHAAL_PER_NACHT = 7
+INHAALSTAAT = os.path.join(DATA, "dagvaststelling-inhaal.json")  # per ingehaalde dag het tijdstip
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
@@ -261,6 +266,13 @@ def main():
         dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
         try:
             delen.append(vastleggen(r, dagen, zoom_gelezen=zoom_gelezen))
+            if NACHT and not DAG_GEGEVEN:
+                inhaal = inhaaldagen(nu, dagen)
+                if inhaal:
+                    delen.append("ingehaald: " + vastleggen(r, inhaal, zoom_gelezen=zoom_gelezen))
+                    gedaan = lees_json(INHAALSTAAT)
+                    gedaan.update({d: nu.isoformat() for d in inhaal})
+                    _schrijf(INHAALSTAAT, json.dumps(gedaan, indent=1, sort_keys=True))
         except Exception as e:  # noqa: BLE001
             if NACHT:
                 raise
@@ -323,6 +335,49 @@ def ontvangst():
         if len(delen) == 2 and delen[1].endswith(".md") and "/versies/" not in delen[1]:
             uit[os.path.basename(delen[1])[:-3]] = delen[0]
     return uit
+
+
+def inhaaldagen(nu, venster):
+    """Codex P7 en W1: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
+    dekkingsrij schreef of vervallen verklaarde na de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
+    hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
+    oudste = date.fromisoformat(min(venster))
+    vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
+    if vroegste >= oudste:
+        return []
+    # elke wijziging van een dekkingsrij telt, ook een die vervallen werd (Codex W1): dan is de dag niet meer gedekt
+    # en moet zijn vaststelling 'onbekend' worden in plaats van de oude telling
+    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' AND datum BETWEEN ? AND ? "
+                         "GROUP BY datum", (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
+    try:
+        staat = json.loads(_lees(STAAT) or "{}")
+    except ValueError:
+        staat = {}
+    gedaan = lees_json(INHAALSTAAT)
+
+    def tijd(x):
+        try:
+            t = datetime.fromisoformat(str(x))
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    uit = []
+    for x in sorted(rijen, key=lambda x: x["datum"], reverse=True):
+        nieuw = tijd(x["ts"])
+        vorige = [v for v in (tijd((staat.get(x["datum"]) or {}).get("ts")), tijd(gedaan.get(x["datum"]))) if v]
+        if nieuw is not None and (not vorige or nieuw > max(vorige)):
+            uit.append(x["datum"])
+    return sorted(uit[:INHAAL_PER_NACHT])
+
+
+def gedekte_dagen(rijen):
+    """F5: de (kanaal, dag) die een Mac-wacht als gelezen meldt: een dekkingsrij dekking:<kanaal>:<dag>. Een dekkingsrij
+    die de wacht zelf vervallen verklaarde (de dag toont geen gegevens meer), bewijst niets meer: die dag is onbekend,
+    nooit nul (Codex V1, fase 2)."""
+    return {(str(x["uniek"]).split(":")[1], x["datum"]) for x in rijen
+            if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2
+            and str(x.get("dubbel_van") or "") != "buiten:vervallen"}
 
 
 def kanaalstand(rij, nu):
@@ -618,8 +673,7 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
     rijen = bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
                          "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?", (eerste, laatste))
-    gedekt = {(x["uniek"].split(":")[1], x["datum"]) for x in rijen
-              if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2}
+    gedekt = gedekte_dagen(rijen)
     dagregels = {x["uniek"][9:]: x["inhoud"] or "" for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()

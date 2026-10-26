@@ -63,8 +63,8 @@
     <h2>Gesprekken (Fathom, Plaud, mail, telefoon)</h2>
     {# J10, Z12 (ontwerp regie-zoom v1.2): een rij met dubbel_van telt niet mee, zoals op de pagina Gesprekken: grijs,
        met waarvan, of "telt niet" voor een rij buiten Mehdi's ruimte. De tellende rijen staan eerst. #}
-    {% if gesprekken %}{% set dubbel = gesprekken|length - gesprekken_tellend %}
-    <p class="tag">{{ gesprekken_tellend }} {{ 'gesprek telt' if gesprekken_tellend == 1 else 'gesprekken tellen' }}{% if dubbel %}, {{ dubbel }} dubbel of buiten; een grijze rij telt niet mee{% endif %}.</p>
+    {% if gesprekken %}{% set dubbel = gesprekken|length - gesprekken_tellend - gesprekken_geen %}
+    <p class="tag">{{ gesprekken_tellend }} {{ 'gesprek telt' if gesprekken_tellend == 1 else 'gesprekken tellen' }}{% if gesprekken_geen %}, {{ gesprekken_geen }} {{ 'mail of chat telt' if gesprekken_geen == 1 else 'mails en chats tellen' }} niet als gesprek{% endif %}{% if dubbel %}, {{ dubbel }} dubbel of buiten; een grijze rij telt niet mee{% endif %}.</p>
     <div class="wrap"><table class="t"><tr><th>Bron</th><th>Start</th><th>Min</th><th>Personen</th><th>Afdeling</th><th>Thema</th><th>Project</th><th>Zeker</th></tr>
       {% for g in gesprekken %}<tr{% if g['dubbel_van'] %} class="dubbel"{% endif %}><td>{{ g['bron'] }}
         {%- if g['dubbel_van'] %}<div class="tag">{% if g['dubbel_van'].startswith('buiten:') %}telt niet: {{ g['dubbel_van'][7:] | replace('-', ' ') }}{% else %}dubbel van {{ g['dubbel_van'] }}{% endif %}</div>{% endif %}</td><td>{{ g['start'] }}</td><td>{{ g['minuten'] or '' }}</td><td>{{ g['personen'] }}</td><td>{{ g['afdeling'] }}{% if g['prive'] %} · privé{% endif %}</td><td>{{ g['thema'] }}</td><td>{{ g['project'] }}</td><td>{{ g['zekerheid'] }}</td></tr>{% endfor %}
