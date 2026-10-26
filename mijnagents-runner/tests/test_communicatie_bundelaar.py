@@ -74,11 +74,13 @@ class NepRonde:
         self.noden.append((tekst, wie))
 
 
-def ronde(rijen=RIJEN, collegas=lambda: COLLEGAS, lees=None, werkwijze=None, terug=lambda its: []):
+def ronde(rijen=RIJEN, collegas=lambda: COLLEGAS, lees=None, werkwijze=None, terug=lambda its: [], eerder=()):
     r, gezet = NepRonde(werkwijze), []
     gelezen = []
 
     def lezen(sql, args):
+        if sql == C.SQL_EERDER:
+            return [{"sleutel": d} for d in eerder]
         gelezen.append((sql, args))
         return [x for x in rijen if args[0] <= x["datum"] <= args[1]]
     dagen = C.werk(r, vandaag=VANDAAG, lees=lees or lezen, collegas=collegas,
@@ -144,13 +146,34 @@ def test_prive_over_een_keten_van_dubbels():
     assert "Sigma" not in json.dumps(gezet)
 
 
-def test_items_met_revisie_zodat_een_opgepakt_item_de_bron_volgt():
-    """Codex, controle 1 (CB04): zonder revisie laat het bord een opgepakt item ongemoeid (mijnagents/app.py,
-    api_klaarzet), en bleef een naam staan als het gesprek later privé werd."""
+def test_geen_revisie_en_niemand_pakt_het_item_op():
+    """Codex CB04 en CB12: het bord werkt een item op klaar bij zonder revisie; een revisie zou de oude inhoud, met een
+    naam die intussen privé werd, in klaarzet_revisie bewaren. Dus geen revisie, en geen lezer die het oppakt."""
     _, gezet, _, _ = ronde()
-    assert gezet and all(it["revisie"] is True for it in gezet)
-    app = open(os.path.join(os.path.dirname(RUNNER), "mijnagents", "app.py"), encoding="utf-8").read()
-    assert 'oud["status"] != "klaar" and it.get("revisie")' in app
+    assert gezet and not any("revisie" in it for it in gezet)
+    coach = open(os.path.join(RUNNER, "levenscoach.py"), encoding="utf-8").read()
+    assert "opgepakt" not in coach, "De Levenscoach pakt nu items op: dan volgt het dagitem de bron niet meer"
+
+
+def test_oudere_dag_met_item_wordt_herzien():
+    """Codex CB11: een gesprek dat na zeven dagen privé wordt, moet ook uit het oude item verdwijnen."""
+    rijen = [rij("fathom:30", "Mehdi, Proefgeheim Sigma", 30, prive=1, datum="2026-10-01")]
+    _, gezet, dagen, gelezen = ronde(rijen=rijen, eerder=["2026-10-01", "2026-10-20"])
+    assert "2026-10-01" in dagen and dagen["2026-10-01"]["personen"] == []
+    assert dagen["2026-10-01"]["prive_per_kanaal"] == {"video": {"aantal": 1, "minuten": 30}}
+    assert [it["sleutel"] for it in gezet][:2] == ["2026-10-01", "2026-10-19"]
+    assert gelezen[0][1][0] == "2026-07-28" and "Sigma" not in json.dumps(gezet)
+
+
+def test_wie_ooit_prive_was_is_geen_bekende_voor_mail():
+    """Codex CB10: oud gewoon gesprek, recent privégesprek en recente mail van dezelfde persoon: geen naam."""
+    rijen = [rij("fathom:40", "Mehdi, Proefgeheim Sigma", 20, datum="2026-09-01"),
+             rij("fathom:41", "Mehdi, Proefgeheim Sigma", 20, prive=1),
+             rij("mail:<z1@voorbeeld.test>", "Proefgeheim Sigma"),
+             rij("mail:<z2@voorbeeld.test>", "zeta@voorbeeld.test")]
+    _, gezet, dagen, _ = ronde(rijen=rijen)
+    assert "Sigma" not in json.dumps(gezet) and dagen[DAG]["overige_mail"] == 1
+    assert list(personen(dagen[DAG])) == ["Proefpersoon Zeta"], "een collega blijft bekend"
 
 
 def test_mehdi_en_onbekende_sprekers_geen_persoon():

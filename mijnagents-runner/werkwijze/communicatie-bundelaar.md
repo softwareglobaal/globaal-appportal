@@ -24,11 +24,12 @@ beloofde ook wie begon en de toon; daar is geen meting voor zonder inhoud te lez
    draagt. Een vreemde met dezelfde voornaam blijft een vreemde. Mehdi zelf en onbekende sprekers tel ik niet als
    persoon; onbekende sprekers worden een aantal.
 5. Mail telt per persoon alleen voor een collega of iemand die in de laatste negentig dagen in een gesprek (Zoom, Fathom
-   of Plaud) zat. Al de rest, firma's en meldingen, wordt een aantal overige mail (keuze van Mehdi, 26-10-2026).
+   of Plaud) zat. Al de rest, firma's en meldingen, wordt een aantal overige mail (keuze van Mehdi, 26-10-2026). Wie
+   ooit in een privégesprek zat, is bij mail geen bekende, tenzij hij een collega is.
 6. Minuten alleen bij video en ter plaatse. Chat en mail hebben geen duur. Een gesprek zonder minuten telt als
    contact zonder duur, nooit als nul minuten.
 7. Per dag een klaarzet-item voor Mehdi, soort communicatie, ook voor een dag zonder contact, zodat een item de bron
-   volgt als een correctie contacten weghaalt. De Levenscoach leest het in zijn dag- en weekspiegel. De Dagbundelaar
+   volgt als een correctie contacten weghaalt. Een oudere dag waarvoor al een item bestaat, herzie ik ook. De Levenscoach leest het in zijn dag- en weekspiegel. De Dagbundelaar
    slaat het over: het hoort bij geen dossier. Elk item lees ik terug van het bord.
 8. Is de gesprekkentabel of kern niet leesbaar, dan zet ik niets klaar en meld ik een nood: onbekend is niet leeg.
 

@@ -100,3 +100,12 @@ Bewust open: wie begon, toon, weekpatronen (werkwijze v1 punt 2). Daar is geen m
 | CB04 opgepakt item | hoog | elk item gaat met `revisie: true`: het bord werkt ook een opgepakt item bij en bewaart de oude versie in `klaarzet_revisie` |
 | CB03/CB05 cron en bordtekst | middel | bij de eerste ronde: werkwijze v2 met `werkwijze_naar_bord.py --zet`, daarna `controle_agenten.py`; de cron pas na Mehdi's ja |
 | CB09 teruglezing | laag | ook voor, soort en sleutel vergeleken |
+
+## Verwerking controle 2 (26-10-2026)
+
+| punt | ernst | verwerking |
+|---|---|---|
+| CB10 mail van iemand uit een privégesprek | hoog | wie ooit in een privégesprek zat, is voor mail geen bekende (een collega blijft bekend); test `test_wie_ooit_prive_was_is_geen_bekende_voor_mail` |
+| CB11 correctie na zeven dagen | hoog | elke dag waarvoor ik al een item zette (`SQL_EERDER` op klaarzet), wordt elke ronde mee herzien; test `test_oudere_dag_met_item_wordt_herzien` |
+| CB12 oude inhoud in klaarzet_revisie | middel | geen revisie meer: niemand pakt het item op, dus het bord werkt het bij zonder kopie; test bewaakt dat De Levenscoach niets oppakt |
+| CB13 cron en bordtekst | middel | live stap: werkwijze v2 op het bord, teruggelezen, eerste ronde en `controle_agenten.py`; cron na Mehdi's ja |

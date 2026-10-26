@@ -48,6 +48,8 @@ MET_DUUR = ("video", "ter plaatse")   # chat en mail hebben geen duur: weggelate
 SQL = ("SELECT uniek, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling, COALESCE(sessie, '') AS sessie, "
        "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?")
 
+SQL_EERDER = "SELECT DISTINCT sleutel FROM klaarzet WHERE soort = 'communicatie' AND van = ?"
+
 HAAKJES = re.compile(r"\s*\([^)]*\)?")
 MEHDI = ("mehdi", "mehdi chegini")   # zoals de bronnen hem schrijven, naast zijn rij in kern
 ONBEKEND = re.compile(r"^(speaker|spreker|deelnemer|externe?|onbekend|unknown)\b", re.I)
@@ -152,14 +154,16 @@ def prive_gesprekken(rijen):
     return lambda r: is_prive(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
 
 
-def bundel(rijen, eerste, laatste, collegas):
-    """Rijen uit gesprek_log naar {dag: inhoud}, plus wat er opviel. Elke dag in [eerste, laatste] krijgt een inhoud, ook
-    een zonder contact: zo volgt een item dat eerder contacten toonde de bron, als een koppeling of privécorrectie ze
-    weghaalt (Codex CB04). De oudere rijen dienen alleen om te weten wie bekend is voor mail."""
+def bundel(rijen, dagen_lijst, collegas):
+    """Rijen uit gesprek_log naar {dag: inhoud}, plus wat er opviel. Elke dag uit dagen_lijst krijgt een inhoud, ook een
+    zonder contact: zo volgt een item dat eerder contacten toonde de bron, als een koppeling of privécorrectie ze
+    weghaalt (Codex CB04, CB11). De andere rijen dienen alleen om te weten wie bekend is voor mail."""
     p = Personen(collegas)
     opgevallen = {"onbekend_kanaal": 0, "telt_niet": 0, "kanalen": set()}
-    bekend = set()   # personen uit gesprekken die geen privé zijn, en collega's
+    bekend, ooit_prive = set(), set()   # personen uit gesprekken die geen privé zijn; wie ooit in een privégesprek zat
     prive_groep = prive_gesprekken(rijen)
+    dagen = {d: {"datum": d, "personen": {}, "prive_per_kanaal": {}, "overige_mail": 0, "onbekende_deelnemers": 0,
+                 "contacten": 0, "kanalen": defaultdict(int)} for d in dagen_lijst}
     tellen = []
     for r in rijen:
         if r.get("dubbel_van"):
@@ -170,18 +174,16 @@ def bundel(rijen, eerste, laatste, collegas):
             opgevallen["onbekend_kanaal"] += 1
             continue
         prive = prive_groep(r)
-        if not prive and k not in ("mail", "groepschat"):
+        if k not in ("mail", "groepschat"):
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
-                if soort in ("collega", "naam"):
-                    bekend.add(wie.casefold())
-        if eerste <= (r.get("datum") or "") <= laatste:
+                if soort == "naam":
+                    (ooit_prive if prive else bekend).add(wie.casefold())
+        if (r.get("datum") or "") in dagen:
             tellen.append((r, k, prive))
-    dagen, dag = {}, date.fromisoformat(eerste)
-    while dag.isoformat() <= laatste:
-        dagen[dag.isoformat()] = {"datum": dag.isoformat(), "personen": {}, "prive_per_kanaal": {}, "overige_mail": 0,
-                                  "onbekende_deelnemers": 0, "contacten": 0, "kanalen": defaultdict(int)}
-        dag += timedelta(days=1)
+    # Wie ooit in een privégesprek zat, is voor mail geen bekende, ook niet als hij ook in een gewoon gesprek zat: anders
+    # staat zijn naam op de dag van een privégesprek (Codex CB10). Een collega uit kern blijft wel bekend: zijn mail is werk.
+    bekend -= ooit_prive
     for r, k, prive in tellen:
         d = dagen[r["datum"]]
         d["contacten"] += 1
@@ -243,11 +245,20 @@ def titel(inhoud):
 def items(dagen):
     """Geen sleutel prive bovenaan de inhoud: wie de inhoud leest, zou die als een privégesprek kunnen nemen
     (zoals dagbundelaar.py, prive, Codex CB02)."""
-    # revisie: ook een item dat al opgepakt is, volgt de bron, met de oude versie in klaarzet_revisie; zo blijft een naam
-    # niet staan als een gesprek later privé wordt (Codex, controle 1, CB04).
-    return [{"voor": "mehdi", "soort": "communicatie", "sleutel": dag, "uniek": f"communicatie:dag:{dag}", "revisie": True,
+    # Geen revisie: die bewaart de oude inhoud, met een naam die intussen privé werd, in klaarzet_revisie (Codex CB12).
+    # Niemand pakt dit item op (De Dagbundelaar slaat het over, De Levenscoach leest alleen), dus het bord werkt het bij
+    # zolang het op klaar staat; staat het toch anders terug, dan meldt de teruglezing een nood.
+    return [{"voor": "mehdi", "soort": "communicatie", "sleutel": dag, "uniek": f"communicatie:dag:{dag}",
              "titel": titel(inhoud), "inhoud": json.dumps(inhoud, ensure_ascii=False, separators=(",", ":"))}
             for dag, inhoud in sorted(dagen.items())]
+
+
+def reeks(eerste, laatste):
+    d, uit = date.fromisoformat(eerste), []
+    while d.isoformat() <= laatste:
+        uit.append(d.isoformat())
+        d += timedelta(days=1)
+    return uit
 
 
 def venster(vandaag=None):
@@ -279,8 +290,11 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
         return None
     eerste, laatste, van, tot = venster(vandaag)
     try:
+        # Ook elke oudere dag waarvoor ik al een item zette, zodat een latere privécorrectie dat item bijwerkt (CB11).
+        eerder = {x["sleutel"] for x in lees(SQL_EERDER, (NAAM,)) if x.get("sleutel") and x["sleutel"] < eerste}
+        dagen_lijst = sorted(eerder) + reeks(eerste, laatste)
         # Tot en met vandaag: een rij van vandaag telt niet, maar kan een gesprek van gisteren privé maken.
-        rijen = lees(SQL, (van, tot))
+        rijen = lees(SQL, (min([van] + dagen_lijst), tot))
     except bord.BordOnbekend:
         # Onbekend is niet leeg (L29): geen item, want een leeg item zou zeggen dat er geen contact was.
         r.nood("Gesprekkentabel niet leesbaar", wie="claude-code")
@@ -293,7 +307,7 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
         r.nood("Collega's uit kern niet leesbaar", wie="claude-code")
         r.detail = f"kern niet gelezen, niets klaargezet ({eerste} tot {laatste})"
         return None
-    dagen, opgevallen = bundel(rijen, eerste, laatste, lijst)
+    dagen, opgevallen = bundel(rijen, dagen_lijst, lijst)
     if opgevallen["onbekend_kanaal"]:
         r.nood("Rij met een onbekend kanaal in de gesprekkentabel", wie="claude-code")
     te_zetten = items(dagen)
