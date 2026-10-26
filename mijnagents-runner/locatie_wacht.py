@@ -27,6 +27,7 @@ geven nooit alarm.
 Met --droog: het dagboek samenstellen en tonen, zonder weg te schrijven of het bord te raken.
 Leest alleen. Verwijdert niets uit het logboek.
 """
+import difflib
 import json
 import math
 import os
@@ -35,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -152,10 +154,67 @@ def projectindex():
     return per_sleutel, per_nummer, d.get("dekking") or {}
 
 
+# Een volledig adres: straat met huisnummer, dan postcode en gemeente ('Grote Markt 9, 3000 Leuven'). Een straat heeft
+# geen cijfers: zo wordt 'VO 2645 en 2646, 3000 Leuven' geen adres (driehoeksoverleg 26-10-2026, K5). De gemeente is
+# één woord, met koppeltekens of een lidwoord ervoor: wat erna komt ('Turnhout Scanning') hoort er niet bij (X5).
+ADRES_RE = re.compile(
+    r"(?P<straat>[A-Za-zÀ-ÿ][^,;:()\[\]\d]*?)\s+(?P<nr>\d{1,4}[A-Za-z]?(?:\.\d{1,3})?(?:\s*[-/]\s*\d{1,4}[A-Za-z]?)?"
+    r"(?:\s+bus\s+\w+)?)\s*,\s*(?P<pc>\d{4})\s+"
+    r"(?P<gem>(?:(?:La|Le|Les|Den|De|Sint|Saint|Sainte)\s+)?[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]*)")
+
+
+def adres_in(tekst, geen_huisnummer=()):
+    """Het laatste volledige adres in een tekst als {'straat', 'nr', 'pc', 'tekst'}, of None. Een projectnummer is nooit
+    het huisnummer ('VO 2645, 3000 Leuven'); losse woorden voor de straat ('plaatsbezoek Kerkstraat 1') vallen weg."""
+    gevonden = None
+    for m in ADRES_RE.finditer(tekst or ""):
+        woorden = m["straat"].split()
+        hoofd = next((i for i, w in enumerate(woorden) if w[:1].isupper()), 0)
+        straat = " ".join(woorden[hoofd:])
+        if re.match(r"\d+", m["nr"]).group(0) in geen_huisnummer or len(re.sub(r"[^A-Za-zÀ-ÿ]", "", straat)) < 3:
+            continue
+        gevonden = {"straat": straat, "nr": m["nr"], "pc": m["pc"], "tekst": f"{straat} {m['nr']}, {m['pc']} {m['gem']}"}
+    return gevonden
+
+
+def _plat(s):
+    return re.sub(r"[^a-z0-9]+", "", unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower())
+
+
+def zelfde_adres(a, b):
+    """Zeker dezelfde plek op tekst: dezelfde straat (zonder spaties, hoofdletters en accenten: 'Lage Kaart' is
+    'Lagekaart'), hetzelfde huisnummer en dezelfde postcode. Een tikfout beslist de afstand, niet de tekst: 'Ter Heide'
+    en 'Ter Heijde' zijn twee straten (driehoeksoverleg 26-10-2026, X4 en K4)."""
+    if not a or not b:
+        return False
+    huisnr = lambda x: re.match(r"\d+[A-Za-z]?", x["nr"]).group(0).lower()  # noqa: E731
+    return a["pc"] == b["pc"] and huisnr(a) == huisnr(b) and _plat(a["straat"]) == _plat(b["straat"])
+
+
+def eigen_adres(a, info, per_nummer=None):
+    """(adres, waar) van een afspraak: eerst het locatieveld, dan de titel (driehoeksoverleg 26-10-2026, X3: het
+    locatieveld is daarvoor bedoeld, zoals bij De Agendawacht; de titel kan het projectadres al dragen). Een online
+    locatie geeft geen adres, de titel dan wel. (None, '') zonder volledig adres."""
+    geen = {info.get("nummer") or ""} | {n for n in (per_nummer or {}) if len(n) >= 4}
+    loc = (a.get("locatie") or "").strip()
+    if loc and not online(loc):
+        adres = adres_in(loc, geen)
+        if adres:
+            return adres, "de agenda"
+    adres = adres_in(a.get("titel"), geen)
+    return (adres, "de titel") if adres else (None, "")
+
+
 def plek_van_afspraak(a, info, index, wcache):
     """Waar een afspraak plaatsvindt: (lat, lon, herkomst) of (None, None, reden).
 
-    Eerst firma plus projectnummer uit de titel in de projectplekken; staat er geen firma
+    Een volledig adres in de agenda, anders in de titel (eigen_adres), gaat voor op de projectplek als het een andere
+    plek is: het projectnummer zegt waarover de afspraak gaat, het adres waar (dagvaststelling 26-10-2026: een
+    vooroverleg op het stadskantoor werd aan de werf getoetst; driehoeksoverleg 26-10-2026, optie B). Hetzelfde adres
+    op tekst, of binnen AFSPRAAK_M van de projectplek: dan blijft het de projectplek. Vindt de kaartdienst het adres
+    niet, dan geen plek: liever geen oordeel dan een vals 'niet gezien' (X2). Vrije tekst zoals 'Gemeentehuis X' is
+    geen adres.
+    Anders firma plus projectnummer uit de titel in de projectplekken; staat er geen firma
     in de titel, dan alleen als het nummer bij precies één firma hoort (nooit gokken). Dan
     het adres uit de projectbron via W.coord, pas daarna het adres in de agenda. Een
     postcode is geen projectnummer."""
@@ -173,6 +232,15 @@ def plek_van_afspraak(a, info, index, wcache):
             p = per_sleutel[per_nummer[nr][0]]
         elif not firma and len(per_nummer.get(nr, [])) > 1:
             reden = f"nummer {nr} bestaat bij meer firma's en de titel noemt er geen"
+    eigen, waar = eigen_adres(a, info, per_nummer)
+    if eigen and not (p and zelfde_adres(eigen, adres_in(p.get("adres")))):
+        c = W.coord(eigen["tekst"], wcache)
+        if not c:
+            storing = c is W.KAARTDIENST_STORING
+            return None, None, f"adres in {waar} {'niet omgezet (kaartdienst onbereikbaar)' if storing else 'niet gevonden'}: {eigen['tekst'][:60]}"
+        if not (p and p.get("coord") and afstand_m(c[0], c[1], *p["coord"]) <= AFSPRAAK_M):
+            anders = f", niet de projectplek {p['firma']} {p['nummer']}" if p else ""
+            return c[0], c[1], f"het adres in {waar} ({eigen['tekst'][:60]}{anders})"
     if p and p.get("coord"):
         return p["coord"][0], p["coord"][1], f"de projectplek {p['firma']} {p['nummer']} ({p['bron']})"
     if p and p.get("adres"):
@@ -212,7 +280,8 @@ def verblijven_van(dagboek):
 
 def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None, afspraken=None):
     """(doorgegaan, niet_gezien, zonder_adres, niet_te_toetsen). Te toetsen is een afspraak
-    buiten (!!, een buitensoort of een buitendienst in de titel) of met een fysiek adres.
+    buiten (!!, een buitensoort of een buitendienst in de titel) of met een fysiek adres, ook een volledig adres alleen
+    in de titel (driehoeksoverleg 26-10-2026, X5); met een online locatie maakt een adres in de titel ze niet fysiek.
     Online, intern en reistijd tellen alleen mee in het aantal. De auto ter plaatse is een
     aanwijzing dat de afspraak doorging, geen bewijs dat Mehdi er was.
     per_id (een dict): krijgt per getoetste afspraak {'uitkomst', 'tekst'}, voor de dagvaststelling van De Dagbundelaar
@@ -227,7 +296,8 @@ def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None, afspraken=None
         info = W.lees_titel(a.get("titel", ""))
         loc = (a.get("locatie") or "").strip()
         buiten = info["buiten"] or info["soort"] in W.BUITEN_SOORTEN
-        if info["reistijd"] or not (buiten or (loc and not online(loc))):
+        fysiek = (loc and not online(loc)) or (not loc and eigen_adres(a, info, index[1])[0])
+        if info["reistijd"] or not (buiten or fysiek):
             overig += 1
             continue
         lat, lon, herkomst = plek_van_afspraak(a, info, index, wcache)

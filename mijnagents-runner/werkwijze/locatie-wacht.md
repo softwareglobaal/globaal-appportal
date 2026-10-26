@@ -31,7 +31,7 @@ Mehdi (privé-vlag op het bord; de tegel staat achter de Authentik-groep
 | De projectplekken (firma en nummer naar coördinaat) | `/api/projectplekken`; bron: H-A Projecten en de projectmappen (A13) | de plek van een afspraak |
 | De locatiecontext voor agents | `/api/context?dag=<dag>` | wegschrijven met de afspraak erbij |
 | De stand per tracker, de taken, de projectdekking | `/api/status` | de bewaking en mijn noden |
-| Adres naar coördinaten | De Agendawacht (`coord()`), alleen als de projectplek het niet weet | de plek van een afspraak met een vrij adres |
+| Adres naar coördinaten | De Agendawacht (`coord()`), alleen als de projectplek het niet weet of de afspraak een ander adres noemt | de plek van een afspraak met een vrij adres |
 | De afspraken van de dag | Google Agenda, dezelfde kalenders als De Agendawacht, alleen lezen | doorgegaan of niet gezien |
 
 ## Wat ik doe, in deze volgorde
@@ -50,11 +50,17 @@ Mehdi (privé-vlag op het bord; de tegel staat achter de Authentik-groep
    geen. Na "motor uit" staat de auto geparkeerd tot de motor weer aanslaat; dat
    is gemeten, geen gat. Een gat blijft "geen meting".
 3. **Naast de agenda leggen.** Ik toets een afspraak buiten (!!, een buitensoort of
-   een buitendienst) of met een fysiek adres. De plek komt eerst uit firma plus
-   projectnummer in de titel; staat er geen firma en hoort het nummer bij meer
-   firma's, dan gok ik niet. Daarna het adres in de agenda. Een postcode is geen
-   projectnummer. "Doorgegaan" als de auto binnen 300 m stond, met een half uur
-   speling; "niet gezien" anders.
+   een buitendienst) of met een fysiek adres, ook een volledig adres alleen in de
+   titel. Het projectnummer zegt waarover de afspraak gaat, het adres waar (26-10-2026:
+   een vooroverleg op het stadskantoor werd aan de werf getoetst). Een volledig adres
+   (straat met huisnummer, postcode en gemeente) in het locatieveld, anders in de
+   titel, gaat voor als het een andere plek is dan het project: verder dan 300 m van
+   de projectplek. Vind ik dat adres niet op de kaart, dan oordeel ik niet. Anders komt
+   de plek uit firma plus projectnummer in de titel; staat er geen firma en hoort het
+   nummer bij meer firma's, dan gok ik niet. Daarna het adres in de agenda. Een postcode
+   is geen projectnummer, een projectnummer geen huisnummer, en vrije tekst zoals
+   "Gemeentehuis X" geen adres. "Doorgegaan" als de auto binnen 300 m stond, met een
+   half uur speling; "niet gezien" anders.
 4. **Signaleren**: de auto bij een project zonder afspraak (mogelijk
    niet-geregistreerd werfbezoek, met de link naar het project), verblijven bij
    meerdere projecten tegelijk (Mehdi kiest op het dashboard), en elders twintig
