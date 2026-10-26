@@ -63,6 +63,9 @@ for i, a in enumerate(sys.argv):
     if a == "--venster" and i + 1 < len(sys.argv):
         VENSTER = int(sys.argv[i + 1])
 DAG_GEGEVEN = DAG is not None
+# Een ronde met de hand (--dag of --venster), niet uit de keten: ze kijkt niet alles na, sluit dus geen noden en geeft het
+# ochtendbericht niet vrij (Codex-controle mailnood 5)
+HANDMATIG = DAG_GEGEVEN or VENSTER is not None
 # Gisteren is de Brusselse dag: de VM loopt in UTC, en om 23:30 UTC is het in Brussel al de volgende dag.
 DAG = DAG or V.gisteren(datetime.now(timezone.utc))
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
@@ -228,7 +231,10 @@ def main():
     gisteren. Nacht (--nacht, elke dag, als stap van keten.py --nacht na De Zoomwacht): alleen de dagvaststelling, over
     NACHTVENSTER dagen. De taaknaam van de nacht (ochtend.NACHTTAAK) geeft het ochtendbericht nooit vrij (Codex D1)."""
     import ochtend
-    with ag.ronde(ochtend.NACHTTAAK if NACHT else "bundels en dagvaststelling") as r:
+    # De taaknaam van de nacht en van een ronde met de hand begint met ochtend.NACHTTAAK, die het ochtendbericht nooit
+    # vrijgeeft (Codex D1, Codex-controle mailnood 5)
+    taak = (f"{ochtend.NACHTTAAK} met de hand" if HANDMATIG else ochtend.NACHTTAAK if NACHT else "bundels en dagvaststelling")
+    with ag.ronde(taak) as r:
         delen, nu = [], datetime.now(timezone.utc)
         nacht = lees_nacht()
         # G3: of De Zoomwacht in deze keten slaagde (True), faalde (False) of niet in deze keten liep (None)
@@ -284,7 +290,11 @@ def main():
             # niet; de noden van de bundels wel, want bundelen() liep. De ronde breekt niet, want het ochtendbericht
             # wacht op haar (ochtend.py).
             behoud(r, lambda t: t.startswith(VASTSTELLING_NODEN))
-        if NACHT:
+        if HANDMATIG:
+            # Codex-controle mailnood 5: een ronde met de hand kijkt een dag of een eigen venster na, niet alles; ze
+            # sluit geen noden (dat doen de geplande rondes), nieuwe komen er wel bij
+            behoud(r, lambda t: True)
+        elif NACHT:
             # Codex-controle mailnood 4: de nacht kijkt de bundels niet na (bundelen() loopt alleen 's ochtends), dus
             # sluit ze hun noden niet; die van de vaststelling en de keten wel.
             behoud(r, lambda t: not t.startswith(VASTSTELLING_NODEN + KETEN_NODEN))

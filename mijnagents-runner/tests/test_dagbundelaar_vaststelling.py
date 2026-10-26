@@ -720,7 +720,7 @@ def test_vaststelling_noden_staan_in_de_lijst():
     for tekst in eigen:
         assert tekst.startswith(D.KETEN_NODEN), tekst
 
-def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=()):
+def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=(), handmatig=False):
     """Een ronde van main() door de echte gedeelde Ronde (bord.py) met een nagebootst bord. open_noden: wat /api/nood
     geeft (None: onleesbaar). Geeft de laatste hartslag zoals die naar het bord ging."""
     gezet = []
@@ -739,8 +739,8 @@ def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=()):
             gezet.append(payload)
         return {}
 
-    oud = (bord.call, D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen)
-    bord.call, D.NACHT, D.DAG_GEGEVEN = call, nacht, True
+    oud = (bord.call, D.NACHT, D.DAG_GEGEVEN, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen)
+    bord.call, D.NACHT, D.DAG_GEGEVEN, D.HANDMATIG = call, nacht, True, handmatig
     nu = datetime.now(timezone.utc).isoformat()
     D.lees_nacht = lambda: ({"start": nu, "stappen": {"zoom-wacht": {"exit": 0}}} if nacht else
                             {"start": nu, "einde": nu, "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}})
@@ -750,7 +750,7 @@ def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=()):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
     finally:
-        bord.call, D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen = oud
+        bord.call, D.NACHT, D.DAG_GEGEVEN, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen = oud
     return gezet[-1]
 
 
@@ -782,6 +782,15 @@ def test_c1_c4_echte_ronde_sluit_alleen_wat_ze_nakeek():
     assert "nood" not in h and h["status"] in ("klaar", "waakt"), h
     h = _echte_ronde(False, [hot, foto], goed, bundelnood=[foto])
     assert teksten(h) == {foto["tekst"]}, "een geslaagde ochtend kijkt alles na: de oude mailnood sluit"
+    # Codex-controle mailnood 5: een ronde met de hand (--dag, --venster) kijkt niet alles na: ze sluit niets, voegt
+    # nieuwe noden toe, en haar taak begint met de nachttaak, die het ochtendbericht nooit vrijgeeft
+    import ochtend
+    for nacht in (False, True):
+        h = _echte_ronde(nacht, [hot, foto], goed, handmatig=True)
+        assert teksten(h) == {hot["tekst"], foto["tekst"]}, (nacht, h)
+        assert h["taak"].startswith(ochtend.NACHTTAAK), h
+    h = _echte_ronde(False, [hot], faal, handmatig=True)
+    assert teksten(h) == {hot["tekst"], "Dagvaststelling mislukt in de ochtendronde, zie werkverslag"}, h
 
 def _kopie(pad, uren, vanaf):
     d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [
