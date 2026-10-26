@@ -387,13 +387,46 @@ try:
         WC.markdown = _oud_md
     with tempfile.TemporaryDirectory() as d:
         wm = Path(d) / "weekconsolidatie"
-        (wm / "2026-W43.json.tmp").mkdir(parents=True)         # de laatste stap faalt: hier kan geen bestand komen
+        (wm / "2026-W43.json.tmp").mkdir(parents=True)         # een vroege stap faalt: hier kan geen bestand komen
         (Path(d) / "regels-vooraf.json").write_text('{"week": "2026-W42"}')
         rc = _draai(d, ["--ronde"], _geslaagd)
-        check("weeknood (Codex fase 1, ronde 2): faalt de laatste stap, dan blijven de weekregels van vorige week gelden",
+        check("weeknood (Codex fase 1, ronde 2): faalt een vroege stap, dan blijven de weekregels van vorige week gelden",
               rc == 1 and not (wm / "2026-W43.json").exists()
               and json.loads((Path(d) / "regels-vooraf.json").read_text()) == {"week": "2026-W42"}
               and json.loads((wm / "laatste.json").read_text())["ok"] is False)
+
+    def _vervang_faalt_op(einde):
+        echt = WC._vervang
+
+        def vervang(bron, doel):
+            if str(doel).endswith(einde):
+                raise OSError(f"vervangen mislukt: {einde}")
+            echt(bron, doel)
+        return vervang
+
+    _oud_vervang = WC._vervang
+    try:
+        for einde, wat in (("2026-W43.json", "het weekbestand (de allerlaatste stap)"),
+                           ("regels-vooraf.json", "de weekregels")):
+            for vooraf in ('{"week": "2026-W42"}', None):
+                with tempfile.TemporaryDirectory() as d:
+                    wm = Path(d) / "weekconsolidatie"
+                    if vooraf:
+                        (Path(d) / "regels-vooraf.json").write_text(vooraf)
+                    WC._vervang = _vervang_faalt_op(einde)
+                    rc = _draai(d, ["--ronde"], _geslaagd)
+                    WC._vervang = _oud_vervang
+                    regels = (Path(d) / "regels-vooraf.json")
+                    check(f"weeknood (Codex fase 1, ronde 3): faalt het vervangen van {wat}"
+                          f"{' zonder oude regels' if not vooraf else ''}, dan geen geslaagde week, de oude regels, "
+                          "de nood open en de week kan opnieuw",
+                          rc == 1 and not (wm / "2026-W43.json").exists() and not WC.al_gedaan("2026-W43", wm)
+                          and (regels.read_text() == vooraf if vooraf else not regels.exists())
+                          and json.loads((wm / "laatste.json").read_text())["ok"] is False
+                          and W.weekconsolidatie_noden(str(wm), datetime(2026, 10, 26, 6, 30, tzinfo=BXL)) == [W.WEEKNOOD],
+                          regels.read_text() if regels.exists() else "geen regels")
+    finally:
+        WC._vervang = _oud_vervang
 finally:
     for k, v in _patch_w.items():
         setattr(W, k, v)

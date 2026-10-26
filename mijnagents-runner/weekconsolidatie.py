@@ -279,11 +279,15 @@ def markdown(week, uit, meta):
     return "\n".join(r) + "\n"
 
 
+def _vervang(bron, doel):
+    os.replace(bron, doel)
+
+
 def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
-    """Eerst alles als tijdelijk bestand; dan <week>.json, dat 'geslaagd' zegt (de weeknood van de Agendawacht en
-    al_gedaan lezen het); pas daarna worden de weekregels actief voor laag 1. Faalt er onderweg iets, dan is er geen
-    <week>.json, de nood blijft open, de week kan opnieuw en de oude weekregels blijven gelden (Codex-controle fase 1,
-    punt 1 en ronde 2)."""
+    """Een week is pas geslaagd als het weekbestand en de weekregels er samen staan (Codex-controle fase 1, rondes 1
+    tot 3). Eerst alles als tijdelijk bestand; dan worden de weekregels actief; dan <week>.json, dat 'geslaagd' zegt
+    (de weeknood van de Agendawacht en al_gedaan lezen het). Faalt die laatste stap, dan komen de weekregels van
+    vorige week terug. Zo is er nooit een geslaagde week zonder haar regels, en nooit nieuwe regels zonder week."""
     nu_utc = nu_utc or datetime.now(timezone.utc)
     WEEKMAP.mkdir(parents=True, exist_ok=True)
     naam = f"{week}-proef" if proef else week
@@ -297,9 +301,19 @@ def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
     tmp = WEEKMAP / f"{naam}.json.tmp"
     tmp.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"), "ronde": ronde,
                                "model": meta, **uit}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    os.replace(tmp, WEEKMAP / f"{naam}.json")
-    if not proef:
-        os.replace(regels_tmp, REGELS_WEEK)
+    if proef:
+        _vervang(tmp, WEEKMAP / f"{naam}.json")
+        return
+    vorige = REGELS_WEEK.read_bytes() if REGELS_WEEK.exists() else None
+    _vervang(regels_tmp, REGELS_WEEK)
+    try:
+        _vervang(tmp, WEEKMAP / f"{naam}.json")
+    except Exception:
+        if vorige is None:
+            REGELS_WEEK.unlink(missing_ok=True)
+        else:
+            REGELS_WEEK.write_bytes(vorige)
+        raise
 
 
 def stand_schrijven(week, ok, fout="", ronde=False, nu_utc=None):
