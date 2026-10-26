@@ -177,10 +177,8 @@ def herkomst(bron):
         return b   # alleen een veld dat helemaal een code is: 'V - Vergunningsbesluit.pdf' is een bestandsnaam (25e review)
     if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I) and not re.search(r"\.\w{2,4}\b", b):
         return "B"   # de schrijver zegt zelf dat het een verklaring is (geen bestand met 'bouwheer' in de naam)
-    zonder = re.sub(r"\s*\((?:opname|transcript)?[^)]*\d{1,2}:\d{2}[^)]*\)|(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio)\s*)?"
-                    r"(?:\d{1,2}:\d{2}(?::\d{2})?|\b\d{1,2}m\d{2}s\b)(?:\s*(?:-|–|tot)\s*(?:\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}m\d{2}s\b))?",
-                    "", b)
-    return re.sub(r"\s{2,}", " ", zonder).strip(" ,;:-") or "(na te kijken)"
+    zonder = schrijfregels.bron_zichtbaar(b)   # dezelfde regel als de bron in het verslag van bevindingen
+    return zonder or "(na te kijken)"
 
 
 # verslag_md is bij een werfverslag de enige plek waar de bron per punt (bestand en opnametijdstip) bewaard blijft. Het

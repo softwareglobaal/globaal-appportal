@@ -248,15 +248,20 @@ def _opname_weg(tekst):
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), ingrepen
 
 
+# Een opnametijdstip in een bron: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
+_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
+_OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
+
+
 def bron_zichtbaar(bron):
-    """De bron zoals ze in een verslag mag staan: zonder opname, transcript of tijdstip (S4). Het volledige veld bron blijft in
-    de gegevens; dit is alleen voor de weergave ("factuur 2026-114, zie opname 00:12:05" wordt "factuur 2026-114")."""
-    b = str(bron or "")
-    b = re.sub(r"(?:zie\s+)?(?:de\s+)?\S*(?:opname|transcript|audio)\S*(?:\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?"
-               r"(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?)?", "", b, flags=re.I)
-    b = re.sub(r"\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", "", b)
+    """De bron zoals ze in een verslag mag staan: zonder opnametijdstip en zonder 'opname 00:12' (S4). Bestandsnamen,
+    een opmeting ('Opname plaatsgesteldheid expert Claes.pdf') en een schaal (1:100) blijven; het volledige veld bron
+    blijft in de gegevens ("factuur 2026-114, zie opname 00:12:05" wordt "factuur 2026-114"). 28e review."""
+    b = re.sub(r"\s*\n\s*", " / ", str(bron or "").strip())
+    b = re.sub(r"\s*\([^()]*" + _OPNAMETIJD + r"[^()]*\)", "", b)
+    b = re.sub(r"(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio|recording)\s+(?:van\s+|at\s+|om\s+)?)?" + _OPNAMETIJDEN, "", b, flags=re.I)
     b = re.sub(r"\(\s*\)", "", b)
-    return re.sub(r"\s{2,}", " ", b).strip(" ,;:-")
+    return re.sub(r"\s{2,}", " ", b).strip(" ,;:-/")
 
 
 def _regels(profiel=None):

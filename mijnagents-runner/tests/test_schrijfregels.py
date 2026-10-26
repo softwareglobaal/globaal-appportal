@@ -377,7 +377,7 @@ for tekst, verwacht in [
     t9, _ = S.toepassen(tekst)
     check(f"S4 negende review: '{tekst[:35]}'", t9 == verwacht and S.toepassen(t9)[0] == t9, repr(t9))
 for bron, verwacht in [("opname 00:31:10", ""), ("factuur 2026-114, zie opname 00:12:05", "factuur 2026-114"),
-                       ("transcript.txt 00:12:00-00:12:40", ""), ("offerte Peeters 2026-03", "offerte Peeters 2026-03")]:
+                       ("transcript.txt 00:12:00-00:12:40", "transcript.txt"), ("offerte Peeters 2026-03", "offerte Peeters 2026-03")]:
     check(f"bron_zichtbaar '{bron}'", S.bron_zichtbaar(bron) == verwacht, S.bron_zichtbaar(bron))
 vg = vb.leeg("2309", "Stockemstraat 15")
 vg["gemeld"] = [{"punt": "Bij hevige regen loopt water binnen langs het dakraam.", "bron": "opname 00:31:10"}]
@@ -530,6 +530,14 @@ for tekst in ["Diagonale barst boven de keukendeur, 0,5 mm breed. (Opname van de
     for profiel in (None, "aankoopkeuring"):
         t27, ing27 = S.toepassen(tekst, profiel)
         check(f"haakjestekst die geen opnameverwijzing is, blijft: '{tekst[-35:]}' {profiel}", t27 == tekst and not ing27, (t27, ing27))
+
+# Achtentwintigste review 26-10-2026: de zichtbare bron houdt opmetingen, bestandsnamen en schalen; alleen opnametijdstippen weg
+for b in ["opname van de bestaande toestand door expert Claes, 3.3.2025", "Opname plaatsgesteldheid expert Claes.pdf", "plan A-201 schaal 1:100",
+          "grondplan 1:50", "verslag audioinstallateur", "momentopname werf.jpg", "Planopname.pdf", "WhatsApp Image 2026-09-30 at 18.04.11.jpeg"]:
+    check(f"bron blijft zoals ze is: '{b}'", S.bron_zichtbaar(b) == b and sj.herkomst(b) == b, (S.bron_zichtbaar(b), sj.herkomst(b)))
+for b, verwacht in [("transcript.txt (00:12:00)", "transcript.txt"), ("transcript.txt 12m30s", "transcript.txt"),
+                    ("transcript.txt (00:12:00)\n00 fotos.md", "transcript.txt / 00 fotos.md")]:
+    check(f"opnametijdstip weg uit de bron: '{b[:30]}'", S.bron_zichtbaar(b) == verwacht and sj.herkomst(b) == verwacht, S.bron_zichtbaar(b))
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
