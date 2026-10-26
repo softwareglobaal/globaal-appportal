@@ -47,7 +47,7 @@
   "melodiebvba@gmail.com": "regels_melo.txt"
  },
  "bronnen": {
-  "_uitleg": "Postvakken die de server niet zelf kan lezen. Microsoft laat voor hotmail geen wachtwoord-login toe (gemeten, ook op 25-09-2026). Mail op de Mac van Mehdi haalt hotmail wel op; mac/hotmail_koppen.py zet elk uur de koppen (geen tekst) in dit bestand onder mijnagents-data. Is het ouder dan drie uur, dan meldt de wacht dat.",
+  "_uitleg": "Postvakken die de wacht uit een bestand onder mijnagents-data leest, niet rechtstreeks via de postbus. Hotmail: sinds 26-10-2026 maakt koppelingen/hotmail_server.py dit bestand elk uur op de server, alleen lezend in de postcontainer met het OAuth-token (driehoeksoverleg 3-0); zo blijft de wacht hetzelfde en schrijft hij niets in hotmail. Tot dan zette mac/hotmail_koppen.py het vanuit Mail op de Mac, maar launchd heeft daar geen Full Disk Access. Is het ouder dan drie uur, dan meldt de wacht dat.",
   "mehdichegini@hotmail.com": "hotmail/koppen.json"
  },
  "rommel_opruimen": {

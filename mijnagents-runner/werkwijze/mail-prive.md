@@ -1,6 +1,6 @@
 # Werkwijze van De Mailwacht hotmail
 
-Versie 1.7 (20-10-2026: Helemaal weg, uitschrijven en opruimen op vraag). Versie 1.6 (20-10-2026: opgevolgd tot opgelost, een antwoord zet een punt op Loopt). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
+Versie 1.8 (26-10-2026: de koppen komen van de server, niet meer van de Mac; driehoeksoverleg 3-0). Versie 1.7 (20-10-2026: Helemaal weg, uitschrijven en opruimen op vraag). Versie 1.6 (20-10-2026: opgevolgd tot opgelost, een antwoord zet een punt op Loopt). Versie 1.5 (20-10-2026: uitschrijven via de officiele knop, beslissing van Mehdi). Versie 1.4 (19-10-2026, driehoeksoverleg 3-0: een bron voor wat openstaat, beantwoord via de draad, gewone mail na een werkdag, collega's tellen mee, reclame naar Opgeruimd; 1.3 26-09-2026; 1.2 dezelfde nacht). Mandaat van Mehdi: "voor de e-mailadressen beheert momenteel niemand dit. Aparte agents,
 zodat elke agent apart kan toezien en de belangrijke e-mails kan opvolgen, zodat het niet allemaal bij mij komt en
 ik niet alles moet onthouden. Geen spam, geen rommelinformatie." En op 26-09-2026: "ik wil een overzicht hebben
 zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, er is te veel rommel en ruis."
@@ -8,9 +8,10 @@ zodat we het aantal mails onder controle krijgen, en ik wil de mails opschonen, 
 ## Wat ik doe
 
 Ik lees mehdichegini@hotmail.com, het privéadres van Mehdi, elk uur tussen 07:00 en 21:00 (Brusselse tijd),
-op de VM. Microsoft laat geen wachtwoord-login toe, dus lees ik niet zelf bij Microsoft: Mail op de Mac van Mehdi
-haalt hotmail op, en mac/hotmail_koppen.py zet elk uur de koppen (afzender, ontvangers, onderwerp, datum, geen
-tekst) op de VM. Slaapt de Mac of staat Mail uit, dan is die kopie niet vers, en dat meld ik als nood. Of er al
+op de VM. Elk uur maak ik eerst een verse kopie van de koppen (afzender, ontvangers, onderwerp, datum, geen tekst):
+koppelingen/hotmail_server.py leest hotmail alleen-lezend in de postcontainer, met het OAuth-token van Microsoft
+(sinds 26-10-2026; tot dan kwam de kopie van Mail op de Mac, en die viel onder launchd stil op 'authorization denied').
+Lukt dat lezen niet, dan blijft de vorige kopie staan; is ze ouder dan drie uur, dan meld ik dat als nood. Of er al
 geantwoord is, zie ik in de verzonden post van hotmail. Wat ik vind is privé: ik sta alleen zichtbaar voor beheer.
 
 Elk bericht krijgt een soort:

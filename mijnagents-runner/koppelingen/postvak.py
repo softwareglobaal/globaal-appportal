@@ -127,7 +127,7 @@ VERZONDEN = ("INBOX.Sent", "INBOX.Sent Messages", "INBOX.Sent Items", "Sent", "[
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
 REGELMAP = os.path.join(RUNNER, "mailregels")   # sorteerregels per postvak; ook de Mac-tools lezen hier (26-9-2026)
 SORTEER_DAGEN = 3           # de nieuwe mail van zoveel dagen wordt elke ronde gesorteerd, zoals de ochtendtaak van 24-9
-BRON_VERS_UREN = 3          # een kopie van de Mac die ouder is dan dit, meld ik als niet vers
+BRON_VERS_UREN = 3          # een kopie (van de server, vroeger van de Mac) die ouder is dan dit, meld ik als niet vers
 VERZONDEN_PLAFOND = 5000    # zoveel verzonden berichten per map lees ik hoogstens; meer is niet volledig gelezen
 
 
@@ -497,7 +497,10 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             continue
         oud = bron_uren_oud(mb, nu)
         if mb.get("bron") and (oud is None or oud > BRON_VERS_UREN):
-            r.nood(f"De kopie van {adres} van de Mac is niet vers: de Mac slaapt, of Mail staat uit", wie="mehdi")
+            # Sinds 26-10-2026 maakt de server de kopie (hotmail_server.py): dan faalt het lezen in de postcontainer,
+            # bijvoorbeeld een verlopen OAuth-token; de reden staat in het logboek van de wacht.
+            r.nood(f"De kopie van {adres} is niet vers (ouder dan {BRON_VERS_UREN} uur): het lezen op de server faalt, "
+                   "zie het logboek van de wacht", wie="claude-code")
         fouten = []
         try:
             berichten = koppen_mappen(adres, mappen_van(adres), sinds, ag, fouten=fouten)

@@ -8,8 +8,10 @@ houdt een index bij: ~/Library/Mail/V10/MailData/Envelope Index. Dit script lees
 tekst, en zet ze op de VM in mijnagents-data/hotmail/koppen.json. De wacht op de VM doet de rest
 met dezelfde regels als elke mailwacht (koppelingen/postvak.py).
 
-Draait elk uur via launchd (be.globaal.mijnagents.mail-prive). Slaapt de Mac of staat Mail uit,
-dan veroudert het bestand, en dan meldt de wacht dat zelf.
+Noodroute sinds 26-10-2026: de server maakt dit bestand nu zelf (koppelingen/hotmail_server.py, driehoeksoverleg 3-0).
+Onder launchd (be.globaal.mijnagents.mail-prive) faalde dit script sinds 26-09-2026 met 'authorization denied': de
+Python van launchd heeft geen Full Disk Access, en die krijgt de algemene Python ook niet (werkwijze/icloud-wacht.md).
+Met de hand vanuit een programma met Full Disk Access werkt het nog wel.
 
     hotmail_koppen.py            lezen en naar de VM zetten
     hotmail_koppen.py --droog    lezen en tellen, niets versturen
