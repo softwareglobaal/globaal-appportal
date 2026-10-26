@@ -101,13 +101,21 @@ _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 #   bestaande toestand" (of van de plaatsgesteldheid, door een expert) is een opmeting, geen geluidsopname.
 SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b"
                    r"|\bdictated\s+(?:his|her|the)\s+(?:findings|observations)\b", re.I)   # "recorded" is ook gewoon "noteerde"
-# "De architect ... sprak zijn vaststellingen in" gaat over de architect zelf; staat er iets anders vóór (een vaststelling:
-# "De dorpel ligt te laag en ..."), dan valt de zin niet stil weg maar wordt hij gemarkeerd
-_OVER_ARCHITECT = re.compile(r"\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:de\s+|the\s+)?(?:architect|mehdi|ik|wij|we|i)\b", re.I)
-_OVER_OPNAME = re.compile(r"\b(?:opname|geluidsopname|transcript|tijdstip|tijdstippen|haakjes|recording|timestamps?|brackets)\b", re.I)
 _TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
-_VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname|"
-                       r"at|between|and|from|to|on|site|the|recording)\b", re.I)
+# De woorden van een zin die alleen over het inspreken of de opname gaat (de 2309-tekst en varianten). Een ander woord
+# (een vaststelling) maakt van het wegvallen een zichtbare markering.
+_META = frozenset("""de het een architect architecte mehdi chegini ik wij we zijn haar ter plaatse in sprak spreekt vaststellingen
+    vaststelling bevindingen opmerkingen tijdstip tijdstippen tussen haakjes verwijst verwijzen naar die deze opname opnames
+    geluidsopname transcript van dit dat wat elk elke zo kan kunnen men terugvinden terug te vinden bezoek plaatsbezoek werfbezoek
+    nam neemt maakte maakt foto foto's fotos en zoals om tot vanaf rond omstreeks uur u kwam aan arriveerde geeft gaf moment noot
+    opmerking ook hierbij telkens bij the a an i his her dictated findings observations timestamp timestamps time times between
+    brackets refers refer to recording recordings audio at and during on site visit this that each every note also""".split())
+_TIJD_PLAATSHOUDER = re.compile(r"\b(?:[uhm]{1,2}|ss)(?::(?:[uhm]{1,2}|ss)){1,2}\b", re.I)
+
+
+def _alleen_meta(kern):
+    rest = _TIJD_PLAATSHOUDER.sub(" ", re.sub(r"\d+", " ", kern))
+    return all(w in _META for w in re.findall(r"[^\W\d_]+(?:'s)?", rest.lower()))
 _OPMETING = (r"(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|"
              r"plaatsbeschrijving|aanpalende|landmeter|terrein|opmeting|\w*expert|\w*verslaggever)\b)")
 OPNAME_ZINNEN = [
@@ -142,10 +150,6 @@ def _s4_begin(kern):
     """Waar de eerste S4-zin in de tekst begint, of None."""
     begins = [m.start() for p in [SPRAK, OPNAME_VOLGENS, *OPNAME_ZINNEN] for m in [p.search(kern)] if m]
     return min(begins) if begins else None
-
-
-def _woorden(tekst):
-    return re.findall(r"[^\W\d_]{2,}", tekst)
 
 
 def _opname_weg(tekst):
@@ -185,22 +189,13 @@ def _opname_weg(tekst):
         if _MARK.fullmatch(kern):
             delen.append(zin)
             continue
-        m = SPRAK.search(kern)
-        if m:
+        is_legende = any(p.search(kern) for p in OPNAME_ZINNEN)
+        if SPRAK.search(kern) or is_legende:
+            # 20e review: een zin over het inspreken of de legende valt alleen stil weg als elk woord een meta-woord is;
+            # staat er iets anders in (een vaststelling, met komma, 'en' of puntkomma eraan), dan zichtbaar gemarkeerd
             ingrepen.append(("S4", kern))
-            rest = _VULWOORD.sub("", _TIJD.sub("", kern[m.end():]))
-            voor = kern[:m.start()]
-            if _woorden(rest) or re.search(r"[;:](?!\d)", voor) or (_woorden(voor) and not _OVER_ARCHITECT.match(voor)):
-                delen.append(kop + markering + staart)
-            else:
-                weg(staart)
-            continue
-        if any(p.search(kern) for p in OPNAME_ZINNEN):
-            ingrepen.append(("S4", kern))
-            legende = True
-            # elk zinsdeel (tussen ; of ": ") gaat over de opname of het tijdstip: de zin valt weg; anders zichtbaar gemarkeerd
-            delen_zin = re.split(r";|:\s", kern)
-            if all(_OVER_OPNAME.search(d) and not OPNAME_VOLGENS.search(d) for d in delen_zin):
+            legende = legende or is_legende
+            if _alleen_meta(kern) and not OPNAME_VOLGENS.search(kern):
                 weg(staart)
             else:
                 delen.append(kop + markering + staart)

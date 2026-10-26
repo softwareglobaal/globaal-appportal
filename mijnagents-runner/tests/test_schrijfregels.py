@@ -296,7 +296,7 @@ check("S5 ook het meervoud ingebrekestellingen", any(r == "S5" for r, _ in S.con
 for tekst, verwacht in [
         ("Mehdi Chegini bezocht het goed op 3 juni 2026 en sprak zijn vaststellingen ter plaatse in tijdens een rondgang van 45 minuten. "
          "Een tijdstip tussen haakjes verwijst naar de opname. Het onderzoek was visueel.", S.MARKERING.format(regel="S4") + " Het onderzoek was visueel."),
-        ("Noot: een tijdstip tussen haakjes verwijst naar de opname.", S.MARKERING.format(regel="S4")),
+        ("Noot: een tijdstip tussen haakjes verwijst naar de opname.", ""),
         ("De goot lekt. Een tijdstip tussen haakjes verwijst naar de opname; de dorpel ligt te laag.", "De goot lekt. " + S.MARKERING.format(regel="S4")),
         ("Wie schildert de plafonds? De architect sprak zijn vaststellingen ter plaatse in.", "Wie schildert de plafonds?"),
         ("De goot lekt aan de achtergevel! Een tijdstip tussen haakjes verwijst naar de opname.", "De goot lekt aan de achtergevel!"),
@@ -460,6 +460,20 @@ for tekst, verwacht in [("Er blijft water staan. Zie opname 00:22:30. De aanneme
                         ("Raam R3 (...) staat uit lood... zie detail.", "Raam R3 (...) staat uit lood... zie detail.")]:
     t19, _ = S.toepassen(tekst, "aankoopkeuring")
     check(f"losse opnameverwijzing zonder losse punt: '{tekst[:30]}'", t19 == verwacht, repr(t19))
+
+# Twintigste review 26-10-2026: een opnamezin valt alleen stil weg als elk woord een meta-woord is
+for tekst in ["De dorpel van raam R3 ligt 3 cm te laag, het tijdstip tussen haakjes verwijst naar de opname.",
+              "De dorpel ligt 3 cm te laag en dit verwijst naar de opname.",
+              "Er blijft water staan op het terras (00:22:30), wat verwijst naar de opname.",
+              "Mehdi zag dat de dakgoot aan de achtergevel lekt en sprak zijn vaststellingen ter plaatse in.",
+              "De architect stelde vast dat de zinken dorpel 3 cm te laag ligt en sprak zijn vaststellingen in."]:
+    t20, ing20 = S.toepassen(tekst + "\nDe voeg is open.")
+    check(f"vaststelling aan een opnamezin: zichtbaar gemarkeerd: '{tekst[:35]}'",
+          t20 == S.MARKERING.format(regel="S4") + "\nDe voeg is open." and ("S4", tekst) in ing20, repr(t20))
+for tekst in ["De architect sprak zijn vaststellingen ter plaatse in.", "De architect nam 18 foto's en sprak zijn vaststellingen ter plaatse in.",
+              "Een tijdstip tussen haakjes (uu:mm:ss) verwijst naar de opname van het plaatsbezoek.", "Dit verwijst naar de opname van het bezoek.",
+              "The architect dictated his findings at 10:15."]:
+    check(f"zuivere opnamezin valt weg: '{tekst[:35]}'", S.toepassen(tekst)[0] == "", S.toepassen(tekst))
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
