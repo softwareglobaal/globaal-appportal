@@ -1,5 +1,11 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.26 (27-10-2026): driehoeksoverleg, punten L5 en M6, goedgekeurd door Mehdi. Een afspraak op de agenda
+van Lara en een afspraak uit een reeks worden nooit gewist, ook niet door Claude: de hook claude-hooks/wisgrendel.py
+weigert het voor het gebeurt (master 5.18). Alleen mijn eigen ritten (ID rit en 32 hexadecimale tekens) mogen weg.
+Wat niet doorgaat, wordt gemarkeerd: 'vervalt (vakantie)' vooraan en Beschikbaar, na Mehdi's ja. Aanzetten staat bij
+het leren in lagen. Grendel: `test_wisgrendel.py`.
+
 Aanvulling v8.25 (22-10-2026): beslissing van Mehdi. Een dubbele zorgafspraak die een collega op de werkagenda zette,
 en een eigen melding van de agent die op Opgelost staat, mogen weg, telkens na Mehdi's akkoord voor dat geval
 (master 5.17). Ik leg het voor; Claude verwijdert na de ja. Zonder ja blijft alles staan.
@@ -785,8 +791,19 @@ voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem zie
    Data uit Mehdi/Agendawacht/weekconsolidatie. Het model stelt voor; een sessie legt vast, met een test.
 
 Laag 1 en 3 zet Mehdi een keer aan in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen):
-UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en regels_vooraf.py.
-De grendel is tests/test_leren_in_lagen.py.
+UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en twee opdrachten:
+regels_vooraf.py en de wisgrendel, python3 ~/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py.
+De grendels zijn tests/test_leren_in_lagen.py en tests/test_wisgrendel.py.
+
+De wisgrendel (27-10-2026, L5 en M6) weigert echt; regels_vooraf.py zet alleen tekst. Hij houdt tegen: wissen op de
+agenda van Lara (behalve een eigen rit), wissen of annuleren van een afspraak uit een reeks (ID eindigt op
+_JJJJMMDD of _JJJJMMDDTUUMMSSZ) op elke agenda, en een Bash-opdracht die zo wist, recurringEventId noemt of op Lara
+een ID gebruikt dat niet te lezen is (een variabele, een lus). Wissen op de werkagenda met een gewoon ID laat hij door;
+daar blijft de ja van Mehdi de regel. Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
+Let op: staat wisgrendel.py niet op dat pad, dan stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code
+elke opdracht die onder de matcher valt (elke Bash- en MCP-opdracht). Het pad wijst dus naar de hoofdcheckout
+~/dev/globaal-appportal, nooit naar een werkboom die later verdwijnt, en de hook gaat pas aan als die checkout de main
+met wisgrendel.py heeft (git pull --ff-only).
 
 ## Wat ik nooit doe
 
