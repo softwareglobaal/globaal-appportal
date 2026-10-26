@@ -260,5 +260,161 @@ lagen = json.dumps(taken.get("leren_in_lagen", {}), ensure_ascii=False)
 check("werkwijze: laag 1 en laag 4 staan in agenda-taken.json", "regels_vooraf.py" in lagen and "weekconsolidatie.py" in lagen)
 check("werkwijze: de zondagsronde staat in de dagplanning", "weekconsolidatie.py --ronde" in json.dumps(taken, ensure_ascii=False))
 
+# ---------- laag 4: de weeknood (overleg 27-10-2026: W40 tot W43 mislukten vier weken zonder dat iemand het zag) ----------
+BXL = W.TIJDZONE
+check("weeknood: de map van de Agendawacht is die van de weekconsolidatie",
+      Path(W.WEEKCONSOLIDATIE_MAP) == Path.home() / "appportal/mijnagents-data/export/Agendawacht/weekconsolidatie"
+      and Path(W.WEEKCONSOLIDATIE_MAP) == WC.WEEKMAP, W.WEEKCONSOLIDATIE_MAP)
+check("weeknood: maandag 06:30 is het anker de zondag ervoor om 20:00 (wintertijd na 25-10)",
+      W.weekconsolidatie_anker(datetime(2026, 10, 26, 6, 30, tzinfo=BXL)) == datetime(2026, 10, 25, 20, 0, tzinfo=BXL))
+check("weeknood: maandag voor 06:00 telt nog de week ervoor (zomertijd)",
+      W.weekconsolidatie_anker(datetime(2026, 10, 26, 5, 59, tzinfo=BXL)) == datetime(2026, 10, 18, 20, 0, tzinfo=BXL))
+check("weeknood: zondagavond na 20:00 telt nog het anker van vorige week",
+      W.weekconsolidatie_anker(datetime(2026, 10, 25, 21, 0, tzinfo=BXL)) == datetime(2026, 10, 18, 20, 0, tzinfo=BXL))
+
+
+def _weekmap(d, bestanden):
+    for naam, inhoud in bestanden.items():
+        (Path(d) / naam).write_text(inhoud if isinstance(inhoud, str) else json.dumps(inhoud), encoding="utf-8")
+    return d
+
+
+MAANDAG = datetime(2026, 10, 26, 6, 30, tzinfo=BXL)
+with tempfile.TemporaryDirectory() as d:
+    nood = W.weekconsolidatie_noden(os.path.join(d, "bestaat-niet"), MAANDAG)
+    check("weeknood: een ontbrekende map geeft de nood, geen crash", nood == [W.WEEKNOOD], str(nood))
+    check("weeknood: een lege map geeft de nood", W.weekconsolidatie_noden(d, MAANDAG) == [W.WEEKNOOD])
+    tekst = W.WEEKNOOD["tekst"]
+    check("weeknood: vaste tekst zonder cijfers en zonder 'stil' (N10; 'stil' belt Mehdi op)",
+          not re.search(r"\d", tekst) and "stil" not in tekst.lower() and W.WEEKNOOD["wie"] == "mehdi", tekst)
+with tempfile.TemporaryDirectory() as d:
+    _weekmap(d, {"2026-W43.json": {"gemaakt": "2026-10-25T19:35:00+00:00"}})
+    check("weeknood: een geslaagde run zondag 20:35 (wintertijd) sluit de nood op maandag",
+          W.weekconsolidatie_noden(d, MAANDAG) == [])
+    check("weeknood: dezelfde run houdt de nood dicht tot de volgende zondag 21:00",
+          W.weekconsolidatie_noden(d, datetime(2026, 11, 1, 21, 0, tzinfo=BXL)) == [])
+    check("weeknood: maar op maandag 2 november is ze weer open zonder nieuwe run",
+          W.weekconsolidatie_noden(d, datetime(2026, 11, 2, 6, 30, tzinfo=BXL)) == [W.WEEKNOOD])
+with tempfile.TemporaryDirectory() as d:
+    _weekmap(d, {"2026-W43.json": {"gemaakt": "2026-10-25T18:55:00+00:00"}})
+    check("weeknood: 18:55 UTC is 19:55 Brussel, voor het anker: telt niet", W.weekconsolidatie_noden(d, MAANDAG) == [W.WEEKNOOD])
+with tempfile.TemporaryDirectory() as d:
+    _weekmap(d, {"2026-W43-proef.json": {"gemaakt": "2026-10-25T19:35:00+00:00"},
+                 "2026-W43.json": {"gemaakt": "2026-10-25T20:35:00"},
+                 "2026-W44.json": {"gemaakt": "kapot"},
+                 "laatste.json": {"gemaakt": "2026-10-25T19:35:00+00:00", "ok": True}})
+    check("weeknood: een proef, een tijd zonder zone, een kapotte tijd en laatste.json tellen nooit als geslaagd",
+          W.weekconsolidatie_noden(d, MAANDAG) == [W.WEEKNOOD])
+with tempfile.TemporaryDirectory() as d:
+    _weekmap(d, {"2026-W44.json": {"gemaakt": "2026-10-28T09:00:00+00:00"}, "2026-W43.json": "{half"})
+    check("weeknood: een tijd in de toekomst telt nooit als geslaagd, een half bestand is geen crash",
+          W.weekconsolidatie_noden(d, MAANDAG) == [W.WEEKNOOD])
+    check("weeknood: een geslaagde herhaling met de hand op dinsdag (weeklabel W44) sluit de nood",
+          W.weekconsolidatie_noden(d, datetime(2026, 10, 28, 11, 0, tzinfo=BXL)) == [])
+with tempfile.TemporaryDirectory() as d:
+    check("weeknood: zonder laatste.json is er geen fout voor het detail", W.weekconsolidatie_fout(d) == "")
+    _weekmap(d, {"laatste.json": {"ok": False, "fout": "RuntimeError: antwoord afgekapt (16000 tokens uit)"}})
+    check("weeknood: de fout van laatste.json gaat naar het detail", "afgekapt" in W.weekconsolidatie_fout(d))
+    _weekmap(d, {"laatste.json": {"ok": True, "fout": ""}})
+    check("weeknood: na een geslaagde run geen fout meer in het detail", W.weekconsolidatie_fout(d) == "")
+
+# de weekconsolidatie zelf: een echte run schrijft laatste.json, een proef nooit; een mislukking nooit <week>.json
+_patch_w = {"nu_lokaal": W.nu_lokaal, "afspraken": W.afspraken, "archief_afspraken": W.archief_afspraken}
+_patch_wc = {"WEEKMAP": WC.WEEKMAP, "REGELS_WEEK": WC.REGELS_WEEK, "sleutel_laden": WC.sleutel_laden,
+             "model_oordeel": WC.model_oordeel, "in_agenda": WC.in_agenda, "invoer": WC.invoer}
+_patch_ag = {"log": W.ag.log, "log_verstuur": W.ag.log_verstuur}
+_argv = sys.argv
+
+
+def _draai(d, argv, model):
+    WC.WEEKMAP, WC.REGELS_WEEK = Path(d) / "weekconsolidatie", Path(d) / "regels-vooraf.json"
+    W.nu_lokaal = lambda: datetime(2026, 10, 25, 20, 5, tzinfo=BXL)
+    W.afspraken = lambda *a, **k: []
+    W.archief_afspraken = lambda *a, **k: []
+    WC.invoer = lambda nu, items: {"register": {"fouten": []}, "zelfcontrole": {"niet_bekend": []}, "dagcontrole": [],
+                                   "commits": []}
+    WC.sleutel_laden = lambda: True
+    WC.model_oordeel = model
+    WC.in_agenda = lambda *a, **k: "nieuw"
+    W.ag.log = lambda *a, **k: None
+    W.ag.log_verstuur = lambda *a, **k: None
+    sys.argv = ["weekconsolidatie.py"] + argv
+    return WC.main()
+
+
+def _afgekapt(inv):
+    raise RuntimeError("antwoord afgekapt (16000 tokens uit)")
+
+
+def _geslaagd(inv):
+    return ANTWOORD, {"model": "nep", "stop_reason": "end_turn", "tokens_in": 1, "tokens_uit": 1}
+
+
+try:
+    with tempfile.TemporaryDirectory() as d:
+        rc = _draai(d, ["--ronde"], _afgekapt)
+        stand = json.loads((Path(d) / "weekconsolidatie" / "laatste.json").read_text())
+        check("weeknood: een mislukte zondagsronde schrijft laatste.json met de fout en geen <week>.json",
+              rc == 1 and stand["ok"] is False and "afgekapt" in stand["fout"] and stand["week"] == "2026-W43"
+              and datetime.fromisoformat(stand["tijd"]).tzinfo is not None
+              and not (Path(d) / "weekconsolidatie" / "2026-W43.json").exists()
+              and not (Path(d) / "weekconsolidatie" / "laatste.json.tmp").exists(), str(stand))
+        rc = _draai(d, [], _geslaagd)
+        stand = json.loads((Path(d) / "weekconsolidatie" / "laatste.json").read_text())
+        check("weeknood: de volgende geslaagde run overschrijft de fout",
+              rc == 0 and stand["ok"] is True and stand["fout"] == "" and (Path(d) / "weekconsolidatie" / "2026-W43.json").exists(),
+              str(stand))
+    with tempfile.TemporaryDirectory() as d:
+        _draai(d, ["--droog"], _afgekapt)
+        _draai(d, ["--droog"], _geslaagd)
+        check("weeknood: een proef (--droog) schrijft nooit laatste.json", not (Path(d) / "weekconsolidatie" / "laatste.json").exists())
+finally:
+    for k, v in _patch_w.items():
+        setattr(W, k, v)
+    for k, v in _patch_wc.items():
+        setattr(WC, k, v)
+    for k, v in _patch_ag.items():
+        setattr(W.ag, k, v)
+    sys.argv = _argv
+
+import inspect                      # noqa: E402
+_bron = inspect.getsource(W.main)
+_i_nood, _i_hart = _bron.find("weekconsolidatie_noden("), _bron.find('ag.hartslag("waakt"')
+check("weeknood: main zet de weeknood voor de hartslag, buiten 'if not DAG_ARG'",
+      0 < _i_nood < _i_hart and re.search(r"\n {8}weeknood = weekconsolidatie_noden\(\)", _bron) is not None)
+
+# ---------- F8 (overleg 27-10-2026): een dagronde opent noden, sluit ze nooit ----------
+check("F8: main stuurt de noden via noden_voor_hartslag", "nood=noden_voor_hartslag(noden, DAG_ARG)" in _bron)
+_open = [{"tekst": "Buitenafspraken zonder reistijd, reden: rit zonder afspraak", "wie": "mehdi"},
+         {"tekst": "Afspraken uit mail kloppen niet met de agenda; details in je privé-agenda", "wie": "mehdi"}]
+_oud_open = W.ag.open_noden
+try:
+    W.ag.open_noden = lambda: [dict(n) for n in _open]
+    check("F8: een dagronde die niets vindt, stuurt de open noden mee: het bord sluit niets",
+          W.noden_voor_hartslag([], "2026-10-27") == _open)
+    _nieuw = [{"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}, dict(_open[0])]
+    _lijst = W.noden_voor_hartslag(_nieuw, "2026-10-27")
+    check("F8: een dagronde met een nieuwe nood stuurt open plus nieuw, zonder dubbel",
+          [n["tekst"] for n in _lijst] == [_open[0]["tekst"], _open[1]["tekst"], "TE KRAP: kies welke afspraak schuift"],
+          str(_lijst))
+    check("F8: de volledige ronde stuurt precies haar eigen lijst, zodat opgeloste noden sluiten",
+          W.noden_voor_hartslag(_nieuw, None) is _nieuw)
+    W.ag.open_noden = lambda: None
+    check("F8: is het bord niet te lezen, dan stuurt een dagronde geen lijst (None), nooit een lege",
+          W.noden_voor_hartslag(_nieuw, "2026-10-27") is None)
+finally:
+    W.ag.open_noden = _oud_open
+_zr = W.zonder_rit_indelen([
+    "2026-11-23T16:00 Reistijd: x: mijn rit zonder afspraak weggehaald",
+    "2026-11-23T16:00 Reistijd: x: rit zonder afspraak (zonder mijn merk: ik verhuis of haal hem niet weg)",
+    "2026-11-24T16:00 Reistijd: y: rit zonder afspraak, niet opgeruimd (1 agenda('s) niet gelezen)",
+    "2026-11-25T16:00 Reistijd: z: rit zonder afspraak",
+    "2026-12-09T08:30 (privé): adres niet gevonden (Straat 1, 3000 Leuven (achteraan))",
+    "2026-09-21T16:00 Werfbezoek: geen adres, geen reistijd"])
+check("F8: 'mijn rit zonder afspraak weggehaald' is een geslaagde opruiming, geen nood; de andere ritregels wel",
+      len(_zr["rit zonder afspraak"]) == 3 and not any("weggehaald" in r for r in _zr["rit zonder afspraak"]), str(_zr))
+check("F8: de andere redenen blijven zoals ze waren",
+      len(_zr["adres niet gevonden"]) == 1 and _zr["geen adres in de agenda"] == ["2026-09-21T16:00 Werfbezoek"], str(_zr))
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

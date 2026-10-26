@@ -294,6 +294,19 @@ def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
                                encoding="utf-8")
 
 
+def stand_schrijven(week, ok, fout="", ronde=False, nu_utc=None):
+    """laatste.json: hoe de laatste echte run afliep. De Agendawacht zet de fout in het detail van haar weeknood; of de
+    nood open staat, beslist alleen een geslaagd <week>.json (agenda_wacht.weekconsolidatie_noden, overleg 27-10-2026).
+    Eerst een tijdelijk bestand, dan vervangen: de Agendawacht leest nooit een half bestand."""
+    nu_utc = nu_utc or datetime.now(timezone.utc)
+    WEEKMAP.mkdir(parents=True, exist_ok=True)
+    tmp = WEEKMAP / "laatste.json.tmp"
+    tmp.write_text(json.dumps({"week": week, "ok": bool(ok), "fout": str(fout)[:300], "ronde": ronde,
+                               "tijd": nu_utc.isoformat(timespec="seconds")}, ensure_ascii=False, indent=1) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, WEEKMAP / "laatste.json")
+
+
 def mislukt_overzicht(week, fout):
     """Wat Mehdi maandag in de agenda ziet als het model niet bereikbaar was: hij leest het bord niet, dus een
     mislukte week mag niet stil voorbijgaan (gezien 30-09-2026: de maandlimiet van de API was bereikt)."""
@@ -360,12 +373,18 @@ def main():
         return 0
     if not sleutel_laden():
         print("geen ANTHROPIC_API_KEY in ~/appportal/.env of ~/agents/.env", file=sys.stderr)
+        if not droog:
+            stand_schrijven(week, False, "geen ANTHROPIC_API_KEY", ronde)
         return 1
     try:
         ruw, meta = model_oordeel(inv)
     except Exception as e:  # noqa: BLE001
         print(f"weekconsolidatie mislukt: {type(e).__name__}: {e}", file=sys.stderr)
         if not droog:
+            try:
+                stand_schrijven(week, False, f"{type(e).__name__}: {e}", ronde)
+            except Exception as e3:  # noqa: BLE001
+                print(f"  stand niet geschreven: {type(e3).__name__}: {e3}", file=sys.stderr)
             W.ag.log(f"week {week}", "fout", f"weekconsolidatie {week} mislukt: {type(e).__name__}", str(e)[:500])
             W.ag.log_verstuur()
             try:
@@ -379,6 +398,7 @@ def main():
     print(markdown(week, uit, meta))
     if droog:
         return 0
+    stand_schrijven(week, True, ronde=ronde)
     try:
         hoe = in_agenda(week, maandag_na(nu), uit, items)
         print(f"  agenda: {hoe} op maandag {maandag_na(nu).isoformat()} (privé, hele dag, vrij)")
