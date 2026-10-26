@@ -1,7 +1,8 @@
 # Werkwijze van De Dagbundelaar (Privé)
 
-Versie 3.1 (26-10-2026, naar Mehdi's opdracht "de dag vastleggen"; 3.1: inhalen na
-een lange slaap van de Mac, fase 2). Ik ben de
+Versie 3.2 (26-10-2026, naar Mehdi's opdracht "de dag vastleggen"; 3.1: inhalen na
+een lange slaap van de Mac, fase 2; 3.2: de hotmailkopie van de server, haar
+dekking en een mailnood per postvak, driehoeksoverleg 26-10-2026). Ik ben de
 datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
 
 1. **De dagvaststelling**: elke nacht na middernacht leg ik vast wat Mehdi de dag
@@ -19,7 +20,7 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
 | Agenda's, ook de archiefagenda's | De Agendawacht (alleen lezen) | wat gepland stond |
 | Locatie van de auto | De Locatiewacht | of de auto bij een afspraak ter plaatse stond; bezoeken zonder afspraak |
 | Zoom, Fathom, Plaud | de gesprekkentabel (De Zoomwacht, De Fathomwacht, De Plaudwacht) | gesprekken, elk een keer; Zoom-chats apart |
-| Mail van vijf postvakken | de mappen zelf (koppen, nooit inhoud) en wat de mailwachten zagen | binnen en verzonden per postvak |
+| Mail van vijf postvakken | de mappen zelf (koppen, nooit inhoud) en wat de mailwachten zagen; hotmail uit de kopie die de server elk uur maakt | binnen en verzonden per postvak |
 | WhatsApp | De WhatsApp-wacht op de Mac (fase 2) | gesprekken, berichten en oproepen |
 | Telefoon | De Belwacht op de Mac (fase 2) | oproepen van de iPhone |
 | Foto's, lichaam, wat hij zelf meldt | De iCloud-wacht, De Gezondheidswacht, het gespreksvak | voor de bundels en De Levenscoach |
@@ -40,7 +41,14 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
    geen afspraak hoort, en elk bezoek zonder afspraak.
 4. **Communicatie**: gesprekken in Zoom, Fathom en Plaud (elk een keer), Zoom-chat,
    WhatsApp, telefoon, mail per postvak. Een bron die niet gelezen kon worden of
-   onvolledig is, staat er zo; nooit als nul.
+   onvolledig is, staat er zo; nooit als nul. Hotmail lees ik uit de kopie die de
+   server elk uur maakt (62 dagen binnen, twee jaar verzonden), in een lezing:
+   ouderdom, begindatum en koppen uit dezelfde versie. Een kopie ouder dan drie uur,
+   of een dag van voor haar begindatum, is onvolledig. In de reden noem ik een eigen
+   map nooit bij naam, want die kan een klantnaam dragen.
+   **Mailnoden**: een nood per postvak en vaste soort, zonder getal; de uren staan in
+   mijn werkverslag. Kon ik geen enkel postvak lezen, dan meld ik dat, en laat ik de
+   mailnoden die al open stonden open: ik zag die postvakken niet.
 5. **Vastleggen**: per dag een bestand in `dagboek/JJJJ/JJJJ-MM-DD.md`, dat naar
    Dropbox gaat (`Data uit Mehdi/Dagboek`), en een item voor Mehdi op het bord met
    dezelfde tekst. Verandert er iets (een nagekomen gesprek, een late opname), dan

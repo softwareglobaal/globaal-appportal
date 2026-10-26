@@ -87,9 +87,10 @@ class Wereld:
         return {"items": [it] if it else []}
 
 
-def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, **k):
+def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_noden=(), **k):
     """Een ronde van vastleggen; gisteren ligt vast (standaard ruim na DAG, zodat Zoom niet meer voorlopig is). mail: een
-    eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt."""
+    eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt; open_noden: wat het bord als open noden geeft
+    (None: onbekend)."""
     oud = (D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren)
     D.V.gisteren = lambda nu: gisteren
     D.DAGBOEK = os.path.join(w.map, "dagboek")
@@ -103,6 +104,7 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, **k):
     bord.db_lees, bord.call = w.db_lees, w.call
     D.ag.klaarzet = w.klaarzet
     D.ag.log = (lambda *a, **k: logboek.append(a)) if logboek is not None else (lambda *a, **k: None)
+    D.ag.open_noden = lambda: None if open_noden is None else [dict(n) for n in open_noden]
     r = NepRonde()
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -110,7 +112,7 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, **k):
         return r, detail
     finally:
         D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren = oud
-        for naam in ("klaarzet", "log"):
+        for naam in ("klaarzet", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
 
 
@@ -284,7 +286,7 @@ def test_f1_f7_mail_privé_afzenders_en_plafond():
     alleen hun verzonden post; een map op het plafond is onvolledig, ook bij verzonden."""
     gelezen = []
 
-    def koppen(adres, m, sinds=None, plafond=1000):
+    def koppen(adres, m, sinds=None, plafond=1000, inhoud=None):
         gelezen.append((adres, m))
         return [{"datum": f"{DAG}T10:00:00+02:00", "message_id": f"<{adres}{m}{i}>", "van": "x@y"}
                 for i in range(plafond if (adres, m) == ("light@h-architects.be", "INBOX.Sent") else 1)]
@@ -670,9 +672,10 @@ def test_o26_mail_kopie_vers_oud_en_venster():
         pad = os.path.join(m, "koppen.json")
         PV = Module(wachten=lambda: {"mail-prive": {"postvakken": ["proef@hotmail.test"], "firma": "PRIV"}},
                     postvak=lambda a: {"adres": a, "bron": pad}, bron_uren_oud=echt.bron_uren_oud,
-                    bron_vanaf=echt.bron_vanaf, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"], mapnamen=echt.mapnamen,
-                    koppen=lambda adres, m_, sinds=None, plafond=1000: echt.uit_bestand(pad, m_, sinds)[:plafond],
-                    VERZONDEN=echt.VERZONDEN)
+                    bron_vanaf=echt.bron_vanaf, momentopname=echt.momentopname, BRON_VERS_UREN=3,
+                    mappen_van=lambda a: ["INBOX"], mapnamen=echt.mapnamen, VERZONDEN=echt.VERZONDEN,
+                    koppen=lambda adres, m_, sinds=None, plafond=1000, inhoud=None:
+                    echt.uit_bestand(pad, m_, sinds, inhoud=inhoud)[:plafond])
         herstel = met_module("postvak", PV)
         try:
             ruim = {"INBOX": "2026-09-01", "Sent": "2024-10-01"}
@@ -741,6 +744,115 @@ def test_o26_mailnood_per_postvak_stabiel_en_uren_in_het_logboek():
     assert ("mail", "bron", f"{hot} ontvangen onvolledig: kopie 150 uur oud") in log1, log1
     assert ("mail", "bron", f"{hot} verzonden onvolledig: kopie 151 uur oud") in log2, log2
     assert ("mail", "fout", "mail niet gelezen (RuntimeError)") in log3, log3
+
+
+def test_c1_totale_mailfout_sluit_geen_postvaknood():
+    """Codex-controle mailnood 1 (C1), overleg 26-10-2026: faalt het hele lezen, dan blijven de open mailnoden open (ook
+    de algemene van voor 26-10), want deze ronde zag die postvakken niet; andere noden niet. Weet het bord niet welke
+    open staan, dan breekt de ronde als laatste stap, nadat de dagen al vastliggen, zodat noden_bij_breuk niets sluit."""
+    hot = f"{D.MAILNOOD}: mehdichegini@hotmail.com (kopie niet vers)"
+    open_ = [{"tekst": hot, "wie": "claude-code"}, {"tekst": D.MAILNOOD, "wie": "claude-code"},
+             {"tekst": "Agenda niet volledig gelezen voor de dagvaststelling", "wie": "claude-code"}]
+
+    def faal(dagen_):
+        raise RuntimeError("mailkoppen eindigde met 1")
+
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        r1, _ = ronde(w, mail=faal, open_noden=open_)
+        try:
+            ronde(w, mail=faal, open_noden=None)
+            gebroken = None
+        except RuntimeError as e:
+            gebroken = str(e)
+        dag = os.path.exists(os.path.join(m, "dagboek", DAG[:4], f"{DAG}.md"))
+    assert [n for n in r1.noden if n.startswith("Mail")] == [D.MAIL_NIET_GELEZEN, hot, D.MAILNOOD], r1.noden
+    assert "Agenda niet volledig gelezen voor de dagvaststelling" not in r1.noden, "alleen mailnoden blijven staan"
+    assert gebroken and "mailnoden" in gebroken, gebroken
+    assert dag, "de dag ligt vast voor de ronde breekt"
+
+
+def test_c2_kopie_uit_een_lezing():
+    """Codex-controle mailnood 1 (C2): ouderdom, begindatum en koppen komen uit dezelfde lezing. Vervangt de server de
+    kopie tijdens het lezen door een die de dag niet meer dekt, dan telt de ronde de versie die ze eerst las, volledig;
+    een kopie die niet te lezen is, geeft een vaste reden en geen tweede lezing."""
+    import postvak as echt
+    with tempfile.TemporaryDirectory() as m:
+        pad = os.path.join(m, "koppen.json")
+        lezingen = []
+
+        def foto(mb):
+            d = echt.momentopname(mb)
+            lezingen.append(d is not None)
+            with open(pad, "w", encoding="utf-8") as f:      # de server vervangt het bestand meteen daarna
+                json.dump({"gemaakt": datetime.now(timezone.utc).isoformat(), "vanaf": {"INBOX": "2026-11-01"},
+                           "berichten": []}, f)
+            return d
+
+        def koppen(adres, m_, sinds=None, plafond=1000, inhoud=None):
+            assert inhoud is not None, "geen tweede lezing van het bestand"
+            return echt.uit_bestand(pad, m_, sinds, inhoud=inhoud)[:plafond]
+
+        PV = Module(wachten=lambda: {"mail-prive": {"postvakken": ["proef@hotmail.test"], "firma": "PRIV"}},
+                    postvak=lambda a: {"adres": a, "bron": pad}, bron_uren_oud=echt.bron_uren_oud,
+                    bron_vanaf=echt.bron_vanaf, momentopname=foto, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"],
+                    mapnamen=echt.mapnamen, VERZONDEN=echt.VERZONDEN, koppen=koppen)
+        herstel = met_module("postvak", PV)
+        try:
+            _kopie(pad, 0, {"INBOX": "2026-09-01", "Sent": "2024-10-01"})
+            o, u, _ = D._lees_mail([DAG])
+            os.remove(pad)
+            o2, u2, _ = D._lees_mail([DAG])
+        finally:
+            herstel()
+    o, u = o["proef@hotmail.test"], u["proef@hotmail.test"]
+    assert not o["onvolledig"] and not u["onvolledig"] and len(o["berichten"]) == len(u["berichten"]) == 1, (o, u)
+    o2, u2 = o2["proef@hotmail.test"], u2["proef@hotmail.test"]
+    assert o2["onvolledig"] == u2["onvolledig"] == ["kopie onleesbaar"], (o2, u2)
+    assert o2["soorten"] == ["kopie niet vers"] and not o2["berichten"], o2
+    assert lezingen == [True, False], lezingen
+
+
+def test_c3_geen_eigen_mapnaam_in_de_reden():
+    """Codex-controle mailnood 1 (C3): een eigen map kan een klantnaam dragen. De reden, die naar het dagbestand en het
+    logboek gaat, noemt dan "een eigen map"; de vaste mappen (INBOX, Sent) blijven bij naam."""
+    import postvak as echt
+
+    def koppen(adres, m_, sinds=None, plafond=1000, inhoud=None):
+        if m_ == "INBOX.Klant Proefbedrijf":
+            raise TimeoutError("traag")
+        if m_ == "INBOX.Klant Testzaak":
+            return [{"datum": f"{DAG}T08:00:00+00:00"}] * plafond
+        if m_ == "INBOX":
+            raise ConnectionError("weg")
+        return []
+
+    PV = Module(wachten=lambda: {"mail-info": {"postvakken": ["info@proef.test"], "firma": "HA"}},
+                postvak=lambda a: {"adres": a}, mapnamen=lambda mb: {"inbox", "sent"}, VERZONDEN=echt.VERZONDEN,
+                mappen_van=lambda a: ["INBOX", "INBOX.Klant Proefbedrijf", "INBOX.Klant Testzaak"], koppen=koppen)
+    herstel = met_module("postvak", PV)
+    try:
+        o, _, _ = D._lees_mail([DAG])
+    finally:
+        herstel()
+    o = o["info@proef.test"]
+    assert o["onvolledig"] == ["INBOX niet leesbaar (ConnectionError)", "een eigen map niet leesbaar (TimeoutError)",
+                               f"een eigen map: meer dan {D.PLAFOND} berichten"], o
+    assert not any("Klant" in r for r in o["onvolledig"]), o
+
+
+def test_k5_hotmailkopie_dekt_de_nachtelijke_inhaal():
+    """Overleg 26-10-2026 (K5): de nacht haalt tot INHAAL dagen terug in en leest vanaf de dag ervoor. De hotmailkopie,
+    elk uur om :25 UTC ververst, moet die dagen dekken, ook op een avond waarop de UTC-dag en de Brusselse dag
+    verschillen; anders blijft hotmail voor elke ingehaalde dag ouder dan de kopie onvolledig."""
+    import hotmail_server
+    from datetime import date
+    for nacht in (datetime(2026, 10, 26, 23, 30, tzinfo=timezone.utc), datetime(2026, 7, 14, 22, 30, tzinfo=timezone.utc)):
+        kopie = nacht - timedelta(minutes=5)
+        vanaf = (kopie.date() - timedelta(days=hotmail_server.BINNEN_DAGEN)).isoformat()   # zoals hotmail_lezer
+        oudste = date.fromisoformat(D.V.gisteren(nacht)) - timedelta(days=D.INHAAL - 1)    # zoals inhaaldagen
+        sinds = (oudste - timedelta(days=1)).isoformat()                                  # zoals _lees_mail
+        assert vanaf <= sinds, (nacht, vanaf, sinds)
 
 
 if __name__ == "__main__":

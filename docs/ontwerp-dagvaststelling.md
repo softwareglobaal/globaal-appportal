@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.9, 26-10-2026: mail per postvak een vaste nood, en een kopie die de dagen niet dekt is onvolledig (docs/overleg/2026-10-26 Dagbundelaar mailnood driehoeksoverleg.md). Versie 2.8, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r8 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.10, 26-10-2026: de hotmailkopie in een lezing, geen eigen mapnaam in de reden, een totale mailfout sluit geen postvaknood, en de kopie dekt 62 dagen binnen (Codex-controle mailnood 1, driehoeksoverleg "De Dagbundelaar afwerken"). Versie 2.9, 26-10-2026: mail per postvak een vaste nood, en een kopie die de dagen niet dekt is onvolledig (docs/overleg/2026-10-26 Dagbundelaar mailnood driehoeksoverleg.md). Versie 2.8, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r8 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -124,6 +124,8 @@ die dag). Alleen bij een andere hash komt een nieuwe versie. Zo komt een Mac die
 - Dubbels: Zoom en Fathom met dubbel_van tellen een keer; chats tellen niet als gesprek.
 - Mail: onleesbare verzonden-map, een oude kopie en een kopie die de dagen niet dekt geven onvolledig; dezelfde
   Message-ID in twee postvakken telt een keer; de mailnood blijft gelijk als de uren of andere postvakken wisselen.
+  Faalt het hele lezen, dan blijven open mailnoden open; is dat onbekend, dan breekt de ronde als laatste stap.
+  Een vervangen kopie tijdens het lezen verandert de telling niet; een eigen map heet "een eigen map".
 - Zoom-stand onbekend of ondergrens staat zo in het overzicht.
 - Privacy: geen privénaam in het klaarzet-item; wel in het bestand.
 - Revisie: zelfde inhoud schrijft niets; andere inhoud geeft versie 2 en bewaart versie 1.

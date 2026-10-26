@@ -19,9 +19,12 @@ CONTAINER = os.environ.get("POST_CONTAINER", "appportal-app-post-1")
 LEZER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hotmail_lezer.py")
 # Het bestand in werkwijze/mailwachten.json ('bronnen'); daar staat ook welk postvak het is, en alleen daar.
 BESTAND = "hotmail/koppen.json"
-# Zoals de Mac: binnengekomen post 30 dagen; verzonden post twee jaar, want wie Mehdi vanuit hotmail mailde is een klant
-# en wordt nooit uitgeschreven (koppelingen/uitschrijven.py, ooit_gemaild; resultaattoets 20-10-2026).
-BINNEN_DAGEN, VERZONDEN_DAGEN = 30, 730
+# Binnengekomen post 62 dagen: De Dagbundelaar haalt 's nachts tot zestig dagen terug in (dagbundelaar.INHAAL) en leest
+# vanaf de dag ervoor; de kopie telt in UTC, de dag in Brussel, dus nog een dag marge (overleg 26-10-2026, K5; tot dan
+# 30, zoals de Mac). De mailwachten lezen met hun eigen grens (postvak.TERUG_DAGEN) en zien niets meer. Verzonden post
+# twee jaar, want wie Mehdi vanuit hotmail mailde is een klant en wordt nooit uitgeschreven (koppelingen/uitschrijven.py,
+# ooit_gemaild; resultaattoets 20-10-2026).
+BINNEN_DAGEN, VERZONDEN_DAGEN = 62, 730
 
 
 def bron():
