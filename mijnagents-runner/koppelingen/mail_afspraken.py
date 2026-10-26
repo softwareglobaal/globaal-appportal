@@ -633,6 +633,21 @@ def _zorg_json(a):
     return z
 
 
+def _patientloze_tweeling(r, a, z):
+    """Is rij r dezelfde boeking als mail a, die eerst zonder leesbare patiënt binnenkwam (F7, 26-10-2026)? Alleen als
+    niets tegenspreekt: geen patiënt, niet Mehdi, niet geannuleerd, geen ander einde, geen andere uitnodigings-UID en geen
+    andere behandelaar. De praktijk en het begin kiest de aanroeper."""
+    rz = _zorg_json(dict(r))
+    if _naam_plat(rz.get("patient") or "") or rz.get("mehdi") or r["geannuleerd"]:
+        return False
+    if r["einde"] and a.get("einde") and r["einde"] != a["einde"]:
+        return False
+    if r["ics_uid"] and a.get("ics_uid") and r["ics_uid"] != a["ics_uid"]:
+        return False
+    b_oud, b_nieuw = _naam_plat(rz.get("behandelaar") or ""), _naam_plat(z.get("behandelaar") or "")
+    return not (b_oud and b_nieuw and b_oud != b_nieuw)
+
+
 def _bewaar_zorg(c, a):
     """Een zorgafspraak heeft een duurzame identiteit: de eerste sleutel blijft. Een herinnering, dezelfde mail via de
     tweede mailbox of een nieuwe ronde voegt alleen een bron toe en vult wat ontbrak; een verplaatsing (tekst met oude
@@ -690,6 +705,15 @@ def _bewaar_zorg(c, a):
             if zelfde_patient(r) and any(h.get("van") == a["start"] for h in _zorg_json(dict(r)).get("historie") or []):
                 doel, alias = r, True
                 break
+    if doel is None and a.get("start") and z.get("mehdi") is True and z.get("gebeurtenis") in ("bevestiging", "herinnering"):
+        # F7 (26-10-2026): dezelfde boeking kwam eerst zonder leesbare patiënt binnen (een Mya-bevestiging) en nu zeker
+        # voor Mehdi (de herinnering). Precies een zo'n rij op dat begin bij deze praktijk: dezelfde afspraak, de update
+        # hieronder vult patiënt en Mehdi. Nooit voor een annulering, verplaatsing of aanvraag: de A01-grendel hierboven
+        # blijft voor die gebeurtenissen gelden.
+        tweeling = [r for r in c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?",
+                                         (a["start"], like)).fetchall() if _patientloze_tweeling(r, a, z)]
+        if len(tweeling) == 1:
+            doel = tweeling[0]
     if doel is None and a.get("start"):
         doel = zoek("SELECT * FROM afspraak WHERE sleutel=?", (a["sleutel"],))
     sleutel = doel["sleutel"] if doel else a["sleutel"]
