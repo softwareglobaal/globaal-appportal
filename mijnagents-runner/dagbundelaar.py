@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """De Dagbundelaar (Privé): legt per dag samen wat de bronnen-agents klaarzetten,
 zegt per bundel bij welk dossier het hoort, en geeft het door. Sinds 26-10-2026 legt hij ook elke nacht de dag vast
-(de dagvaststelling, ontwerp docs/ontwerp-dagvaststelling.md v1.2): wat gepland stond en of het doorging, wat er gebeurde
+(de dagvaststelling, ontwerp docs/ontwerp-dagvaststelling.md v1.5): wat gepland stond en of het doorging, wat er gebeurde
 zonder gepland te zijn, en de communicatie. Nacht: --nacht om 23:30 UTC (planning/dagvaststelling.cron), alleen de
 vaststelling over veertien dagen. Ochtend: hieronder, de bundels en daarna de vaststelling van gisteren. Beide gaan door
 de gedeelde ronde (N12); de nachttaak geeft het ochtendbericht nooit vrij (koppelingen/ochtend.py, NACHTTAAK).
@@ -49,7 +49,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
-import dagvaststelling as V  # noqa: E402  de dagvaststelling, pure functies (ontwerp dagvaststelling v1.2)
+import dagvaststelling as V  # noqa: E402  de dagvaststelling, pure functies (ontwerp dagvaststelling v1.5)
 import locatiecontext as LC  # noqa: E402  dagboek voor precies de dag, met startgrens (opdracht v1.4)
 
 NAAM = "dagbundelaar"
@@ -72,6 +72,8 @@ ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de ko
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
+ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel in de staat: dagen waarvoor De Zoomwacht faalde
+ZOOM_VENSTER = 7                                              # zoveel dagen leest een ronde van De Zoomwacht opnieuw
 
 
 def bundelen():
@@ -222,18 +224,20 @@ def main():
     with ag.ronde(ochtend.NACHTTAAK if NACHT else "bundels en dagvaststelling") as r:
         delen, nu = [], datetime.now(timezone.utc)
         nacht = lees_nacht()
-        zoom_nacht_ok = True
+        # G3: of De Zoomwacht in deze keten slaagde (True), faalde (False) of niet in deze keten liep (None)
+        zoom_gelezen = None
         if NACHT:
             # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Zoomwacht
             begin = ochtend.tijdstip(nacht.get("start"))
             zoom = (nacht.get("stappen") or {}).get("zoom-wacht") or {}
             if begin is None or nacht.get("einde") or nu - begin > timedelta(hours=3):
-                zoom_nacht_ok = False
                 r.nood("Nachtronde buiten de nachtketen: De Zoomwacht liep niet vooraf", wie="claude-code")
             elif zoom.get("exit") != 0:
-                zoom_nacht_ok = False
+                zoom_gelezen = False
                 r.nood("De Zoomwacht faalde in de nachtketen: de Zoom-gesprekken van gisteravond kunnen ontbreken",
                        wie="claude-code")
+            else:
+                zoom_gelezen = True
         else:
             uit = bundelen()
             for n in uit["nood"]:
@@ -251,10 +255,10 @@ def main():
             keten = lees_json(KETENBESTAND)
             kbegin = ochtend.tijdstip(keten.get("start"))
             if kbegin is not None and not keten.get("einde") and nu - kbegin <= timedelta(hours=3):
-                zoom_nacht_ok = ((keten.get("stappen") or {}).get("zoom-wacht") or {}).get("exit") == 0
+                zoom_gelezen = ((keten.get("stappen") or {}).get("zoom-wacht") or {}).get("exit") == 0
         dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
         try:
-            delen.append(vastleggen(r, dagen, zoom_nacht_ok=zoom_nacht_ok))
+            delen.append(vastleggen(r, dagen, zoom_gelezen=zoom_gelezen))
         except Exception as e:  # noqa: BLE001
             if NACHT:
                 raise
@@ -443,8 +447,10 @@ def _lees_mail(dagen):
     cfgs = [c for c in PV.wachten().values() if isinstance(c, dict) and "postvakken" in c]
     postvakken = list(dict.fromkeys(a for c in cfgs for a in c["postvakken"]))
     afzenders = [a for a in dict.fromkeys(a for c in cfgs for a in c.get("antwoord_vanuit") or []) if a not in postvakken]
+    # H1: ook de adressen waaruit een privéwacht antwoordt (mch@ antwoordt uit info@, light@, standaard@): van daaruit kan
+    # privépost vertrekken, dus geen ontvangers bij naam
     prive = {a for c in cfgs if c.get("firma") == "PRIV" or str(c.get("afdeling") or "").startswith("prive")
-             for a in c["postvakken"]}
+             for a in c["postvakken"] + list(c.get("antwoord_vanuit") or [])}
     ontvangen, verzonden = {}, {}
 
     def lees(adres, m, waar):
@@ -507,12 +513,13 @@ def zoomstand(inhoud):
     return "volledig" if t == "volledig" else ("ondergrens" if t.startswith(("ondergrens", "minstens")) else "onbekend")
 
 
-def vastleggen(r, dagen, zoom_nacht_ok=True):
-    """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.2). Leest agenda, locatie, gesprekkentabel,
+def vastleggen(r, dagen, zoom_gelezen=None):
+    """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.5). Leest agenda, locatie, gesprekkentabel,
     Zoom-dagregels, mail en de hartslag van de WhatsApp-wacht en de Belwacht; schrijft per dag het bestand (de vorige
     versie blijft in versies/, nooit overschreven), de staat en het klaarzet-item voor Mehdi, en leest bestand en item
-    letterlijk terug (F8). zoom_nacht_ok: faalde De Zoomwacht in deze nachtketen, dan is Zoom van gisteren hoogstens een
-    ondergrens (F9). Geeft het detail."""
+    letterlijk terug (F8). zoom_gelezen: slaagde (True) of faalde (False) De Zoomwacht in deze keten, of liep ze niet mee
+    (None). Een dag die gisteren was toen ze faalde, blijft hoogstens een ondergrens tot een geslaagde Zoomwacht hem in haar
+    venster opnieuw las (F9, G3). Geeft het detail."""
     nu = datetime.now(timezone.utc)
     eerste, laatste = min(dagen), max(dagen)
     per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
@@ -523,8 +530,6 @@ def vastleggen(r, dagen, zoom_nacht_ok=True):
     zoom = {x["uniek"][9:]: zoomstand(x["inhoud"]) for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{laatste}"))}
     gisteren = V.gisteren(nu)
-    if not zoom_nacht_ok and zoom.get(gisteren) == "volledig":
-        zoom[gisteren] = "ondergrens"
     gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
                                        "AND COALESCE(message_id, '') != ''", (eerste, laatste))
     soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
@@ -548,6 +553,18 @@ def vastleggen(r, dagen, zoom_nacht_ok=True):
         staat = json.loads(_lees(STAAT) or "{}")
     except ValueError:
         staat = {}
+    # G3: de dagen waarvoor De Zoomwacht faalde, bewaard tot ze die dag aantoonbaar opnieuw las
+    onzeker = set(staat.get(ZOOM_ONZEKER) or [])
+    if zoom_gelezen is False:
+        onzeker.add(gisteren)
+    elif zoom_gelezen is True:
+        grens = (date.fromisoformat(gisteren) - timedelta(days=ZOOM_VENSTER - 1)).isoformat()
+        onzeker = {d for d in onzeker if d < grens}
+    for d in onzeker:
+        if zoom.get(d) == "volledig":
+            zoom[d] = "ondergrens"
+    staat[ZOOM_ONZEKER] = sorted(onzeker)
+    _schrijf(STAAT, json.dumps(staat, ensure_ascii=False, indent=1, sort_keys=True))
     bewijs, nieuw, fouten, locatiefout = ontvangst(), [], [], set()
     for dag in sorted(dagen):
         afspraken = per_dag.get(dag, [])

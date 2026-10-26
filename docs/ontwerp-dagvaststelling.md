@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.4, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.5, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -231,3 +231,11 @@ over acht adressen; gewone verblijven zonder plek; hotmail onvolledig (Mac-kopie
 | G5 | zonder volledige Zoom-stand: 'minstens N, minstens M min (verdeling onbekend)' |
 | G6 | de Mac-sync draait met PIPE_FAIL: een falende find of shasum laat het ontvangstbewijs falen |
 | G7 | een vrije archiefnaam ('v1 (2)', 'v1 (3)', ...); een bewaarde versie wordt nooit overschreven |
+
+## Wijzigingen in v1.5 (antwoord op ronde 5, docs/codex/dagvaststelling-bouw-r5.md)
+
+| punt | antwoord in de code |
+|---|---|
+| G2 | `locatie_wacht.meetgaten`: ongemeten is wat voor de eerste en na de laatste meting van de dag ligt, een pauze tussen twee stukken, een gat, en een verblijf zonder een enkel meetpunt (geparkeerd 'al van daarvoor'); bij meer sporen de doorsnede. 'Niet gezien' wordt in zo'n stuk 'auto zonder meting op dat uur' |
+| G3 | de staat bewaart de dagen waarvoor De Zoomwacht faalde (`_zoom_onzeker`); zo'n dag blijft een ondergrens tot een geslaagde Zoomwacht hem in haar venster van zeven dagen opnieuw las; een ronde buiten een keten verandert niets (tri-state zoom_gelezen); test met twee mislukte nachten na elkaar |
+| H1 | ook de adressen waaruit een privéwacht antwoordt (info@, light@, standaard@ voor mch@) zijn privé: geen ontvangers bij naam |

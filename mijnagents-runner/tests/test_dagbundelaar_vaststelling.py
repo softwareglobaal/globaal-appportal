@@ -295,7 +295,7 @@ def test_f1_f7_mail_privé_afzenders_en_plafond():
         o, u, prive = D._lees_mail([DAG])
     finally:
         herstel()
-    assert prive == {"mch@h-architects.be"}, prive
+    assert prive == {"mch@h-architects.be", "light@h-architects.be"}, "H1: ook het antwoordadres van de privéwacht"
     assert ("light@h-architects.be", "INBOX.Sent") in gelezen and ("light@h-architects.be", "INBOX") not in gelezen, gelezen
     assert "light@h-architects.be" not in o and any("meer dan" in x for x in u["light@h-architects.be"]["onvolledig"]), u
 
@@ -357,6 +357,69 @@ def test_g2_locatie_zonder_meting():
         h2()
 
 
+def test_g2_meetgaten():
+    """G2, tweede ronde: wat voor de eerste meting van de dag ligt, een pauze, een gat en een verblijf zonder meetpunt
+    zijn ongemeten; bij twee sporen alleen wat in beide ongemeten is."""
+    import locatie_wacht as LW
+    b = datetime.fromisoformat(f"{DAG}T00:00:00").replace(tzinfo=LW.BRUSSEL).timestamp()
+    u = 3600
+    laat = {"sporen": {"auto": {"indeling": [{"soort": "bezoek", "van": b + 17 * u, "tot": b + 24 * u, "punten": 4}]}}}
+    assert LW.meetgaten(laat, DAG) == [(b, b + 17 * u)], "de ochtend zonder meting"
+    geparkeerd = {"sporen": {"auto": {"indeling": [
+        {"soort": "bezoek", "van": b, "tot": b + 10 * u, "punten": 0},
+        {"soort": "verplaatsing", "van": b + 10 * u, "tot": b + 11 * u, "punten": None},
+        {"soort": "gat", "van": b + 12 * u, "tot": b + 13 * u, "punten": None},
+        {"soort": "bezoek", "van": b + 13 * u, "tot": b + 24 * u, "punten": 9}]}}}
+    assert LW.meetgaten(geparkeerd, DAG) == [(b, b + 10 * u), (b + 11 * u, b + 12 * u), (b + 12 * u, b + 13 * u)]
+    twee = {"sporen": {"auto": laat["sporen"]["auto"],
+                       "telefoon": {"indeling": [{"soort": "bezoek", "van": b + 8 * u, "tot": b + 24 * u, "punten": 30}]}}}
+    assert LW.meetgaten(twee, DAG) == [(b, b + 8 * u)], LW.meetgaten(twee, DAG)
+    assert LW.meetgaten({"sporen": {}}, DAG) == [(b, b + 24 * u)], "geen sporen"
+
+
+def test_g3_twee_mislukte_zoomnachten():
+    """G3: een dag waarvoor De Zoomwacht faalde, blijft een ondergrens, ook na een tweede mislukte nacht, tot een
+    geslaagde Zoomwacht hem in haar venster opnieuw las."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
+        oud = D.V.gisteren
+        try:
+            for gisteren, gelezen, verwacht in (("2026-10-22", False, "minstens"), ("2026-10-23", False, "minstens"),
+                                                ("2026-10-23", None, "minstens"), ("2026-10-24", True, "1, 6 min (1 met")):
+                D.V.gisteren = lambda nu, g=gisteren: g
+                ronde(w, zoom_gelezen=gelezen)
+                t = lees(pad)
+                regel = next(x for x in t.splitlines() if x.startswith("- gesprekken in Zoom"))
+                assert verwacht in regel or (verwacht == "1, 6 min (1 met" and "6 min (0 met opname, 1 alleen in Zoom)" in regel), \
+                    (gisteren, gelezen, regel)
+            staat = json.load(open(os.path.join(m, "staat.json")))
+            assert staat[D.ZOOM_ONZEKER] == [], staat
+        finally:
+            D.V.gisteren = oud
+
+
+def test_h1_antwoordadressen_van_een_privewacht():
+    PV = Module(wachten=lambda: {"mail-mch": {"postvakken": ["mch@x.be"], "afdeling": "prive-communicatie",
+                                              "antwoord_vanuit": ["info@x.be", "light@x.be"]},
+                                 "mail-info": {"postvakken": ["info@x.be"], "firma": "HARC", "afdeling": "h-architects",
+                                               "antwoord_vanuit": []},
+                                 "mail-melo": {"postvakken": ["melo@x.be"], "firma": "MELO", "afdeling": "organisatie"}},
+                postvak=lambda a: None, bron_uren_oud=lambda mb: None, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"],
+                mapnamen=lambda mb: set(), koppen=lambda *a, **k: [], VERZONDEN=("Sent",))
+    herstel = met_module("postvak", PV)
+    try:
+        _, _, prive = D._lees_mail([DAG])
+    finally:
+        herstel()
+    assert prive == {"mch@x.be", "info@x.be", "light@x.be"}, prive
+    import dagvaststelling as V
+    u = {"light@x.be": {"berichten": [{"datum": f"{DAG}T10:00:00+02:00", "message_id": "<a@x>", "aan": ["Tante Mie <t@x.be>"]}]}}
+    t = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", V.mail_telling(DAG, {}, u), None, lambda a: False),
+                prive_postvakken=prive)
+    assert "Tante Mie" not in t and "light@x.be: 0 binnen, 1 verzonden" in t, t
+
+
 def test_g4_ontbrekend_postvak():
     PV = Module(wachten=lambda: {"mail-info": {"postvakken": ["info@x.be"], "firma": "HARC", "antwoord_vanuit": ["weg@x.be"]}},
                 postvak=lambda a: None, bron_uren_oud=lambda mb: None, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"],
@@ -412,21 +475,21 @@ def test_f9_nachtketen_noden():
 
     oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
-    D.vastleggen = lambda r, dagen, zoom_nacht_ok=True: uit.update(ok=zoom_nacht_ok) or ""
+    D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
     try:
         for nacht, nachtbestand, nood_deel, ok in (
                 (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}, None, True),
                 (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 124}}}, "Zoomwacht faalde", False),
-                (True, {}, "buiten de nachtketen", False),
-                (False, {"start": (NU - timedelta(hours=40)).isoformat()}, "nachtketen van de dagvaststelling liep niet", True),
+                (True, {}, "buiten de nachtketen", None),
+                (False, {"start": (NU - timedelta(hours=40)).isoformat()}, "nachtketen van de dagvaststelling liep niet", None),
                 (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
-                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}, None, True),
+                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}, None, None),
                 # G3: de nachtketen liep maar De Dagbundelaar faalde, of ze stopte halverwege
                 (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
-                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 1}}}, "nachtketen van de dagvaststelling faalde", True),
+                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 1}}}, "nachtketen van de dagvaststelling faalde", None),
                 (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": None,
-                         "stappen": {"zoom-wacht": {"exit": 0}}}, "nachtketen van de dagvaststelling faalde", True)):
+                         "stappen": {"zoom-wacht": {"exit": 0}}}, "nachtketen van de dagvaststelling faalde", None)):
             r = R()
             D.NACHT, D.DAG_GEGEVEN, D.lees_nacht = nacht, True, (lambda b=nachtbestand: b)
             D.ag.ronde = lambda taak, **k: r
@@ -458,7 +521,7 @@ def test_g3_zoom_van_de_ochtendketen():
         oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
         D.NACHT, D.DAG_GEGEVEN, D.KETENBESTAND = False, True, kpad
         D.lees_nacht = lambda: {}
-        D.vastleggen = lambda r, dagen, zoom_nacht_ok=True: uit.update(ok=zoom_nacht_ok) or ""
+        D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
         D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
         D.ag.ronde = lambda taak, **k: R()
         try:

@@ -1,5 +1,5 @@
 """De dagvaststelling van De Dagbundelaar: een vast overzicht van een Brusselse dag (ontwerp docs/ontwerp-dagvaststelling.md
-v1.2, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
+v1.5, opdracht van Mehdi 26-10-2026). Wat gepland stond en wat er echt gebeurde, wat er gebeurde zonder gepland te zijn,
 en de communicatie langs mail, Zoom, WhatsApp en telefoon.
 
 Pure functies: de runner (dagbundelaar.py) haalt de bronnen op en geeft ze als gewone lijsten door. Geen netwerk, geen

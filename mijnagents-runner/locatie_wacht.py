@@ -216,7 +216,7 @@ def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None, afspraken=None
     Online, intern en reistijd tellen alleen mee in het aantal. De auto ter plaatse is een
     aanwijzing dat de afspraak doorging, geen bewijs dat Mehdi er was.
     per_id (een dict): krijgt per getoetste afspraak {'uitkomst', 'tekst'}, voor de dagvaststelling van De Dagbundelaar
-    (ontwerp dagvaststelling v1.2). Een afspraak die er niet in staat, is niet ter plaatse.
+    (ontwerp dagvaststelling v1.5). Een afspraak die er niet in staat, is niet ter plaatse.
     afspraken: de lijst die De Dagbundelaar al las (met archiefagenda's, zonder annuleringen), zodat beide naar dezelfde
     afspraken kijken (Codex F4); zonder die lijst lees ik de agenda zelf, zoals voordien."""
     alle = afspraken if afspraken is not None else (W.afspraken_dag(dag) if agenda.beschikbaar() else [])
@@ -261,6 +261,34 @@ def lijn(v):
     zeker = f" [{v['zekerheid']}]" if v.get("zekerheid") not in (None, "geen") else ""
     link = f" {v['project']['link']}" if v.get("project") and v["project"].get("link") else ""
     return f"- {uur(v['van'])}-{uur(v['tot'])} ({duur(v['minuten'])}) {v['waar']}{zeker}{link}"
+
+
+def meetgaten(dagboek, dag):
+    """De stukken van de dag (epoch, van tot tot) waarin geen enkel spoor mat (Codex G2 en G2 tweede ronde, dagvaststelling).
+    Per spoor: wat voor het eerste en na het laatste stuk van de dag ligt, een pauze tussen twee stukken, een gat, en een
+    verblijf zonder een enkel meetpunt (geparkeerd 'al van daarvoor': de plek is afgeleid, niet gemeten). Een dag zonder
+    sporen is een gat. Bij meer sporen telt alleen wat in elk spoor ongemeten is (de doorsnede)."""
+    begin = datetime.fromisoformat(dag).replace(tzinfo=BRUSSEL).timestamp()
+    einde = (datetime.fromisoformat(dag) + timedelta(days=1)).replace(tzinfo=BRUSSEL).timestamp()
+    per_spoor = []
+    for sp in (dagboek.get("sporen") or {}).values():
+        gaten, t = [], begin
+        for seg in sorted(sp.get("indeling") or [], key=lambda x: x.get("van") or 0):
+            van, tot = max(seg.get("van") or begin, begin), min(seg.get("tot") or begin, einde)
+            if van > t + 60:
+                gaten.append((t, van))
+            if seg.get("soort") == "gat" or (seg.get("soort") == "bezoek" and not seg.get("punten")):
+                gaten.append((van, tot))
+            t = max(t, tot)
+        if t < einde - 60:
+            gaten.append((t, einde))
+        per_spoor.append(gaten)
+    if not per_spoor:
+        return [(begin, einde)]
+    uit = per_spoor[0]
+    for andere in per_spoor[1:]:
+        uit = [(max(a0, b0), min(a1, b1)) for a0, a1 in uit for b0, b1 in andere if max(a0, b0) < min(a1, b1)]
+    return uit
 
 
 def maak(dag, afspraken=None):
@@ -309,8 +337,7 @@ def maak(dag, afspraken=None):
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
             "per_id": per_id,
             # G2 (dagvaststelling): waar de tracker niets mat, en hoeveel geldige punten de dag had
-            "gaten": [(seg["van"], seg["tot"]) for sp in (db.get("sporen") or {}).values()
-                      for seg in (sp.get("indeling") or []) if seg.get("soort") == "gat"],
+            "gaten": meetgaten(db, dag),
             "geldig": sum(int(sp.get("geldig") or 0) for sp in (db.get("sporen") or {}).values()),
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
             "projecten": sorted({"%s %s" % (v["project"].get("firma"), v["project"].get("nummer"))
