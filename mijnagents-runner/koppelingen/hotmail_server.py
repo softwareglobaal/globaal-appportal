@@ -61,9 +61,14 @@ def ververs(adres, doel, nu=None, voer=subprocess.run):
     nu = nu or datetime.now(timezone.utc)
     d = bestand(adres, lees(adres, nu, voer), nu)
     os.makedirs(os.path.dirname(doel), exist_ok=True)
-    with open(doel + ".nieuw", "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False)
-    os.replace(doel + ".nieuw", doel)
+    tmp = f"{doel}.{os.getpid()}.nieuw"  # een ronde met de hand en de cron schrijven elk hun eigen bestand
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+        os.replace(tmp, doel)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     tel = {k: sum(1 for b in d["berichten"] if b["map"] == k) for k in ("INBOX", "Sent")}
     return (f"{nu.isoformat(timespec='seconds')} hotmail: {tel['INBOX']} binnen ({BINNEN_DAGEN} d), "
             f"{tel['Sent']} verzonden ({VERZONDEN_DAGEN} d), van de server")

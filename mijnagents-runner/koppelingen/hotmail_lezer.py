@@ -14,7 +14,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.utils import parseaddr, parsedate_to_datetime
 
 sys.path.insert(0, "/app")
@@ -26,9 +26,10 @@ import imapbron    # noqa: E402
 NIET_BINNEN = re.compile(r"^(deleted|junk|drafts|outbox|sync issues|conversation history|archive)", re.I)
 NIET_BINNEN_SOORT = {"\\trash", "\\junk", "\\drafts", "\\archive"}
 VERZONDEN = re.compile(r"^sent( items)?$", re.I)
-KOPPEN = ("FROM TO CC SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES AUTO-SUBMITTED PRECEDENCE LIST-ID "
+KOPPEN = ("FROM TO CC BCC SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES AUTO-SUBMITTED PRECEDENCE LIST-ID "
           "LIST-UNSUBSCRIBE")
 _UID = re.compile(r"UID (\d+)")
+_ONTVANGEN = re.compile(r'INTERNALDATE "([^"]+)"')
 
 
 def soort_map(attributen, naam):
@@ -62,16 +63,34 @@ def automatisch(m):
     return (bool(auto) and auto != "no") or imapbron._kop(m.get("Precedence")).strip().lower() in ("bulk", "list", "junk")
 
 
-def bericht(mapsoort, mapnaam, uid, ruw):
-    m = email.message_from_bytes(ruw)
+def adressen(waarde):
+    """Alle adressen van een kopregel, als 'Naam <adres>'. imapbron._adressen houdt er twintig; de klantenlijst
+    (uitschrijven.ooit_gemaild) moet ze allemaal zien (Codex-controle 26-10-2026)."""
+    return [d.strip() for d in re.split(r",(?![^<]*>)", imapbron._kop(waarde)) if d.strip()]
+
+
+def _tijd(tekst, vorm=None):
     try:
-        datum = parsedate_to_datetime(m.get("Date"))
-        datum = datum.astimezone(timezone.utc).isoformat() if datum else None   # zoals de Mac: in UTC, dan sorteert het
-    except (TypeError, ValueError):
-        datum = None
+        d = datetime.strptime(tekst.strip(), vorm) if vorm else parsedate_to_datetime(tekst)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return d.astimezone(timezone.utc).isoformat() if d and d.tzinfo else None
+
+
+def datum_van(meta, m):
+    """De ontvangsttijd (INTERNALDATE) in UTC, zoals de Mac (date_received) en zoals SINCE zoekt; anders de Date-kop."""
+    t = _ONTVANGEN.search(meta)
+    return (t and _tijd(t.group(1), "%d-%b-%Y %H:%M:%S %z")) or _tijd(m.get("Date"))
+
+
+def bericht(mapsoort, mapnaam, meta, ruw):
+    m = email.message_from_bytes(ruw)
+    u = _UID.search(meta)
     naam, adres = parseaddr(imapbron._kop(m.get("From")))
-    return {"map": mapsoort, "uid": f"{mapnaam}/{uid}", "datum": datum, "van": adres.lower(), "van_naam": naam,
-            "aan": imapbron._adressen(m.get("To")), "cc": imapbron._adressen(m.get("Cc")),
+    # Bcc staat alleen op eigen verzonden post; de Mac zette het bij 'aan' (mac/hotmail_koppen.py, soort != 1).
+    return {"map": mapsoort, "uid": f"{mapnaam}/{u.group(1)}" if u else None, "datum": datum_van(meta, m),
+            "van": adres.lower(), "van_naam": naam,
+            "aan": adressen(m.get("To")) + adressen(m.get("Bcc")), "cc": adressen(m.get("Cc")),
             "onderwerp": imapbron._kop(m.get("Subject")), "message_id": imapbron._kop(m.get("Message-ID")),
             "in_antwoord_op": imapbron._kop(m.get("In-Reply-To")),
             "verwijzingen": re.findall(r"<[^<>\s]+>", imapbron._kop(m.get("References"))),
@@ -83,12 +102,15 @@ def lees_map(M, mapsoort, mapnaam, sinds):
     uids = imapbron.zoek_uids(M, imapbron._criteria(None, None, None, None, sinds, None, False))
     uit = []
     for i in range(0, len(uids), 200):
-        ok, data = M.uid("FETCH", ",".join(str(u) for u in uids[i:i + 200]), f"(UID BODY.PEEK[HEADER.FIELDS ({KOPPEN})])")
+        ok, data = M.uid("FETCH", ",".join(str(u) for u in uids[i:i + 200]),
+                         f"(UID INTERNALDATE BODY.PEEK[HEADER.FIELDS ({KOPPEN})])")
         if ok != "OK":
             raise ValueError("koppen ophalen mislukt: " + imapbron._leesbaar(data))
-        for meta, ruw in antwoorden(data):
-            u = _UID.search(meta)
-            uit.append(bericht(mapsoort, mapnaam, u.group(1) if u else "?", ruw))
+        uit += [bericht(mapsoort, mapnaam, meta, ruw) for meta, ruw in antwoorden(data)]
+    # Een bericht zonder UID of zonder datum zou de wacht stil overslaan (postvak.werk): dan is de map niet volledig.
+    zonder = sum(1 for b in uit if not b["uid"] or not b["datum"])
+    if zonder:
+        raise ValueError(f"{zonder} bericht(en) zonder UID of datum")
     return uit, len(uids)
 
 

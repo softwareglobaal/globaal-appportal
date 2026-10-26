@@ -34,13 +34,16 @@ def kop(van, onderwerp, datum, mid, extra=""):
 
 # De mappen zoals Outlook.com ze over IMAP geeft: (attributen, naam, {uid: koppen}).
 MAPPEN = [
-    (("\\HasNoChildren",), "Inbox", {7: kop("Klant <k@klant.test>", "Offerte", "Mon, 19 Oct 2026 10:00:00 +0200", "a@k")}),
+    (("\\HasNoChildren",), "Inbox", {7: (kop("Klant <k@klant.test>", "Offerte", "Mon, 19 Oct 2026 10:00:00 +0200", "a@k"),
+                                          "19-Oct-2026 08:01:30 +0000")}),
     (("\\HasChildren",), "Projecten", {3: kop("Aannemer <a@bouw.test>", "Planning", "Tue, 20 Oct 2026 09:00:00 +0200", "b@b",
                                                "Auto-Submitted: auto-generated\r\n")}),
     (("\\HasNoChildren",), "Nieuws", {9: kop("Blad <nieuws@blad.test>", "Deze week", "Thu, 22 Oct 2026 07:00:00 +0000", "g@b",
                                              "Precedence: Bulk \r\nList-Unsubscribe: <https://b/u>\r\n")}),
     (("\\HasNoChildren", "\\Sent"), "Sent", {5: kop(f"Mehdi <{ADRES}>", "Re: Offerte", "Wed, 21 Oct 2026 08:00:00 +0200",
-                                                     "c@h", "In-Reply-To: <a@k>\r\nReferences: <x@y> <a@k>\r\n")}),
+                                                     "c@h", "In-Reply-To: <a@k>\r\nReferences: <x@y> <a@k>\r\n"
+                                                     + "Cc: " + ", ".join(f"Lid {i} <lid{i}@groep.test>" for i in range(21))
+                                                     + "\r\nBcc: Stil <stil@klant.test>\r\n")}),
     (("\\HasNoChildren", "\\Trash"), "Deleted", {1: kop("x@x.test", "weg", "Mon, 19 Oct 2026 10:00:00 +0200", "d@x")}),
     (("\\HasNoChildren", "\\Junk"), "Junk", {1: kop("x@x.test", "spam", "Mon, 19 Oct 2026 10:00:00 +0200", "e@x")}),
     (("\\HasNoChildren",), "Drafts", {1: kop("x@x.test", "concept", "Mon, 19 Oct 2026 10:00:00 +0200", "h@x")}),
@@ -75,7 +78,9 @@ class NepImap:
                 return "NO", [b"server weigert"]
             uit = []
             for u in args[0].split(","):
-                uit += [(b"1 (BODY[HEADER.FIELDS (...)] {100}", berichten[int(u)]), f" UID {u})".encode()]
+                ruw, ontvangen = berichten[int(u)] if isinstance(berichten[int(u)], tuple) else (berichten[int(u)], None)
+                na = f' INTERNALDATE "{ontvangen}"' if ontvangen else ""
+                uit += [(b"1 (BODY[HEADER.FIELDS (...)] {100}", ruw), f"{na} UID {u})".encode()]
             return "OK", uit
         raise AssertionError(f"onverwachte opdracht {opdracht}")
 
@@ -145,7 +150,9 @@ def test_automatisch_lijst_en_draad():
     assert b["Deze week"]["automatisch"] and b["Deze week"]["lijst"], "Precedence bulk (hoofdletters, spatie) en List-Unsubscribe"
     s = b["Re: Offerte"]
     assert s["in_antwoord_op"] == "<a@k>" and s["verwijzingen"] == ["<x@y>", "<a@k>"] and s["message_id"] == "<c@h>"
-    assert b["Offerte"]["datum"] == "2026-10-19T08:00:00+00:00", "in UTC, zoals de Mac"
+    assert b["Offerte"]["datum"] == "2026-10-19T08:01:30+00:00", "de ontvangsttijd (INTERNALDATE), zoals de Mac"
+    assert b["Planning"]["datum"] == "2026-10-20T07:00:00+00:00", "zonder INTERNALDATE de Date-kop, in UTC"
+    assert len(s["cc"]) == 21 and "Stil <stil@klant.test>" in s["aan"], "alle ontvangers, ook voorbij twintig, en de Bcc"
     assert b["Offerte"]["van"] == "k@klant.test" and b["Offerte"]["van_naam"] == "Klant"
 
 
@@ -164,6 +171,30 @@ def test_postvak_leest_het_bestand_en_ziet_het_antwoord():
     assert postvak.wie_is(binnen[-1]) <= postvak.in_draad(verzonden[0])
 
 
+def test_bericht_zonder_uid_of_datum_maakt_de_map_onvolledig():
+    zonder_datum = [(("\\HasNoChildren",), "Inbox", {7: b"From: x@x.test\r\nSubject: geen datum\r\n\r\n"})]
+    d = lees_met(NepImap(MAPPEN[3:4] + zonder_datum))
+    assert d["fouten"] and "Inbox" in d["fouten"][0], d["fouten"]
+
+
+def test_klantenlijst_alleen_uit_een_verse_kopie():
+    import uitschrijven as U
+    doel = os.path.join(tempfile.mkdtemp(), "koppen.json")
+    nep = NepImap(MAPPEN)
+    S.ververs(ADRES, doel, NU, voer=lambda *a, **k: _uitvoer(lees_met(nep)))
+    oud_pv = postvak.postvak
+    postvak.postvak = lambda a: {"adres": a, "bron": doel}
+    try:
+        cfg = {"mail-prive": {"postvakken": [ADRES]}}
+        klanten = U.ooit_gemaild(NU, cfg, None, os.path.join(tempfile.mkdtemp(), "k.json"))
+        assert {"stil@klant.test", "lid0@groep.test", "lid20@groep.test"} <= klanten, klanten
+        laat = NU.replace(hour=22)
+        assert U.ooit_gemaild(laat, cfg, None, os.path.join(tempfile.mkdtemp(), "k.json")) is None, \
+            "vier uur oud: niemand uitschrijven"
+    finally:
+        postvak.postvak = oud_pv
+
+
 def test_vorig_bestand_blijft_bij_een_fout():
     doel = os.path.join(tempfile.mkdtemp(), "koppen.json")
     json.dump({"gemaakt": "2026-10-26T15:00:00+00:00", "berichten": []}, open(doel, "w"))
@@ -176,7 +207,7 @@ def test_vorig_bestand_blijft_bij_een_fout():
         except RuntimeError:
             pass
         assert json.load(open(doel))["gemaakt"] == "2026-10-26T15:00:00+00:00", reden
-        assert not os.path.exists(doel + ".nieuw"), reden
+        assert os.listdir(os.path.dirname(doel)) == ["koppen.json"], (reden, "geen tijdelijk bestand achtergelaten")
 
 
 def test_het_adres_staat_alleen_in_mailwachten_json():

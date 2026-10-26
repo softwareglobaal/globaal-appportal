@@ -460,6 +460,10 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
         if not mb:
             onvolledig.append(f"{adres} staat niet in de postbus")
             continue
+        oud = bron_uren_oud(mb, nu)
+        if mb.get("bron") and (oud is None or oud > BRON_VERS_UREN):
+            # een oude kopie mist misschien een recent antwoord of een nieuwe klant (Codex-controle 26-10-2026)
+            onvolledig.append(f"{adres}: de kopie is ouder dan {BRON_VERS_UREN} uur")
         gelezen = False
         try:
             bestaand = mapnamen(mb)
