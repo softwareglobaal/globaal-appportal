@@ -72,8 +72,9 @@ OPNAME = [
 _AFK = r"(?:(?<=\bexcl)|(?<=\bincl)|(?<=\bca)|(?<=\bnr)|(?<=\bresp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+(?-i:[a-z0-9(€]))"
 _T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
 # Een regelovergang midden in een zin (de volgende regel begint met een kleine letter: "sprak zijn vaststellingen\nter
-# plaatse in") breekt de zin niet; een hoofdletter, een lijstteken of een lege regel begint een nieuwe zin.
-_Z = r"(?:[^.!?\n]|\n(?=[ \t]*(?-i:[a-zà-ÿ]))|(?<=\d)\.(?=\d)|" + _AFK + ")"
+# plaatse in") breekt de zin niet; een hoofdletter, een lijstteken, een lege regel of een regel die op ; of : eindigt
+# (een opsomming) begint een nieuwe zin.
+_Z = r"(?:[^.!?\n]|(?<![;:])\n(?=[ \t]*(?-i:[a-zà-ÿ]))|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
 # S4 per zin (een zin stopt aan . ! ? of een nieuwe regel, niet aan de punt van 4.500 of de dubbelpunt van 10:15), zodat

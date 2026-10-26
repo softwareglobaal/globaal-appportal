@@ -377,5 +377,15 @@ vg["posten"] = [{"post": "Dakraam plaatsen", "bron": "factuur 2026-114, zie opna
 mdg = vb.naar_markdown(vg)
 check("bevindingen: gemeld en posten tonen geen opname of tijdstip", "00:31" not in mdg and "00:12" not in mdg and "factuur 2026-114" in mdg, mdg[-500:])
 
+# Tiende review 26-10-2026: een opsomming over meerdere regels (regels op ; of :) blijft een reeks eigen zinnen
+t10, _ = S.toepassen("Aan de achtergevel werden genoteerd:\nbarst B1 boven het keukenraam, 0,3 mm, diagonaal;\nbarst B2 in de linkerhoek, 1 mm, "
+                     "verticaal;\nde aannemer van de buren is aansprakelijk voor beide barsten.")
+check("opsomming: de metingen blijven, alleen de S5-regel wordt gemarkeerd",
+      "0,3 mm" in t10 and "1 mm" in t10 and "schrijfregel S5" in t10 and "aansprakelijk" not in t10, t10)
+t10, _ = S.toepassen("Bij de rondgang werd vastgesteld:\nde zinken dakgoot lekt;\nde pannen zijn verweerd;\nde herstelkost wordt geraamd op ca. € 2.500.",
+                     "aankoopkeuring")
+check("opsomming aankoopkeuring: de vaststellingen blijven, het bedrag gaat weg",
+      "dakgoot lekt" in t10 and "verweerd" in t10 and "2.500" not in t10 and "500" not in t10, t10)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
