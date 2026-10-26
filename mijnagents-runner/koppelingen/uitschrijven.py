@@ -279,6 +279,15 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
     (hotmail_server.py): dat moet twee jaar verzonden post bevatten en hoogstens BRON_MAX_UREN oud zijn (tweede
     toets 20-10-2026, X1: wie Mehdi alleen vanuit hotmail mailde, is ook een klant)."""
     vandaag = nu.date().isoformat()
+    cfg_alles = cfg_alles or postvak.wachten()
+    # Ook de bewaarde lijst van vandaag geldt alleen zolang elk bestand uit 'bronnen' vers is: faalt het verversen van
+    # hotmail, dan schrijft niemand uit tot het weer lukt (Codex-hercontrole 26-10-2026).
+    for adres in (cfg_alles.get("bronnen") or {}):
+        if adres.startswith("_"):
+            continue
+        oud = postvak.bron_uren_oud(postvak.postvak(adres), nu)
+        if oud is None or oud > BRON_MAX_UREN:
+            return None
     try:
         with open(pad, encoding="utf-8") as f:
             c = json.load(f)
@@ -287,7 +296,6 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
     except (OSError, ValueError):
         pass
     koppen = koppen or postvak.koppen
-    cfg_alles = cfg_alles or postvak.wachten()
     adressen = []
     for cfg in cfg_alles.values():
         if isinstance(cfg, dict) and cfg.get("postvakken"):

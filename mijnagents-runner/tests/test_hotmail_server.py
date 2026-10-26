@@ -191,6 +191,11 @@ def test_klantenlijst_alleen_uit_een_verse_kopie():
         laat = NU.replace(hour=22)
         assert U.ooit_gemaild(laat, cfg, None, os.path.join(tempfile.mkdtemp(), "k.json")) is None, \
             "vier uur oud: niemand uitschrijven"
+        cfg["bronnen"] = {"_uitleg": "", ADRES: S.BESTAND}
+        cache = os.path.join(tempfile.mkdtemp(), "k.json")
+        assert U.ooit_gemaild(NU, cfg, None, cache) == klanten and os.path.exists(cache)
+        assert U.ooit_gemaild(NU.replace(hour=19), cfg, None, cache) == klanten, "bewaard en nog vers: de lijst van vandaag"
+        assert U.ooit_gemaild(laat, cfg, None, cache) is None, "ook de bewaarde lijst niet bij een oude kopie"
     finally:
         postvak.postvak = oud_pv
 
