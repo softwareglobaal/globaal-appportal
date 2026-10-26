@@ -156,7 +156,8 @@ cutover niet geraakt:
 - **Chunker van Mehdi** - `~/chunker-van-mehdi` (repo `chunker-van-mehdi`, auto-deploy
   per 2 min), systemd `chunker-van-mehdi.service` op `172.17.0.1:8460`, data in
   `~/chunker-van-mehdi-data` (0700), database `kennis_mehdi` (rol `chunker_mehdi`) op de
-  host-Postgres, backup naar `~/backups/chunker-van-mehdi`. Raakt de Chunker van
+  host-Postgres, backup naar `~/chunker-van-mehdi-backups` (bewust niet onder `~/backups`, dat de
+  stack-backup opruimt). Raakt de Chunker van
   agents.globaal.be (database `kennis`, `~/kb-werk`) niet aan; leest alleen diens OCR-cache.
 - **cloudflared-tunnel** - routeert alleen `ha-customgpt.globaal.be` (ongebruikt).
 - **Host-PostgreSQL** - `127.0.0.1:5432` (los van de Authentik-DB in Docker).
