@@ -39,6 +39,7 @@ import agenda_wacht as W                      # noqa: E402
 import dagcontrole as DC                      # noqa: E402
 
 MODEL = os.environ.get("WEEKCONSOLIDATIE_MODEL", "claude-opus-5-5")
+MAX_TOKENS = 64000
 DATA = Path.home() / "appportal/mijnagents-data"
 EXPORT = DATA / "export" / "Agendawacht"
 WEEKMAP = EXPORT / "weekconsolidatie"
@@ -211,13 +212,15 @@ def model_oordeel(inv, client=None):
     if client is None:
         from anthropic import Anthropic
         client = Anthropic()
+    # Het denken (effort high) telt mee in max_tokens: met 16000 viel het antwoord vier weken op rij weg
+    # (W40 tot W42, "antwoord afgekapt"). Ruimte genoeg, en een wachttijd die bij die ruimte past.
     resp = client.beta.messages.create(
-        model=MODEL, max_tokens=16000,
+        model=MODEL, max_tokens=MAX_TOKENS,
         betas=["server-side-fallback-2026-07-01"], fallbacks="default",
         output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
         system=SYSTEEM,
         messages=[{"role": "user", "content": json.dumps(inv, ensure_ascii=False)}],
-        timeout=900)
+        timeout=1800)
     meta = {"model": getattr(resp, "model", MODEL), "stop_reason": getattr(resp, "stop_reason", ""),
             "tokens_in": getattr(getattr(resp, "usage", None), "input_tokens", 0) or 0,
             "tokens_uit": getattr(getattr(resp, "usage", None), "output_tokens", 0) or 0}

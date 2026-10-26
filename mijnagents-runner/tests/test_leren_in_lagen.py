@@ -183,6 +183,8 @@ check("laag 4: fallbacks default met de juiste beta",
 check("laag 4: gestructureerd antwoord volgens het schema",
       kw["output_config"]["format"] == {"type": "json_schema", "schema": WC.SCHEMA} and kw["output_config"]["effort"] == "high")
 check("laag 4: geen thinking uitgezet en geen budget_tokens (400 op Opus 5.5)", "thinking" not in kw)
+check("laag 4: ruimte voor denken en antwoord (16000 kapte W40 tot W42 af)", kw["max_tokens"] >= 64000 and kw["timeout"] >= 1800,
+      str((kw.get("max_tokens"), kw.get("timeout"))))
 check("laag 4: het antwoord wordt gelezen", ruw["overzicht"].startswith("Rustige week") and meta["tokens_in"] == 100)
 for stop in ("refusal", "max_tokens"):
     try:
