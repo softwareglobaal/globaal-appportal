@@ -452,5 +452,14 @@ twee = dict(w, categorieen=[{"naam": "Vocht", "punten": [{"nummer": "3.1", "tite
           "tekst_en": "The contractor is liable for the moisture damage (recording 00:12:00)."}]}])
 md2 = sj.naar_markdown(twee)
 check("tweetalig werfverslag: ook het Engels gaat door de grendel", "liable" not in md2 and "00:12" not in md2.split("<!--")[0], md2[-300:])
+# Negentiende review 26-10-2026: een losse verwijzing "Zie opname 00:12:05." laat geen punt achter
+for tekst, verwacht in [("Er blijft water staan. Zie opname 00:22:30. De aannemer herstelt de afvoer.", "Er blijft water staan. De aannemer herstelt de afvoer."),
+                        ("Zie opname 00:14:40. De pannen tonen mosgroei.", "De pannen tonen mosgroei."),
+                        ("De goot lekt! Transcript 12:30.", "De goot lekt!"), ("Opname 00:12:05.", ""),
+                        ("De gevel loopt trapsgewijs.\nZie opname 00:12:05.", "De gevel loopt trapsgewijs."),
+                        ("Raam R3 (...) staat uit lood... zie detail.", "Raam R3 (...) staat uit lood... zie detail.")]:
+    t19, _ = S.toepassen(tekst, "aankoopkeuring")
+    check(f"losse opnameverwijzing zonder losse punt: '{tekst[:30]}'", t19 == verwacht, repr(t19))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

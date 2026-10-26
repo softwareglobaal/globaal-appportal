@@ -68,6 +68,10 @@ VERBODEN_PROFIEL = {
 
 # Verwijzingen naar de opname: "(opname 00:22:30)", "(opname 00:22:30-00:23:16)", "opname 00:11:49 tot 00:12:10",
 # "(transcript 12:30)", "volgens de opname", "sprak zijn vaststellingen in".
+# "Zie opname 00:12:05." als eigen zin: weg samen met de punt, zodat er geen ".." of losse punt overblijft
+_TIJDSTIP = r"\d{1,2}:\d{2}(?::\d{2})?"
+OPNAME_LOS = re.compile(r"(?:^|(?<=[.!?]))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
+                        + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I | re.M)
 OPNAME = [
     re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
     re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
@@ -207,7 +211,7 @@ def _opname_weg(tekst):
             continue
         delen.append(zin)
     tekst = "".join(delen)
-    for p in OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
+    for p in [OPNAME_LOS] + OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
         tekst, k = p.subn("", tekst)
         ingrepen += [("S4", "opnameverwijzing")] * k
     tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)
