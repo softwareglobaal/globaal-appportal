@@ -120,6 +120,38 @@ class Personen:
         return self._cache[naam]
 
 
+def prive_gesprekken(rijen):
+    """Privé is de OF over alle rijen van een gesprek, dubbels inbegrepen (De Regisseur, _prive_sessies, M1 en BAS-02):
+    een Fathom-rij die zelf niet privé is, met een Zoom-dubbel die het wel is, is privé. Een gesprek is de hele groep
+    rijen die via dubbel_van of dezelfde sessie aan elkaar hangen, ook over een keten van dubbels (Codex, controle 1:
+    met alleen de directe voorganger lekte een naam). Een rij buiten:<reden> hoort niet bij Mehdi's gesprek en hangt
+    nergens aan. Geeft een functie rij -> privé."""
+    ouder = {}
+
+    def wortel(x):
+        while ouder.setdefault(x, x) != x:
+            ouder[x] = ouder[ouder[x]]
+            x = ouder[x]
+        return x
+
+    def koppel(a, b):
+        ouder[wortel(a)] = wortel(b)
+
+    for r in rijen:
+        dv = str(r.get("dubbel_van") or "")
+        if dv.startswith("buiten:"):
+            continue
+        u = "rij:" + str(r.get("uniek") or "")
+        wortel(u)
+        if dv:
+            koppel(u, "rij:" + dv)
+        if r.get("sessie"):
+            koppel(u, "sessie:" + r["sessie"])
+    prive = {wortel("rij:" + str(r.get("uniek") or "")) for r in rijen
+             if is_prive(r) and not str(r.get("dubbel_van") or "").startswith("buiten:")}
+    return lambda r: is_prive(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
+
+
 def bundel(rijen, eerste, laatste, collegas):
     """Rijen uit gesprek_log naar {dag: inhoud}, plus wat er opviel. Elke dag in [eerste, laatste] krijgt een inhoud, ook
     een zonder contact: zo volgt een item dat eerder contacten toonde de bron, als een koppeling of privécorrectie ze
@@ -127,15 +159,7 @@ def bundel(rijen, eerste, laatste, collegas):
     p = Personen(collegas)
     opgevallen = {"onbekend_kanaal": 0, "telt_niet": 0, "kanalen": set()}
     bekend = set()   # personen uit gesprekken die geen privé zijn, en collega's
-    # Privé is de OF over alle rijen van een gesprek, dubbels inbegrepen (De Regisseur, _prive_sessies, M1 en BAS-02):
-    # een Fathom-rij die zelf niet privé is, met een Zoom-dubbel die het wel is, is privé. Buiten:<reden> hoort niet bij
-    # Mehdi's gesprek en telt niet mee. Codex, ontwerplezing 26-10-2026.
-    prive_sessies, prive_uniek = set(), set()
-    for r in rijen:
-        if is_prive(r) and not str(r.get("dubbel_van") or "").startswith("buiten:"):
-            if r.get("sessie"):
-                prive_sessies.add(r["sessie"])
-            prive_uniek.add(r.get("dubbel_van") or r.get("uniek"))
+    prive_groep = prive_gesprekken(rijen)
     tellen = []
     for r in rijen:
         if r.get("dubbel_van"):
@@ -145,7 +169,7 @@ def bundel(rijen, eerste, laatste, collegas):
         if k is None:
             opgevallen["onbekend_kanaal"] += 1
             continue
-        prive = is_prive(r) or r.get("uniek") in prive_uniek or (r.get("sessie") or "") in prive_sessies - {""}
+        prive = prive_groep(r)
         if not prive and k not in ("mail", "groepschat"):
             for n in namen(r.get("personen")):
                 soort, wie = p.persoon(n)
@@ -219,7 +243,9 @@ def titel(inhoud):
 def items(dagen):
     """Geen sleutel prive bovenaan de inhoud: wie de inhoud leest, zou die als een privégesprek kunnen nemen
     (zoals dagbundelaar.py, prive, Codex CB02)."""
-    return [{"voor": "mehdi", "soort": "communicatie", "sleutel": dag, "uniek": f"communicatie:dag:{dag}",
+    # revisie: ook een item dat al opgepakt is, volgt de bron, met de oude versie in klaarzet_revisie; zo blijft een naam
+    # niet staan als een gesprek later privé wordt (Codex, controle 1, CB04).
+    return [{"voor": "mehdi", "soort": "communicatie", "sleutel": dag, "uniek": f"communicatie:dag:{dag}", "revisie": True,
              "titel": titel(inhoud), "inhoud": json.dumps(inhoud, ensure_ascii=False, separators=(",", ":"))}
             for dag, inhoud in sorted(dagen.items())]
 
@@ -239,7 +265,7 @@ def terug_lezen(gezet, lees=None):
     fout = []
     for it in ag.maskeer(gezet):
         terug = lees(it["uniek"])
-        if not any(t.get("inhoud") == it["inhoud"] and t.get("titel") == it["titel"] for t in terug):
+        if not any(all(t.get(k) == it[k] for k in ("voor", "soort", "sleutel", "titel", "inhoud")) for t in terug):
             fout.append(it["uniek"])
     return fout
 

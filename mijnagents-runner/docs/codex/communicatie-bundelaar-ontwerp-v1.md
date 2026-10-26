@@ -91,3 +91,12 @@ Bewust open: wie begon, toon, weekpatronen (werkwijze v1 punt 2). Daar is geen m
 | CB07 voornaam | middel | eigen herkenning: exacte naam of adres, of een losse voornaam die maar een collega draagt; Mehdi alleen als "Mehdi", "Mehdi Chegini" of zijn kernrij |
 | CB08 kern | middel | kern leeg: nood en niets klaargezet; de nood "minder dan twee kanalen" is weg |
 | CB09 controleerbaar | middel | elk item wordt teruggelezen op uniek; `--droog --zaad` toont de items; het privélek in `/dagen` van het bord is een ander onderdeel en staat als vervolg |
+
+## Verwerking controle 1 (26-10-2026)
+
+| punt | ernst | verwerking |
+|---|---|---|
+| CB01 keten van dubbels | hoog | `prive_gesprekken`: een gesprek is de hele groep rijen die via dubbel_van of sessie aan elkaar hangen; test `test_prive_over_een_keten_van_dubbels` |
+| CB04 opgepakt item | hoog | elk item gaat met `revisie: true`: het bord werkt ook een opgepakt item bij en bewaart de oude versie in `klaarzet_revisie` |
+| CB03/CB05 cron en bordtekst | middel | bij de eerste ronde: werkwijze v2 met `werkwijze_naar_bord.py --zet`, daarna `controle_agenten.py`; de cron pas na Mehdi's ja |
+| CB09 teruglezing | laag | ook voor, soort en sleutel vergeleken |

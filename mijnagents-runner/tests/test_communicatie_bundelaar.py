@@ -133,6 +133,26 @@ def test_prive_geldt_voor_het_hele_gesprek():
     assert "Sigma" not in json.dumps(gezet) and "Tau" not in json.dumps(gezet)
 
 
+def test_prive_over_een_keten_van_dubbels():
+    """Codex, controle 1: met alleen de directe voorganger lekte de naam uit een privégesprek via een keten."""
+    rijen = [rij("fathom:20", "Mehdi, Proefgeheim Sigma", 30),
+             rij("fathom:21", "Mehdi, Proefgeheim Sigma", 30, dubbel_van="fathom:20"),
+             rij("zoom:meeting:e5", "Mehdi, Proefgeheim Sigma", 30, prive=1, dubbel_van="fathom:21", sessie="zoom:meeting:e5"),
+             rij("fathom:22", "Mehdi, Proefgeheim Sigma", 30, sessie="zoom:meeting:e5", dubbel_van="fathom:20")]
+    _, gezet, dagen, _ = ronde(rijen=rijen)
+    assert dagen[DAG]["personen"] == [] and dagen[DAG]["prive_per_kanaal"] == {"video": {"aantal": 1, "minuten": 30}}
+    assert "Sigma" not in json.dumps(gezet)
+
+
+def test_items_met_revisie_zodat_een_opgepakt_item_de_bron_volgt():
+    """Codex, controle 1 (CB04): zonder revisie laat het bord een opgepakt item ongemoeid (mijnagents/app.py,
+    api_klaarzet), en bleef een naam staan als het gesprek later privé werd."""
+    _, gezet, _, _ = ronde()
+    assert gezet and all(it["revisie"] is True for it in gezet)
+    app = open(os.path.join(os.path.dirname(RUNNER), "mijnagents", "app.py"), encoding="utf-8").read()
+    assert 'oud["status"] != "klaar" and it.get("revisie")' in app
+
+
 def test_mehdi_en_onbekende_sprekers_geen_persoon():
     _, _, dagen, _ = ronde()
     p = personen(dagen[DAG])
@@ -215,6 +235,7 @@ def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
     gelezen = []
     assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0])]) == []
     assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}")]) == [gezet[0]["uniek"]]
+    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], voor="h-architects")]) == [gezet[0]["uniek"]]
     assert gelezen == [gezet[0]["uniek"]]
 
 
