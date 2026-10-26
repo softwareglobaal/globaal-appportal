@@ -602,6 +602,15 @@ def api_klaarzet():
             herzien += 1
             zakelijk_herzien += 0 if oud["voor"] == "mehdi" else 1
             continue
+        if oud and anders and oud["status"] != "klaar" and it.get("vervang"):
+            # De Communicatiebundelaar (Codex CB04 en CB12, 26-10-2026): ook een opgepakt item volgt de bron, zonder kopie
+            # in klaarzet_revisie, want de oude inhoud kan een naam dragen die intussen privé werd.
+            conn.execute("UPDATE klaarzet SET voor=?, titel=?, inhoud=?, verwijzing=?, sleutel=?, status='klaar', opgepakt_door='', "
+                         "opgepakt_ts='' WHERE id=?",
+                         (it["voor"], it["titel"][:300], inhoud[:60000], (it.get("verwijzing") or "")[:500],
+                          str(it.get("sleutel") or "")[:120], oud["id"]))
+            bijgewerkt += 1
+            continue
         if oud:
             # Les van 12-09-2026: een item dat nog niet opgepakt is, volgt de bron. Toen de Agendawacht TKN leerde
             # herkennen, bleef de afspraak van Britt Verboven bij h-architects staan omdat de bak nooit bijwerkte.

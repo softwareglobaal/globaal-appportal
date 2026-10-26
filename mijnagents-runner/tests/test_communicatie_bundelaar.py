@@ -78,11 +78,11 @@ def ronde(rijen=RIJEN, collegas=lambda: COLLEGAS, lees=None, werkwijze=None, ter
     r, gezet = NepRonde(werkwijze), []
     gelezen = []
 
-    def lezen(sql, args):
+    def lezen(sql, args=()):
         if sql == C.SQL_EERDER:
             return [{"sleutel": d} for d in eerder]
         gelezen.append((sql, args))
-        return [x for x in rijen if args[0] <= x["datum"] <= args[1]]
+        return list(rijen)
     dagen = C.werk(r, vandaag=VANDAAG, lees=lees or lezen, collegas=collegas,
                    zet=lambda its: gezet.extend(its) or {"nieuw": len(its)}, terug=terug)
     return r, gezet, dagen, gelezen
@@ -146,11 +146,11 @@ def test_prive_over_een_keten_van_dubbels():
     assert "Sigma" not in json.dumps(gezet)
 
 
-def test_geen_revisie_en_niemand_pakt_het_item_op():
-    """Codex CB04 en CB12: het bord werkt een item op klaar bij zonder revisie; een revisie zou de oude inhoud, met een
-    naam die intussen privé werd, in klaarzet_revisie bewaren. Dus geen revisie, en geen lezer die het oppakt."""
+def test_vervang_geen_revisie_en_niemand_pakt_het_item_op():
+    """Codex CB04 en CB12: met vervang zet het bord ook een opgepakt item terug op de bron, zonder kopie in
+    klaarzet_revisie (mijnagents/test_klaarzet_revisie.py); een revisie zou een naam die intussen privé werd bewaren."""
     _, gezet, _, _ = ronde()
-    assert gezet and not any("revisie" in it for it in gezet)
+    assert gezet and all(it.get("vervang") is True and "revisie" not in it for it in gezet)
     coach = open(os.path.join(RUNNER, "levenscoach.py"), encoding="utf-8").read()
     assert "opgepakt" not in coach, "De Levenscoach pakt nu items op: dan volgt het dagitem de bron niet meer"
 
@@ -162,7 +162,30 @@ def test_oudere_dag_met_item_wordt_herzien():
     assert "2026-10-01" in dagen and dagen["2026-10-01"]["personen"] == []
     assert dagen["2026-10-01"]["prive_per_kanaal"] == {"video": {"aantal": 1, "minuten": 30}}
     assert [it["sleutel"] for it in gezet][:2] == ["2026-10-01", "2026-10-19"]
-    assert gelezen[0][1][0] == "2026-07-28" and "Sigma" not in json.dumps(gezet)
+    assert "Sigma" not in json.dumps(gezet)
+
+
+def test_prive_van_lang_geleden_en_dubbel_van_de_nacht_ervoor():
+    """Codex CB17 en CB18: een privégesprek van meer dan negentig dagen geleden en een privé Zoom-dubbel van een dag
+    voor het oudere dagitem vielen buiten de leesvraag; nu leest de runner de hele tabel."""
+    rijen = [rij("fathom:60", "Mehdi, Proefgeheim Sigma", 20, prive=1, datum="2026-03-01"),
+             rij("fathom:61", "Mehdi, Proefgeheim Sigma", 20, datum="2026-10-10"),
+             rij("mail:<v1@voorbeeld.test>", "Proefgeheim Sigma"),
+             rij("fathom:62", "Mehdi, Proefgeheim Tau", 15, datum="2026-06-02", sessie="zoom:meeting:g7"),
+             rij("zoom:meeting:g7", "Mehdi, Proefgeheim Tau", 15, prive=1, datum="2026-06-01", sessie="zoom:meeting:g7",
+                 dubbel_van="fathom:62")]
+    _, gezet, dagen, _ = ronde(rijen=rijen, eerder=["2026-06-02"])
+    assert "Sigma" not in json.dumps(gezet) and "Tau" not in json.dumps(gezet)
+    assert dagen["2026-06-02"]["prive_per_kanaal"] == {"video": {"aantal": 1, "minuten": 15}}
+
+
+def test_bekend_voor_mail_alleen_uit_de_laatste_negentig_dagen():
+    """Codex CB19: een oud dagitem rekt de bekendheid voor mail niet op."""
+    rijen = [rij("fathom:70", "Mehdi, Klant Omega", 20, datum="2026-07-01"),
+             rij("mail:<u1@voorbeeld.test>", "Klant Omega")]
+    _, _, dagen, _ = ronde(rijen=rijen, eerder=["2026-07-01"])
+    assert dagen[DAG]["personen"] == [] and dagen[DAG]["overige_mail"] == 1
+    assert list(personen(dagen["2026-07-01"])) == ["Klant Omega"], "het oude item zelf telt wel"
 
 
 def test_wie_ooit_prive_was_is_geen_bekende_voor_mail():
@@ -194,10 +217,11 @@ def test_item_zonder_namen_in_titel_en_zonder_prive_sleutel():
     assert "2026-08-01" not in dagen, "een dag buiten het venster krijgt geen item"
 
 
-def test_venster_zeven_dagen_voor_vandaag():
-    _, _, _, gelezen = ronde()
-    assert gelezen[0][1] == ("2026-07-28", "2026-10-26"), gelezen[0][1]
-    assert C.venster(VANDAAG) == ("2026-10-19", "2026-10-25", "2026-07-28", "2026-10-26")
+def test_venster_zeven_dagen_voor_vandaag_en_hele_tabel_gelezen():
+    _, _, dagen, gelezen = ronde()
+    assert gelezen == [(C.SQL, ())] and "where" not in C.SQL.lower(), "de hele tabel, zonder datumgrens (CB17, CB18)"
+    assert C.venster(VANDAAG) == ("2026-10-19", "2026-10-25", "2026-07-28")
+    assert sorted(dagen) == [f"2026-10-{d}" for d in range(19, 26)]
 
 
 def test_namen_haakjes_met_komma_en_label_na_dubbelepunt():
@@ -268,11 +292,9 @@ def test_vreemde_met_voornaam_van_collega_is_geen_collega():
 
 def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
     r, gezet, _, _ = ronde(terug=lambda its: [its[0]["uniek"]])
-    assert ("Een dagitem staat niet zo op het bord of werd opgepakt", "claude-code") in r.noden
+    assert ("Een dagitem staat niet zo op het bord", "claude-code") in r.noden
     gelezen = []
     assert C.terug_lezen(gezet[:1], lees=lambda u: gelezen.append(u) or [dict(gezet[0], status="klaar")]) == []
-    assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], status="opgepakt")]) == [gezet[0]["uniek"]], \
-        "een opgepakt item volgt de bron niet meer (CB04)"
     assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], inhoud="{}", status="klaar")]) == [gezet[0]["uniek"]]
     assert C.terug_lezen(gezet[:1], lees=lambda u: [dict(gezet[0], voor="h-architects", status="klaar")]) == [gezet[0]["uniek"]]
     assert gelezen == [gezet[0]["uniek"]]

@@ -119,3 +119,16 @@ Bewust open: wie begon, toon, weekpatronen (werkwijze v1 punt 2). Daar is geen m
 | CB15 termijn voor bekend | middel | geen zevendaagse keuze van Mehdi: zijn optie noemde geen termijn. Negentig dagen staat nu uitdrukkelijk bij keuze 1 en in de werkwijze; een andere termijn is zijn beslissing |
 | CB16 onbekend kanaal | middel | telt als kanaal `overig`, zonder namen, met nood |
 | CB04 opgepakt | middel | de teruglezing eist status klaar; een opgepakt dagitem geeft een nood. Niemand pakt het vandaag op (tests op De Dagbundelaar en De Levenscoach) |
+
+## Verwerking controle 4 (26-10-2026): ontwerp herbekeken
+
+Drie rondes na elkaar vonden een naam die via een leesgrens op datum ontsnapte (CB01, CB14, CB17, CB18). Stopregel
+punt 4.7: de oorzaak is het venster zelf, niet het geval. Nieuw ontwerp: de runner leest de hele gesprekkentabel
+(1508 rijen op 26-10-2026), zonder datumgrens.
+
+| punt | ernst | verwerking |
+|---|---|---|
+| CB17 privé ouder dan negentig dagen | hoog | hele tabel gelezen: wie ooit privé was, is voor mail geen bekende |
+| CB18 dubbel van de nacht ervoor | hoog | hele tabel gelezen: de keten van dubbels en sessies is altijd volledig |
+| CB19 bekend buiten negentig dagen | middel | bekendheid voor mail alleen uit gesprekken vanaf vandaag min negentig dagen |
+| CB04 opgepakt item | middel | nieuw veld `vervang` in `/api/klaarzet` (mijnagents/app.py): ook een opgepakt item volgt de bron, zonder kopie in klaarzet_revisie; test in mijnagents/test_klaarzet_revisie.py |
