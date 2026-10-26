@@ -484,5 +484,20 @@ for tekst, verwacht in [
     t22, _ = S.toepassen(tekst)
     check(f"harde regelovergang in een opnamezin: '{tekst[:35]}'", t22 == verwacht and not any(r == "S4" for r, _ in S.controleer(t22)), repr(t22))
 
+# Drieëntwintigste review 26-10-2026: een opnamezin met twee harde regelovergangen
+for tekst, verwacht in [("De dakgoot lekt aan de achterzijde.\nDe architect sprak zijn\nvaststellingen ter plaatse\nin. De dorpel ligt 3 cm te laag.",
+                         "De dakgoot lekt aan de achterzijde. De dorpel ligt 3 cm te laag."),
+                        ("De architect sprak\nzijn vaststellingen\nter plaatse in.", "")]:
+    t23, _ = S.toepassen(tekst, "aankoopkeuring")
+    check(f"opnamezin over drie regels: '{tekst[-30:]}'", t23.replace("\n", " ") == verwacht and not any(r == "S4" for r, _ in S.controleer(t23)), repr(t23))
+woorden = "De architect sprak zijn vaststellingen ter plaatse in.".split()
+lek = []
+for a in range(1, len(woorden)):
+    for b in range(a + 1, len(woorden)):
+        tekst = " ".join(woorden[:a]) + "\n" + " ".join(woorden[a:b]) + "\n" + " ".join(woorden[b:])
+        if any(r == "S4" for r, _ in S.controleer(S.toepassen(tekst)[0])) or S.toepassen(tekst)[0]:
+            lek.append(tekst)
+check("elke plaatsing van twee harde regelovergangen in de ingesproken-zin wordt gevangen", not lek, lek[:3])
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

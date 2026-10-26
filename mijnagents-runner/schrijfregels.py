@@ -141,12 +141,23 @@ def _is_s4(kern):
     return _s4_begin(kern) is not None
 
 
-def _loopt_door(zin, volgende):
+def _vooruit(stukken, i, regels=3):
+    """De volgende regels die nog bij dezelfde zin kunnen horen (geen leesteken op het einde, kleine letter vooraan)."""
+    uit = stukken[i]
+    for j in range(i + 1, min(i + regels, len(stukken))):
+        if uit.strip().endswith((".", "!", "?", ";", ":")) or "\n" not in uit or not stukken[j].lstrip()[:1].islower():
+            break
+        uit += stukken[j]
+    return uit
+
+
+def _loopt_door(zin, volgende, vooruit=None):
     """Loopt een S4-zin over een harde regelovergang door naar de volgende regel (die met een kleine letter begint)?
     Ja als de opnamezin pas samen herkenbaar is en in deze regel begint ('volgens de\nopname'), als de volgende regel de
     opnamewoorden voortzet ('verwijst naar\nde opname van het plaatsbezoek'), of als deze regel alleen meta-woorden heeft
     ('De architect\nsprak zijn vaststellingen in'). Een opsomming ('de goot lekt\nde architect sprak ...') loopt niet door."""
-    samen = (zin + volgende).lstrip()
+    vooruit = vooruit or volgende
+    samen = (zin + vooruit).lstrip()   # tot drie regels vooruit: een opnamezin met twee harde regelovergangen (23e review)
     if not _is_s4(zin.strip()) and _begint_in(_s4_begin(samen), zin):
         return True
     if _is_s4(zin.strip()) and re.search(r"\b(?:opname|geluidsopname|transcript|tijdstip|haakjes|recording)\b", volgende, re.I):
@@ -197,7 +208,7 @@ def _opname_weg(tekst):
         # een harde regelovergang midden in een opnamezin: de regel eindigt zonder leesteken, de volgende begint klein,
         # en pas samen is het een S4-zin; dan worden ze samen beoordeeld
         while (i < len(stukken) and "\n" in zin and not zin.strip().endswith((".", "!", "?", ";", ":"))
-               and stukken[i].lstrip()[:1].islower() and _loopt_door(zin, stukken[i])):
+               and stukken[i].lstrip()[:1].islower() and _loopt_door(zin, stukken[i], _vooruit(stukken, i))):
             zin += stukken[i]
             i += 1
         kern = zin.strip()
