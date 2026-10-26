@@ -709,11 +709,12 @@ def test_vaststelling_noden_staan_in_de_lijst():
     import re
     bron = inspect.getsource(D.vastleggen)
     letterlijk = re.findall(r'r\.nood\(\s*"([^"]+)"', bron)
-    assert len(letterlijk) >= 5, letterlijk
+    assert len(letterlijk) >= 4, letterlijk
     for tekst in letterlijk:
         assert tekst.startswith(D.VASTSTELLING_NODEN), tekst
-    assert set(re.findall(r'r\.nood\(\s*f?"?\{?(MAIL\w+)', bron)) == {"MAIL_NIET_GELEZEN", "MAILNOOD"}, bron
-    assert {D.MAILNOOD, D.MAIL_NIET_GELEZEN} <= set(D.VASTSTELLING_NODEN)
+    constanten = set(re.findall(r'r\.nood\(\s*f?"?\{?([A-Z][A-Z_]+)', bron))
+    assert constanten == {"MAIL_NIET_GELEZEN", "MAILNOOD", "LOCATIENOOD"}, constanten
+    assert {getattr(D, c) for c in constanten} <= set(D.VASTSTELLING_NODEN)
     # en KETEN_NODEN het begin van elke nood die main() zelf geeft (de bundelnoden komen uit bundelen())
     eigen = re.findall(r'r\.nood\(\s*"([^"]+)"', inspect.getsource(D.main))
     assert len(eigen) >= 5, eigen
@@ -775,13 +776,22 @@ def test_c1_c4_echte_ronde_sluit_alleen_wat_ze_nakeek():
     h = _echte_ronde(False, [hot, foto], faal)
     assert teksten(h) == {hot["tekst"], "Dagvaststelling mislukt in de ochtendronde, zie werkverslag"}, h
     h = _echte_ronde(False, None, faal)
-    assert "nood" not in h and h["status"] in ("klaar", "waakt"), h
+    assert h.get("nood_sluiten") is False and h["status"] in ("klaar", "waakt"), h
+    assert teksten(h) == {"Dagvaststelling mislukt in de ochtendronde, zie werkverslag"}, "nieuwe noden komen er wel bij"
     h = _echte_ronde(True, [hot, agenda, foto], goed)
     assert teksten(h) == {foto["tekst"]}, h
     h = _echte_ronde(True, None, goed)
-    assert "nood" not in h and h["status"] in ("klaar", "waakt"), h
+    assert h.get("nood_sluiten") is False and h["status"] in ("klaar", "waakt"), h
     h = _echte_ronde(False, [hot, foto], goed, bundelnood=[foto])
-    assert teksten(h) == {foto["tekst"]}, "een geslaagde ochtend kijkt alles na: de oude mailnood sluit"
+    assert teksten(h) == {foto["tekst"]}, "een geslaagde ochtend kijkt het lezen na: de oude mailnood sluit"
+    assert "nood_sluiten" not in h, h
+    # review 27-10-2026: wat van oudere dagen van het nachtvenster afhangt, kijkt alleen de nacht na
+    locatie = {"tekst": D.LOCATIENOOD, "wie": "claude-code"}
+    plafond = {"tekst": f"{D.MAILNOOD}: info@proef.test (te veel berichten)", "wie": "claude-code"}
+    h = _echte_ronde(False, [locatie, plafond, agenda], goed)
+    assert teksten(h) == {locatie["tekst"], plafond["tekst"]}, h
+    h = _echte_ronde(True, [locatie, plafond], goed)
+    assert teksten(h) == set(), "de nacht kijkt ze na en sluit ze"
     # Codex-controle mailnood 5: een ronde met de hand (--dag, --venster) kijkt niet alles na: ze sluit niets, voegt
     # nieuwe noden toe, en haar taak begint met de nachttaak, die het ochtendbericht nooit vrijgeeft
     import ochtend
@@ -791,6 +801,22 @@ def test_c1_c4_echte_ronde_sluit_alleen_wat_ze_nakeek():
         assert h["taak"].startswith(ochtend.NACHTTAAK), h
     h = _echte_ronde(False, [hot], faal, handmatig=True)
     assert teksten(h) == {hot["tekst"], "Dagvaststelling mislukt in de ochtendronde, zie werkverslag"}, h
+
+def test_review_dropbox_ook_s_ochtends_over_het_venster():
+    """Review 27-10-2026: de ochtend legt alleen gisteren vast, maar kijkt de Dropbox-ontvangst na over het hele
+    nachtvenster. Anders sloot ze de nood "Dagboek nog niet bevestigd in Dropbox" elke werkdag zonder iets na te kijken,
+    net voor het ochtendbericht; met het ontvangstbewijs gaat hij dicht."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        ronde(w, dagen=("2026-11-05",))                                     # de nacht schreef een oudere dag
+        r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
+        dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
+        pad = os.path.join(m, "dagboek", "2026", "2026-11-05.md")
+        with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
+            f.write(f"{D._sha(lees(pad))}  ./2026/2026-11-05.md\n")
+        r2, d2 = ronde(w, dagen=("2026-11-10",))
+    assert dropbox and "Dropbox open: 1" in d, (r.noden, d)
+    assert not [n for n in r2.noden if n.startswith("Dagboek nog niet bevestigd")] and "Dropbox open: 0" in d2, d2
 
 def _kopie(pad, uren, vanaf):
     d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [
@@ -967,7 +993,7 @@ def test_c3_geen_eigen_mapnaam_in_de_reden():
     import postvak as echt
 
     def koppen(adres, m_, sinds=None, plafond=1000, inhoud=None):
-        if m_ == "INBOX.Klant Proefbedrijf":
+        if m_ in ("INBOX.Klant Proefbedrijf", "INBOX.Klant Derde"):
             raise TimeoutError("traag")
         if m_ == "INBOX.Klant Testzaak":
             return [{"datum": f"{DAG}T08:00:00+00:00"}] * plafond
@@ -977,7 +1003,8 @@ def test_c3_geen_eigen_mapnaam_in_de_reden():
 
     PV = Module(wachten=lambda: {"mail-info": {"postvakken": ["info@proef.test"], "firma": "HA"}},
                 postvak=lambda a: {"adres": a}, mapnamen=lambda mb: {"inbox", "sent"}, VERZONDEN=echt.VERZONDEN,
-                mappen_van=lambda a: ["INBOX", "INBOX.Klant Proefbedrijf", "INBOX.Klant Testzaak"], koppen=koppen)
+                mappen_van=lambda a: ["INBOX", "INBOX.Klant Proefbedrijf", "INBOX.Klant Testzaak", "INBOX.Klant Derde"],
+                koppen=koppen)
     herstel = met_module("postvak", PV)
     try:
         o, _, _ = D._lees_mail([DAG])
@@ -986,7 +1013,8 @@ def test_c3_geen_eigen_mapnaam_in_de_reden():
     o = o["info@proef.test"]
     assert o["onvolledig"] == ["INBOX niet leesbaar", "een eigen map niet leesbaar",
                                f"een eigen map: meer dan {D.PLAFOND} berichten"], o
-    assert o["details"] == ["INBOX: ConnectionError", "een eigen map: TimeoutError"], o
+    # review 27-10-2026: twee eigen mappen die falen, geven een reden (anders een andere hash bij elk aantal), twee details
+    assert o["details"] == ["INBOX: ConnectionError", "een eigen map: TimeoutError", "een eigen map: TimeoutError"], o
     assert not any("Klant" in r for r in o["onvolledig"] + o["details"]), o
 
 

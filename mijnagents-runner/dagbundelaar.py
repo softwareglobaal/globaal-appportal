@@ -270,6 +270,7 @@ def main():
             if kbegin is not None and not keten.get("einde") and nu - kbegin <= timedelta(hours=3):
                 zoom_gelezen = ((keten.get("stappen") or {}).get("zoom-wacht") or {}).get("exit") == 0
         dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
+        vastgesteld = False
         try:
             delen.append(vastleggen(r, dagen, zoom_gelezen=zoom_gelezen))
             if NACHT and not DAG_GEGEVEN:
@@ -279,6 +280,7 @@ def main():
                     gedaan = lees_json(INHAALSTAAT)
                     gedaan.update({d: nu.isoformat() for d in inhaal})
                     _schrijf(INHAALSTAAT, json.dumps(gedaan, indent=1, sort_keys=True))
+            vastgesteld = True
         except Exception as e:  # noqa: BLE001
             if NACHT:
                 raise
@@ -298,7 +300,16 @@ def main():
             # Codex-controle mailnood 4: de nacht kijkt de bundels niet na (bundelen() loopt alleen 's ochtends), dus
             # sluit ze hun noden niet; die van de vaststelling en de keten wel.
             behoud(r, lambda t: not t.startswith(VASTSTELLING_NODEN + KETEN_NODEN))
+        elif vastgesteld:
+            # Review 27-10-2026: de ochtend legt alleen gisteren vast. Een locatienood of een postvak op het plafond kan
+            # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na.
+            behoud(r, alleen_nacht)
         r.detail = "; ".join(d for d in delen if d)
+
+
+def alleen_nacht(tekst):
+    """Een nood die van de dagen van het nachtvenster afhangt, niet van gisteren alleen (review 27-10-2026)."""
+    return tekst.startswith(LOCATIENOOD) or (tekst.startswith(MAILNOOD) and tekst.endswith("(te veel berichten)"))
 
 
 def behoud(r, houden):
@@ -582,10 +593,11 @@ SYSTEEMPYTHON = "/usr/bin/python3"
 PLAFOND = 2000                                                # zoveel koppen per map; meer is niet volledig gelezen
 MAILNOOD = "Mail niet volledig gelezen voor de dagvaststelling"  # + ": postvak (soort)"; zonder het staartje: voor 26-10
 MAIL_NIET_GELEZEN = "Mail niet gelezen voor de dagvaststelling"
+LOCATIENOOD = "Locatie niet gelezen voor de dagvaststelling"
 # Het begin van elke nood die vastleggen() geeft; een mislukte ochtendvaststelling laat die open (Codex-controle 3). Een
 # test houdt deze lijst gelijk met de noden in vastleggen().
 VASTSTELLING_NODEN = ("Dagboek nog niet bevestigd in Dropbox", "Agenda niet volledig gelezen voor de dagvaststelling",
-                      "Locatie niet gelezen voor de dagvaststelling", "WhatsApp: de WhatsApp-wacht leest",
+                      LOCATIENOOD, "WhatsApp: de WhatsApp-wacht leest",
                       "Telefoon: de Belwacht leest", MAIL_NIET_GELEZEN, MAILNOOD)
 # Het begin van de noden die main() zelf geeft over de nacht- en ochtendketen. Samen met VASTSTELLING_NODEN is dat wat de
 # nachtronde nakijkt; de rest (de bundels) laat ze open (Codex-controle 4).
@@ -633,7 +645,9 @@ def _lees_mail(dagen):
         # Overleg 26-10-2026 (K2): de soort is vast en geeft de nood (N10). De reden gaat naar het dagbestand en telt mee
         # in zijn hash, dus ook die is vast; wat wisselt (uren, fouttype) staat alleen in het detail, voor het logboek.
         # Anders kreeg elke dag van het venster elke nacht een nieuwe versie zolang een kopie oud bleef (lens 26-10).
-        waar["onvolledig"].append(reden)
+        # Een reden staat er een keer, ook als twee eigen mappen falen (review 27-10-2026); het detail per map wel.
+        if reden not in waar["onvolledig"]:
+            waar["onvolledig"].append(reden)
         waar.setdefault("soorten", []).append(soort)
         if detail:
             waar.setdefault("details", []).append(detail)
@@ -858,14 +872,17 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     if fouten:
         ag.log("teruglezen", "fout", "; ".join(fouten))
         raise RuntimeError("dagvaststelling niet teruggelezen: " + "; ".join(fouten[:5]))
-    # Dropbox (D9, E6): een dag van eergisteren of ouder zonder ontvangstbewijs met dezelfde sha256 staat er niet.
-    open_ = [d for d in dagen if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
+    # Dropbox (D9, E6): een dag van eergisteren of ouder zonder ontvangstbewijs met dezelfde sha256 staat er niet. Over het
+    # hele nachtvenster, ook 's ochtends: de ochtend legt alleen gisteren vast en sloot deze nood anders elke werkdag
+    # zonder iets na te kijken, net voor het ochtendbericht (review 27-10-2026).
+    gekeken = sorted(set(dagen) | {d for d in V.venster(nu, NACHTVENSTER) if os.path.exists(dagpad(d))})
+    open_ = [d for d in gekeken if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
     if open_:
         r.nood("Dagboek nog niet bevestigd in Dropbox: de sync van Data uit Mehdi op de Mac haalt het niet op", wie="mehdi")
     if ongelezen:
         r.nood("Agenda niet volledig gelezen voor de dagvaststelling", wie="claude-code")
     if locatiefout:
-        r.nood("Locatie niet gelezen voor de dagvaststelling", wie="claude-code")
+        r.nood(LOCATIENOOD, wie="claude-code")
     if kanalen["whatsapp"] != "aangesloten":
         r.nood("WhatsApp: de WhatsApp-wacht leest de databank op de Mac nog niet (fase 2 van de dagvaststelling)",
                wie="claude-code")
