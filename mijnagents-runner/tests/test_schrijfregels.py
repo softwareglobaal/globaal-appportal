@@ -418,5 +418,16 @@ for tekst, verwacht in [(f"A.\n{SP}\n{LG}\nB.", "A.\nB."), (f"A.\n\n{SP}\n\nB.",
     t12, _ = S.toepassen(tekst)
     check(f"regelafstand na weggevallen opnameregels: {tekst[:20]!r}", t12 == verwacht, repr(t12))
 
+# Dertiende review 26-10-2026: geluidsopname is nooit een opmeting; van_markdown houdt de regels van een punt apart
+for zin in ["Volgens de geluidsopname van de expert is de barst 2 mm breed.", "Uit de geluidsopname van de landmeter blijkt dat de grens verschuift.",
+            "Blijkens de geluidsopname door de verzekeringsexpert is de schade beperkt."]:
+    check(f"S4 geluidsopname is nooit een opmeting: '{zin[:40]}'", any(r == "S4" for r, _ in S.controleer(zin)), S.controleer(zin))
+check("S4 'opname van de expert' blijft een opmeting", not S.controleer("Volgens de opname van de expert is de barst 2 mm breed."))
+pl = dict(w, categorieen=[{"naam": "Stukken", "punten": [{"nummer": "2.1", "titel": "Stukken", "datum": "2026-10-01", "fotos": [],
+         "tekst_nl": "Nog te bezorgen aan de architect:\n- het EPB-verslag\n- de keuring, de keurder is niet gekomen"}]}])
+terug = sj.van_markdown(sj.naar_markdown(pl))["categorieen"][0]["punten"][0]["tekst_nl"]
+check("van_markdown houdt de regels van een punt apart", terug == pl["categorieen"][0]["punten"][0]["tekst_nl"], repr(terug))
+check("na het teruglezen grijpt de grendel niet in op een schone lijst", not S.wacht({"t": terug}), S.wacht({"t": terug}))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

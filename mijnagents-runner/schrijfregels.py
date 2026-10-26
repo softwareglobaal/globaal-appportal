@@ -95,7 +95,8 @@ OPNAME_ZINNEN = [
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
     re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _OPMETING + _T + r"*\.?", re.I),
 ]
-OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b" + _OPMETING, re.I)
+# een geluidsopname is altijd een opname, nooit een opmeting: de uitzondering hangt alleen achter "opname"
+OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _OPMETING + r"|geluidsopname\b)", re.I)
 
 # Een markering is een eigen "zin": zo versmelt ze bij een tweede doorgang niet met de zin erna (idempotent).
 _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")

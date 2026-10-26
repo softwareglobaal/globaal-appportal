@@ -405,7 +405,9 @@ def van_markdown(md):
         elif rg.startswith("*") and rg.endswith("*") and punt["tekst_nl"]:
             punt["tekst_en"] = rg.strip("*")
         else:
-            punt["tekst_nl"] = (punt["tekst_nl"] + " " + rg.strip()).strip()
+            # met de regelovergang: naar_markdown schrijft tekst_nl zoals hij is, en de grendel (S1-S7 per regel) mag bij
+            # Herlayout of naar werfapp geen lijstregels samen zien die in de proef apart stonden
+            punt["tekst_nl"] = (punt["tekst_nl"] + "\n" + rg.strip()).strip()
     for rg in secties.get("Foto's niet geplaatst", []):
         m = re.match(r"- (.*?): (.*)", rg)
         if m:
