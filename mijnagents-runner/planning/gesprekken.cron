@@ -9,3 +9,9 @@
 # 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00; 13:00 UTC is 15:00, vanaf 25-10 14:00.
 # Op de VM zetten: python3 mijnagents-runner/planning/gesprekken_cron_zetten.py (tonen), daarna met --zet
 0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py >> /home/ubuntu/agents/keten.log 2>&1; if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: keten niet gestart" >> /home/ubuntu/agents/keten.log; fi
+# De nachtketen van de dagvaststelling (ontwerp docs/ontwerp-dagvaststelling.md v1.2, Codex F9): elke dag om 23:30 UTC
+# (00:30 Brussel in de winter, 01:30 in de zomer) keten.py --nacht: De Zoomwacht en daarna De Dagbundelaar --nacht, die
+# de dag van gisteren en de dertien dagen ervoor vastlegt. Ze schrijft nacht.json, nooit keten.json; het ochtendbericht en
+# het startuur van de keten (ochtend.ketenstart slaat deze regel over) kijken er niet naar. Een bezet slot staat in
+# keten.log, en De Dagbundelaar meldt overdag een nachtketen die niet liep.
+30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py --nacht >> /home/ubuntu/agents/keten.log 2>&1; if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: nachtketen niet gestart" >> /home/ubuntu/agents/keten.log; fi

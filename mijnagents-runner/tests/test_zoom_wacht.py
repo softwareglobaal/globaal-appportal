@@ -1415,8 +1415,11 @@ def test_t30_planning():
     doel, oud = M.samenvoegen(huidig, cron)
     assert oud == 3, oud
     actief = [r for r in doel if r.strip() and not r.startswith("#") and not r.startswith("MAILTO")]
-    keten = [r for r in actief if "keten.py" in r]
+    keten = [r for r in actief if "keten.py" in r and "--nacht" not in r]
     assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), keten
+    # de nachtketen van de dagvaststelling (keten.py --nacht, 23:30 UTC) staat in hetzelfde beheerde blok
+    nacht = [r for r in actief if "keten.py --nacht" in r]
+    assert len(nacht) == 1 and nacht[0].startswith("30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), nacht
     assert "; if [ $? -eq 75 ]; then " in keten[0], "een keten die het slot niet kreeg, staat in keten.log (RZ4-04)"
     assert not any("fathom_wacht.py" in r or "zoom_wacht.py" in r for r in actief), "de losse regels zijn weg"
     # RZ4-04: De Dagbundelaar heeft geen eigen regel meer; hij is de laatste stap van keten.py (tests/test_keten.py)
