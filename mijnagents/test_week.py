@@ -141,7 +141,15 @@ def w02_doorsturen():
     r = C.get("/week", headers=BEHEER)
     plek = r.headers.get("Location", "")
     check("W02 /week stuurt door", r.status_code in (301, 302) and re.search(r"/week/\d{4}-W\d{2}$", plek), (r.status_code, plek))
-    check("W02 naar de huidige week in Brussel", plek.endswith("/week/" + A.week_naam(A.datetime.now(A.BRUSSEL).date())), plek)
+    check("W02 naar de laatst afgesloten week in Brussel (die maakt De Dagbundelaar maandagnacht)",
+          plek.endswith("/week/" + A.laatste_week(A.datetime.now(A.BRUSSEL))), plek)
+    bxl = A.BRUSSEL
+    check("W02 maandag net na middernacht is de laatste week die van gisteren",
+          A.laatste_week(A.datetime(2026, 10, 26, 0, 30, tzinfo=bxl)) == "2026-W43")
+    check("W02 zondagavond is de laatste week nog die ervoor",
+          A.laatste_week(A.datetime(2026, 10, 25, 21, 0, tzinfo=bxl)) == "2026-W42")
+    check("W02 op 4 januari 2027 is de laatste week 2026-W53",
+          A.laatste_week(A.datetime(2027, 1, 4, 9, 0, tzinfo=bxl)) == "2026-W53")
     check("W02 die week opent", pagina(plek[plek.index("/week/"):])[0].status_code == 200)
 
 

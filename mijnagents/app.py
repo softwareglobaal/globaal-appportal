@@ -1824,7 +1824,9 @@ def _week_blokken(e, totaal=False):
     def kanaal(d, *sleutels):
         d = _wk_dict(d)
         if totaal:
-            stand = "niet aangesloten" if _wk_getal(d.get("aangesloten_dagen")) == "0" else None
+            # zonder een aangesloten dag geen getallen, maar de stand van de week: niet aangesloten of onbekend (Codex
+            # fase 2, punt 1: onbekend is nooit 'niet aangesloten')
+            stand = (str(d.get("stand") or "niet aangesloten") if _wk_getal(d.get("aangesloten_dagen")) == "0" else None)
         else:
             stand = None if d.get("stand") == "aangesloten" else str(d.get("stand") or "onbekend")
         return {"stand": stand, "breedte": len(sleutels)} if stand else blok(d, *sleutels)
@@ -1839,11 +1841,18 @@ def _week_blokken(e, totaal=False):
             blok(mail, "binnen", "verzonden", grijs=mail.get("onvolledig") is True)]
 
 
+def laatste_week(nu):
+    """De laatst afgesloten ISO-week in Brussel: die maakt De Dagbundelaar maandagnacht (weekoverzicht.vorige_week).
+    De lopende week is nog niet samengevat (Codex fase 2, punt 3)."""
+    vandaag = nu.astimezone(BRUSSEL).date()
+    return week_naam(vandaag - timedelta(days=vandaag.weekday() + 7))
+
+
 @app.route("/week")
 def week_nu():
     if not mag_beslissen():
         abort(403)
-    return redirect(url_for("week_pagina", week=week_naam(datetime.now(BRUSSEL).date())))
+    return redirect(url_for("week_pagina", week=laatste_week(datetime.now(BRUSSEL))))
 
 
 @app.route("/week/<week>")

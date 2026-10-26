@@ -105,6 +105,14 @@ d2 = WO.dag_samenvatting("2026-10-21", V2, 1)
 check("dag: een ongelezen agenda, Zoom en mail zijn onbekend, nooit nul",
       d2["afspraken"] is None and d2["zoom_chats"] is None and d2["mail"] is None and d2["niet_gepland"]["bezoeken"] is None,
       json.dumps(d2, ensure_ascii=False))
+check("dag (Codex fase 2, punt 1): zonder Zoom-stand en zonder gezien gesprek zijn de gesprekken onbekend, geen nul",
+      d2["gesprekken"]["aantal"] is None and d2["niet_gepland"]["gesprekken"] is None and d2["niet_gepland"]["minuten"] is None,
+      json.dumps(d2, ensure_ascii=False))
+V3 = V.vaststellen("2026-10-22", [], set(), [dict(rij("zoom:meeting:z", "10:00", 20, "Egbert Nergens"), datum="2026-10-22")],
+                   {}, [], "onbekend", None, None, lambda a: False)
+d3 = WO.dag_samenvatting("2026-10-22", V3, 1)
+check("dag: met een gezien gesprek blijft het aantal staan als ondergrens, ook zonder Zoom-stand",
+      d3["gesprekken"]["aantal"] == 1 and d3["niet_gepland"]["gesprekken"] == 1, json.dumps(d3, ensure_ascii=False))
 
 # -------------------------------------------------------------------------------------------------- planning ---
 FIRMA = {"HA": "HARC", "UB": "UNAB"}
@@ -138,6 +146,18 @@ check("planning: privé is een post, hele dag en een andere week tellen niet",
 check("planning: privé en onbekend staan onderaan, de firma's eerst",
       [x["code"] for x in p["uren_per_firma"]][-2:] == ["onbekend", "privé"], str(p["uren_per_firma"]))
 check("planning: de firmanaam komt van de aanroeper (kern)", p["uren_per_firma"][0]["naam"] in ("H-Architects", "UNABO"))
+_werk = afspraak("k1", "13:00", "14:00", "Mehdi: [HA-KO] 2605 - Bertha Verzonnen")
+_prive = dict(_werk, kalender="privé", start=f"{DAG}T11:00:00+00:00", einde=f"{DAG}T12:00:00+00:00", _prive=True)
+_uitkomst = []
+for volgorde in ([_werk, _prive], [_prive, _werk]):
+    q = WO.planning_uren({DAG: volgorde}, [DAG], set(), lambda a: bool(a.get("_prive")), firma_van, {})
+    _uitkomst.append({x["code"]: (x["afspraken"], x["minuten"]) for x in q["uren_per_firma"]})
+check("planning (Codex fase 2, punt 2): dezelfde afspraak op werk en privé, ook in een andere tijdschrijfwijze, is een "
+      "keer privé, in welke volgorde ook", _uitkomst == [{"privé": (1, 60)}, {"privé": (1, 60)}], str(_uitkomst))
+q = WO.planning_uren({DAG: [_werk, dict(_werk, titel=_werk["titel"], kalender="UNABO", _code="UNAB")]}, [DAG], set(),
+                     lambda a: False, lambda a: a.get("_code") or firma_van(a), {})
+check("planning: twee kopieën met een andere firmacode tellen een keer, als onbekend",
+      {x["code"]: x["afspraken"] for x in q["uren_per_firma"]} == {"onbekend": 1}, str(q["uren_per_firma"]))
 check("planning: een ongelezen agenda maakt de planning onvolledig, een ongelezen geheel onbekend",
       WO.planning_uren(PER_DAG, WO.dagen_van("2026-W43"), {"archief"}, lambda a: False, firma_van, {})["stand"] == "onvolledig"
       and WO.planning_uren(PER_DAG, WO.dagen_van("2026-W43"), None, lambda a: False, firma_van, {})["afspraken"] is None)
@@ -167,6 +187,42 @@ check("weekbestand: kort, met voorbehoud, per dag en uren met een Nederlandse ko
       md.startswith("# Week 2026-W43 (19-10 tot 25-10)") and "Voorbehoud:" in md and "- di 20-10: niet vastgesteld" in md
       and "1,0 uur" in md, md[:400])
 check("weekbestand: geen gedachtestreepje", "—" not in md and "–" not in md)
+check("week: een onbekende Zoom-dag staat als voorbehoud: de gesprekken zijn een ondergrens",
+      "gesprekken zijn een ondergrens: Zoom niet elke dag volledig gelezen" in t["voorbehoud"], str(t["voorbehoud"]))
+check("week: de stand van WhatsApp en telefoon over de week",
+      t["whatsapp"]["stand"] == "niet aangesloten" and t["telefoon"]["stand"] == "deels aangesloten", str(t["telefoon"]))
+V4 = V.vaststellen("2026-10-23", [], set(), [], {}, [], "volledig", MAIL, {"whatsapp": "onbekend voor deze dag",
+                                                                          "telefoon": "aangesloten"}, lambda a: False)
+w4 = WO.samenvatten("2026-W43", {"2026-10-23": (V4, 1)}, p, "x")["totaal"]
+check("week (Codex fase 2, punt 1): een onbekende WhatsApp-dag is nooit 'niet aangesloten'",
+      w4["whatsapp"]["stand"] == "onbekend" and "WhatsApp op een dag onbekend" in w4["voorbehoud"]
+      and "WhatsApp niet aangesloten" not in w4["voorbehoud"], json.dumps(w4["whatsapp"]))
+
+# ------------------------------------------------- van begin tot eind: runner, klaarzet en de pagina /week (K5) ---
+BORD = os.path.join(os.path.dirname(os.path.dirname(HIER)), "mijnagents")
+try:
+    import tempfile
+    os.environ["AGENTS_DB"] = os.path.join(tempfile.mkdtemp(), "week.db")
+    os.environ["AGENTS_TOKEN"] = "proef"
+    sys.path.insert(0, BORD)
+    import app as A  # noqa: E402
+except ImportError as e:
+    A = None
+    print(f"  overgeslagen: de pagina /week zonder Flask ({e}); CI installeert Flask voor deze job")
+if A is not None:
+    C = A.app.test_client()
+    r = C.post("/api/klaarzet", headers={"X-Agents-Token": "proef"}, json={"items": [{
+        "van": "dagbundelaar", "voor": "mehdi", "soort": "weekoverzicht", "sleutel": "2026-W43", "titel": "Week 2026-W43",
+        "uniek": "weekoverzicht:2026-W43", "inhoud": json.dumps(w, ensure_ascii=False)}]})
+    pagina = C.get("/week/2026-W43", headers={"X-authentik-groups": "admin", "X-authentik-username": "proef"})
+    html = pagina.get_data(as_text=True)
+    bak = C.get("/api/klaarzet?uniek=weekoverzicht:2026-W43", headers={"X-Agents-Token": "proef"}).get_json() or {}
+    inhoud = "".join(str(x.get("inhoud") or "") for x in bak.get("items") or [])
+    check("van begin tot eind: het weekoverzicht van de runner staat op het bord en op de pagina",
+          r.status_code == 200 and pagina.status_code == 200 and json.loads(inhoud)["week"] == "2026-W43"
+          and "niet vastgesteld" in html and "H-Architects" in html, f"{r.status_code} {pagina.status_code} {inhoud[:80]}")
+    check("van begin tot eind (K5): geen persoon, ontvanger of privétitel in klaarzet of op de pagina",
+          not [n for n in namen if n in html or n in inhoud], str([n for n in namen if n in html or n in inhoud]))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

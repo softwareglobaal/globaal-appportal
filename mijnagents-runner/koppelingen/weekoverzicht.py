@@ -75,14 +75,21 @@ def dag_samenvatting(dag, v, dagversie=None):
     wa = v.get("whatsapp") or {}
     tel = v.get("telefoon") or {}
     mail = v.get("mail")
+    # Zoals de dagtekst (dagvaststelling.tekst): zonder stand van De Zoomwacht en zonder een gezien gesprek is het aantal
+    # onbekend, geen nul (Codex fase 2, punt 1). Wat wel gezien is, blijft staan als ondergrens.
+    zoom_onbekend = (zoom.get("stand") or ONBEKEND) == ONBEKEND
+    chatstand = zoom.get("chatstand") or zoom.get("stand") or ONBEKEND
+    praat = ng.get("gesprekken") or []
     return {
         "dag": dag, "vastgesteld": True, "dagversie": dagversie,
         "afspraken": afspraken,
-        "niet_gepland": {"gesprekken": len(ng.get("gesprekken") or []),
-                         "minuten": sum(int(g.get("minuten") or 0) for g in ng.get("gesprekken") or []),
+        "niet_gepland": {"gesprekken": None if zoom_onbekend and not praat else len(praat),
+                         "minuten": None if zoom_onbekend and not praat else sum(int(g.get("minuten") or 0) for g in praat),
                          "bezoeken": None if bezoeken is None else len(bezoeken)},
-        "gesprekken": {k: _getal(gesprekken.get(k)) for k in ("aantal", "minuten", "met_opname", "alleen_zoom")},
-        "zoom_chats": None if zoom.get("chatstand", zoom.get("stand")) == ONBEKEND else _getal(zoom.get("chats")),
+        "gesprekken": ({k: None for k in ("aantal", "minuten", "met_opname", "alleen_zoom")}
+                       if zoom_onbekend and not _getal(gesprekken.get("aantal")) else
+                       {k: _getal(gesprekken.get(k)) for k in ("aantal", "minuten", "met_opname", "alleen_zoom")}),
+        "zoom_chats": None if chatstand == ONBEKEND and not _getal(zoom.get("chats")) else _getal(zoom.get("chats")),
         "whatsapp": {"stand": wa.get("stand") or "niet aangesloten",
                      **{k: _getal(wa.get(k)) for k in ("gesprekken", "berichten", "oproepen", "minuten")}},
         "telefoon": {"stand": tel.get("stand") or "niet aangesloten",
@@ -121,12 +128,29 @@ def totaal(dagen):
            "zoom_chats": _optellen(d.get("zoom_chats") for d in vast)}
     if any(d.get("zoom_chats") is None for d in vast):
         voorbehoud.append("Zoom-chats op een dag niet gekend")
+    if any((d.get("standen") or {}).get("zoom") != "volledig" for d in vast):
+        voorbehoud.append("gesprekken zijn een ondergrens: Zoom niet elke dag volledig gelezen")
     for kanaal, sleutels, naam in (("whatsapp", ("gesprekken", "berichten", "oproepen", "minuten"), "WhatsApp"),
                                    ("telefoon", ("oproepen", "minuten"), "telefoon")):
+        standen = [(d.get(kanaal) or {}).get("stand") or ONBEKEND for d in vast]
         aan = [d for d in vast if (d.get(kanaal) or {}).get("stand") == "aangesloten"]
-        uit[kanaal] = {**{k: _optellen(d[kanaal].get(k) for d in aan) for k in sleutels}, "aangesloten_dagen": len(aan)}
-        if len(aan) < len(vast):
-            voorbehoud.append(f"{naam} niet elke dag aangesloten" if aan else f"{naam} niet aangesloten")
+        # Onbekend is nooit 'niet aangesloten' (Codex fase 2, punt 1): elke stand die geen van beide is, is onbekend.
+        if standen and all(s == "aangesloten" for s in standen):
+            stand = "aangesloten"
+        elif standen and all(s == "niet aangesloten" for s in standen):
+            stand = "niet aangesloten"
+        elif any(s not in ("aangesloten", "niet aangesloten") for s in standen):
+            stand = ONBEKEND
+        else:
+            stand = "deels aangesloten"
+        uit[kanaal] = {**{k: _optellen(d[kanaal].get(k) for d in aan) for k in sleutels}, "aangesloten_dagen": len(aan),
+                       "stand": stand if standen else ONBEKEND}
+        if stand == "niet aangesloten":
+            voorbehoud.append(f"{naam} niet aangesloten")
+        elif stand == ONBEKEND:
+            voorbehoud.append(f"{naam} op een dag onbekend")
+        elif stand == "deels aangesloten":
+            voorbehoud.append(f"{naam} niet elke dag aangesloten")
     mails = [d.get("mail") for d in vast]
     gelezen = [m for m in mails if m is not None]
     uit["mail"] = None if not gelezen else {"binnen": _optellen(m.get("binnen") for m in gelezen),
@@ -154,25 +178,32 @@ def planning_uren(afspraken_per_dag, dagen, ongelezen, is_prive, firma_van, firm
     overlappende afspraken tellen elk; een afspraak zonder einde telt mee zonder minuten."""
     if ongelezen is None:
         return {"stand": ONBEKEND, "uren_per_firma": [], "afspraken": None, "minuten": None}
-    posten, gezien = {}, set()
+    # Eerst de kopieën van dezelfde afspraak samen (begin en einde als tijdstip, dus ook in een andere schrijfwijze),
+    # dan pas indelen: zo hangt de post niet af van welke agenda eerst gelezen werd (Codex fase 2, punt 2). Privé gaat
+    # voor (twijfel is privé); verschillende firmacodes zijn onbekend.
+    groepen = {}
     for dag in dagen:
         for a in afspraken_per_dag.get(dag) or []:
             if a.get("hele_dag") or "T" not in str(a.get("start") or ""):
                 continue
-            identiteit = (a.get("start"), a.get("einde"), " ".join(str(a.get("titel") or "").lower().split()))
-            if identiteit in gezien:
-                continue
-            gezien.add(identiteit)
-            if is_prive(a):
-                code = PRIVE
-            else:
-                code = firma_van(a) or ONBEKEND
-            minuten = 0
-            if a.get("einde"):
-                minuten = max(int((_tijd(a["einde"]) - _tijd(a["start"])).total_seconds() // 60), 0)
-            p = posten.setdefault(code, {"code": code, "naam": firmanamen.get(code) or code, "afspraken": 0, "minuten": 0})
-            p["afspraken"] += 1
-            p["minuten"] += minuten
+            einde = _tijd(a["einde"]).astimezone(BRUSSEL).isoformat() if a.get("einde") else ""
+            identiteit = (_tijd(a["start"]).astimezone(BRUSSEL).isoformat(), einde,
+                          " ".join(str(a.get("titel") or "").lower().split()))
+            groepen.setdefault(identiteit, []).append(a)
+    posten = {}
+    for kopieen in groepen.values():
+        a = kopieen[0]
+        if any(is_prive(k) for k in kopieen):
+            code = PRIVE
+        else:
+            codes = {firma_van(k) for k in kopieen} - {None}
+            code = codes.pop() if len(codes) == 1 else ONBEKEND
+        minuten = 0
+        if a.get("einde"):
+            minuten = max(int((_tijd(a["einde"]) - _tijd(a["start"])).total_seconds() // 60), 0)
+        p = posten.setdefault(code, {"code": code, "naam": firmanamen.get(code) or code, "afspraken": 0, "minuten": 0})
+        p["afspraken"] += 1
+        p["minuten"] += minuten
     if ONBEKEND in posten:
         posten[ONBEKEND]["naam"] = "zonder of met onduidelijke firmacode"
     rij = sorted((p for c, p in posten.items() if c not in (ONBEKEND, PRIVE)), key=lambda p: (-p["minuten"], p["code"]))
