@@ -714,6 +714,74 @@ def test_vaststelling_noden_staan_in_de_lijst():
         assert tekst.startswith(D.VASTSTELLING_NODEN), tekst
     assert set(re.findall(r'r\.nood\(\s*f?"?\{?(MAIL\w+)', bron)) == {"MAIL_NIET_GELEZEN", "MAILNOOD"}, bron
     assert {D.MAILNOOD, D.MAIL_NIET_GELEZEN} <= set(D.VASTSTELLING_NODEN)
+    # en KETEN_NODEN het begin van elke nood die main() zelf geeft (de bundelnoden komen uit bundelen())
+    eigen = re.findall(r'r\.nood\(\s*"([^"]+)"', inspect.getsource(D.main))
+    assert len(eigen) >= 5, eigen
+    for tekst in eigen:
+        assert tekst.startswith(D.KETEN_NODEN), tekst
+
+def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=()):
+    """Een ronde van main() door de echte gedeelde Ronde (bord.py) met een nagebootst bord. open_noden: wat /api/nood
+    geeft (None: onleesbaar). Geeft de laatste hartslag zoals die naar het bord ging."""
+    gezet = []
+
+    def call(pad, payload=None, method=None):
+        if pad == f"/api/agent/{D.NAAM}/werkwijze" and payload is None:
+            with open(os.path.join(os.path.dirname(D.__file__), "werkwijze", "dagbundelaar.md"), encoding="utf-8") as f:
+                return {"werkwijze": f.read()}
+        if pad == "/api/agents":
+            return []
+        if pad == "/api/nood":
+            if open_noden is None:
+                raise OSError("bord onbereikbaar")
+            return {"nood": [dict(n, naam=D.NAAM) for n in open_noden]}
+        if pad == "/agent-status":
+            gezet.append(payload)
+        return {}
+
+    oud = (bord.call, D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen)
+    bord.call, D.NACHT, D.DAG_GEGEVEN = call, nacht, True
+    nu = datetime.now(timezone.utc).isoformat()
+    D.lees_nacht = lambda: ({"start": nu, "stappen": {"zoom-wacht": {"exit": 0}}} if nacht else
+                            {"start": nu, "einde": nu, "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}})
+    D.vastleggen = vastleggen
+    D.bundelen = lambda: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            D.main()
+    finally:
+        bord.call, D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen = oud
+    return gezet[-1]
+
+
+def test_c1_c4_echte_ronde_sluit_alleen_wat_ze_nakeek():
+    """Codex-controle mailnood 4, met de echte Ronde: een mislukte ochtendvaststelling laat haar open noden open en
+    sluit een opgeloste bundelnood; een geslaagde nacht sluit de vaststellingsnoden die ze niet meer geeft, maar laat de
+    bundelnoden open (die kijkt alleen de ochtend na). Is het bord onleesbaar, dan gaat er geen noodlijst mee en sluit
+    het bord niets; de ronde breekt niet, want het ochtendbericht wacht op haar."""
+    hot = {"tekst": f"{D.MAILNOOD}: mehdichegini@hotmail.com (kopie niet vers)", "wie": "claude-code"}
+    agenda = {"tekst": "Agenda niet volledig gelezen voor de dagvaststelling", "wie": "claude-code"}
+    foto = {"tekst": "Foto's van gisteren wachten op validatie", "wie": "mehdi"}
+
+    def faal(r, dagen, zoom_gelezen=None):
+        raise RuntimeError("dagvaststelling niet teruggelezen")
+
+    def goed(r, dagen, zoom_gelezen=None):
+        return "1 dag(en) vastgesteld"
+
+    def teksten(h):
+        return {n["tekst"] for n in h["nood"]}
+
+    h = _echte_ronde(False, [hot, foto], faal)
+    assert teksten(h) == {hot["tekst"], "Dagvaststelling mislukt in de ochtendronde, zie werkverslag"}, h
+    h = _echte_ronde(False, None, faal)
+    assert "nood" not in h and h["status"] in ("klaar", "waakt"), h
+    h = _echte_ronde(True, [hot, agenda, foto], goed)
+    assert teksten(h) == {foto["tekst"]}, h
+    h = _echte_ronde(True, None, goed)
+    assert "nood" not in h and h["status"] in ("klaar", "waakt"), h
+    h = _echte_ronde(False, [hot, foto], goed, bundelnood=[foto])
+    assert teksten(h) == {foto["tekst"]}, "een geslaagde ochtend kijkt alles na: de oude mailnood sluit"
 
 def _kopie(pad, uren, vanaf):
     d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [

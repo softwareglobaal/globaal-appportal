@@ -343,6 +343,10 @@ class Ronde:
         self.werkwijze = ""
         self._bronnen = {}
         self._noden = []
+        # Weet de agent niet welke van zijn noden nog gelden (de open lijst van het bord was onleesbaar en hij kon ze niet
+        # allemaal nakijken), dan zet hij dit: de ronde stuurt dan geen noodlijst en het bord sluit niets (Codex-controle
+        # mailnood 4 van De Dagbundelaar, 27-10-2026).
+        self.noden_onbekend = False
         for naam, inhoud in dict(bronnen).items():
             self.bron(naam, inhoud)
         for n in begin_noden:
@@ -439,7 +443,7 @@ class Ronde:
                                 nood=self.agent.noden_bij_breuk(self._noden))
             return False
         self.agent.hartslag("klaar" if not self._noden else "waakt",
-                            taak=self.taak, detail=self.detail, nood=self._noden)
+                            taak=self.taak, detail=self.detail, nood=None if self.noden_onbekend else self._noden)
         return False
 
 

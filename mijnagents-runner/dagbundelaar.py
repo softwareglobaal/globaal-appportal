@@ -280,14 +280,27 @@ def main():
             # nachtronde haalt de dag in, en de nood zegt het.
             ag.log(f"dag {DAG}", "fout", f"dagvaststelling mislukt: {type(e).__name__}: {str(e)[:200]}")
             r.nood("Dagvaststelling mislukt in de ochtendronde, zie werkverslag", wie="claude-code")
-            # Codex-controle mailnood 2 en 3 (C1): deze ronde maakte de vaststelling niet af en sluit dus haar noden niet;
-            # die bleven ongecontroleerd. De noden van de bundels wel, want bundelen() liep. Weet het bord niet wat open
-            # staat, dan breekt de ronde niet: het ochtendbericht wacht op deze ronde (ochtend.py), en een bord dat geen
-            # noden geeft, neemt de afsluitende lijst zelden aan. De nachtronde (die breekt) zegt het dan.
-            for n in ag.open_noden() or []:
-                if n["tekst"].startswith(VASTSTELLING_NODEN):
-                    r.nood(n["tekst"], wie=n["wie"])
+            # Codex-controle mailnood 2 tot 4 (C1): deze ronde maakte de vaststelling niet af en sluit dus haar noden
+            # niet; de noden van de bundels wel, want bundelen() liep. De ronde breekt niet, want het ochtendbericht
+            # wacht op haar (ochtend.py).
+            behoud(r, lambda t: t.startswith(VASTSTELLING_NODEN))
+        if NACHT:
+            # Codex-controle mailnood 4: de nacht kijkt de bundels niet na (bundelen() loopt alleen 's ochtends), dus
+            # sluit ze hun noden niet; die van de vaststelling en de keten wel.
+            behoud(r, lambda t: not t.startswith(VASTSTELLING_NODEN + KETEN_NODEN))
         r.detail = "; ".join(d for d in delen if d)
+
+
+def behoud(r, houden):
+    """Codex-controle mailnood 3 en 4: de open noden waarvoor houden(tekst) waar is, kijkt deze ronde niet na; ze blijven
+    open. Weet het bord niet wat open staat, dan stuurt de ronde geen noodlijst, zodat het bord niets sluit."""
+    bestaand = ag.open_noden()
+    if bestaand is None:
+        r.noden_onbekend = True
+        return
+    for n in bestaand:
+        if houden(n["tekst"]):
+            r.nood(n["tekst"], wie=n["wie"])
 
 
 # ------------------------------------------------------------------------------------------- dagvaststelling ---
@@ -564,6 +577,10 @@ MAIL_NIET_GELEZEN = "Mail niet gelezen voor de dagvaststelling"
 VASTSTELLING_NODEN = ("Dagboek nog niet bevestigd in Dropbox", "Agenda niet volledig gelezen voor de dagvaststelling",
                       "Locatie niet gelezen voor de dagvaststelling", "WhatsApp: de WhatsApp-wacht leest",
                       "Telefoon: de Belwacht leest", MAIL_NIET_GELEZEN, MAILNOOD)
+# Het begin van de noden die main() zelf geeft over de nacht- en ochtendketen. Samen met VASTSTELLING_NODEN is dat wat de
+# nachtronde nakijkt; de rest (de bundels) laat ze open (Codex-controle 4).
+KETEN_NODEN = ("Nachtronde buiten de nachtketen", "De Zoomwacht faalde in de nachtketen",
+               "De nachtketen van de dagvaststelling", "Dagvaststelling mislukt in de ochtendronde")
 
 
 def lees_mail(dagen):
