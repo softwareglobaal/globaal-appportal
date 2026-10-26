@@ -280,18 +280,22 @@ def markdown(week, uit, meta):
 
 
 def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
+    """<week>.json komt als laatste, via een tijdelijk bestand: dat bestand zegt 'geslaagd' (de weeknood van de
+    Agendawacht en al_gedaan lezen het). Faalt het markdownbestand of de weekregels, dan bestaat het niet en kan de
+    week opnieuw (Codex-controle fase 1, punt 1)."""
     nu_utc = nu_utc or datetime.now(timezone.utc)
     WEEKMAP.mkdir(parents=True, exist_ok=True)
     naam = f"{week}-proef" if proef else week
-    (WEEKMAP / f"{naam}.json").write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"),
-                                                      "ronde": ronde, "model": meta, **uit},
-                                                     ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (WEEKMAP / f"{naam}.md").write_text(markdown(week, uit, meta), encoding="utf-8")
     if not proef:
         REGELS_WEEK.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"),
                                            "bron": f"weekconsolidatie/{week}.json",
                                            "categorieen": uit["regels_vooraf"]}, ensure_ascii=False, indent=1) + "\n",
                                encoding="utf-8")
+    tmp = WEEKMAP / f"{naam}.json.tmp"
+    tmp.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"), "ronde": ronde,
+                               "model": meta, **uit}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, WEEKMAP / f"{naam}.json")
 
 
 def stand_schrijven(week, ok, fout="", ronde=False, nu_utc=None):
@@ -394,7 +398,13 @@ def main():
                 print(f"  agenda mislukt: {type(e2).__name__}: {e2}", file=sys.stderr)
         return 1
     uit = schoon(ruw)
-    schrijf(week, uit, meta, ronde, proef=droog)
+    try:
+        schrijf(week, uit, meta, ronde, proef=droog)
+    except Exception as e:  # noqa: BLE001
+        print(f"weekconsolidatie niet weggeschreven: {type(e).__name__}: {e}", file=sys.stderr)
+        if not droog:
+            stand_schrijven(week, False, f"niet weggeschreven: {type(e).__name__}: {e}", ronde)
+        return 1
     print(markdown(week, uit, meta))
     if droog:
         return 0

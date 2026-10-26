@@ -5345,7 +5345,7 @@ def weekconsolidatie_noden(weekmap=None, nu=None):
                 gemaakt = datetime.fromisoformat(str(json.load(f).get("gemaakt") or ""))
         except (OSError, ValueError, AttributeError, TypeError):
             continue
-        if gemaakt.tzinfo is not None and anker <= gemaakt <= nu + timedelta(minutes=5):
+        if gemaakt.tzinfo is not None and anker <= gemaakt <= nu:
             return []
     return [dict(WEEKNOOD)]
 

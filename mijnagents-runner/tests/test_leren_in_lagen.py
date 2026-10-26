@@ -311,6 +311,8 @@ with tempfile.TemporaryDirectory() as d:
           W.weekconsolidatie_noden(d, MAANDAG) == [W.WEEKNOOD])
     check("weeknood: een geslaagde herhaling met de hand op dinsdag (weeklabel W44) sluit de nood",
           W.weekconsolidatie_noden(d, datetime(2026, 10, 28, 11, 0, tzinfo=BXL)) == [])
+    check("weeknood (Codex fase 1, punt 3): een minuut in de toekomst telt al niet",
+          W.weekconsolidatie_noden(d, datetime(2026, 10, 28, 8, 59, tzinfo=timezone.utc)) == [W.WEEKNOOD])
 with tempfile.TemporaryDirectory() as d:
     check("weeknood: zonder laatste.json is er geen fout voor het detail", W.weekconsolidatie_fout(d) == "")
     _weekmap(d, {"laatste.json": {"ok": False, "fout": "RuntimeError: antwoord afgekapt (16000 tokens uit)"}})
@@ -368,6 +370,21 @@ try:
         _draai(d, ["--droog"], _afgekapt)
         _draai(d, ["--droog"], _geslaagd)
         check("weeknood: een proef (--droog) schrijft nooit laatste.json", not (Path(d) / "weekconsolidatie" / "laatste.json").exists())
+    _oud_md = WC.markdown
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            WC.markdown = lambda *a, **k: (_ for _ in ()).throw(OSError("schijf vol"))
+            rc = _draai(d, ["--ronde"], _geslaagd)
+            wm = Path(d) / "weekconsolidatie"
+            stand = json.loads((wm / "laatste.json").read_text())
+            check("weeknood (Codex fase 1, punt 1): faalt het wegschrijven, dan geen <week>.json, de nood blijft open "
+                  "en de week kan opnieuw",
+                  rc == 1 and not (wm / "2026-W43.json").exists() and not (wm / "2026-W43.json.tmp").exists()
+                  and stand["ok"] is False and "schijf vol" in stand["fout"] and not WC.al_gedaan("2026-W43", wm)
+                  and W.weekconsolidatie_noden(str(wm), datetime(2026, 10, 26, 6, 30, tzinfo=BXL)) == [W.WEEKNOOD],
+                  str(stand))
+    finally:
+        WC.markdown = _oud_md
 finally:
     for k, v in _patch_w.items():
         setattr(W, k, v)

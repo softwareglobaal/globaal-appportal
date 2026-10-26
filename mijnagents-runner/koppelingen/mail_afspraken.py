@@ -634,9 +634,10 @@ def _zorg_json(a):
 
 
 def _patientloze_tweeling(r, a, z):
-    """Is rij r dezelfde boeking als mail a, die eerst zonder leesbare patiënt binnenkwam (F7, 26-10-2026)? Alleen als
-    niets tegenspreekt: geen patiënt, niet Mehdi, niet geannuleerd, geen ander einde, geen andere uitnodigings-UID en geen
-    andere behandelaar. De praktijk en het begin kiest de aanroeper."""
+    """Is rij r dezelfde boeking als mail a, die eerst zonder leesbare patiënt binnenkwam (F7, 26-10-2026)? Alleen met
+    een gedeeld, ingevuld bewijs: dezelfde behandelaar aan beide kanten (Codex-controle fase 1, punt 2: zonder dat kon
+    een gezinslid zonder patiënt, UID of behandelaar Mehdi's rij worden). Verder spreekt niets tegen: geen patiënt, niet
+    Mehdi, niet geannuleerd, geen ander einde en geen andere uitnodigings-UID. De praktijk en het begin kiest de aanroeper."""
     rz = _zorg_json(dict(r))
     if _naam_plat(rz.get("patient") or "") or rz.get("mehdi") or r["geannuleerd"]:
         return False
@@ -645,7 +646,16 @@ def _patientloze_tweeling(r, a, z):
     if r["ics_uid"] and a.get("ics_uid") and r["ics_uid"] != a["ics_uid"]:
         return False
     b_oud, b_nieuw = _naam_plat(rz.get("behandelaar") or ""), _naam_plat(z.get("behandelaar") or "")
-    return not (b_oud and b_nieuw and b_oud != b_nieuw)
+    return bool(b_oud) and b_oud == b_nieuw
+
+
+def _profiel_van(c, pid):
+    """Het zorgprofiel van een praktijk, gelezen langs de open verbinding; leeg als het er niet is of niet te lezen."""
+    try:
+        rij = c.execute("SELECT profiel FROM zorgpraktijk WHERE id=?", (pid,)).fetchone()
+        return json.loads(rij["profiel"]) if rij else {}
+    except (sqlite3.Error, ValueError, TypeError):
+        return {}
 
 
 def _bewaar_zorg(c, a):
@@ -705,11 +715,13 @@ def _bewaar_zorg(c, a):
             if zelfde_patient(r) and any(h.get("van") == a["start"] for h in _zorg_json(dict(r)).get("historie") or []):
                 doel, alias = r, True
                 break
-    if doel is None and a.get("start") and z.get("mehdi") is True and z.get("gebeurtenis") in ("bevestiging", "herinnering"):
-        # F7 (26-10-2026): dezelfde boeking kwam eerst zonder leesbare patiënt binnen (een Mya-bevestiging) en nu zeker
-        # voor Mehdi (de herinnering). Precies een zo'n rij op dat begin bij deze praktijk: dezelfde afspraak, de update
-        # hieronder vult patiënt en Mehdi. Nooit voor een annulering, verplaatsing of aanvraag: de A01-grendel hierboven
-        # blijft voor die gebeurtenissen gelden.
+    if doel is None and a.get("start") and z.get("gebeurtenis") in ("bevestiging", "herinnering") and (
+            z.get("mehdi") is True or (z.get("patient") and _eigen_patient(z["patient"], _profiel_van(c, pid)))):
+        # F7 (26-10-2026): dezelfde boeking kwam eerst zonder leesbare patiënt binnen (een Mya-bevestiging) en nu voor
+        # Mehdi (de herinnering), met dezelfde regel als _zorg_status: het mehdi-veld, of de patiënt is een eigen patiënt
+        # van het profiel (op de VM had de herinnering mehdi False en toch een eigen gemaskeerde naam). Precies een zo'n
+        # rij op dat begin bij deze praktijk, met dezelfde behandelaar: dezelfde afspraak, de update hieronder vult de
+        # patiënt. Nooit voor een annulering, verplaatsing of aanvraag: de A01-grendel hierboven blijft daarvoor gelden.
         tweeling = [r for r in c.execute("SELECT * FROM afspraak WHERE soort='zorg' AND start=? AND sleutel LIKE ?",
                                          (a["start"], like)).fetchall() if _patientloze_tweeling(r, a, z)]
         if len(tweeling) == 1:

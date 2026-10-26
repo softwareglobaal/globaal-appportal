@@ -603,6 +603,35 @@ check("F7 tweelingregel: een rij met een leesbare patiënt (ook gemaskeerd) is n
       not MA._patientloze_tweeling(dict(_rij7, zorg=json.dumps({"patient": "Lar*** Jan***", "mehdi": False})), _mail7, _z7))
 check("F7 tweelingregel: een rij die al van Mehdi is, valt onder de gewone koppeling",
       not MA._patientloze_tweeling(dict(_rij7, zorg=json.dumps({"patient": "", "mehdi": True})), _mail7, _z7))
+check("F7 tweelingregel (Codex fase 1, punt 2): zonder ingevulde behandelaar aan beide kanten geen tweeling",
+      not MA._patientloze_tweeling(_rij7, _mail7, dict(_z7, behandelaar=""))
+      and not MA._patientloze_tweeling(dict(_rij7, zorg=json.dumps({"patient": "", "mehdi": False})), _mail7, _z7)
+      and not MA._patientloze_tweeling(dict(_rij7, ics_uid="", zorg=json.dumps({"patient": "", "mehdi": False})),
+                                       dict(_mail7, ics_uid=""), dict(_z7, behandelaar="")))
+
+# Codex fase 1, punt 2 als keten: een rij zonder patiënt, UID of behandelaar wordt nooit Mehdi's afspraak
+_ronde_met([_huis("22/01/2027", "09:00", "<f7g-bev@huis>", bij=""),
+            _huis("22/01/2027", "09:00", "<f7g-mo@huis>", naam=_MO7, soort=_HER, datum=_LAAT, bij="")])
+_f7g = _uur("2027-01-22T09:00")
+check("F7 zonder behandelaar aan beide kanten: twee rijen, de rij zonder patiënt blijft een eigen vraag",
+      len(_f7g) == 2 and sum(bool(MA._zorg_json(a).get("patient")) for a in _f7g) == 1, _wie(_f7g))
+
+# zoals op de VM (25-10-2026): de herinnering heeft een eigen gemaskeerde naam in 'Naam', maar Voornaam en Achternaam
+# passen niet samen, dus zorg_herken zet mehdi False; _zorg_status rekent haar toch als Mehdi. Dezelfde regel koppelt.
+_VM7 = "Naam: Jan*** Pie***\nVoornaam: Jan***\nAchternaam: Xyz***\n"
+_f7v_her = _huis("25/01/2027", "11:20", "<f7v-her@huis>", naam=_VM7, soort=_HER, datum=_LAAT)
+_z7v = (MA.uit_kandidaat(_f7v_her, MA.zorgprofielen()) or [{}])[0].get("zorg") or {}
+check("F7 VM-vorm: de herinnering heeft een eigen gemaskeerde naam en toch mehdi False",
+      _z7v.get("patient") == "Jan*** Pie***" and _z7v.get("mehdi") is False, str(_z7v))
+_ronde_met([_huis("25/01/2027", "11:20", "<f7v-bev@huis>")])
+_f7v_sleutel = (_uur("2027-01-25T11:20") or [{"sleutel": ""}])[0]["sleutel"]
+_ronde_met([_huis("25/01/2027", "11:20", "<f7v-bev@huis>"), _f7v_her])
+_f7v = _uur("2027-01-25T11:20")
+_f7v_s = MA.vergelijk(_f7v, [dict(_f7_blok, id="f7v-blok", start="2027-01-25T11:20:00+01:00",
+                                  einde="2027-01-25T11:40:00+01:00", _merk={MA.ZORGMERK: _f7v_sleutel})], nu)
+check("F7 VM-vorm: een rij, dezelfde sleutel, het gezette blok is gekoppeld zonder vraag",
+      len(_f7v) == 1 and _f7v[0]["sleutel"] == _f7v_sleutel and [a["status"] for a in _f7v_s] == ["gekoppeld"],
+      _wie(_f7v) + str([(a["status"], a["detail"]) for a in _f7v_s]))
 
 
 def test_gemaskeerde_patient_drie_velden_telt_als_mehdi():
