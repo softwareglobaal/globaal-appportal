@@ -336,5 +336,24 @@ for combi in _it.product(POOL, repeat=3):
             kapot.append((scheiding.join(combi), uit))
 check(f"mengtest met regelovergangen: {2 * len(POOL) ** 3} combinaties heel", not kapot, kapot[:3])
 
+# Achtste review 26-10-2026: de grendel is idempotent (de sjablonen passen hem een tweede keer toe), het restdeel na een
+# legende wordt opnieuw getoetst, en de tijdstippen waar de legende naar verwijst gaan mee
+for tekst, verwacht in [
+        ("Volgens de opname is de scheur 1 mm breed; een tijdstip tussen haakjes verwijst naar de opname.", S.MARKERING.format(regel="S4")),
+        ("De dakgoot boven de keuken lekt (00:12:30); het tijdstip verwijst naar de opname.", "De dakgoot boven de keuken lekt."),
+        ("De aannemer kwam aan (10:15). De goot lekt.", "De aannemer kwam aan (10:15). De goot lekt."),
+        ("De aannemer is aansprakelijk.\n- De goot lekt.", S.MARKERING.format(regel="S5") + "\n- De goot lekt.")]:
+    t8, _ = S.toepassen(tekst)
+    check(f"S4/S5 achtste review: '{tekst[:35]}'", t8 == verwacht, repr(t8))
+niet_idempotent = []
+for combi in _it.product(POOL + ["Volgens de opname is de goot nat; een tijdstip tussen haakjes verwijst naar de opname."], repeat=3):
+    for scheiding in (" ", "\n"):
+        for profiel in (None, "aankoopkeuring"):
+            een, _ = S.toepassen(scheiding.join(combi), profiel)
+            twee, ing2 = S.toepassen(een, profiel)
+            if een != twee or ing2:
+                niet_idempotent.append((scheiding.join(combi), een, twee))
+check("de grendel is idempotent: een tweede doorgang verandert niets en meldt niets", not niet_idempotent, niet_idempotent[:2])
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

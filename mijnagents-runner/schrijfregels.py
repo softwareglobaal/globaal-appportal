@@ -93,7 +93,12 @@ OPNAME_ZINNEN = [
 ]
 OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b" + _OPMETING, re.I)
 
-_ZIN = re.compile(_Z + r"+[.!?]?\s*")
+# Een markering is een eigen "zin": zo versmelt ze bij een tweede doorgang niet met de zin erna (idempotent).
+_MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
+_ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]?\s*")
+# Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
+# opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
+_KAAL_TIJDSTIP = re.compile(r"\s*\(\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\)")
 
 
 def _woorden(tekst):
@@ -116,9 +121,13 @@ def _opname_weg(tekst):
                     nieuw = nieuw[1:]
             delen.append(nieuw)
 
+    legende = False
     for zin in _ZIN.findall(tekst):
         kern = zin.strip()
         kop, staart = zin[:len(zin) - len(zin.lstrip())], zin[len(zin.rstrip()):]
+        if _MARK.fullmatch(kern):
+            delen.append(zin)
+            continue
         m = SPRAK.search(kern)
         if m:
             ingrepen.append(("S4", kern))
@@ -131,9 +140,12 @@ def _opname_weg(tekst):
         m = next((m for p in OPNAME_ZINNEN for m in [p.search(kern)] if m), None)
         if m:
             ingrepen.append(("S4", kern))
+            legende = True
             voor, na = kern[:m.start()].strip().rstrip(";:,").strip(), kern[m.end():].strip().lstrip(";:,").strip()
             over = (voor + " " + na).strip() if voor else na[:1].upper() + na[1:]
-            if len(_woorden(over)) >= 2:
+            if OPNAME_VOLGENS.search(over) or SPRAK.search(over):
+                delen.append(kop + markering + staart)
+            elif len(_woorden(over)) >= 2:
                 delen.append(kop + over + ("" if over.endswith((".", "!", "?")) else ".") + staart)
             else:
                 weg(staart)
@@ -144,7 +156,7 @@ def _opname_weg(tekst):
             continue
         delen.append(zin)
     tekst = "".join(delen)
-    for p in OPNAME:
+    for p in OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
         tekst, k = p.subn("", tekst)
         ingrepen += [("S4", "opnameverwijzing")] * k
     tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)
@@ -180,13 +192,14 @@ def toepassen(tekst, profiel=None, vast=frozenset()):
     delen = []
     regels = _regels(profiel)
     for zin in _ZIN.findall(tekst):
-        if zin.strip() in vast:
+        if zin.strip() in vast or _MARK.fullmatch(zin.strip()):
             delen.append(zin)
             continue
         for regel, p in regels:
             if p.search(zin):
                 ingrepen.append((regel, zin.strip()))
-                delen.append(MARKERING.format(regel=regel) + " ")
+                staart = zin[len(zin.rstrip()):]
+                delen.append(zin[:len(zin) - len(zin.lstrip())] + MARKERING.format(regel=regel) + (staart if "\n" in staart else " "))
                 break
         else:
             delen.append(zin)
