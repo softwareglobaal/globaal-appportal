@@ -240,9 +240,18 @@ def main():
                 r.nood(n["tekst"], wie=n["wie"])
             delen.append(uit["detail"])
             begin = ochtend.tijdstip(nacht.get("start"))
+            stappen = nacht.get("stappen") or {}
             if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
                 # F9: een bezet slot of een cron die niet liep, zegt keten.log; hier wordt het een nood
                 r.nood("De nachtketen van de dagvaststelling liep niet, zie keten.log", wie="claude-code")
+            elif not nacht.get("einde") or any((stappen.get(n) or {}).get("exit") != 0 for n in ("zoom-wacht", "dagbundelaar")):
+                # G3: ze liep, maar stopte halverwege of een stap faalde
+                r.nood("De nachtketen van de dagvaststelling faalde, zie keten.log en dagbundelaar.log", wie="claude-code")
+            # G3: in de ochtendketen zegt keten.json of De Zoomwacht net slaagde; faalde ze, dan is Zoom een ondergrens
+            keten = lees_json(KETENBESTAND)
+            kbegin = ochtend.tijdstip(keten.get("start"))
+            if kbegin is not None and not keten.get("einde") and nu - kbegin <= timedelta(hours=3):
+                zoom_nacht_ok = ((keten.get("stappen") or {}).get("zoom-wacht") or {}).get("exit") == 0
         dagen = [DAG] if DAG_GEGEVEN else V.venster(nu, VENSTER or (NACHTVENSTER if NACHT else 1))
         try:
             delen.append(vastleggen(r, dagen, zoom_nacht_ok=zoom_nacht_ok))
@@ -258,15 +267,20 @@ def main():
 
 # ------------------------------------------------------------------------------------------- dagvaststelling ---
 NACHTBESTAND = os.path.join(DATA, "nacht.json")               # keten.py --nacht: start, einde, stappen met exit
+KETENBESTAND = os.path.join(DATA, "keten.json")               # keten.py: de lopende ochtendketen, met de Zoomwacht
 NACHT_UREN = 30                                               # zo oud mag de laatste nachtketen overdag zijn
 
 
-def lees_nacht():
+def lees_json(pad):
     try:
-        d = json.loads(_lees(NACHTBESTAND) or "{}")
+        d = json.loads(_lees(pad) or "{}")
     except ValueError:
         return {}
     return d if isinstance(d, dict) else {}
+
+
+def lees_nacht():
+    return lees_json(NACHTBESTAND)
 
 
 def _schrijf(pad, tekst):
@@ -369,12 +383,21 @@ def lees_locatie(dag, afspraken):
     try:
         d = LW.maak(dag, afspraken=afspraken)
         stand = str(d.get("status") or "")
+        if stand in ("afgesloten", "voorlopig") and not int(d.get("geldig") or 0):
+            stand, reden = "", "geen meting die dag"            # G2: afgesloten zegt alleen dat de tijd verstreek
         if stand in ("afgesloten", "voorlopig"):
+            # G2: 'niet gezien' geldt alleen als de tracker op dat uur mat; een gat maakt het onbekend
+            vensters = {a.get("id"): (V.afspraak_venster(a)[0].timestamp() - 1800, V.afspraak_venster(a)[1].timestamp() + 1800)
+                        for a in afspraken}
+            for aid, u in d["per_id"].items():
+                van, tot = vensters.get(aid, (None, None))
+                if u.get("uitkomst") == "niet_gezien" and van is not None and any(g0 < tot and van < g1 for g0, g1 in d.get("gaten") or []):
+                    d["per_id"][aid] = {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}
             bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar"),
                          "soort": soort} for soort, lijst in (("project", d["werf"]), ("twijfel", d["twijfel"]),
                                                               ("elders", d["elders"])) for v in lijst]
             return d["per_id"], sorted(bezoeken, key=lambda b: b["van"]), stand, ""
-        reden = f"dagboek {stand or 'zonder stand'}"
+        reden = reden or f"dagboek {stand or 'zonder stand'}"
     except Exception as e:  # noqa: BLE001
         reden = type(e).__name__
     per_id = {}
@@ -382,7 +405,7 @@ def lees_locatie(dag, afspraken):
         info = W.lees_titel(a.get("titel") or "")
         loc = (a.get("locatie") or "").strip()
         if info["buiten"] or info["soort"] in W.BUITEN_SOORTEN or (loc and not LW.online(loc)):
-            per_id[a.get("id")] = {"uitkomst": "onbekend"}
+            per_id[a.get("id")] = {"uitkomst": "onbekend", "tekst": f"locatie niet gelezen ({reden})"}
     return per_id, None, "", reden
 
 
@@ -439,7 +462,9 @@ def _lees_mail(dagen):
         o = ontvangen.setdefault(adres, {"berichten": [], "onvolledig": []}) if adres in postvakken else None
         mb = PV.postvak(adres)
         if not mb:
-            (o or u)["onvolledig"].append("niet in de postbus")
+            for x in (o, u):
+                if x is not None:
+                    x["onvolledig"].append("niet in de postbus")      # G4: beide richtingen onbekend, nooit nul
             continue
         if mb.get("bron"):
             oud = PV.bron_uren_oud(mb)
@@ -544,8 +569,10 @@ def vastleggen(r, dagen, zoom_nacht_ok=True):
             versie = basis + 1
             if oud is not None:
                 archief = os.path.join(DAGBOEK, dag[:4], "versies", f"{dag} v{basis}.md")
-                if _lees(archief) not in (None, oud):
-                    archief = archief[:-3] + f" ({nu:%Y%m%dT%H%M%S}).md"     # een bewaarde versie nooit overschrijven
+                n = 1
+                while _lees(archief) not in (None, oud):      # een bewaarde versie nooit overschrijven (F8, G7)
+                    n += 1
+                    archief = os.path.join(DAGBOEK, dag[:4], "versies", f"{dag} v{basis} ({n}).md")
                 if _lees(archief) != oud:
                     _schrijf(archief, oud)
             over = [f"versie {versie}, gemaakt {nu.astimezone(V.BRUSSEL):%d-%m-%Y %H:%M}",

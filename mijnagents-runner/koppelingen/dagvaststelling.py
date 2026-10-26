@@ -128,7 +128,8 @@ def namen(tekst):
     """De afzonderlijke namen in een tekst, elk als verzameling naamdelen: de stukken tussen komma's, streepjes en haakjes.
     Wat tussen haakjes staat (een afdeling, '(H-AI & ICT)') telt niet."""
     zonder = re.sub(r"\([^)]*\)|\[[^\]]*\]", ",", str(tekst or ""))
-    return [d for d in (naamdelen(x) for x in re.split(r"[,;/]|\s[-\u2013]\s|:", zonder)) if d]
+    stukken = re.split(r"[,;/+&]|\s[-\u2013]\s|:|\s(?:en|and|met|und|et)\s", zonder, flags=re.I)
+    return [d for d in (naamdelen(x) for x in stukken) if d]
 
 
 def personen_van_afspraak(a):
@@ -203,7 +204,8 @@ def bewijs(a, gesprekken, locatie=None):
                 + "; ".join(gesprek_tekst(g) for g in op_uur), "gesprekken": []}
     grond = {"niet_gezien": "auto niet gezien op de plek",
              "zonder_adres": "geen bruikbaar adres om de locatie te toetsen",
-             "onbekend": "locatie niet gelezen"}.get(locatie.get("uitkomst"), "geen gesprek, oproep of locatie")
+             "onbekend": locatie.get("tekst") or "locatie niet gelezen"}.get(locatie.get("uitkomst"),
+                                                                        "geen gesprek, oproep of locatie")
     return {"uitkomst": "geen spoor", "grond": grond + ". Ging dit door?", "gesprekken": []}
 
 
@@ -348,8 +350,13 @@ def tekst(v, prive_postvakken=(), over=None):
     # F5: een Zoom-stand die niet volledig is, maakt elk getal van Zoom een ondergrens; zonder stand is de chat onbekend
     minstens = "" if z["stand"] == "volledig" else "minstens "
     stand = {"volledig": "", "ondergrens": "", "onbekend": " (Zoom-stand onbekend)"}.get(z["stand"], f" ({z['stand']})")
-    r.append(f"- gesprekken in Zoom, Fathom en Plaud: {minstens}{g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
-             f"opname, {g['alleen_zoom']} alleen in Zoom){stand}")
+    if minstens:
+        # G5: zonder volledige Zoom-stand is elk getal een ondergrens, en de verdeling is niet te kennen
+        r.append(f"- gesprekken in Zoom, Fathom en Plaud: minstens {g['aantal']}, minstens {g['minuten']} min "
+                 f"(verdeling onbekend){stand}")
+    else:
+        r.append(f"- gesprekken in Zoom, Fathom en Plaud: {g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
+                 f"opname, {g['alleen_zoom']} alleen in Zoom)")
     if z["stand"] == "onbekend" and not z["chats"]:
         r.append("- Zoom-chat: onbekend (Zoom-stand onbekend)")
     else:

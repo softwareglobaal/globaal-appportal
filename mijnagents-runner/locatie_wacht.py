@@ -308,6 +308,10 @@ def maak(dag, afspraken=None):
             "verblijven": verblijven, "doorgegaan": doorgegaan, "niet_gezien": niet_gezien,
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
             "per_id": per_id,
+            # G2 (dagvaststelling): waar de tracker niets mat, en hoeveel geldige punten de dag had
+            "gaten": [(seg["van"], seg["tot"]) for sp in (db.get("sporen") or {}).values()
+                      for seg in (sp.get("indeling") or []) if seg.get("soort") == "gat"],
+            "geldig": sum(int(sp.get("geldig") or 0) for sp in (db.get("sporen") or {}).values()),
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
             "projecten": sorted({"%s %s" % (v["project"].get("firma"), v["project"].get("nummer"))
                                  for v in verblijven if v.get("project")})}

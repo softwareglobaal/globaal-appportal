@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.3, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.4, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -219,3 +219,15 @@ Bestanden: `koppelingen/dagvaststelling.py` (nieuw), `dagbundelaar.py`, `koppeli
 
 Droge proef op de VM met v1.3 (22, 24 en 25-10-2026, schrijven naar /tmp): werkt; mail 10 binnen en 14 verzonden op 22-10
 over acht adressen; gewone verblijven zonder plek; hotmail onvolledig (Mac-kopie 144 uur oud).
+
+## Wijzigingen in v1.4 (antwoord op ronde 4, docs/codex/dagvaststelling-bouw-r4.md)
+
+| punt | antwoord in de code |
+|---|---|
+| G1 | namen in een titel worden ook gesplitst op 'en', '&', 'met' en '+': "Anna Peeters en Jan Claes" zijn twee personen; "Anna Claes" bevestigt niets |
+| G2 | `locatie_wacht.maak` geeft de gaten van de tracker en het aantal geldige punten; zonder geldige meting die dag is de locatie niet gelezen; een afspraak waarvan het uur (met 30 minuten marge) in een gat valt, is 'onbekend: auto zonder meting op dat uur' in plaats van 'niet gezien'. Op 22-10 gold dat voor Leuven (gat 12:33 tot 13:09) |
+| G3 | overdag kijkt De Dagbundelaar naar einde en exits van de nachtketen (Zoomwacht en Dagbundelaar), en in de ochtendketen naar de exit van De Zoomwacht in keten.json; faalde die, dan is Zoom van gisteren een ondergrens |
+| G4 | een ontbrekend postvak maakt ontvangen en verzonden onvolledig |
+| G5 | zonder volledige Zoom-stand: 'minstens N, minstens M min (verdeling onbekend)' |
+| G6 | de Mac-sync draait met PIPE_FAIL: een falende find of shasum laat het ontvangstbewijs falen |
+| G7 | een vrije archiefnaam ('v1 (2)', 'v1 (3)', ...); een bewaarde versie wordt nooit overschreven |

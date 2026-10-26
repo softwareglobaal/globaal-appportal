@@ -5,6 +5,7 @@
 # Alleen ophalen en toevoegen; nooit iets wissen in Dropbox (geen --delete).
 # Mehdi besliste op 12-09-2026: alles, ook privé (Locatie); delen met Shaniel regelt hij per submap.
 set -u
+setopt PIPE_FAIL   # een falende stap in een pipeline (find, shasum) laat de hele pipeline falen (Codex G6)
 DOEL="$HOME/TKN-buro Dropbox/Data uit Mehdi"
 BRON="globaal:appportal/mijnagents-data"
 LOG="$HOME/Library/Logs/mijnagents-data-uit-mehdi.log"

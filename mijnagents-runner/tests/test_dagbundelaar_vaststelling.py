@@ -13,6 +13,7 @@ Legt vast, zonder netwerk en zonder de echte mappen (alles in een tijdelijke map
 Draaien: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
 """
 import io
+import json
 import os
 import sys
 import tempfile
@@ -306,12 +307,12 @@ def test_f4_locatie_met_dezelfde_afspraken_en_stand():
         gezien["afspraken"] = afspraken
         if gezien.get("stand") == "fout":
             raise ValueError("buiten de reeks")
-        return {"status": gezien.get("stand", "voorlopig"), "per_id": {"t": {"uitkomst": "niet_gezien"}},
+        return {"status": gezien.get("stand", "voorlopig"), "geldig": 12, "gaten": [], "per_id": {"t": {"uitkomst": "niet_gezien"}},
                 "werf": [{"van": 1, "tot": 2, "minuten": 18, "waar": "project HARC 2197"}],
                 "twijfel": [], "elders": [{"van": 3, "tot": 4, "minuten": 30, "waar": "Kerkstraat 1"}]}
     LW = Module(maak=maak, uur=lambda x: f"0{x}:00", online=lambda t: False)
     W = Module(lees_titel=lambda t: {"buiten": True, "soort": "KB"}, BUITEN_SOORTEN=("KB",))
-    afs = [{"id": "t", "titel": "!! Mehdi: [UB-KB] x", "start": f"{DAG}T14:15:00+02:00"}]
+    afs = [{"id": "t", "titel": "!! Mehdi: [UB-KB] x", "start": f"{DAG}T14:15:00+02:00", "einde": f"{DAG}T15:15:00+02:00"}]
     h1, h2 = met_module("locatie_wacht", LW), met_module("agenda_wacht", W)
     try:
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
@@ -319,13 +320,75 @@ def test_f4_locatie_met_dezelfde_afspraken_en_stand():
         assert [b["soort"] for b in bezoeken] == ["project", "elders"], bezoeken
         gezien["stand"] = "niet ingesteld"
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
-        assert bezoeken is None and per_id == {"t": {"uitkomst": "onbekend"}} and "niet ingesteld" in reden, reden
+        assert bezoeken is None and per_id["t"]["uitkomst"] == "onbekend" and "niet ingesteld" in reden, reden
         gezien["stand"] = "fout"
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
         assert bezoeken is None and reden == "ValueError", reden
     finally:
         h1()
         h2()
+
+
+def test_g2_locatie_zonder_meting():
+    """G2: 'afgesloten' zegt alleen dat de tijd verstreek. Zonder geldige meting die dag is de locatie niet gelezen; valt
+    het uur van een afspraak in een gat van de tracker, dan is 'niet gezien' onbekend."""
+    t0 = datetime.fromisoformat(f"{DAG}T12:30:00+02:00").timestamp()
+    gezien = {"geldig": 566}
+
+    def maak(dag, afspraken=None):
+        return {"status": "afgesloten", "geldig": gezien["geldig"], "gaten": [(t0 + 180, t0 + 2340)],
+                "per_id": {"leuven": {"uitkomst": "niet_gezien"}, "ander": {"uitkomst": "niet_gezien"}},
+                "werf": [], "twijfel": [], "elders": []}
+    LW = Module(maak=maak, uur=lambda x: "00:00", online=lambda t: False)
+    W = Module(lees_titel=lambda t: {"buiten": True, "soort": "KB"}, BUITEN_SOORTEN=("KB",))
+    afs = [{"id": "leuven", "titel": "!! Mehdi: [HA] 2616 Leuven", "start": f"{DAG}T12:30:00+02:00", "einde": f"{DAG}T13:30:00+02:00"},
+           {"id": "ander", "titel": "!! Mehdi: [HA] 2617 Gent", "start": f"{DAG}T17:00:00+02:00", "einde": f"{DAG}T18:00:00+02:00"}]
+    h1, h2 = met_module("locatie_wacht", LW), met_module("agenda_wacht", W)
+    try:
+        per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
+        assert per_id["leuven"] == {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}, per_id
+        assert per_id["ander"] == {"uitkomst": "niet_gezien"} and stand == "afgesloten" and bezoeken == [], per_id
+        gezien["geldig"] = 0
+        per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
+        assert bezoeken is None and reden == "geen meting die dag", (bezoeken, reden)
+        assert all(u["uitkomst"] == "onbekend" for u in per_id.values()), per_id
+    finally:
+        h1()
+        h2()
+
+
+def test_g4_ontbrekend_postvak():
+    PV = Module(wachten=lambda: {"mail-info": {"postvakken": ["info@x.be"], "firma": "HARC", "antwoord_vanuit": ["weg@x.be"]}},
+                postvak=lambda a: None, bron_uren_oud=lambda mb: None, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"],
+                mapnamen=lambda mb: set(), koppen=lambda *a, **k: [], VERZONDEN=("Sent",))
+    herstel = met_module("postvak", PV)
+    try:
+        o, u, _ = D._lees_mail([DAG])
+    finally:
+        herstel()
+    assert o["info@x.be"]["onvolledig"] == ["niet in de postbus"] and u["info@x.be"]["onvolledig"] == ["niet in de postbus"], (o, u)
+    assert u["weg@x.be"]["onvolledig"] == ["niet in de postbus"], u
+    import dagvaststelling as V
+    t = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", V.mail_telling(DAG, o, u), None, lambda a: False))
+    assert "info@x.be: 0 binnen, 0 verzonden (onvolledig: niet in de postbus)" in t, t
+
+
+def test_g7_vrije_archiefnaam():
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
+        versies = os.path.join(m, "dagboek", "2026", "versies")
+        ronde(w)
+        eerste = lees(pad)
+        os.makedirs(versies)
+        for naam in (f"{DAG} v1.md", f"{DAG} v1 (2).md"):
+            with open(os.path.join(versies, naam), "w") as f:
+                f.write(f"bezet: {naam}\n")
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
+        ronde(w)
+        assert lees(os.path.join(versies, f"{DAG} v1.md")) == f"bezet: {DAG} v1.md\n"
+        assert lees(os.path.join(versies, f"{DAG} v1 (2).md")) == f"bezet: {DAG} v1 (2).md\n"
+        assert lees(os.path.join(versies, f"{DAG} v1 (3).md")) == eerste, os.listdir(versies)
 
 
 def test_f9_nachtketen_noden():
@@ -347,7 +410,8 @@ def test_f9_nachtketen_noden():
         def nood(self, t, wie="mehdi"):
             self.noden.append(t)
 
-    oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen)
+    oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
+    D.KETENBESTAND = "/bestaat/niet/keten.json"
     D.vastleggen = lambda r, dagen, zoom_nacht_ok=True: uit.update(ok=zoom_nacht_ok) or ""
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
     try:
@@ -356,7 +420,13 @@ def test_f9_nachtketen_noden():
                 (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 124}}}, "Zoomwacht faalde", False),
                 (True, {}, "buiten de nachtketen", False),
                 (False, {"start": (NU - timedelta(hours=40)).isoformat()}, "nachtketen van de dagvaststelling liep niet", True),
-                (False, {"start": (NU - timedelta(hours=8)).isoformat()}, None, True)):
+                (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
+                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}, None, True),
+                # G3: de nachtketen liep maar De Dagbundelaar faalde, of ze stopte halverwege
+                (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
+                         "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 1}}}, "nachtketen van de dagvaststelling faalde", True),
+                (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": None,
+                         "stappen": {"zoom-wacht": {"exit": 0}}}, "nachtketen van de dagvaststelling faalde", True)):
             r = R()
             D.NACHT, D.DAG_GEGEVEN, D.lees_nacht = nacht, True, (lambda b=nachtbestand: b)
             D.ag.ronde = lambda taak, **k: r
@@ -364,9 +434,42 @@ def test_f9_nachtketen_noden():
             assert (nood_deel is None and not r.noden) or any(nood_deel in n for n in r.noden), (nachtbestand, r.noden)
             assert uit["ok"] is ok, (nachtbestand, uit)
     finally:
-        D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen = oud
+        D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND = oud
         D.ag.__dict__.pop("ronde", None)
     assert ochtend.NACHTTAAK == "dagvaststelling"
+
+
+def test_g3_zoom_van_de_ochtendketen():
+    """G3: in de ochtendketen zegt keten.json of De Zoomwacht net slaagde; faalde ze, dan is Zoom een ondergrens."""
+    uit = {}
+
+    class R:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def nood(self, t, wie="mehdi"):
+            pass
+
+    with tempfile.TemporaryDirectory() as m:
+        kpad = os.path.join(m, "keten.json")
+        oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
+        D.NACHT, D.DAG_GEGEVEN, D.KETENBESTAND = False, True, kpad
+        D.lees_nacht = lambda: {}
+        D.vastleggen = lambda r, dagen, zoom_nacht_ok=True: uit.update(ok=zoom_nacht_ok) or ""
+        D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+        D.ag.ronde = lambda taak, **k: R()
+        try:
+            for exit_, ok in ((0, True), (124, False)):
+                with open(kpad, "w") as f:
+                    json.dump({"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": exit_}}}, f)
+                D.main()
+                assert uit["ok"] is ok, (exit_, uit)
+        finally:
+            D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND = oud
+            D.ag.__dict__.pop("ronde", None)
 
 
 if __name__ == "__main__":

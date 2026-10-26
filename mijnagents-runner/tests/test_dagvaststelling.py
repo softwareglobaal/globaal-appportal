@@ -120,6 +120,15 @@ def test_bewijs():
         ["uitkomst"] == "bevestigd", "een naam met partikel")
     eis(V.bewijs(robertis, [rij("telefoon:10", "14:20", 6, "Nicolas", bron="telefoon")], {"uitkomst": "niet_gezien"})
         ["uitkomst"] == "geen spoor", "alleen een voornaam bevestigt niet")
+    # G1: twee personen in een titel blijven twee personen; 'Anna Claes' is geen van beiden
+    twee = afspraak("2", "10:30", "11:00", "Mehdi: [HA-KO] Anna Peeters en Jan Claes")
+    eis(V.bewijs(twee, [rij("zoom:meeting:11", "10:31", 9, "Anna Claes")])["uitkomst"] == "aanwijzing", "G1: Anna Claes")
+    eis(V.bewijs(twee, [rij("zoom:meeting:12", "10:31", 9, "Jan Claes")])["uitkomst"] == "bevestigd", "G1: Jan Claes")
+    eis(V.bewijs(afspraak("3", "10:30", "11:00", "Mehdi: [HA-KO] Anna Peeters & Jan Claes"),
+                 [rij("zoom:meeting:13", "10:31", 9, "Anna Claes")])["uitkomst"] == "aanwijzing", "G1: met &")
+    # G2: een onbekende locatie draagt haar reden
+    b = V.bewijs(buiten, [], {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"})
+    eis(b["uitkomst"] == "geen spoor" and "auto zonder meting op dat uur" in b["grond"], f"G2: reden ({b})")
 
 
 def test_dubbels_en_niet_gepland():
@@ -161,8 +170,11 @@ def test_agenda_en_standen():
     eis("Zoom-stand onbekend" in t and "Zoom-chat: onbekend" in t and "0 chatgesprek" not in t, f"F5: Zoom onbekend\n{t}")
     eis("WhatsApp: nog niet aangesloten" in t and "telefoon: nog niet aangesloten" in t, "zonder kanaalstand: niet aangesloten")
     t = V.tekst(vast(rijen=[rij("zoom:meeting:a", "09:00", 20, "Ruben")], zoom="ondergrens"))
-    eis("Zoom en Fathom en Plaud" not in t and "gesprekken in Zoom, Fathom en Plaud: minstens 1, 20 min" in t
-        and "Zoom-chat: minstens 0" in t, f"ondergrens\n{t}")
+    eis("gesprekken in Zoom, Fathom en Plaud: minstens 1, minstens 20 min (verdeling onbekend)" in t
+        and "Zoom-chat: minstens 0" in t and "alleen in Zoom" not in t, f"G5: ondergrens\n{t}")
+    t = V.tekst(vast(rijen=[rij("fathom:a", "09:00", 20, "Ruben", bron="fathom")], zoom="onbekend"))
+    eis("minstens 1, minstens 20 min (verdeling onbekend) (Zoom-stand onbekend)" in t and "met opname" not in t,
+        f"G5: onbekend\n{t}")
     # D2: rijen zonder aangesloten wacht tellen niet als aangesloten; een stille wacht is onvolledig
     wa = [rij("whatsapp:abc:2026-10-22", "08:01", 0, "Broer Ali", bron="whatsapp", thema="14 berichten (5 van Mehdi)")]
     eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"})), "rijen alleen")
