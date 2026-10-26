@@ -19,9 +19,13 @@
 # De toestemming (Full Disk Access) hangt aan de cdhash van precies dit programma, niet aan Python of de Terminal. Een
 # nieuwe helper moet Mehdi dus opnieuw toestemming geven (System Settings > Privacy & Security > Full Disk Access);
 # daarom bouwt deze uitrol alleen opnieuw als de bron veranderde (Codex Q7, R4 tot R6).
+# Een slot voor alle opdrachten behalve controleer (Codex S4): installeer, proef, aan, uit en terug lopen nooit samen.
+# De code wisselt alleen als beide wachten echt uit launchd zijn en geen ronde loopt; hun rondeslot blijft vast tijdens
+# de wissel (S3).
 # De paden en gereedschappen zijn te vervangen voor tests/test_mac_gesprekken.py (drie uitrollen na elkaar en terug).
 set -euo pipefail
 
+SCRIPT=${0:A}                 # het pad van dit script; in een functie is $0 in zsh de functienaam
 modus=${1:-installeer}
 REPO=${REPO:-$HOME/dev/globaal-appportal}
 REF=${REF:-origin/main}
@@ -32,6 +36,7 @@ LOGS=${LOGS:-$HOME/Library/Logs/mijnagents}
 LAUNCHCTL=${LAUNCHCTL:-/bin/launchctl}
 CODESIGN=${CODESIGN:-/usr/bin/codesign}
 CC=${CC:-/usr/bin/cc}
+LOCKF=${LOCKF:-/usr/bin/lockf}
 WERK="$BASIS/repo"
 HMAP="$BASIS/mac-gesprekken"
 HELPER="$HMAP/MacGesprekkenKopie"
@@ -58,6 +63,22 @@ wachten_uit() {
     rm -f "$PROEF"
 }
 
+wachten_echt_uit() {
+    # Codex S3: een bootout die faalt, mag niet stil voorbijgaan; staat een wacht nog in launchd, dan wisselt niets
+    wachten_uit
+    for l in $WACHTEN; do
+        if geladen $l; then print -u2 "$l staat nog in launchd; niets gewisseld"; exit 1; fi
+    done
+}
+
+met_rondesloten() {
+    # de wissel loopt met de rondesloten van beide wachten vast (zoals mac_gesprekken.slot ze neemt); loopt er nog een
+    # ronde, dan geeft lockf meteen 75 en wisselt niets
+    mkdir -p -m 700 "$BASIS/whatsapp-wacht" "$BASIS/belwacht"
+    exec "$LOCKF" -k -t 0 "$BASIS/whatsapp-wacht/ronde.lock" "$LOCKF" -k -t 0 "$BASIS/belwacht/ronde.lock" \
+        /bin/zsh "$SCRIPT" "$@"
+}
+
 stempel() {
     # waaraan het proefbewijs hoort: de cdhash van de helper en de commit van de code
     print "$("$CODESIGN" -dv "$HELPER" 2>&1 | grep -m1 CDHash= | cut -d= -f2) $(git -C "$WERK" rev-parse HEAD)"
@@ -77,8 +98,18 @@ bewaar_vorige() {
     mv "$VORIG.nieuw" "$VORIG"
 }
 
+if [[ $modus != controleer && -z ${UITROL_SLOT:-} ]]; then
+    mkdir -p -m 700 "$BASIS" "$HMAP"
+    export UITROL_SLOT=1
+    exec "$LOCKF" -k -t 0 "$HMAP/.uitrol.lock" /bin/zsh "$SCRIPT" "$@"
+fi
+[[ $modus != __* || -n ${UITROL_SLOT:-} ]] || { print -u2 "Gebruik: $0 [proef|aan|uit|terug|controleer]"; exit 64; }
+
 case $modus in
-    installeer) ;;
+    installeer)
+        wachten_echt_uit
+        met_rondesloten __installeer ;;
+    __installeer) ;;
     proef)
         rm -f "$PROEF"
         "$PY" -I -c "
@@ -111,7 +142,9 @@ except M.MacFout as e:
         exit 0 ;;
     terug)
         [[ -f "$VORIG/COMMIT" && -x "$VORIG/MacGesprekkenKopie" ]] || { print -u2 "Geen vorige versie bewaard"; exit 1; }
-        wachten_uit
+        wachten_echt_uit
+        met_rondesloten __terug ;;
+    __terug)
         for l in $HELPERTAKEN; do "$LAUNCHCTL" bootout "gui/$uid/$l" >/dev/null 2>&1 || true; done
         git -C "$WERK" checkout -q --detach "$(cat "$VORIG/COMMIT")"
         cp -p "$VORIG/MacGesprekkenKopie" "$HELPER"
@@ -136,8 +169,8 @@ except M.MacFout as e:
         exit 64 ;;
 esac
 
-# 0. Eerst de wachten uit (Codex R4): geen ronde draait op code of een helper die nog niet beproefd is.
-wachten_uit
+# 0. De wachten zijn uit (Codex R4, S3) en hun rondesloten zijn vast: geen ronde draait op code of een helper die nog
+#    niet beproefd is.
 
 # 1. De code: een eigen worktree, losgekoppeld op REF. Nooit de werkmap van een sessie.
 git -C "$REPO" fetch -q origin

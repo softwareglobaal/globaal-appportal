@@ -216,6 +216,16 @@ static int schrijf(int dirfd, const char *naam, const unsigned char *buf, size_t
 
 /* Wat een vroegere ronde liet liggen (een uitvoer die niemand las, of die een runner niet meer wiste), na tien minuten
    weg: nooit ouder dan dat staan er namen in de map. */
+/* Codex S2: alleen de eigen uitvoernamen: gesprekken.sqlite, gesprekken-<aanvraag>.sqlite en .lezen-<aanvraag>.sqlite. */
+static int is_uitvoer(const char *naam) {
+    if (strcmp(naam, "gesprekken.sqlite") == 0) return 1;
+    const char *rest = strncmp(naam, "gesprekken-", 11) == 0 ? naam + 11 : strncmp(naam, ".lezen-", 7) == 0 ? naam + 7 : NULL;
+    if (rest == NULL || strlen(rest) != 32 + 7 || strcmp(rest + 32, ".sqlite") != 0) return 0;
+    for (int i = 0; i < 32; i++)
+        if (!((rest[i] >= '0' && rest[i] <= '9') || (rest[i] >= 'a' && rest[i] <= 'f'))) return 0;
+    return 1;
+}
+
 static void ruim_op(int dirfd) {
     int kopie = dup(dirfd);
     DIR *d = kopie >= 0 ? fdopendir(kopie) : NULL;
@@ -226,11 +236,8 @@ static void ruim_op(int dirfd) {
     struct dirent *e;
     time_t grens = time(NULL) - 600;
     while ((e = readdir(d)) != NULL) {
-        size_t n = strlen(e->d_name);
-        int uitvoer = (strncmp(e->d_name, "gesprekken", 10) == 0 || strncmp(e->d_name, ".lezen-", 7) == 0) &&
-                      n > 7 && strcmp(e->d_name + n - 7, ".sqlite") == 0;
         struct stat st;
-        if (uitvoer && fstatat(dirfd, e->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 && st.st_mtime < grens)
+        if (is_uitvoer(e->d_name) && fstatat(dirfd, e->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 && st.st_mtime < grens)
             unlinkat(dirfd, e->d_name, 0);
     }
     closedir(d);

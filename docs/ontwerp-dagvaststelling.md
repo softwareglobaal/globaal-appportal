@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.3, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 en r3 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.4, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r4 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -452,3 +452,14 @@ Vooruitgang: Q2, Q3, Q5 en Q8 waren opgelost; R1 tot R6 gaan dieper op Q1, Q4, Q
 | R4 | een uitrol zet eerst de wachten uit (en wist het proefbewijs), elke keer, ook bij alleen gewijzigde Python-code; daarna blijven ze uit tot `proef` en `aan` |
 | R5 | een bezette wacht eindigt met 75; een geslaagde ronde drukt haar ronde-ID af; `proef` eist per wacht exit 0, precies een ronde-ID en die ID in eindhartslag en kennis op het bord (`mac_gesprekken.proefronde`). Test |
 | R6 | de uitrol bewaart de vorige versie als geheel (commit, helper, BRON_SHA256, alle LaunchAgents) en `terug` zet dat geheel terug, ook een LaunchAgent die er toen niet was. Test met nagebootste launchctl, codesign en cc: drie uitrollen na elkaar, `aan` geweigerd zonder proefbewijs, terug naar versie 2, `aan` met een proefbewijs voor precies die versie |
+
+### Antwoord op de bouwcontrole r4 (v2.4, docs/codex/dagvaststelling-fase2-bouw-r4.md, "live: nee")
+
+Vooruitgang: R1 tot R6 waren in hun gewone paden opgelost; S1 tot S4 zijn randgevallen bij overstap en uitrol.
+
+| punt | antwoord in de code |
+|---|---|
+| S1 | gemeten op 26-10-2026: de gesprekkentabel heeft nog geen enkele rij `whatsapp`, `telefoon` of `dekking`, dus live bestaan geen oude sleutels. De overstap is toch expliciet: een rij van het kanaal met een andere sleutelvorm dan `HUIDIGE_SLEUTEL` komt van een oudere versie en wordt vervallen, buiten de rem. En de rem gaat nu voor het schrijven: een halve bron schrijft en markeert niets. Test met vijf oude en vijf nieuwe rijen (geen dubbele telling) en een halve bron (geen schrijfoproep) |
+| S2 | `ruim_op` herkent alleen de eigen namen (`gesprekken.sqlite`, `gesprekken-<32 hex>.sqlite`, `.lezen-<32 hex>.sqlite`). Test: `gesprekken-archief.sqlite` blijft staan |
+| S3 | `wachten_echt_uit`: na de bootout moet elke wacht echt uit launchd zijn, anders wisselt niets; de wissel loopt met de rondesloten van beide wachten vast (`lockf`, hetzelfde flock als `mac_gesprekken.slot`). Test met een wacht die geladen blijft en met een vastgehouden rondeslot |
+| S4 | een slot voor alle opdrachten behalve controleer (`.uitrol.lock`): installeer, proef, aan, uit en terug lopen nooit samen. Test met een vastgehouden uitrolslot |

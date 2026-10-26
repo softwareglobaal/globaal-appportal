@@ -357,6 +357,11 @@ class NepBord:
                 if van <= r["datum"] <= tot and u.startswith(bordstand.KANALEN[kanaal])}
 
 
+def tel(i):
+    """Een telefoonsleutel in de vorm van deze versie (ID en tijdstip)."""
+    return f"telefoon:U{i}-{1000 + i}"
+
+
 def rij(uniek, dag=DAG, **x):
     return {"uniek": uniek, "datum": dag, "start": "10:00", "minuten": 1, "personen": "Jan Proef", "thema": "t",
             "prive": 1, "bron": "telefoon", "dubbel_van": "", **x}
@@ -364,13 +369,13 @@ def rij(uniek, dag=DAG, **x):
 
 def test_schrijven_teruglezen_en_vervallen():
     b = NepBord()
-    rijen = [rij(f"telefoon:{i}") for i in range(10)]
+    rijen = [rij(tel(i)) for i in range(10)]
     assert M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug) == 0
     # een rij die de bron niet meer toont, wordt vervallen; ze komt terug als de bron ze weer toont
     assert M.schrijf_en_lees_terug("telefoon", rijen[:9], DAG, DAG, b.call, b.terug) == 1
-    assert b.tabel["telefoon:9"]["dubbel_van"] == M.VERVALLEN
+    assert b.tabel[tel(9)]["dubbel_van"] == M.VERVALLEN
     assert M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug) == 0
-    assert b.tabel["telefoon:9"]["dubbel_van"] == ""
+    assert b.tabel[tel(9)]["dubbel_van"] == ""
     # een rij van een ander kanaal of buiten het venster blijft ongemoeid
     b.tabel["whatsapp:x:" + DAG] = rij("whatsapp:x:" + DAG, bron="whatsapp")
     b.tabel["telefoon:oud"] = rij("telefoon:oud", dag="2026-09-01")
@@ -380,7 +385,7 @@ def test_schrijven_teruglezen_en_vervallen():
     try:
         M.schrijf_en_lees_terug("telefoon", rijen[:2], DAG, DAG, b.call, b.terug)
     except M.MacFout as e:
-        assert "niets als vervallen" in e.nood
+        assert "niets geschreven of gemarkeerd" in e.nood
     else:
         raise AssertionError("te veel vervallen rijen werden gemarkeerd")
     assert "/api/gesprekken/koppel" not in b.oproepen[len(voor):]
@@ -730,9 +735,9 @@ def test_q1_dubbele_oproep_id_overschrijft_niets():
 def test_q2_grens_van_vervallen():
     def proef(op_bord, bron):
         b = NepBord()
-        M.schrijf_en_lees_terug("telefoon", [rij(f"telefoon:{i}") for i in range(op_bord)], DAG, DAG, b.call, b.terug)
+        M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(op_bord)], DAG, DAG, b.call, b.terug)
         try:
-            return M.schrijf_en_lees_terug("telefoon", [rij(f"telefoon:{i}") for i in range(bron)], DAG, DAG, b.call,
+            return M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(bron)], DAG, DAG, b.call,
                                            b.terug)
         except M.MacFout:
             return "stop"
@@ -743,7 +748,7 @@ def test_q2_grens_van_vervallen():
     assert proef(10, 6) == 4                # vier: onder de grens van vijf
     # alleen dekking is geen gegeven
     b = NepBord()
-    M.schrijf_en_lees_terug("telefoon", [rij("telefoon:1")], DAG, DAG, b.call, b.terug)
+    M.schrijf_en_lees_terug("telefoon", [rij(tel(1))], DAG, DAG, b.call, b.terug)
     try:
         M.schrijf_en_lees_terug("telefoon", [rij("dekking:telefoon:" + DAG, bron="dekking", dubbel_van=M.DEKKING)],
                                 DAG, DAG, b.call, b.terug)
@@ -751,6 +756,24 @@ def test_q2_grens_van_vervallen():
         pass
     else:
         raise AssertionError("bron met alleen dekking markeerde rijen als vervallen")
+
+
+def test_s1_overstap_van_oude_sleutels_en_rem_voor_het_schrijven():
+    b = NepBord()
+    for i in range(5):                      # vijf rijen van een oudere versie, zonder tijdstip in de sleutel
+        b.tabel[f"telefoon:U{i}"] = rij(f"telefoon:U{i}")
+    assert M.schrijf_en_lees_terug("telefoon", [rij(tel(i)) for i in range(5)], DAG, DAG, b.call, b.terug) == 5
+    tellend = [u for u, r in b.tabel.items() if not r["dubbel_van"]]
+    assert sorted(tellend) == sorted(tel(i) for i in range(5)), tellend          # geen dubbele telling
+    # de rem gaat voor het schrijven: een halve bron schrijft niets
+    voor = len(b.oproepen)
+    try:
+        M.schrijf_en_lees_terug("telefoon", [rij(tel(9))], DAG, DAG, b.call, b.terug)
+    except M.MacFout:
+        pass
+    else:
+        raise AssertionError("halve bron ging door")
+    assert "/api/gesprekken" not in b.oproepen[voor:] and tel(9) not in b.tabel
 
 
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():
@@ -824,11 +847,14 @@ def test_q3_helper_leest_geen_verwisselde_bron():
         subprocess.run([helper, "whatsapp"], capture_output=True, text=True, check=True)
         assert M.lees(doel / f"gesprekken-{'9' * 32}.sqlite", M.SQL_AANVRAAG) == [("9" * 32,)]
         assert M.lees(doel / f"gesprekken-{'8' * 32}.sqlite", M.SQL_AANVRAAG) == [("8" * 32,)]
-        # wat ouder is dan tien minuten, ruimt de volgende start op
+        # wat ouder is dan tien minuten, ruimt de volgende start op; alleen de eigen uitvoernamen (S2)
         oud = time.time() - 900
-        os.utime(doel / f"gesprekken-{'9' * 32}.sqlite", (oud, oud))
+        for naam in (f"gesprekken-{'9' * 32}.sqlite", "gesprekken-archief.sqlite", f".lezen-{'7' * 32}.sqlite"):
+            (doel / naam).touch()
+            os.utime(doel / naam, (oud, oud))
         subprocess.run([helper, "whatsapp"], capture_output=True, text=True, check=True)
-        assert not (doel / f"gesprekken-{'9' * 32}.sqlite").exists()
+        assert not (doel / f"gesprekken-{'9' * 32}.sqlite").exists() and not (doel / f".lezen-{'7' * 32}.sqlite").exists()
+        assert (doel / "gesprekken-archief.sqlite").exists()
 
 
 # ------------------------------------------------------------------------------------- bouwcontrole r3 ---
@@ -888,7 +914,9 @@ def test_r6_drie_uitrollen_en_terug():
         log = m / "launchctl.log"
         stub = m / "stub"
         stub.mkdir()
-        (stub / "launchctl").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\n[ \"$1\" = print ] && exit 1\nexit 0\n")
+        geladen = m / "geladen"
+        (stub / "launchctl").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nif [ \"$1\" = print ]; then\n"
+                                        f"  case \"$2\" in *wacht) [ -f '{geladen}' ] && exit 0;; esac\n  exit 1\nfi\nexit 0\n")
         (stub / "codesign").write_text("#!/bin/sh\n[ \"$1\" = -dv ] && echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2\nexit 0\n")
         (stub / "cc").write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in -o) uit=$2; shift;; *.c) bron=$1;; esac; shift; done\n"
                                  "cp \"$bron\" \"$uit\"; chmod +x \"$uit\"\n")
@@ -936,6 +964,23 @@ def test_r6_drie_uitrollen_en_terug():
             assert ("NIEUWE HELPER" in uit) == (i < 2), uit
         vorige = basis / "mac-gesprekken" / "vorige"
         assert (vorige / "COMMIT").read_text().strip() == shas[1]
+        # S3: een wacht die na bootout nog in launchd staat: niets gewisseld
+        geladen.write_text("")
+        assert "staat nog in launchd" in uitrol(ref=shas[0], ok=False)
+        geladen.unlink()
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[2] and (vorige / "COMMIT").read_text().strip() == shas[1]
+        # S4: een andere uitrol of proef houdt het uitrolslot, of een wacht houdt haar rondeslot: niets gewisseld
+        import fcntl
+        for slotpad in (basis / "mac-gesprekken" / ".uitrol.lock", basis / "belwacht" / "ronde.lock"):
+            slotpad.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(slotpad, os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                assert "already locked" in uitrol(ref=shas[0], ok=False)
+            finally:
+                os.close(fd)
+            assert git("rev-parse", "HEAD", cwd=werk) == shas[2], slotpad
+        assert (basis / "belwacht" / "ronde.lock").exists()           # lockf -k laat het slot van de wacht staan
         # aan zonder proef: geweigerd
         assert "eerst" in uitrol("aan", ok=False)
         # terug: versie 2 als geheel
