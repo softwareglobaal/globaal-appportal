@@ -134,6 +134,9 @@ def taak_melden(taak, gelukt, detail=""):
 
 # ---------------------------------------------------------- projecten ---
 BEKENDE_NUMMERS = set()   # alle projectnummers van de tegel, ook niet actieve; projectindex() vervangt dit
+# De laatste poging van projectindex(): de terugval van De Dagbundelaar neemt die index over en vraagt de tegel niet
+# opnieuw als hij net faalde (Codex, 26-10-2026: twee time-outs per dag konden de nachtronde laten stoppen).
+INDEX_POGING = {"per_nummer": None, "mislukt": False}
 
 
 def projectindex():
@@ -142,6 +145,7 @@ def projectindex():
     Dezelfde bron als de herkenning (H-A Projecten en de projectmappen); geen eigen
     register meer. Tot 04-10-2026 las deze wacht werkwijze/projecten.json, een lijst die
     alleen uit de agenda groeide en sinds 20-09 niet meer vernieuwd was."""
+    INDEX_POGING.update(per_nummer=None, mislukt=True)
     d = haal("/api/projectplekken")
     per_sleutel, per_nummer = {}, {}
     # Ook een afgesloten project is nooit een huisnummer (Codex, K5); per ronde vervangen, niet aangevuld: een
@@ -157,6 +161,7 @@ def projectindex():
                                      "bron": p.get("bron"), "link": p.get("link"), "firma": p.get("firma"),
                                      "nummer": p.get("nummer")}
         per_nummer.setdefault(str(p.get("nummer")), []).append(p["sleutel"])
+    INDEX_POGING.update(per_nummer=per_nummer, mislukt=False)
     return per_sleutel, per_nummer, d.get("dekking") or {}
 
 

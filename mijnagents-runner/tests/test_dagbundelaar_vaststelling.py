@@ -355,16 +355,35 @@ def test_f4_niet_gelezen_met_dezelfde_toetsregel_als_de_locatiewacht():
            {"id": "intern", "titel": "Mehdi: [HARC-IN] 9003 overleg Proefklant 9004, 3990 Proefstad", "locatie": "",
             "start": f"{DAG}T16:00:00+02:00", "einde": f"{DAG}T17:00:00+02:00"}]
     index = {"projectplekken": [{"sleutel": "HARC:9004", "nummer": "9004", "actief": True, "adres": "Proefweg 1, 3990 Proefstad"}]}
+    gevraagd = []
+
+    def haal(pad):
+        gevraagd.append(pad)
+        if gezien.get("tegel") == "traag":
+            raise TimeoutError("de tegel antwoordt niet")
+        return index
+
+    def maak_na_index(dag, afspraken=None):
+        LW.projectindex()
+    gezien = {}
     oud, LW.maak = LW.maak, maak
-    oud_haal, bekend, LW.haal = LW.haal, set(LW.BEKENDE_NUMMERS), lambda pad: index
+    oud_haal, bekend, poging, LW.haal = LW.haal, set(LW.BEKENDE_NUMMERS), dict(LW.INDEX_POGING), haal
+    LW.INDEX_POGING.update(per_nummer=None, mislukt=False)
     try:
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
+        assert per_id == {"adres": {"uitkomst": "onbekend", "tekst": "locatie niet gelezen (ValueError)"}}, per_id
+        assert bezoeken is None and reden == "ValueError" and len(gevraagd) == 1, (bezoeken, reden, gevraagd)
+        # Codex ronde 3: faalde de index al in maak(), dan geen tweede lange poging in de terugval
+        gezien["tegel"], LW.maak, gevraagd[:] = "traag", maak_na_index, []
+        per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
+        assert reden == "TimeoutError" and len(gevraagd) == 1, (reden, gevraagd)
+        assert set(per_id) == {"adres"}, "de nummers van de vorige geslaagde index blijven gelden"
     finally:
         LW.maak, LW.haal = oud, oud_haal
         LW.BEKENDE_NUMMERS.clear()
         LW.BEKENDE_NUMMERS.update(bekend)
-    assert per_id == {"adres": {"uitkomst": "onbekend", "tekst": "locatie niet gelezen (ValueError)"}}, per_id
-    assert bezoeken is None and reden == "ValueError", (bezoeken, reden)
+        LW.INDEX_POGING.clear()
+        LW.INDEX_POGING.update(poging)
 
 
 def test_g2_locatie_zonder_meting():
