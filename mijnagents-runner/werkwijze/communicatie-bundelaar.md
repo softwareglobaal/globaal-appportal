@@ -48,6 +48,7 @@ beloofde ook wie begon en de toon; daar is geen meting voor zonder inhoud te lez
 - Of de uitkomst ooit naar iemand anders dan hem en De Levenscoach gaat.
 - Wanneer ik live ga en op de cron kom.
 - Of De Dagbundelaar mijn dagitem toch meeneemt in het dagverslag.
+- Of een collega die ook in een privégesprek zat, bij naam blijft in zijn werkcontacten (nu wel).
 
 ## Wat ik nu nodig heb
 
