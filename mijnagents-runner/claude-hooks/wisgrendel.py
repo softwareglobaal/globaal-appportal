@@ -10,10 +10,13 @@ Geweigerd wordt:
   zoals _nieuwe_rit in agenda_wacht.py ze maakt);
 - een update_event die de status op 'cancelled' zet, op de agenda van Lara (zelfde uitzondering) of op een afspraak
   uit een reeks;
-- een Bash-opdracht die wist (DELETE, events().delete of status 'cancelled') en recurringEventId noemt, een afspraak
-  uit een reeks, of de agenda van Lara met een ID dat geen eigen rit is of dat niet uit de opdracht te lezen is (een
-  variabele, een lus).
-Zonder agenda (calendarId) werkt de MCP op de primaire agenda, en die is niet van Lara.
+- een Bash-opdracht die in een agenda wist (DELETE, events().delete of status 'cancelled') en recurringEventId noemt,
+  een afspraak uit een reeks, of de agenda van Lara met een ID dat geen eigen rit is;
+- een Bash-opdracht die in een agenda wist zonder dat agenda en ID letterlijk in de opdracht staan: een variabele,
+  $(...) of een onbekende agenda faalt dicht, ook op de werkagenda (Codex-controle 27-10-2026, punt 5).
+Zonder agenda (calendarId) werkt de MCP op de primaire agenda, en die is niet van Lara. Een Bash-wisopdracht die niets
+met een agenda te maken heeft (geen calendar, googleapis, events/, events() of eventId), laat de grendel door. De eigen
+ritopruiming van de Agendawacht draait in Python op de VM, buiten Claude Code, en valt hier niet onder.
 
 Het ID van Lara komt uit werkwijze/agenda-taken.json (de agenda met rol 'lara'); een tweede kopie staat nergens. Is het
 niet te lezen, dan telt elke genoemde agenda als die van Lara. Kapotte invoer, een ander moment dan PreToolUse of iets
@@ -35,9 +38,23 @@ MCP_WIJZIG = re.compile(r"^mcp__.+__update_event$")
 BASH_WIS = re.compile(r"""-X\s*["']?DELETE|--request[ =]["']?DELETE|method\s*=\s*["']DELETE["']"""
                       r"""|\.request\(\s*["']DELETE["']|\b(requests|httpx)\.delete\b|events\(\)\.delete"""
                       r"""|\\?["']status\\?["']\s*:\s*\\?["']cancell?ed""", re.I)
-ID_IN_PAD = re.compile(r"""events/([^\s/?'"\\#&;|<>()]*)""")
-ID_IN_VELD = re.compile(r"""(?i:event_?id)\\?["']?\s*[=:]\s*\\?["']([^"'\\]*)\\?["']""")
+PAD_DEEL = r"""([^\s/?'"\\#&;|<>()]*)"""         # tot de volgende / ? of spatie; een $ of { blijft erin staan
+AGENDA_IN_PAD = re.compile(r"\bcalendars/" + PAD_DEEL)
+ID_IN_PAD = re.compile(r"\bevents/" + PAD_DEEL)
+
+
+def _veld(naam):
+    """naam=waarde of "naam": "waarde"; groep 1 is het aanhalingsteken (leeg: een variabele), groep 2 de waarde."""
+    return re.compile(r"(?i:" + naam + r""")\\?["']?\s*[=:]\s*(\\?["']?)([^\s,)"'\\;&|]*)""")
+
+
+AGENDA_IN_VELD = _veld("calendar_?id")
+ID_IN_VELD = _veld("event_?id")
+AGENDA_WOORD = re.compile(r"calendar|googleapis|\bevents/|events\(\)|event_?id", re.I)
+LETTERLIJKE_AGENDA = re.compile(r"[A-Za-z0-9._%@+-]+")
 SCHOON_ID = re.compile(r"[A-Za-z0-9_]+")
+RIT_TIP = (": gebruik het letterlijke rit-ID. De eigen ritopruiming van de Agendawacht draait in Python op de VM en valt "
+           "hier niet onder")
 
 REDEN = ("Wisgrendel: markeer, wis niet. Afspraken op de agenda van Lara en afspraken uit een reeks worden nooit gewist "
          "(Mehdi, driehoeksoverleg 27-10-2026, L5 en M6). Zet 'vervalt (vakantie)' vooraan in de titel en zet de afspraak "
@@ -89,6 +106,11 @@ def _mcp(naam, ti, pad):
     return None
 
 
+def _waarden(in_pad, in_veld, cmd):
+    """Alle agenda's of ID's die de opdracht noemt; een veld zonder aanhalingstekens is een variabele en telt als '$'."""
+    return in_pad.findall(cmd) + [w if q else "$" for q, w in in_veld.findall(cmd)]
+
+
 def _bash(ti, pad):
     cmd = ti.get("command") if isinstance(ti, dict) else None
     if not isinstance(cmd, str) or not BASH_WIS.search(cmd):
@@ -96,14 +118,23 @@ def _bash(ti, pad):
     laag = cmd.lower()
     if "recurringeventid" in laag:
         return "de opdracht noemt recurringEventId, dus een reeks"
-    ids = ID_IN_PAD.findall(cmd) + ID_IN_VELD.findall(cmd)
+    lara = lara_id(pad)
+    if not AGENDA_WOORD.search(cmd) and not (lara and lara in laag):
+        return None                                  # wist niets in een agenda (bv. gh api -X DELETE op een branch)
+    agendas = _waarden(AGENDA_IN_PAD, AGENDA_IN_VELD, cmd)
+    ids = _waarden(ID_IN_PAD, ID_IN_VELD, cmd)
     reeks = [i for i in ids if REEKS_ID.search(i)]
     if reeks:
         return f"het ID {reeks[0]} is een afspraak uit een reeks"
-    lara = lara_id(pad)
-    op_lara = (lara in laag) if lara else "calendar" in laag
-    if op_lara and (not ids or not all(SCHOON_ID.fullmatch(i) for i in ids)):
-        return _lara_oorzaak(lara, "en het ID is niet uit de opdracht te lezen (een variabele of een lus)")
+    if not agendas or not all(LETTERLIJKE_AGENDA.fullmatch(a) for a in agendas):
+        return ("de agenda is niet uit de opdracht te lezen (een variabele, $(...) of geen agenda), dus niet na te kijken "
+                "of het die van Lara is: schrijf het adres van de agenda letterlijk in de opdracht")
+    op_lara = (lara in laag) if lara else True
+    if not ids or not all(SCHOON_ID.fullmatch(i) for i in ids):
+        if op_lara:
+            return _lara_oorzaak(lara, "en het ID is niet uit de opdracht te lezen (een variabele of een lus)") + RIT_TIP
+        return ("het ID is niet uit de opdracht te lezen (een variabele of een lus), dus niet na te kijken of het een "
+                "afspraak uit een reeks is: schrijf het ID letterlijk in de opdracht")
     if op_lara and not all(RIT_ID.fullmatch(i) for i in ids):
         return _lara_oorzaak(lara)
     return None

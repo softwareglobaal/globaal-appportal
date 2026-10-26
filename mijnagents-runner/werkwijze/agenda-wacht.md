@@ -797,9 +797,11 @@ De grendels zijn tests/test_leren_in_lagen.py en tests/test_wisgrendel.py.
 
 De wisgrendel (27-10-2026, L5 en M6) weigert echt; regels_vooraf.py zet alleen tekst. Hij houdt tegen: wissen op de
 agenda van Lara (behalve een eigen rit), wissen of annuleren van een afspraak uit een reeks (ID eindigt op
-_JJJJMMDD of _JJJJMMDDTUUMMSSZ) op elke agenda, en een Bash-opdracht die zo wist, recurringEventId noemt of op Lara
-een ID gebruikt dat niet te lezen is (een variabele, een lus). Wissen op de werkagenda met een gewoon ID laat hij door;
-daar blijft de ja van Mehdi de regel. Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
+_JJJJMMDD of _JJJJMMDDTUUMMSSZ) op elke agenda, en een Bash-opdracht die zo wist of recurringEventId noemt. In Bash
+moeten agenda en ID letterlijk in de opdracht staan: een variabele, $(...) of een onbekende agenda weigert hij, ook
+op de werkagenda (Codex-controle 27-10-2026, punt 5). Wissen op de werkagenda met een letterlijk gewoon ID laat hij
+door; daar blijft de ja van Mehdi de regel. Mijn eigen ritopruiming draait in Python op de VM en valt er niet onder.
+Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
 Let op: staat wisgrendel.py niet op dat pad, dan stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code
 elke opdracht die onder de matcher valt (elke Bash- en MCP-opdracht). Het pad wijst dus naar de hoofdcheckout
 ~/dev/globaal-appportal, nooit naar een werkboom die later verdwijnt, en de hook gaat pas aan als die checkout de main

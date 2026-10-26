@@ -152,6 +152,38 @@ check("Bash: lezen op Lara mag", rc == 0 and uit is None, str(uit)[:200])
 rc, uit = hook(bash("ls -la"))
 check("Bash: een gewone opdracht krijgt niets", rc == 0 and uit is None, str(uit)[:200])
 
+# ---------- Bash: agenda en ID moeten letterlijk in de opdracht staan (Codex-controle 27-10-2026, punt 5) ----------
+rc, uit = hook(bash(f'LARA_CAL="{LARA_URL}"; curl -s -X DELETE "{API}/$LARA_CAL/events/abc123" -H "Authorization: Bearer $TOK"'))
+check("Bash: een agenda uit $LARA_CAL wordt geweigerd en de reden vraagt het adres letterlijk",
+      geweigerd(rc, uit) and "agenda is niet uit de opdracht te lezen" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+check("Bash: een agenda uit ${CAL} wordt geweigerd",
+      geweigerd(*hook(bash(f'curl -X DELETE "{API}/${{CAL}}/events/abc123"'))))
+check("Bash: een agenda uit $(cat x) wordt geweigerd",
+      geweigerd(*hook(bash(f'curl -X DELETE "{API}/$(cat x)/events/abc123"'))))
+check("Bash: een agenda uit `cat x` wordt geweigerd",
+      geweigerd(*hook(bash(f'curl -X DELETE "{API}/`cat x`/events/abc123"'))))
+check("Bash: een variabele agenda wordt ook met een rit-ID geweigerd",
+      geweigerd(*hook(bash(f'curl -X DELETE "{API}/$CAL/events/{RIT}"'))))
+check("Bash: events().delete met calendarId uit een variabele wordt geweigerd",
+      geweigerd(*hook(bash(f"python3 -c \"s.events().delete(calendarId=cal, eventId='abc123').execute()\""))))
+check("Bash: wissen in de agendalijst (calendarList, geen calendars/) wordt geweigerd",
+      geweigerd(*hook(bash("curl -X DELETE https://www.googleapis.com/calendar/v3/users/me/calendarList/abc"))))
+rc, uit = hook(bash(f'curl -X DELETE "{API}/{LARA_URL}/events/$RIT_ID"'))
+_r = (uit or {}).get("permissionDecisionReason", "")
+check("Bash: een variabel ID op Lara blijft geweigerd, met de raad: het letterlijke rit-ID, de ritopruiming draait op de VM",
+      geweigerd(rc, uit) and "letterlijke rit-ID" in _r and "op de VM" in _r, _r[-300:])
+rc, uit = hook(bash(f'curl -X DELETE "{API}/mehdiprivewerkagenda%40gmail.com/events/$E"'))
+check("Bash: een variabel ID op de werkagenda wordt geweigerd (een reeks is dan niet na te kijken)",
+      geweigerd(rc, uit) and "ID is niet uit de opdracht te lezen" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+rc, uit = hook(bash(f"curl -X DELETE '{API}/{WERK}/events/4kq9s0abc12def?sendUpdates=none'"))
+check("Bash: een letterlijke werkagenda (@-vorm) met een letterlijk gewoon ID mag", rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash(f"python3 -c \"s.events().delete(calendarId='{WERK}', eventId='4kq9s0abc12def').execute()\""))
+check("Bash: events().delete met letterlijke werkagenda en letterlijk ID mag", rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash(f"curl -X DELETE {API}/primary/events/4kq9s0abc12def"))
+check("Bash: de primaire agenda met een letterlijk gewoon ID mag", rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash("gh api -X DELETE repos/softwareglobaal/globaal-appportal/git/refs/heads/oud"))
+check("Bash: een wisopdracht buiten de agenda (gh api) laat de grendel door", rc == 0 and uit is None, str(uit)[:200])
+
 # ---------- kapotte invoer, ander moment ----------
 rc, uit = hook(None, ruw="geen json")
 check("kapotte invoer: geen uitvoer en exitcode 0", rc == 0 and uit is None, str(uit)[:200])
