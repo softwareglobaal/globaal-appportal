@@ -50,6 +50,7 @@ REGELS_VAST = HIER / "claude-hooks" / "regels.json"
 ZELFCONTROLE = DATA / "zelfcontrole.json"
 KLEURHERSTEL = DATA / "agenda-kleurherstel.json"
 PRIVE = "mehdipriveagena@gmail.com"
+WEEKLINK = "Wat je deze week deed: https://mijnagents.globaal.be/week/"
 UUR = 20
 WEEK_MAX = 2
 
@@ -314,8 +315,9 @@ def mislukt_overzicht(week, fout):
 
 def agenda_body(week, maandag, uit):
     """Hele dag op maandag, op de privé-agenda. Vrij (transparent), zodat het nooit een Calendly-slot of een
-    rit blokkeert (FR-57), en zonder melding."""
-    oms = [uit["overzicht"], ""]
+    rit blokkeert (FR-57), en zonder melding. De link naar de weekpagina staat vooraan, zodat de inkorting op 7500
+    tekens hem nooit wegknipt; de Dagbundelaar zet die pagina maandagnacht klaar (overleg fase 2, Q6)."""
+    oms = [f"{WEEKLINK}{week}", "", uit["overzicht"], ""]
     if uit["voor_mehdi"]:
         oms += ["Voor jou:"] + [f"- {x['vraag']} Volgende stap: {x['volgende_stap']}" for x in uit["voor_mehdi"]] + [""]
     if uit["teruggekomen"]:
