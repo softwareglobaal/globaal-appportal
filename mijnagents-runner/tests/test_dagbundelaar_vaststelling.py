@@ -321,7 +321,7 @@ def test_f4_locatie_met_dezelfde_afspraken_en_stand():
                                 "project": {"nummer": "9004"}, "zekerheid": "waarschijnlijk"}],
                 "werf": [], "twijfel": [], "elders": []}
     LW = Module(maak=maak, uur=lambda x: "00:00", online=lambda t: False, AFSPRAAK_M=300, MIN_BEZOEK=20,
-                afstand_m=__import__("locatie_wacht").afstand_m)
+                afstand_m=__import__("locatie_wacht").afstand_m, te_toetsen=__import__("locatie_wacht").te_toetsen)
     W = Module(lees_titel=lambda t: {"buiten": True, "soort": "KB"}, BUITEN_SOORTEN=("KB",))
     afs = [{"id": "t", "titel": "!! Mehdi: [UB-KB] x", "start": f"{DAG}T14:15:00+02:00", "einde": f"{DAG}T15:15:00+02:00"}]
     h1, h2 = met_module("locatie_wacht", LW), met_module("agenda_wacht", W)
@@ -338,6 +338,26 @@ def test_f4_locatie_met_dezelfde_afspraken_en_stand():
     finally:
         h1()
         h2()
+
+
+def test_f4_niet_gelezen_met_dezelfde_toetsregel_als_de_locatiewacht():
+    """Codex, 26-10-2026: is de locatie niet te lezen, dan krijgt elke afspraak die De Locatiewacht zou toetsen
+    'onbekend', ook een afspraak met een volledig adres alleen in de titel; hetzelfde gesprek online niet."""
+    import locatie_wacht as LW
+
+    def maak(dag, afspraken=None):
+        raise ValueError("buiten de reeks")
+    titel = "Mehdi: [HARC-IN] 9003 overleg, Proefplein 1, 3990 Proefstad"
+    afs = [{"id": "adres", "titel": titel, "locatie": "", "start": f"{DAG}T10:00:00+02:00", "einde": f"{DAG}T11:00:00+02:00"},
+           {"id": "online", "titel": titel, "locatie": "https://us06web.zoom.us/j/1", "start": f"{DAG}T14:00:00+02:00",
+            "einde": f"{DAG}T15:00:00+02:00"}]
+    oud, LW.maak = LW.maak, maak
+    try:
+        per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
+    finally:
+        LW.maak = oud
+    assert per_id == {"adres": {"uitkomst": "onbekend", "tekst": "locatie niet gelezen (ValueError)"}}, per_id
+    assert bezoeken is None and reden == "ValueError", (bezoeken, reden)
 
 
 def test_g2_locatie_zonder_meting():
@@ -368,7 +388,7 @@ def test_g2_locatie_zonder_meting():
                     {"van": t("16:25"), "tot": t("16:59"), "lat": elders[0], "lon": elders[1], "waar": "Thuis", "vaste_plek": True}],
                 "werf": [], "twijfel": [], "elders": []}
     LW = Module(maak=maak, uur=lambda x: "00:00", online=lambda t: False, AFSPRAAK_M=300, MIN_BEZOEK=20,
-                afstand_m=__import__("locatie_wacht").afstand_m)
+                afstand_m=__import__("locatie_wacht").afstand_m, te_toetsen=__import__("locatie_wacht").te_toetsen)
     W = Module(lees_titel=lambda t: {"buiten": True, "soort": "KB"}, BUITEN_SOORTEN=("KB",))
     a = lambda i, s_, e: {"id": i, "titel": "!! Mehdi: [HA] 9003", "start": f"{DAG}T{s_}:00+02:00", "einde": f"{DAG}T{e}:00+02:00"}  # noqa: E731
     afs = [a("ochtend", "10:00", "11:00"), a("avond", "17:00", "18:00"), a("laat", "20:00", "21:00"), a("zonder", "12:00", "13:00")]

@@ -211,6 +211,70 @@ def test_het_projectnummer_en_vrije_tekst_zijn_geen_adres():
     assert L.adres_in("Proefstraat 10.4, 2999 Proefdorp")["nr"] == "10.4"
 
 
+def test_zelfde_adres_vergelijkt_het_volledige_huisnummer():
+    """Codex, 26-10-2026: een ander busnummer of een ander deel van het huisnummer is een andere plek."""
+    werf = L.adres_in("Werfstraat 12, 3999 Proefdorp")
+    for links, rechts, zelfde in (("12 bus 2", "12 bus 3", False), ("12-14", "12-16", False), ("10.4", "10.5", False),
+                                  ("10.4", "104", False), ("12A", "12a", True), ("12 Bus 2", "12 bus 2", True)):
+        a, b = (L.adres_in(f"Werfstraat {x}, 3999 Proefdorp") for x in (links, rechts))
+        assert L.zelfde_adres(a, b) is zelfde, (links, rechts)
+    assert not L.zelfde_adres(L.adres_in("Werfstraat 12 bus 2, 3999 Proefdorp"), werf)
+
+
+def test_de_adreslezer_leest_bus_en_lidwoord_ongeacht_hoofdletters():
+    for tekst, verwacht in (("Werfstraat 12 Bus 2, 3999 Proefdorp", ("Werfstraat", "12 Bus 2", "3999")),
+                            ("Proefdijk 5, 8999 de Proefhaven, België", ("Proefdijk", "5", "8999")),
+                            ("Proeflaan 12-14, 2999 Sint-Proef-Waver", ("Proeflaan", "12-14", "2999"))):
+        a = L.adres_in(tekst)
+        assert (a["straat"], a["nr"], a["pc"]) == verwacht, (tekst, a)
+    assert L.adres_in("Proefdijk 5, 8999 de Proefhaven, België")["tekst"] == "Proefdijk 5, 8999 de Proefhaven"
+    assert L.adres_in("Proeflaan 12-14, 2999 Sint-Proef-Waver")["tekst"].endswith("2999 Sint-Proef-Waver")
+
+
+def test_bij_twee_adressen_telt_het_afwijkende_en_bij_twijfel_geen_oordeel():
+    """Codex, 26-10-2026: eerst het overlegadres, dan het werfadres; de werf is dan niet de plek. Twee andere plekken
+    dan de werf: niet eenduidig, geen oordeel."""
+    L.W.coord = Coord(list(STADSKANTOOR))
+    a = {"titel": "!! Mehdi: [HARC] 2645 vooroverleg, Proefplein 1, 3990 Proefstad, over Werfstraat 9, 3999 Proefdorp",
+         "locatie": ""}
+    lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+    assert (lat, lon) == STADSKANTOOR and "Proefplein 1" in herkomst, herkomst
+    assert L.W.coord.gevraagd == ["Proefplein 1, 3990 Proefstad"], "de werf zelf hoeft niet op de kaart"
+    plekken = iter([[50.75, 4.70], [50.80, 4.80]])
+    L.W.coord = lambda adres, cache: next(plekken)
+    a = {"titel": "!! Mehdi: [HARC] 2645 rondgang, Proefplein 1, 3990 Proefstad en Markt 2, 3991 Proefgem", "locatie": ""}
+    lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+    assert lat is None and "niet eenduidig" in herkomst, herkomst
+
+
+def test_een_storing_blijft_zichtbaar_ook_bij_een_vrij_adres():
+    """Codex, 26-10-2026: ook de oude route met een vrij adres in de agenda zegt dat de kaartdienst onbereikbaar was."""
+    L.W.coord = Coord(L.W.KAARTDIENST_STORING)
+    a = {"titel": "!! Mehdi: rondleiding", "locatie": "Proefzaal Proefdorp"}
+    lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+    assert lat is None and "kaartdienst onbereikbaar" in herkomst and "Proefzaal" in herkomst, herkomst
+    L.W.coord = Coord(None)
+    lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+    assert lat is None and herkomst == "adres niet gevonden: Proefzaal Proefdorp", herkomst
+
+
+def test_een_afgesloten_projectnummer_is_ook_geen_huisnummer():
+    """Codex, 26-10-2026: de grendel kent ook de projecten die niet meer actief zijn."""
+    echt_haal, bekend = L.haal, set(L.BEKENDE_NUMMERS)
+    L.haal = lambda pad: {"projectplekken": [{"sleutel": "HARC:2699", "nummer": "2699", "actief": False}], "dekking": {}}
+    try:
+        L.projectindex()
+        assert "2699" in L.BEKENDE_NUMMERS
+        L.W.coord = Coord(list(STADSKANTOOR))
+        a = {"titel": "!! Mehdi: [HARC-KB] 2645 bespreking Proefklant 2699, 3990 Proefstad", "locatie": ""}
+        lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+        assert (lat, lon) == WERF and not L.W.coord.gevraagd, herkomst
+    finally:
+        L.haal = echt_haal
+        L.BEKENDE_NUMMERS.clear()
+        L.BEKENDE_NUMMERS.update(bekend)
+
+
 def test_een_overleg_op_het_stadskantoor_is_doorgegaan_en_de_plek_gaat_naar_de_dagbundelaar():
     L.W.coord = Coord(list(STADSKANTOOR))
     L.agenda.beschikbaar = lambda: True

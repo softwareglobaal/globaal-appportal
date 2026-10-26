@@ -477,8 +477,7 @@ def lees_locatie(dag, afspraken):
     per_id = {}
     for a in afspraken:
         info = W.lees_titel(a.get("titel") or "")
-        loc = (a.get("locatie") or "").strip()
-        if info["buiten"] or info["soort"] in W.BUITEN_SOORTEN or (loc and not LW.online(loc)):
+        if LW.te_toetsen(a, info):                 # dezelfde regel als De Locatiewacht, ook een adres alleen in de titel
             per_id[a.get("id")] = {"uitkomst": "onbekend", "tekst": f"locatie niet gelezen ({reden})"}
     return per_id, None, "", reden
 
