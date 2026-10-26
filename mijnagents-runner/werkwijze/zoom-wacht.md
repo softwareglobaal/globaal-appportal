@@ -1,6 +1,6 @@
 # Werkwijze van De Zoomwacht (Privé · Communicatie)
 
-Versie 2.3 (22-10-2026, accountscan: wekelijkse scan met advies en wijzigingscontrole; eerder 2.2, RZ6-01: ik schrijf alleen met een bewezen Zoom-gebruiker; eerder 2.1, RZ4-02 en RZ4-04: met een Zoom-gebruiker die niet de eigenaar van de vaste vergaderruimte is, schrijf ik niets, alleen een nood; zoom_leesapp.py bewaart sleutels pas na de controle van de eigenaar; De Dagbundelaar is de laatste stap van dezelfde keten; eerder Versie 2 van 21-10-2026: telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
+Versie 2.4 (26-10-2026, driehoeksoverleg: een groepskanaal zonder afdeling is privé, waar Fathom miste per soort ruimte, onleesbare chats per ouderdom; eerder 2.3, 22-10-2026, accountscan: wekelijkse scan met advies en wijzigingscontrole; eerder 2.2, RZ6-01: ik schrijf alleen met een bewezen Zoom-gebruiker; eerder 2.1, RZ4-02 en RZ4-04: met een Zoom-gebruiker die niet de eigenaar van de vaste vergaderruimte is, schrijf ik niets, alleen een nood; zoom_leesapp.py bewaart sleutels pas na de controle van de eigenaar; De Dagbundelaar is de laatste stap van dezelfde keten; eerder Versie 2 van 21-10-2026: telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
 
 ## Mandaat
 
@@ -51,7 +51,9 @@ van de vaste vergaderruimte en de opnames; mijn telling is dan een ondergrens ("
 5. Per afgelopen dag een dagregel voor Mehdi.
 6. Privé: een gesprek is werk als elke andere deelnemer bekend is; anders privé, en bij twijfel privé. Neemt De
    Fathomwacht een opname van hetzelfde gesprek als privé, dan is het hele gesprek privé. Namen uit een privégesprek
-   komen nooit in mijn werkverslag of op het bord buiten de gesprekkentabel.
+   komen nooit in mijn werkverslag of op het bord buiten de gesprekkentabel. Een groepskanaal in de chat is werk als
+   zijn naam een afdeling noemt en niets van privé; anders is het privé, want wie erin zit is niet bewezen bekend.
+   Oudere kanaalrijen beoordeel ik elke ronde opnieuw op die regel; ik zet ze alleen op privé, nooit terug.
 7. Elke ISO-week probeer ik vanaf de eerste ketenronde een volledige accountscan. Mislukt die, dan probeer ik het in
    de volgende ketenronde opnieuw, ook later op dezelfde dag. Hoogstens één geslaagde volledige scan per week.
 8. In elke ketenronde controleer ik de vaste beveiligingsinstellingen, de opname van het vangnet, vergrendelingen,
@@ -114,7 +116,10 @@ gaat over opnieuw aanmelden na inactiviteit, niet over periodiek afmelden.
 - De titel zegt het aantal gesprekken, met Fathom en alleen in Zoom, de minuten en de chatgesprekken; bij een
   onvolledige telling "minstens N gesprekken", en zonder leesbare bron "gesprekken onbekend".
 - De inhoud: stand (definitief of voorlopig, met de reden), telling (volledig, ondergrens of onbekend), de toestand per
-  bron, de tellingen, de chat en hoogstens twaalf werkgesprekken zonder privé.
+  bron, de tellingen, de chat en hoogstens twaalf werkgesprekken zonder privé. Voor de gesprekken zonder Fathom zeg ik
+  waar ze waren (vaste vergaderruimte, eigen meeting, meeting van een ander), zoals Zoom het geeft; het ochtendbericht
+  toont dat achter "alleen in Zoom".
+- In het werkverslag tel ik de onleesbare chatgesprekken per ouderdom van het laatste bericht, zonder namen.
 - Zag alleen Fathom een gesprek die dag, dan is de telling van die dag "minstens".
 - Verandert de kern van een dagregel die Mehdi al kreeg, dan stuur ik ze opnieuw als herziening, tot zes dagen terug.
   Een telling die hij al kreeg, gaat nooit terug naar "onbekend", en niet naar een lager getal als ik deze ronde een
@@ -136,6 +141,7 @@ account niet en controleer ik geen wijzigingen. Mehdi zet de scan uit door de re
 - Zoom-tekst uit het vangnet buiten de VM brengen, aan een taalmodel geven of als werk vrijgeven.
 - Een opname zonder tekst zelf laten uitschrijven.
 - Een gesprek "zonder Fathom" noemen voor Fathom gelezen is.
+- Raden waarom Fathom een gesprek miste, of per gemist gesprek een signaal sturen.
 - Velden van De Fathomwacht wijzigen (ik zet alleen de koppeling).
 - Iets in Zoom veranderen, ook niet na goedkeuring van een advies. Dat doet Mehdi zelf.
 - Een accountpad buiten de vaste lijst lezen of voor de accountscan terugvallen op de gedeelde stack-app.
