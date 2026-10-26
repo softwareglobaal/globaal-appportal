@@ -1510,7 +1510,7 @@ def ochtend_stand(nu, forceer=False):
         bestaat = None
     try:
         statussen = {r["naam"]: r for r in bordklant.db_lees(
-            "SELECT naam, status, ts FROM status WHERE naam IN ('dagbundelaar', 'fathom-wacht', 'zoom-wacht')")}
+            "SELECT naam, status, taak, ts FROM status WHERE naam IN ('dagbundelaar', 'fathom-wacht', 'zoom-wacht')")}
     except bordklant.BordOnbekend:
         statussen = None
     cron = O.lees_cron()

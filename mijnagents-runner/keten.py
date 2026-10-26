@@ -57,6 +57,13 @@ STAPPEN = (("fathom-wacht", "fathom_wacht.py", 2700, "fathom_wacht.log"),
            ("zoom-wacht", "zoom_wacht.py", 1200, "zoom_wacht.log"))
 # RZ4-04: de laatste stap van de ochtendketen op een werkdag. Een ronde duurt gewoonlijk enkele seconden; 900 s is ruim.
 DAGBUNDELAAR = ("dagbundelaar", "dagbundelaar.py", 900, "dagbundelaar.log")
+# De nachtketen (keten.py --nacht, ontwerp dagvaststelling v1.2, Codex F9): elke nacht om 23:30 UTC De Zoomwacht, zodat de
+# gesprekken van de avond in de tabel staan, en daarna De Dagbundelaar --nacht, die de dagvaststelling maakt. Ze schrijft
+# nacht.json, nooit keten.json: het ochtendbericht en het inhalen van de ochtendketen kijken er niet naar. De Dagbundelaar
+# leest in nacht.json de exit van De Zoomwacht. Een ronde over veertien dagen duurt minuten; 1800 s is ruim.
+NACHT = os.path.expanduser("~/appportal/mijnagents-data/nacht.json")
+NACHTSTAPPEN = (("zoom-wacht", "zoom_wacht.py", 1200, "zoom_wacht.log"),)
+NACHTBUNDELAAR = ("dagbundelaar", ("dagbundelaar.py", "--nacht"), 1800, "dagbundelaar.log")
 # Het startmoment staat op een plek: de regel met keten.py in de planning. Een proef zet CRON op een eigen bestand.
 CRON = os.path.join(HIER, "planning", "gesprekken.cron")
 KOPPELINGEN = os.path.join(HIER, "koppelingen")
@@ -75,15 +82,16 @@ def stempel(t):
     return t.isoformat(timespec="seconds")
 
 
-def schrijf(keten):
-    """Atomisch: een lezer ziet altijd een hele versie van keten.json, nooit een half bestand."""
-    map_ = os.path.dirname(KETEN)
+def schrijf(keten, pad=None):
+    """Atomisch: een lezer ziet altijd een hele versie van keten.json (of nacht.json), nooit een half bestand."""
+    pad = pad or KETEN
+    map_ = os.path.dirname(pad)
     os.makedirs(map_, exist_ok=True)
     fd, tijdelijk = tempfile.mkstemp(prefix=".keten-", dir=map_)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(keten, f, ensure_ascii=False, indent=1)
-        os.replace(tijdelijk, KETEN)
+        os.replace(tijdelijk, pad)
     except BaseException:
         if os.path.exists(tijdelijk):
             os.unlink(tijdelijk)
@@ -92,10 +100,11 @@ def schrijf(keten):
 
 def stap(runner, tijdslimiet, logboek):
     """Een runner met zijn eigen time-out. Geeft zijn exitcode, of 124 als hij te lang liep. Stopt de keten zelf
-    (SIGTERM), dan stopt ook de runner die nog loopt."""
+    (SIGTERM), dan stopt ook de runner die nog loopt. runner: een bestandsnaam, of (bestandsnaam, argumenten...)."""
     os.makedirs(LOGMAP, exist_ok=True)
+    naam, *argumenten = (runner,) if isinstance(runner, str) else tuple(runner)
     with open(os.path.join(LOGMAP, logboek), "a", encoding="utf-8") as log:
-        p = subprocess.Popen([PYTHON, os.path.join(HIER, runner)], stdout=log, stderr=subprocess.STDOUT, cwd=HIER)
+        p = subprocess.Popen([PYTHON, os.path.join(HIER, naam), *argumenten], stdout=log, stderr=subprocess.STDOUT, cwd=HIER)
         try:
             return p.wait(timeout=tijdslimiet)
         except subprocess.TimeoutExpired:
@@ -170,11 +179,29 @@ def ochtendketen(start, vorige=None):
     return True, "inhaalronde: de vorige keten van vandaag draaide hem niet met exit 0"
 
 
-def voer_uit(keten, naam, runner, tijdslimiet, logboek):
+def voer_uit(keten, naam, runner, tijdslimiet, logboek, pad=None):
     code = stap(runner, tijdslimiet, logboek)
     keten["stappen"][naam] = {"exit": code, "einde": stempel(nu())}
     print(f"{stempel(nu())} {naam}: exit {code}" + (" (time-out)" if code == TIJDSLIMIET else ""), flush=True)
-    schrijf(keten)
+    schrijf(keten, pad)
+
+
+def nachtketen():
+    """De nachtketen (Codex F9): De Zoomwacht en daarna De Dagbundelaar --nacht, ook als De Zoomwacht faalde (hij meldt
+    dat zelf, uit nacht.json). Schrijft nacht.json met einde null tot het einde; De Dagbundelaar ziet zo dat hij in een
+    lopende nachtketen draait. Exit 0 alleen als beide stappen met 0 eindigden."""
+    start = nu()
+    nacht = {"start": stempel(start), "einde": None, "stappen": {}}
+    schrijf(nacht, NACHT)
+    try:
+        for naam, runner, tijdslimiet, logboek in NACHTSTAPPEN + (NACHTBUNDELAAR,):
+            voer_uit(nacht, naam, runner, tijdslimiet, logboek, NACHT)
+    finally:
+        nacht["einde"] = stempel(nu())
+        schrijf(nacht, NACHT)
+    geslaagd = all(s.get("exit") == 0 for s in nacht["stappen"].values()) and len(nacht["stappen"]) == len(NACHTSTAPPEN) + 1
+    print(f"{nacht['einde']} nachtketen {'geslaagd' if geslaagd else 'niet geslaagd'}", flush=True)
+    return 0 if geslaagd else 1
 
 
 def main():
@@ -205,4 +232,4 @@ def main():
 
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, stop_bij_sigterm)
-    sys.exit(main())
+    sys.exit(nachtketen() if "--nacht" in sys.argv else main())

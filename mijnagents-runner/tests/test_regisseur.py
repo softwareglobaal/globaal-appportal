@@ -1243,6 +1243,21 @@ def test_rz2_03_dagbundelaar_telt_pas_na_het_einde_van_de_keten():
                                                                   einde="2026-10-24T07:50:00+00:00"))["beurt"]
 
 
+def test_dagvaststelling_nachtronde_geeft_het_ochtendbericht_niet_vrij():
+    """Codex D1 (ontwerp dagvaststelling v1.2, 26-10-2026): De Dagbundelaar heeft een nachtronde die alleen de
+    dagvaststelling maakt (taak 'dagvaststelling'). Faalt de ochtendstap, dan mag een latere nachtronde of een ronde in
+    fout het ochtendbericht niet vrijgeven; een volledige ronde met bundels wel."""
+    keten = {"start": "2026-10-22T07:00:05+00:00", "einde": "2026-10-22T07:50:00+00:00", "geslaagd": True,
+             "stappen": {"dagbundelaar": {"exit": 1, "einde": "2026-10-22T07:49:00+00:00"}}}
+    nu = datetime(2026, 10, 22, 8, 10, tzinfo=UTC)
+    db = lambda st, taak: {"dagbundelaar": {"status": st, "taak": taak, "ts": "2026-10-22T08:00:00+00:00"}}  # noqa: E731
+    assert not _stand(nu, keten, db("klaar", "dagvaststelling"))["beurt"], "nachtronde na de keten"
+    assert not _stand(nu, keten, db("waakt", "dagvaststelling"))["beurt"], "nachtronde met noden"
+    assert not _stand(nu, keten, db("fout", "bundels en dagvaststelling"))["beurt"], "een ronde in fout"
+    assert _stand(nu, keten, db("waakt", "bundels en dagvaststelling"))["beurt"], "volledige ronde met noden"
+    assert _stand(nu, keten, db("klaar", "dag 2026-10-21 gebundeld"))["beurt"], "oude taaknaam van voor 26-10-2026"
+
+
 def test_t52_moment_van_het_ochtendbericht():
     k = lambda start, ok=True: {"start": start, "geslaagd": ok, "einde": start}  # noqa: E731
     db = lambda ts, st="klaar": {"dagbundelaar": {"status": st, "ts": ts}}  # noqa: E731
