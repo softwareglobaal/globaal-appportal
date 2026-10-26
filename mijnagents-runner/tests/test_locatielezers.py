@@ -100,7 +100,7 @@ def test_dagbundelaar_meldt_een_ontbrekend_nieuw_dagboek_naast_een_oud_item():
     from collections import defaultdict
     bron = open(os.path.join(HIER, "dagbundelaar.py"), encoding="utf-8").read()
     boom = ast.parse(bron)
-    knoop = next(n for n in boom.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+    knoop = next(n for n in boom.body if isinstance(n, ast.FunctionDef) and n.name == "bundelen")
     harten = []
     ns = {"ag": SimpleNamespace(hartslag=lambda *a, **k: harten.append(k), klaarzet=lambda x: {"nieuw": 0},
                                 log=lambda *a, **k: None, log_verstuur=lambda: None),
@@ -110,8 +110,7 @@ def test_dagbundelaar_meldt_een_ontbrekend_nieuw_dagboek_naast_een_oud_item():
                "titel": "Locatielogboek 2026-09-30", "inhoud": "oud", "status": "klaar"}]},
               opgepakt=lambda *a: None)}
     exec(compile(ast.Module(body=[knoop], type_ignores=[]), "dagbundelaar.py", "exec"), ns)
-    ns["main"]()
-    noden = [n["tekst"] for n in harten[-1]["nood"]]
+    noden = [n["tekst"] for n in ns["bundelen"]()["nood"]]
     assert any("geen Locatiedagboek" in t for t in noden), noden
 
 

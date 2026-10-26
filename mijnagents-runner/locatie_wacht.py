@@ -210,11 +210,13 @@ def verblijven_van(dagboek):
     return uit
 
 
-def vergelijk_agenda(dag, verblijven, index, wcache):
+def vergelijk_agenda(dag, verblijven, index, wcache, per_id=None):
     """(doorgegaan, niet_gezien, zonder_adres, niet_te_toetsen). Te toetsen is een afspraak
     buiten (!!, een buitensoort of een buitendienst in de titel) of met een fysiek adres.
     Online, intern en reistijd tellen alleen mee in het aantal. De auto ter plaatse is een
-    aanwijzing dat de afspraak doorging, geen bewijs dat Mehdi er was."""
+    aanwijzing dat de afspraak doorging, geen bewijs dat Mehdi er was.
+    per_id (een dict): krijgt per getoetste afspraak {'uitkomst', 'tekst'}, voor de dagvaststelling van De Dagbundelaar
+    (ontwerp dagvaststelling v1.2). Een afspraak die er niet in staat, is niet ter plaatse."""
     alle = W.afspraken_dag(dag) if agenda.beschikbaar() else []
     doorgegaan, niet_gezien, zonder_adres, overig = [], [], [], 0
     for a in alle:
@@ -229,6 +231,8 @@ def vergelijk_agenda(dag, verblijven, index, wcache):
         lat, lon, herkomst = plek_van_afspraak(a, info, index, wcache)
         if lat is None:
             zonder_adres.append(f"{a['start'][11:16]} {a['titel']} ({herkomst})")
+            if per_id is not None:
+                per_id[a.get("id")] = {"uitkomst": "zonder_adres", "tekst": herkomst}
             continue
         van, tot = epoch_van_iso(a["start"]), epoch_van_iso(a["einde"])
         # Alle verblijven op de plek die in tijd aansluiten: aankomen en parkeren horen bij één afspraak.
@@ -241,8 +245,13 @@ def vergelijk_agenda(dag, verblijven, index, wcache):
                               f", {treffers[0]['waar']} (plek uit {herkomst})")
             for v in treffers:
                 v["afspraak"] = a["titel"]
+            if per_id is not None:
+                per_id[a.get("id")] = {"uitkomst": "doorgegaan", "tekst": f"{wie} ter plaatse "
+                                       f"{uur(min(v['van'] for v in treffers))}-{uur(max(v['tot'] for v in treffers))}"}
         else:
             niet_gezien.append(f"{a['start'][11:16]} {a['titel']} · plek uit {herkomst}")
+            if per_id is not None:
+                per_id[a.get("id")] = {"uitkomst": "niet_gezien", "tekst": f"plek uit {herkomst}"}
     return doorgegaan, niet_gezien, zonder_adres, overig
 
 
@@ -261,7 +270,9 @@ def maak(dag):
     per_sleutel, per_nummer, dekking = projectindex()
     db = haal(f"/api/dagboek/{dag}")          # leest alleen; verrijken is een aparte stap (verrijk())
     verblijven = verblijven_van(db)
-    doorgegaan, niet_gezien, zonder_adres, overig = vergelijk_agenda(dag, verblijven, (per_sleutel, per_nummer), wcache)
+    per_id = {}
+    doorgegaan, niet_gezien, zonder_adres, overig = vergelijk_agenda(dag, verblijven, (per_sleutel, per_nummer), wcache,
+                                                                     per_id=per_id)
     zonder = [v for v in verblijven if not v.get("afspraak") and v.get("zekerheid") != "niet_mehdi"]
     werf = [v for v in zonder if v.get("project") and v.get("zekerheid") in ("waarschijnlijk", "bevestigd")]
     twijfel = [v for v in zonder if v.get("zekerheid") == "onzeker"]
@@ -294,6 +305,7 @@ def maak(dag):
     return {"volledig": "\n".join(regels) + "\n", "status": db.get("status"), "versie": versie, "dekking": dekking,
             "verblijven": verblijven, "doorgegaan": doorgegaan, "niet_gezien": niet_gezien,
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
+            "per_id": per_id,
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
             "projecten": sorted({"%s %s" % (v["project"].get("firma"), v["project"].get("nummer"))
                                  for v in verblijven if v.get("project")})}

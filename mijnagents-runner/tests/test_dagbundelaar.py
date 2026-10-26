@@ -63,11 +63,35 @@ class NepBord:
         raise AssertionError("onverwachte bordoproep " + pad)
 
 
-def bundelen(dag, nb):
-    oud = (bord.call, bord.opgepakt, D.DAG)
+class NepRonde:
+    """De gedeelde ronde (N12) zonder bord: de noden en het detail komen als laatste hartslag in nb.harten."""
+
+    def __init__(self, nb, taak):
+        self.nb, self.taak, self.noden, self.detail = nb, taak, [], ""
+
+    def __enter__(self):
+        return self
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append({"tekst": tekst, "wie": wie})
+
+    def bron(self, naam, inhoud):
+        pass
+
+    def __exit__(self, *fout):
+        self.nb.harten.append({"taak": self.taak, "nood": self.noden, "detail": self.detail, "fout": fout[0]})
+        return False
+
+
+def bundelen(dag, nb, nacht=False):
+    """De ochtendronde van De Dagbundelaar met een nagebootst bord; de dagvaststelling heeft eigen tests
+    (test_dagbundelaar_vaststelling.py) en is hier een lege stap."""
+    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
     bord.call = nb.call
     bord.opgepakt = lambda kid, door: nb.opgepakt.append(kid)
-    D.DAG = dag
+    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, True, nacht
+    D.vastleggen = lambda r, dagen: nb.logs.append(("vastleggen", dagen)) or "vastgelegd"
+    D.ag.ronde = lambda taak, **k: NepRonde(nb, taak)
     D.ag.klaarzet = lambda items: nb.bundels.extend(items) or {"nieuw": len(items)}
     D.ag.hartslag = lambda *a, **k: nb.harten.append(k)
     D.ag.log = lambda *a, **k: nb.logs.append(a)
@@ -76,8 +100,8 @@ def bundelen(dag, nb):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
     finally:
-        bord.call, bord.opgepakt, D.DAG = oud
-        for naam in ("klaarzet", "hartslag", "log", "log_verstuur"):
+        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
+        for naam in ("ronde", "klaarzet", "hartslag", "log", "log_verstuur"):
             D.ag.__dict__.pop(naam, None)
     return nb
 
@@ -506,6 +530,24 @@ def test_rz3_02_zetten_alleen_als_het_bord_herbouwd_is():
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def test_vaststelling_ochtend_en_nacht():
+    """Ontwerp dagvaststelling v1.2 (Codex D1, D2): de ochtendronde bundelt en stelt gisteren vast in een ronde met taak
+    'bundels en dagvaststelling'; de nachtronde bundelt niet en heet 'dagvaststelling' (ochtend.NACHTTAAK). Een item
+    dagvaststelling komt nooit in een bundel en wordt nooit opgepakt; de oude noden over WhatsApp-exports en Xelion zijn
+    weg (die meldt de dagvaststelling zelf, naar de hartslag van hun wacht)."""
+    vast = item(31, "dagbundelaar", "mehdi", "dagvaststelling", f"Dag {DAG} vastgesteld", sleutel=DAG,
+                inhoud="# Dag vastgesteld", uniek=f"vaststelling:{DAG}")
+    nb = bundelen(DAG, NepBord([WERK, vast]))
+    assert nb.harten[-1]["taak"] == "bundels en dagvaststelling" and nb.harten[-1]["fout"] is None, nb.harten
+    assert ("vastleggen", [DAG]) in nb.logs, nb.logs
+    assert 31 not in nb.opgepakt and all(vast["titel"] not in tekst_van(b) for b in nb.bundels), "vaststelling gebundeld"
+    noden = " ".join(n["tekst"] for n in nb.harten[-1]["nood"])
+    assert "chat-export" not in noden and "Xelion" not in noden, noden
+    nb = bundelen(DAG, NepBord([WERK, vast]), nacht=True)
+    import ochtend
+    assert nb.harten[-1]["taak"] == ochtend.NACHTTAAK and not nb.bundels and not nb.opgepakt, nb.harten
 
 
 def test_bron_houdt_de_bestaande_grendels():

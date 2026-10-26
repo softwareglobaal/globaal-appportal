@@ -24,6 +24,16 @@ haal fathom-data "Fathom data"   # volledig Fathom-archief, plat (18-09-2026)
 # (plaud_haal_alles.py) en gaat de andere kant op naar de VM (plaud_invoer_push.sh, launchd be.globaal.plaud.ophalen).
 # De oude VM-map gaf de jaarmap Plaud/2026/ naast het archief: twee archieven.
 haal locatielogboek Locatie
+# De dagvaststelling van De Dagbundelaar (26-10-2026): een bestand per dag, met vorige versies in versies/. Daarna een
+# ontvangstbewijs terug naar de VM: de sha256 van elke dagkopie hier in Dropbox; De Dagbundelaar meldt een dag zonder
+# gelijk bewijs als niet in Dropbox (ontwerp dagvaststelling v1.2, Codex D9 en E6).
+haal dagboek Dagboek
+if [ -d "$DOEL/Dagboek" ]; then
+  ( cd "$DOEL/Dagboek" && find . -name '*.md' -not -path '*/versies/*' -exec shasum -a 256 {} + ) \
+    | ssh -o BatchMode=yes -o ConnectTimeout=20 globaal \
+      'cat > appportal/mijnagents-data/dagboek-ontvangst.txt.tmp && mv appportal/mijnagents-data/dagboek-ontvangst.txt.tmp appportal/mijnagents-data/dagboek-ontvangst.txt' \
+      2>>"$LOG"
+fi
 haal bord Bord 2>/dev/null
 # één map per agent (werkwijze, werkverslag, klaargezet, noden, voorstellen), uit de export van het bord
 mkdir -p "$DOEL"

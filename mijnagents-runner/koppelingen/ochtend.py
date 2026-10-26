@@ -128,12 +128,25 @@ def keten_geslaagd(keten, start_utc):
     return True, ""
 
 
+# De taak van een nachtronde van De Dagbundelaar (dagbundelaar.py --nacht): alleen de dagvaststelling, geen bundels. Zo'n
+# ronde geeft het ochtendbericht nooit vrij (ontwerp dagvaststelling v1.2, Codex D1).
+NACHTTAAK = "dagvaststelling"
+
+
 def _klaar_na(rij, grens):
     """Een hartslag die niet op actief staat en niet ouder is dan de grens."""
     if not isinstance(rij, dict) or grens is None or rij.get("status") in (None, "", "actief"):
         return False
     ts = tijdstip(rij.get("ts"))
     return ts is not None and ts >= grens
+
+
+def _bundelronde_klaar_na(rij, grens):
+    """De Dagbundelaar na de keten (Codex D1, ontwerp dagvaststelling v1.2): een afgeronde ronde met bundels, dus klaar of
+    waakt (nooit fout), en niet de nachtronde die alleen de dagvaststelling maakt. Een rij zonder taak (van voor
+    26-10-2026) telt zoals voordien."""
+    return (_klaar_na(rij, grens) and rij.get("status") in ("klaar", "waakt")
+            and not str(rij.get("taak") or "").strip().startswith(NACHTTAAK))
 
 
 def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False):
@@ -180,7 +193,7 @@ def aan_de_beurt(nu, statussen=None, keten=None, cron_tekst=None, bestaat=False)
         code = stap.get("exit") if isinstance(stap, dict) else None
         if _getal(code) and code == 0:
             pass
-        elif statussen is not None and _klaar_na(statussen.get("dagbundelaar"), grens):
+        elif statussen is not None and _bundelronde_klaar_na(statussen.get("dagbundelaar"), grens):
             pass                                       # een ronde na het einde van de keten, door De Regisseur gestart
         elif _getal(code):
             ontbreekt.append(f"De Dagbundelaar eindigde in de gesprekkenketen met exit {code}")
