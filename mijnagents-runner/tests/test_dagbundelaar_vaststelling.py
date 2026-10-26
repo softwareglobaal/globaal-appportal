@@ -809,13 +809,15 @@ def test_review_dropbox_ook_s_ochtends_over_het_venster():
     with tempfile.TemporaryDirectory() as m:
         w = Wereld(m)
         ronde(w, dagen=("2026-11-05",))                                     # de nacht schreef een oudere dag
+        ronde(w, dagen=("2026-10-01",))                                     # en haalde een dag van zes weken terug in
         r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
         dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
         pad = os.path.join(m, "dagboek", "2026", "2026-11-05.md")
+        oud_pad = os.path.join(m, "dagboek", "2026", "2026-10-01.md")
         with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
-            f.write(f"{D._sha(lees(pad))}  ./2026/2026-11-05.md\n")
+            f.write(f"{D._sha(lees(pad))}  ./2026/2026-11-05.md\n{D._sha(lees(oud_pad))}  ./2026/2026-10-01.md\n")
         r2, d2 = ronde(w, dagen=("2026-11-10",))
-    assert dropbox and "Dropbox open: 1" in d, (r.noden, d)
+    assert dropbox and "Dropbox open: 2" in d, (r.noden, d)
     assert not [n for n in r2.noden if n.startswith("Dagboek nog niet bevestigd")] and "Dropbox open: 0" in d2, d2
 
 def _kopie(pad, uren, vanaf):

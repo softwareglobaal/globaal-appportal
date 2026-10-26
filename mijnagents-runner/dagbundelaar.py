@@ -872,10 +872,11 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     if fouten:
         ag.log("teruglezen", "fout", "; ".join(fouten))
         raise RuntimeError("dagvaststelling niet teruggelezen: " + "; ".join(fouten[:5]))
-    # Dropbox (D9, E6): een dag van eergisteren of ouder zonder ontvangstbewijs met dezelfde sha256 staat er niet. Over het
-    # hele nachtvenster, ook 's ochtends: de ochtend legt alleen gisteren vast en sloot deze nood anders elke werkdag
-    # zonder iets na te kijken, net voor het ochtendbericht (review 27-10-2026).
-    gekeken = sorted(set(dagen) | {d for d in V.venster(nu, NACHTVENSTER) if os.path.exists(dagpad(d))})
+    # Dropbox (D9, E6): een dag van eergisteren of ouder zonder ontvangstbewijs met dezelfde sha256 staat er niet. Over
+    # elke dag met een dagbestand tot INHAAL terug, ook 's ochtends: de ochtend legt alleen gisteren vast en sloot deze
+    # nood anders elke werkdag zonder iets na te kijken, net voor het ochtendbericht, ook voor een ingehaalde dag ouder dan
+    # het nachtvenster (review en Codex-controle 6, 27-10-2026).
+    gekeken = sorted(set(dagen) | {d for d in V.venster(nu, INHAAL) if os.path.exists(dagpad(d))})
     open_ = [d for d in gekeken if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
     if open_:
         r.nood("Dagboek nog niet bevestigd in Dropbox: de sync van Data uit Mehdi op de Mac haalt het niet op", wie="mehdi")
