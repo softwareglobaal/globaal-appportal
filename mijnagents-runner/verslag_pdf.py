@@ -57,7 +57,8 @@ def md_naar_html(md):
 
     def sluit_alinea():
         if alinea:
-            uit.append("<p>" + " ".join(_inline(x) for x in alinea) + "</p>")
+            # regels van één alinea blijven aparte regels, zoals de harde regeleinden in Word (een opsomming zonder streepjes)
+            uit.append("<p>" + "<br>".join(_inline(x) for x in alinea) + "</p>")
             alinea.clear()
 
     def sluit_lijst():

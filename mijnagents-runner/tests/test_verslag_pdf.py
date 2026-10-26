@@ -58,5 +58,9 @@ check("zonder foto's alleen de tekstpagina", len(pdf.pages) == 1, f"kreeg {len(p
 h = verslag_pdf.md_naar_html("Er blijft water staan.\n\nHerkomst: V <!-- bron: transcript.txt 00:22:30 -->\n")
 check("de bewaarde bron achter Herkomst komt niet in de PDF", "Herkomst: V" in h and "00:22" not in h and "bron:" not in h, h)
 
+h = verslag_pdf.md_naar_html("Vaststellingen:\nspouwhaken ontbreken\nisolatie niet aansluitend\n\nVolgende alinea.")
+check("regels van een alinea blijven aparte regels, zoals in Word",
+      "<p>Vaststellingen:<br>spouwhaken ontbreken<br>isolatie niet aansluitend</p>" in h and "<p>Volgende alinea.</p>" in h, h)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
