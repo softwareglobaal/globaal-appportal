@@ -79,6 +79,12 @@ apps:
     subdomain: agents
     roles: [admin, manager, agents]
     status: active
+  - id: chunker
+    name: Chunker van Mehdi
+    description: Boeken en documenten naar een eigen kennisbank
+    subdomain: chunker
+    roles: [admin, manager]
+    status: active
   - id: items
     name: Items
     description: Verkoop-etalage tweedehands ICT met AI-taxatie

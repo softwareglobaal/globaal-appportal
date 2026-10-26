@@ -4,6 +4,11 @@ server {
     server_name barstenscheurenv2.${BASE_DOMAIN};
     include /etc/nginx/snippets/ssl.conf;
     client_max_body_size 512m;
+    # Opslaan en goedkeuren maken het klantverslag opnieuw op: twee scripts van elk hoogstens
+    # 300 s. Met de standaard 60 s brak de proxy af en werd de goedkeuring nooit verstuurd
+    # (dossier 46118, driehoeksoverleg 26-10-2026).
+    proxy_read_timeout 660s;
+    proxy_send_timeout 660s;
     set $app_upstream http://172.17.0.1:8081;
     include /etc/nginx/snippets/forward-auth.conf;
 }

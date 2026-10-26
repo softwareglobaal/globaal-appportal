@@ -1,0 +1,48 @@
+# Proxygeheim (X-Chunker-Proxy-Geheim), patroon van 84-regie en 42-btw. De app eist het op elke route behalve
+# /api/keten/* (token) en /gezond, zodat een container in appnet of een proces op de host de app op
+# 172.17.0.1:8460 niet rechtstreeks kan aanspreken met zelfgemaakte X-authentik-koppen. Alleen naar
+# chunker.<domein>: forward-auth.conf van globaal-appportal zet de kop na de forward-auth
+# (proxy_set_header X-Chunker-Proxy-Geheim $chunker_proxy_geheim;), elders is hij leeg en gaat hij niet mee.
+#
+# Het geheim staat niet in dit template en niet in de omgeving van de nginx-container, maar op de VM in
+# ~/appportal/nginx/snippets/.env-chunker-proxy.conf, een regel
+#     "chunker.<domein>" "<geheim>";
+# met dezelfde waarde als CVM_PROXY_GEHEIM in de eigen .env. deploy/nginx/zet.sh schrijft dat bestand (0600;
+# nginx leest de configuratie als root). In globaal-appportal negeert de regel .env* in .gitignore het, dus het
+# komt nooit in git. Het jokerteken in de include maakt een ontbrekend bestand onschuldig: nginx start gewoon,
+# de waarde is leeg en de app laat dan niemand binnen (faalt dicht). Zo vraagt het geheim geen wijziging in
+# docker-compose.yml en geen nieuwe container: herladen volstaat.
+map $host $chunker_proxy_geheim {
+    default "";
+    include /etc/nginx/snippets/.env-chunker-proxy*.conf;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name chunker.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    # De chunker van Mehdi (repo softwareglobaal/chunker-van-mehdi, ONTWERP.md). Host-dienst
+    # chunker-van-mehdi op 172.17.0.1:8460 (systemd, gunicorn). Authentik is de poort (tegel chunker,
+    # groepen admin en manager); de app eist daarnaast zelf een gebruiker in admin of manager.
+    #
+    # Bewust geen eigen locatieblok, ook niet voor het aanleveren: alles gaat door het blok voor "/" uit
+    # forward-auth.conf, dus door auth_request, en daar komen de X-authentik-koppen altijd uit het
+    # antwoord van Authentik (wat een bezoeker zelf meestuurt, telt niet). Het origineel had een aparte
+    # uploadroute zonder login (52-agents.conf.template, regels 31-39); die fout nemen we niet over.
+    # De keten spreekt de app op de host rechtstreeks aan, dus ook /api/keten/ hoeft hier niet open.
+    #
+    # Grote boeken (een gescand boek is 169 MB): grens en time-outs op serverniveau, zodat het blok voor
+    # "/" ze erft. De app toetst zelf Content-Length tegen CVM_MAX_UPLOAD_MB voor ze leest en begrenst
+    # het aantal uploads per uur. Geen buffering: nginx zet 400 MB niet eerst op schijf, de app leest in
+    # stukken met teller en sha256.
+    client_max_body_size 400m;
+    client_body_timeout 900s;
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
+    proxy_request_buffering off;
+
+    set $app_upstream http://172.17.0.1:8460;
+    include /etc/nginx/snippets/forward-auth.conf;
+}

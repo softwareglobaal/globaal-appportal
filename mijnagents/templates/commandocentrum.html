@@ -39,7 +39,7 @@
 </header>
 <main>
 <h1>Commandocentrum</h1>
-<p class="leid">Elke afspraak ter plaatse met een dienst erbij (werfbezoek, veiligheidscoördinatie, plaatsbeschrijving, barsten en scheuren) wordt hier een rij.
+<p class="leid">Elke afspraak ter plaatse met een dienst erbij (werfbezoek, veiligheidscoördinatie, plaatsbeschrijving, barsten en scheuren, aankoopkeuring) wordt hier een rij.
 Het Commandocentrum stuurt de verslagagent vooraf op pad (dossiermap, bezoekmap) en laat na het bezoek de wachten het pakket vullen (foto's, opname, transcript).
 Is het pakket vol, dan druk jij op <strong>Proef maken</strong>; de proef landt in de bezoekmap. Werfverslagen lopen door hun eigen keten (knop Werfverslagen).</p>
 
@@ -82,7 +82,7 @@ Is het pakket vol, dan druk jij op <strong>Proef maken</strong>; de proef landt 
 <h2>Komende bezoeken ({{ komend|length }})</h2>
 <p class="leid">De verslagagent zoekt nu al de dossiermap en maakt de bezoekmap aan, zodat alles klaarstaat als je terugkomt.</p>
 {% if komend %}<table><tr><th>Wanneer</th><th>Verslag</th><th>Dossier</th><th>Pakket</th><th>Stand</th><th></th></tr>{% for r in komend %}{{ rij(r) }}{% endfor %}</table>
-{% else %}<p class="stil">Geen komende bezoeken met een verslagsoort in de agenda. Zet de dienstcode in de titel (WB, OPL, VC, PLB, BS, STA) en het Commandocentrum ziet hem binnen het kwartier.</p>{% endif %}
+{% else %}<p class="stil">Geen komende bezoeken met een verslagsoort in de agenda. Zet de dienstcode in de titel (WB, OPL, VC, PLB, BS, STA, AK, AB) en het Commandocentrum ziet hem binnen het kwartier.</p>{% endif %}
 
 <h2>Na het bezoek: pakket en verslag ({{ lopend|length }})</h2>
 <p class="leid">Foto's komen van de iCloud-wacht (Mac), het transcript van de Plaudwacht. Vol pakket = groen; dan is de knop aan jou.</p>
