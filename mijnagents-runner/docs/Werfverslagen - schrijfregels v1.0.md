@@ -45,7 +45,9 @@ of nalatig was.
 vaststellingen insprak of dat een tijdstip naar de opname verwijst. Het tijdstip blijft in de brongegevens (het veld
 bron op de bezoekpagina), voor de controle, nooit in het verslag. Herkomst wordt in het verslag alleen aangeduid als
 V (eigen vaststelling ter plaatse), B (verklaring van de bouwheer) of S (blijkt uit de stukken), ook in de regel
-"Herkomst" van een werfverslag. De volledige bron (bestand en tijdstip) blijft daar onzichtbaar achter bewaard, zodat
+"Herkomst" van een werfverslag. V staat er alleen bij je eigen transcript of de opname van het bezoek; bij een foto of
+een bestand waarvan de naam niet zegt of het van jou is (een foto van de bouwheer, een transcript van de aannemer) staat
+de bestandsnaam zonder tijdstip, zodat het verslag nooit ten onrechte "eigen vaststelling" zegt. De volledige bron (bestand en tijdstip) blijft daar onzichtbaar achter bewaard, zodat
 een nieuwe opmaak niets verliest; een EPB-startverklaring of prestatieverklaring is een stuk (S), geen verklaring van
 de bouwheer.
 

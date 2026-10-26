@@ -125,7 +125,8 @@ def test_fotofout_word_en_zichtbare_markdown(monkeypatch):
     basis = {"dossier": "9999", "bezoek": "1", "adres": "Teststraat", "datum": "2026-10-21", "opgemaakt": "2026-10-21", **verslag}
     md = S.naar_markdown(basis)
     # herkomst in het verslag alleen als V, B of S (schrijfregel S4); de bestandsnaam blijft in het veld bron
-    assert "Foto's niet geplaatst" in md and "Herkomst: V" in md and "Herkomst: foto.jpg" not in md
+    # een foto: de naam zegt niet of ze van Mehdi is, dus de naam (zonder tijdstip) en geen onjuiste V (zeventiende review)
+    assert "Foto's niet geplaatst" in md and "Herkomst: foto.jpg" in md
     assert basis["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"
     terug = S.van_markdown(md)
     assert terug["categorieen"][0]["punten"][0]["bron"] == "foto.jpg"   # de bron blijft bewaard achter de V

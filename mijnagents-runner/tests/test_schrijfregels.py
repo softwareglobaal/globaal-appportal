@@ -144,8 +144,12 @@ check("V11 werfverslag: de bron blijft bewaard achter de V en komt terug bij van
 xml = zipfile.ZipFile(io.BytesIO(sj.naar_docx(wb))).read("word/document.xml").decode("utf8")
 check("V11 werfverslag Word zonder opnametijdstip", "00:22" not in xml and "transcript.txt" not in xml)
 check("V11 bron in de gegevens ongewijzigd", wb["categorieen"][0]["punten"][0]["bron"] == "transcript.txt 00:22:30-00:23:16")
-check("V11 herkomst-codes", [sj.herkomst(x) for x in ("IMG_1.jpg", "lastenboek.pdf", "verklaring bouwheer, transcript.txt 00:03:10", "V + B", "vast punt kantoor", "")]
-      == ["V", "S", "B", "V + B", "vast punt kantoor", ""])
+check("V11/zeventiende review: herkomst-codes, nooit een onjuiste V",
+      [sj.herkomst(x) for x in ("IMG_1.jpg", "lastenboek.pdf", "verklaring bouwheer, transcript.txt 00:03:10", "V + B", "vast punt kantoor", "",
+                               "transcript.txt 00:22:30", "opname 00:12:00", "transcript aannemer.txt 00:05:10",
+                               "WhatsApp Image 2026-09-30 at 18.04.11.jpeg")]
+      == ["IMG_1.jpg", "S", "B", "V + B", "vast punt kantoor", "", "V", "V", "transcript aannemer.txt", "WhatsApp Image 2026-09-30 at 18.04.11.jpeg"],
+      [sj.herkomst(x) for x in ("IMG_1.jpg", "transcript aannemer.txt 00:05:10")])
 bvw = vb.uit_werfproef(dict(wb, categorieen=[{"naam": "Ramen", "punten": [dict(wb["categorieen"][0]["punten"][0], nummer="VB1.1")]}]))
 mdb = vb.naar_markdown(bvw)
 check("V11 bevindingen: herkomst eigen vaststelling, geen opnametijdstip", "herkomst: eigen vaststelling ter plaatse" in mdb and "00:22" not in mdb, mdb)

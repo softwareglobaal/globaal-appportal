@@ -96,7 +96,7 @@ _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # - "Volgens de opname is de dorpel 3 cm te laag." draagt een vaststelling: zichtbaar gemarkeerd. "De opname van de
 #   bestaande toestand" (of van de plaatsgesteldheid, door een expert) is een opmeting, geen geluidsopname.
 SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b"
-                   r"|\b(?:recorded|dictated)\s+(?:his|her|the)\s+(?:findings|observations)\b", re.I)
+                   r"|\bdictated\s+(?:his|her|the)\s+(?:findings|observations)\b", re.I)   # "recorded" is ook gewoon "noteerde"
 # "De architect ... sprak zijn vaststellingen in" gaat over de architect zelf; staat er iets anders vóór (een vaststelling:
 # "De dorpel ligt te laag en ..."), dan valt de zin niet stil weg maar wordt hij gemarkeerd
 _OVER_ARCHITECT = re.compile(r"\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:de\s+|the\s+)?(?:architect|mehdi|ik|wij|we|i)\b", re.I)

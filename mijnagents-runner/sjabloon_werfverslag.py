@@ -26,6 +26,10 @@ from datetime import date
 
 import schrijfregels
 
+import sys as _sys
+_sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
+import werfnamen  # noqa: E402  (de naamvormen van Mehdi's eigen bezoekmateriaal, dezelfde regel als voorbereider en schrijver)
+
 HIER = os.path.dirname(os.path.abspath(__file__))
 MASTER = os.path.join(HIER, "sjabloon_HA_master.docx")
 
@@ -165,21 +169,26 @@ VASTE_TEKSTEN = frozenset([t for p in VASTE_PUNTEN for t in (p["nl"], p["en"])] 
 
 
 def herkomst(bron):
-    """De herkomst zoals het verslag ze toont (schrijfregel S4): V (eigen vaststelling ter plaatse: opname, eigen foto's
-    en notities), B (verklaring van de bouwheer) of S (blijkt uit de stukken), of 'vast punt kantoor'. Nooit de naam of
-    het tijdstip van de opname: dat blijft in het veld bron van de gegevens, voor de controle."""
+    """De herkomst zoals het verslag ze toont (schrijfregel S4): nooit het tijdstip van de opname, dat blijft in het veld bron.
+    V alleen voor Mehdi's eigen tekst (werfnamen.eigen_tekst: zijn transcript, 00 verslag.md), B voor een verklaring van de
+    bouwheer, S voor een document. Bij een foto of een bestand waarvan de naam niet zegt of het eigen is (een foto van de
+    bouwheer, een transcript van de aannemer) de naam zonder tijdstip, zoals vroeger: nooit een onjuiste V."""
     b = (bron or "").strip()
     code = re.match(r"[VBS](?:\s*[+,/]\s*[VBS])*(?![\w.])", b)
     if not b or b == "vast punt kantoor":
         return b
     if code:
         return code.group(0)
-    # Een "verklaring" alleen als die van de bouwheer is: een EPB-startverklaring of prestatieverklaring is een stuk (S).
     if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I):
         return "B"
-    if re.search(r"transcript|opname|audio|\d{1,2}:\d{2}|\.(?:jpe?g|png|heic)\b|\b00 (?:verslag|fotos)\.md\b", b, re.I):
-        return "V"
-    return "S"
+    zonder_tijd = re.sub(r"\s*\((?:opname|transcript)?[^)]*\d{1,2}:\d{2}[^)]*\)|\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?",
+                         "", b).strip(" ,;:-")
+    naam = re.match(r"(.+?\.(?:txt|docx|md))\b", zonder_tijd, re.I)
+    if (naam and werfnamen.eigen_tekst(naam.group(1))) or re.fullmatch(r"(?:de\s+)?(?:geluids)?opname|transcript|audio", zonder_tijd, re.I):
+        return "V"   # zijn eigen transcript, of "opname 00:12:00" van het bezoek zelf
+    if re.search(r"\.(?:pdf|docx?|xlsx?|dwg|eml|msg|pptx?)\b", zonder_tijd, re.I):
+        return "S"
+    return zonder_tijd or "S"
 
 
 # verslag_md is bij een werfverslag de enige plek waar de bron per punt (bestand en opnametijdstip) bewaard blijft. Het
