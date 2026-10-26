@@ -87,8 +87,9 @@ class Wereld:
         return {"items": [it] if it else []}
 
 
-def ronde(w, dagen=(DAG,), gisteren="2026-11-10", **k):
-    """Een ronde van vastleggen; gisteren ligt vast (standaard ruim na DAG, zodat Zoom niet meer voorlopig is)."""
+def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, **k):
+    """Een ronde van vastleggen; gisteren ligt vast (standaard ruim na DAG, zodat Zoom niet meer voorlopig is). mail: een
+    eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt."""
     oud = (D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren)
     D.V.gisteren = lambda nu: gisteren
     D.DAGBOEK = os.path.join(w.map, "dagboek")
@@ -97,11 +98,11 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", **k):
     D.lees_agenda = lambda dagen_: ({DAG: list(w.afspraken)}, set(), lambda a: "[LA]" in a["titel"])
     D.lees_locatie = lambda dag, afspraken: ({"t": {"uitkomst": "doorgegaan", "tekst": "auto ter plaatse 14:31-16:07"}}, [],
                                              "afgesloten", "")
-    D.lees_mail = lambda dagen_: ({"info@h-architects.be": {"berichten": [
-        {"datum": f"{DAG}T08:36:57+02:00", "message_id": "<w1@x>"}], "onvolledig": []}}, {}, set())
+    D.lees_mail = mail or (lambda dagen_: ({"info@h-architects.be": {"berichten": [
+        {"datum": f"{DAG}T08:36:57+02:00", "message_id": "<w1@x>"}], "onvolledig": []}}, {}, set()))
     bord.db_lees, bord.call = w.db_lees, w.call
     D.ag.klaarzet = w.klaarzet
-    D.ag.log = lambda *a, **k: None
+    D.ag.log = (lambda *a, **k: logboek.append(a)) if logboek is not None else (lambda *a, **k: None)
     r = NepRonde()
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -647,6 +648,99 @@ def test_g3_zoom_van_de_ochtendketen():
         finally:
             D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND = oud
             D.ag.__dict__.pop("ronde", None)
+
+
+def _kopie(pad, uren, vanaf):
+    d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [
+        {"map": "INBOX", "datum": f"{DAG}T08:00:00+00:00", "message_id": "<h1@x>", "van": "k@klant.test"},
+        {"map": "Sent", "datum": f"{DAG}T09:00:00+00:00", "message_id": "<h2@x>", "van": "proef@hotmail.test",
+         "aan": ["k@klant.test"]}]}
+    if vanaf is not None:
+        d["vanaf"] = vanaf
+    with open(pad, "w", encoding="utf-8") as f:
+        json.dump(d, f)
+
+
+def test_o26_mail_kopie_vers_oud_en_venster():
+    """Overleg 26-10-2026 (mailnood): de reden noemt de Mac niet meer (A); een verse kopie die de dagen niet dekt, of
+    niet zegt vanaf wanneer, is onvolledig (X2), anders telde een oude dag stil nul; een verse kopie die ze dekt, is
+    volledig. Elke reden heeft een vaste soort voor de nood (K2)."""
+    import postvak as echt
+    with tempfile.TemporaryDirectory() as m:
+        pad = os.path.join(m, "koppen.json")
+        PV = Module(wachten=lambda: {"mail-prive": {"postvakken": ["proef@hotmail.test"], "firma": "PRIV"}},
+                    postvak=lambda a: {"adres": a, "bron": pad}, bron_uren_oud=echt.bron_uren_oud,
+                    bron_vanaf=echt.bron_vanaf, BRON_VERS_UREN=3, mappen_van=lambda a: ["INBOX"], mapnamen=echt.mapnamen,
+                    koppen=lambda adres, m_, sinds=None, plafond=1000: echt.uit_bestand(pad, m_, sinds)[:plafond],
+                    VERZONDEN=echt.VERZONDEN)
+        herstel = met_module("postvak", PV)
+        try:
+            ruim = {"INBOX": "2026-09-01", "Sent": "2024-10-01"}
+            uit = {}
+            for naam, uren, vanaf in (("oud", 150, ruim), ("vers", 0, ruim), ("kort", 0, {"INBOX": DAG, "Sent": "2024-10-01"}),
+                                      ("zonder", 0, None)):
+                _kopie(pad, uren, vanaf)
+                o, u, _ = D._lees_mail([DAG])
+                uit[naam] = (o["proef@hotmail.test"], u["proef@hotmail.test"])
+        finally:
+            herstel()
+    o, u = uit["oud"]
+    assert o["onvolledig"] == u["onvolledig"] == ["kopie 150 uur oud"], (o, u)
+    assert o["soorten"] == u["soorten"] == ["kopie niet vers"], (o, u)
+    o, u = uit["vers"]
+    assert not o["onvolledig"] and not u["onvolledig"] and len(o["berichten"]) == len(u["berichten"]) == 1, (o, u)
+    o, u = uit["kort"]
+    assert o["onvolledig"] == [f"kopie van INBOX begint pas op {DAG}"] and o["soorten"] == ["kopie dekt de dagen niet"], o
+    assert not u["onvolledig"], "verzonden dekt twee jaar"
+    o, u = uit["zonder"]
+    assert o["onvolledig"] == ["kopie van INBOX begint op een onbekende dag"], o
+    assert u["onvolledig"] == ["kopie van Sent begint op een onbekende dag"], u
+    assert not any("Mac" in r for x in uit.values() for p in x for r in p["onvolledig"])
+
+
+def test_o26_mailnood_per_postvak_stabiel_en_uren_in_het_logboek():
+    """Overleg 26-10-2026 (K2, X3, C): een nood per postvak en soort, zonder getal, gelijk van ronde tot ronde ook als de
+    uren veranderen of een ander postvak bijkomt; faalt het hele lezen, dan een vaste nood zonder fouttype. De volle
+    reden met de uren staat in het logboek; een ronde die alles leest, meldt geen mailnood."""
+    import subprocess
+    hot = "mehdichegini@hotmail.com"
+
+    def mail(uren, ook_info=False):
+        def lees(dagen_):
+            reden = {"berichten": [], "onvolledig": [f"kopie {uren} uur oud"], "soorten": ["kopie niet vers"]}
+            o = {hot: json.loads(json.dumps(reden)), "info@h-architects.be": {"berichten": [], "onvolledig": []}}
+            if ook_info:
+                o["info@h-architects.be"] = {"berichten": [], "onvolledig": ["INBOX niet leesbaar (TimeoutError)"],
+                                             "soorten": ["map niet leesbaar"]}
+            return o, {hot: json.loads(json.dumps(reden))}, {hot}
+        return lees
+
+    def faal(fout):
+        def lees(dagen_):
+            raise fout
+        return lees
+
+    def mailnoden(r):
+        return [n for n in r.noden if n.startswith("Mail")]
+
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        log1, log2, log3 = [], [], []
+        r1, _ = ronde(w, mail=mail(150), logboek=log1)
+        r2, _ = ronde(w, mail=mail(151, ook_info=True), logboek=log2)
+        r3, _ = ronde(w, mail=faal(RuntimeError("mailkoppen eindigde met 1")), logboek=log3)
+        r4, _ = ronde(w, mail=faal(subprocess.TimeoutExpired("python", 900)))
+        r5, _ = ronde(w)
+    vast = f"Mail niet volledig gelezen voor de dagvaststelling: {hot} (kopie niet vers)"
+    assert mailnoden(r1) == [vast], r1.noden
+    assert vast in mailnoden(r2) and len(mailnoden(r2)) == 2, r2.noden
+    assert "Mail niet volledig gelezen voor de dagvaststelling: info@h-architects.be (map niet leesbaar)" in mailnoden(r2)
+    assert not any(c.isdigit() for n in mailnoden(r1) + mailnoden(r2) for c in n), "N10: geen getal in de nood"
+    assert mailnoden(r3) == mailnoden(r4) == ["Mail niet gelezen voor de dagvaststelling"], (r3.noden, r4.noden)
+    assert not mailnoden(r5), r5.noden
+    assert ("mail", "bron", f"{hot} ontvangen onvolledig: kopie 150 uur oud") in log1, log1
+    assert ("mail", "bron", f"{hot} verzonden onvolledig: kopie 151 uur oud") in log2, log2
+    assert ("mail", "fout", "mail niet gelezen (RuntimeError)") in log3, log3
 
 
 if __name__ == "__main__":

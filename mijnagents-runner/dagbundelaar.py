@@ -588,14 +588,20 @@ def _lees_mail(dagen):
              for a in c["postvakken"] + list(c.get("antwoord_vanuit") or [])}
     ontvangen, verzonden = {}, {}
 
+    def mis(waar, soort, reden):
+        # Overleg 26-10-2026 (K2): de soort is vast en geeft de nood (N10); de reden, met getallen, gaat naar het dagbestand
+        # en het logboek
+        waar["onvolledig"].append(reden)
+        waar.setdefault("soorten", []).append(soort)
+
     def lees(adres, m, waar):
         try:
             deel = PV.koppen(adres, m, sinds=sinds, plafond=PLAFOND)
         except Exception as e:  # noqa: BLE001
-            waar["onvolledig"].append(f"{m} niet leesbaar ({type(e).__name__})")
+            mis(waar, "map niet leesbaar", f"{m} niet leesbaar ({type(e).__name__})")
             return None
         if len(deel) >= PLAFOND:
-            waar["onvolledig"].append(f"{m}: meer dan {PLAFOND} berichten")
+            mis(waar, "te veel berichten", f"{m}: meer dan {PLAFOND} berichten")
         return deel
 
     for adres in postvakken + afzenders:
@@ -605,15 +611,24 @@ def _lees_mail(dagen):
         if not mb:
             for x in (o, u):
                 if x is not None:
-                    x["onvolledig"].append("niet in de postbus")      # G4: beide richtingen onbekend, nooit nul
+                    mis(x, "niet in de postbus", "niet in de postbus")      # G4: beide richtingen onbekend, nooit nul
             continue
         if mb.get("bron"):
+            # De kopie komt sinds 26-10-2026 van de server (hotmail_server.py), daarvoor van de Mac
             oud = PV.bron_uren_oud(mb)
             if oud is None or oud > PV.BRON_VERS_UREN:
-                reden = "kopie van de Mac " + ("onleesbaar" if oud is None else f"{oud:.0f} uur oud")
+                reden = "kopie " + ("onleesbaar" if oud is None else f"{oud:.0f} uur oud")
                 for x in (o, u):
                     if x is not None:
-                        x["onvolledig"].append(reden)
+                        mis(x, "kopie niet vers", reden)
+            # Overleg 26-10-2026 (X2): ook een verse kopie dekt maar een venster (hotmail: 30 dagen binnen). Een dag
+            # daarvoor stond er niet in en telde stil nul; zegt de kopie niet vanaf wanneer, dan is het onbekend.
+            vanaf = PV.bron_vanaf(mb)
+            for x, mappen in ((o, PV.mappen_van(adres) if o is not None else []), (u, ["Sent"])):
+                for m in mappen:
+                    if not vanaf.get(m) or vanaf[m] > sinds:
+                        mis(x, "kopie dekt de dagen niet",
+                            f"kopie van {m} begint " + (f"pas op {vanaf[m]}" if vanaf.get(m) else "op een onbekende dag"))
         if o is not None:
             for m in PV.mappen_van(adres):
                 deel = lees(adres, m, o)
@@ -622,20 +637,20 @@ def _lees_mail(dagen):
         try:
             bestaand = PV.mapnamen(mb)
         except Exception as e:  # noqa: BLE001
-            u["onvolledig"].append(f"mappenlijst niet leesbaar ({type(e).__name__})")
+            mis(u, "mappenlijst niet leesbaar", f"mappenlijst niet leesbaar ({type(e).__name__})")
             continue
         gelezen = False
         for m in PV.VERZONDEN:
             if (mb.get("mappen") and m not in mb["mappen"]) or (bestaand is not None and m.lower() not in bestaand):
                 continue
             if bestaand is None and m != "Sent":
-                continue        # een kopie van de Mac kent alleen INBOX en Sent
+                continue        # een kopie (bestand) kent alleen INBOX en Sent
             deel = lees(adres, m, u)
             if deel is not None:
                 u["berichten"] += deel
                 gelezen = True
         if not gelezen:
-            u["onvolledig"].append("geen map Verzonden leesbaar")
+            mis(u, "geen map Verzonden leesbaar", "geen map Verzonden leesbaar")
     return ontvangen, verzonden, prive
 
 
@@ -704,6 +719,14 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     except Exception as e:  # noqa: BLE001
         ontvangen = verzonden = None
         prive_postvakken, mailfout = set(), f"{type(e).__name__}"
+    # Overleg 26-10-2026 (C): de volle reden, met de uren, staat in het logboek; de nood draagt alleen postvak en soort
+    if ontvangen is None:
+        ag.log("mail", "fout", f"mail niet gelezen ({mailfout})")
+    else:
+        for richting, x in (("ontvangen", ontvangen), ("verzonden", verzonden)):
+            for adres, p in sorted(x.items()):
+                if p.get("onvolledig"):
+                    ag.log("mail", "bron", f"{adres} {richting} onvolledig: " + "; ".join(p["onvolledig"]))
     r.bron("kanaalstand", json.dumps(kanalen, sort_keys=True))
     try:
         staat = json.loads(_lees(STAAT) or "{}")
@@ -777,8 +800,14 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         r.nood("Agenda niet volledig gelezen voor de dagvaststelling", wie="claude-code")
     if locatiefout:
         r.nood("Locatie niet gelezen voor de dagvaststelling", wie="claude-code")
-    if ontvangen is None or any(p["onvolledig"] for x in (ontvangen, verzonden) for p in x.values()):
-        r.nood("Mail niet volledig gelezen voor de dagvaststelling", wie="claude-code")
+    # Overleg 26-10-2026 (K2): een nood per postvak en soort, nooit een wisselende lijst of een fouttype, zodat hij gelijk
+    # blijft van ronde tot ronde (N10) en sluit zodra dat postvak weer leest
+    if ontvangen is None:
+        r.nood("Mail niet gelezen voor de dagvaststelling", wie="claude-code")
+    else:
+        for adres, soort in sorted({(a, s) for x in (ontvangen, verzonden) for a, p in x.items()
+                                    for s in p.get("soorten") or (["onvolledig"] if p.get("onvolledig") else [])}):
+            r.nood(f"Mail niet volledig gelezen voor de dagvaststelling: {adres} ({soort})", wie="claude-code")
     if kanalen["whatsapp"] != "aangesloten":
         r.nood("WhatsApp: de WhatsApp-wacht leest de databank op de Mac nog niet (fase 2 van de dagvaststelling)",
                wie="claude-code")

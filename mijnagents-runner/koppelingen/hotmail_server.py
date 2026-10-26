@@ -53,7 +53,7 @@ def bestand(adres, d, nu):
     if not any(b.get("map") == "INBOX" for b in berichten) or not any(b.get("map") == "Sent" for b in berichten):
         raise RuntimeError(f"onvolledig: geen binnengekomen of geen verzonden post gelezen ({d.get('mappen')})")
     return {"gemaakt": nu.isoformat(), "adres": adres, "bron": "server", "verzonden_dagen": VERZONDEN_DAGEN,
-            "berichten": berichten}
+            "vanaf": d.get("vanaf") or {}, "berichten": berichten}
 
 
 def ververs(adres, doel, nu=None, voer=subprocess.run):

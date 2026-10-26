@@ -201,7 +201,8 @@ def uit_bestand(pad, mapnaam, sinds=None):
 
 
 def bron_uren_oud(mb, nu=None):
-    """Hoe oud de kopie van de Mac is, in uren; None als het geen bestand is of het niet leesbaar is."""
+    """Hoe oud de kopie is (sinds 26-10-2026 van de server, daarvoor van de Mac), in uren; None als het geen bestand is of
+    het niet leesbaar is."""
     if not mb or not mb.get("bron"):
         return None
     try:
@@ -210,6 +211,19 @@ def bron_uren_oud(mb, nu=None):
     except (OSError, ValueError, KeyError):
         return None
     return ((nu or datetime.now(BRUSSEL)) - gemaakt).total_seconds() / 3600
+
+
+def bron_vanaf(mb):
+    """Vanaf welke dag de kopie elke map dekt, {'INBOX': 'jjjj-mm-dd', 'Sent': ...} (hotmail_server.py zet het). Leeg als
+    het bestand dat niet zegt of niet leesbaar is: dan is onbekend wat ervoor lag (overleg 26-10-2026, X2)."""
+    if not mb or not mb.get("bron"):
+        return {}
+    try:
+        with open(mb["bron"], encoding="utf-8") as f:
+            vanaf = json.load(f).get("vanaf")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return {m: d for m, d in vanaf.items() if isinstance(d, str)} if isinstance(vanaf, dict) else {}
 
 
 def koppen(adres, mapnaam="INBOX", sinds=None, maximaal=200, plafond=1000):
