@@ -387,5 +387,28 @@ t10, _ = S.toepassen("Bij de rondgang werd vastgesteld:\nde zinken dakgoot lekt;
 check("opsomming aankoopkeuring: de vaststellingen blijven, het bedrag gaat weg",
       "dakgoot lekt" in t10 and "verweerd" in t10 and "2.500" not in t10 and "500" not in t10, t10)
 
+# Elfde review 26-10-2026: elke regelovergang sluit een zin af (zoals productie); een opsomming zonder leesteken of met
+# komma's verliest geen regels door één verboden regel
+for tekst, profiel, moeten_blijven, weg in [
+        ("Aan de achtergevel werden genoteerd:\nbarst B1 boven het keukenraam, 0,3 mm, diagonaal\nbarst B2 in de linkerhoek, 1 mm, verticaal\n"
+         "de aannemer van de buren is aansprakelijk voor beide barsten.", None, ["0,3 mm", "1 mm"], "aansprakelijk"),
+        ("Bij de rondgang werd vastgesteld:\nde zinken dakgoot lekt\nde pannen zijn verweerd\nde veranda is stedenbouwkundig verjaard.",
+         "aankoopkeuring", ["dakgoot lekt", "pannen zijn verweerd"], "verjaard"),
+        ("barst B1, 0,3 mm,\nbarst B2, 1 mm,\nde aannemer is aansprakelijk.", None, ["0,3 mm", "1 mm"], "aansprakelijk")]:
+    t11, _ = S.toepassen(tekst, profiel)
+    check(f"opsomming per regel: '{tekst[:30]}'", all(x in t11 for x in moeten_blijven) and weg not in t11, t11)
+LAAG = ["barst B1, 0,3 mm", "de goot lekt", "de aannemer is aansprakelijk", "volgens de opname is de muur nat",
+        "de architect sprak zijn vaststellingen in", "zie opname 00:12:30", "de veranda is verjaard"]
+verlies = []
+for combi in _it.product(LAAG, repeat=3):
+    for profiel in (None, "aankoopkeuring"):
+        uit, _ = S.toepassen("\n".join(combi), profiel)
+        for regel in combi:
+            schoon = S.toepassen(regel, profiel)[0]
+            if schoon and schoon not in uit:
+                verlies.append(("\n".join(combi), uit))
+                break
+check("mengtest regels zonder leesteken: elke regel blijft zoals hij alleen zou blijven", not verlies, verlies[:2])
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

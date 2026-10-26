@@ -71,10 +71,10 @@ OPNAME = [
 # Alleen als de zin daarna echt doorloopt (kleine letter of cijfer, ook onder re.I); "BV." van een firma is een zinseinde.
 _AFK = r"(?:(?<=\bexcl)|(?<=\bincl)|(?<=\bca)|(?<=\bnr)|(?<=\bresp)|(?<=\bvb)|(?<=\bgew))\.(?=\s+(?-i:[a-z0-9(€]))"
 _T = r"(?:[^.;:\n]|(?<=\d)[.:](?=\d)|" + _AFK + ")"
-# Een regelovergang midden in een zin (de volgende regel begint met een kleine letter: "sprak zijn vaststellingen\nter
-# plaatse in") breekt de zin niet; een hoofdletter, een lijstteken, een lege regel of een regel die op ; of : eindigt
-# (een opsomming) begint een nieuwe zin.
-_Z = r"(?:[^.!?\n]|(?<![;:])\n(?=[ \t]*(?-i:[a-zà-ÿ]))|(?<=\d)\.(?=\d)|" + _AFK + ")"
+# Elke regelovergang sluit een zin af, zoals in productie: een opsomming zonder leesteken blijft zo een reeks eigen
+# regels. Alleen voor S4 kijkt _opname_weg één regel verder (een harde regelovergang midden in "sprak zijn
+# vaststellingen\nter plaatse in" of "volgens de\nopname").
+_Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 # Zinnen die alleen over de opname gaan: ze vallen weg (S4). Wat na "sprak zijn vaststellingen in:" volgt, is de
 # vaststelling zelf en blijft staan. De geschrapte zin staat in de ingrepen, dus in het logboek.
 # S4 per zin (een zin stopt aan . ! ? of een nieuwe regel, niet aan de punt van 4.500 of de dubbelpunt van 10:15), zodat
@@ -105,6 +105,21 @@ _ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]?\s*")
 _KAAL_TIJDSTIP = re.compile(r"\s*\(\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\)")
 
 
+def _is_s4(kern):
+    return _s4_begin(kern) is not None
+
+
+def _begint_in(begin, zin):
+    """De S4-zin begint in deze regel (niet pas in de volgende)."""
+    return begin is not None and begin < len(zin.strip())
+
+
+def _s4_begin(kern):
+    """Waar de eerste S4-zin in de tekst begint, of None."""
+    begins = [m.start() for p in [SPRAK, OPNAME_VOLGENS, *OPNAME_ZINNEN] for m in [p.search(kern)] if m]
+    return min(begins) if begins else None
+
+
 def _woorden(tekst):
     return re.findall(r"[^\W\d_]{2,}", tekst)
 
@@ -126,7 +141,18 @@ def _opname_weg(tekst):
             delen.append(nieuw)
 
     legende = False
-    for zin in _ZIN.findall(tekst):
+    stukken = _ZIN.findall(tekst)
+    i = 0
+    while i < len(stukken):
+        zin = stukken[i]
+        i += 1
+        # een harde regelovergang midden in een opnamezin: de regel eindigt zonder leesteken, de volgende begint klein,
+        # en pas samen is het een S4-zin; dan worden ze samen beoordeeld
+        while (i < len(stukken) and "\n" in zin and not zin.strip().endswith((".", "!", "?", ";", ":"))
+               and stukken[i].lstrip()[:1].islower() and not _is_s4(zin.strip())
+               and _begint_in(_s4_begin((zin + stukken[i]).lstrip()), zin)):
+            zin += stukken[i]
+            i += 1
         kern = zin.strip()
         kop, staart = zin[:len(zin) - len(zin.lstrip())], zin[len(zin.rstrip()):]
         if _MARK.fullmatch(kern):
