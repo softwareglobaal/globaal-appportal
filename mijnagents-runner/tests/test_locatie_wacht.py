@@ -269,6 +269,12 @@ def test_een_afgesloten_projectnummer_is_ook_geen_huisnummer():
         a = {"titel": "!! Mehdi: [HARC-KB] 2645 bespreking Proefklant 2699, 3990 Proefstad", "locatie": ""}
         lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
         assert (lat, lon) == WERF and not L.W.coord.gevraagd, herkomst
+        # Codex ronde 2: de volgende index vervangt de nummers; een verdwenen nummer verbergt geen adres meer.
+        L.haal = lambda pad: {"projectplekken": [{"sleutel": "HARC:2698", "nummer": "2698", "actief": False}], "dekking": {}}
+        L.projectindex()
+        assert L.BEKENDE_NUMMERS == {"2698"}, L.BEKENDE_NUMMERS
+        lat, lon, herkomst = L.plek_van_afspraak(a, L.W.lees_titel(a["titel"]), INDEX, {})
+        assert (lat, lon) == STADSKANTOOR, herkomst
     finally:
         L.haal = echt_haal
         L.BEKENDE_NUMMERS.clear()

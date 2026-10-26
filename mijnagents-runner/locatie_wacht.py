@@ -133,7 +133,7 @@ def taak_melden(taak, gelukt, detail=""):
 
 
 # ---------------------------------------------------------- projecten ---
-BEKENDE_NUMMERS = set()   # alle projectnummers van de tegel, ook niet actieve; projectindex() vult dit aan
+BEKENDE_NUMMERS = set()   # alle projectnummers van de tegel, ook niet actieve; projectindex() vervangt dit
 
 
 def projectindex():
@@ -144,9 +144,11 @@ def projectindex():
     alleen uit de agenda groeide en sinds 20-09 niet meer vernieuwd was."""
     d = haal("/api/projectplekken")
     per_sleutel, per_nummer = {}, {}
+    # Ook een afgesloten project is nooit een huisnummer (Codex, K5); per ronde vervangen, niet aangevuld: een
+    # verdwenen nummer mag een echt adres niet blijven verbergen.
+    BEKENDE_NUMMERS.clear()
+    BEKENDE_NUMMERS.update(str(p["nummer"]) for p in d.get("projectplekken") or [] if p.get("nummer"))
     for p in d.get("projectplekken") or []:
-        if p.get("nummer"):
-            BEKENDE_NUMMERS.add(str(p["nummer"]))     # ook een afgesloten project is nooit een huisnummer (Codex, K5)
         if not p.get("actief"):
             continue
         bruikbaar = p.get("geocode_kwaliteit") in ("adres", "override") and p.get("lat") is not None \

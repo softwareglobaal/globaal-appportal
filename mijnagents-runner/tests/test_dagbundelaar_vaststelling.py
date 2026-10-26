@@ -350,12 +350,19 @@ def test_f4_niet_gelezen_met_dezelfde_toetsregel_als_de_locatiewacht():
     titel = "Mehdi: [HARC-IN] 9003 overleg, Proefplein 1, 3990 Proefstad"
     afs = [{"id": "adres", "titel": titel, "locatie": "", "start": f"{DAG}T10:00:00+02:00", "einde": f"{DAG}T11:00:00+02:00"},
            {"id": "online", "titel": titel, "locatie": "https://us06web.zoom.us/j/1", "start": f"{DAG}T14:00:00+02:00",
-            "einde": f"{DAG}T15:00:00+02:00"}]
+            "einde": f"{DAG}T15:00:00+02:00"},
+           # Codex ronde 2: 9004 is een projectnummer, geen huisnummer; ook als maak() faalde voor de index geladen was
+           {"id": "intern", "titel": "Mehdi: [HARC-IN] 9003 overleg Proefklant 9004, 3990 Proefstad", "locatie": "",
+            "start": f"{DAG}T16:00:00+02:00", "einde": f"{DAG}T17:00:00+02:00"}]
+    index = {"projectplekken": [{"sleutel": "HARC:9004", "nummer": "9004", "actief": True, "adres": "Proefweg 1, 3990 Proefstad"}]}
     oud, LW.maak = LW.maak, maak
+    oud_haal, bekend, LW.haal = LW.haal, set(LW.BEKENDE_NUMMERS), lambda pad: index
     try:
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
     finally:
-        LW.maak = oud
+        LW.maak, LW.haal = oud, oud_haal
+        LW.BEKENDE_NUMMERS.clear()
+        LW.BEKENDE_NUMMERS.update(bekend)
     assert per_id == {"adres": {"uitkomst": "onbekend", "tekst": "locatie niet gelezen (ValueError)"}}, per_id
     assert bezoeken is None and reden == "ValueError", (bezoeken, reden)
 
