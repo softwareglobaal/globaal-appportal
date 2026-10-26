@@ -713,14 +713,16 @@ def api_gesprekken_zetten():
     return jsonify(ok=True, rijen=n, zonder_bron=zonder_bron)
 
 
-# Een chat is geen gesprek (D7, ontwerp dagvaststelling): een Zoom-chat, en een WhatsApp-gesprek per dag van De
-# WhatsApp-wacht (whatsapp:<sha1 jid>:<dag>; een WhatsApp-oproep is whatsapp-oproep: en telt wel). Zoals
-# koppelingen/dagvaststelling.CHAT_VOORVOEGSELS.
+# Een gesprek is een rij van een gespreksbron die geen chat is (D7 en E1, ontwerp dagvaststelling; Codex P3 en Q8 bij
+# fase 2): een mail, een Zoom-chat of een WhatsApp-gesprek per dag (whatsapp:<sha1 jid>:<dag>) telt niet; een
+# WhatsApp-oproep (whatsapp-oproep:) en een telefoonoproep wel. Zoals koppelingen/dagvaststelling.soort.
+GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
 CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
 
 
-def is_chat(uniek):
-    return str(uniek or "").startswith(CHAT_VOORVOEGSELS)
+def telt_als_gesprek(rij):
+    return (str(rij["bron"] or "") in GESPREKSBRONNEN
+            and not str(rij["uniek"] or "").startswith(CHAT_VOORVOEGSELS))
 
 
 # Een dubbel_van die met buiten: begint, is een merkteken en geen verwijzing naar een rij: de rij telt niet voor Mehdi,
@@ -1633,11 +1635,11 @@ def dagen_pagina():
             r["bundels"] += 1
         elif s == "signaal":
             r["signalen"] += 1
-    # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer. Een chat
-    # (Zoom-chat, WhatsApp per gesprek per dag) is geen gesprek (D7, Codex P3 bij fase 2 van de dagvaststelling).
-    for g in conn.execute("SELECT uniek, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling FROM gesprek_log "
-                          "WHERE COALESCE(dubbel_van, '')=''").fetchall():
-        if is_chat(g["uniek"]):
+    # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer. Een mail of
+    # een chat is geen gesprek (telt_als_gesprek).
+    for g in conn.execute("SELECT uniek, bron, datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling "
+                          "FROM gesprek_log WHERE COALESCE(dubbel_van, '')=''").fetchall():
+        if not telt_als_gesprek(g):
             continue
         r = dagen.setdefault(g["datum"], {"dag": g["datum"], "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
                                           "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
@@ -1745,8 +1747,8 @@ def dag_pagina(datum):
         dagplannen=van_soort("dagplan"), afspraken=van_soort("afspraak"), fotos=van_soort("foto"),
         gezondheid=van_soort("gezondheid"), mails=van_soort("mail"), signalen=van_soort("signaal"),
         transcripten=van_soort("transcript", "werfbezoek"), gesprekken=gesprekken,
-        gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"] and not is_chat(g["uniek"])),
-        gesprekken_chats=sum(1 for g in gesprekken if not g["dubbel_van"] and is_chat(g["uniek"])),
+        gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"] and telt_als_gesprek(g)),
+        gesprekken_geen=sum(1 for g in gesprekken if not g["dubbel_van"] and not telt_als_gesprek(g)),
     )
 
 

@@ -105,9 +105,9 @@ static int map_open(int dirfd, const char *naam, int maak, int eigen) {
     return fd;
 }
 
-/* Geen symlink in het bronpad onder de thuismap, ook niet in een tussenmap (SQLITE_OPEN_NOFOLLOW kijkt alleen naar
-   het laatste deel). Geeft 0 als het pad goed is, anders een errno. */
-static int zonder_symlink(const char *home, const char *pad) {
+/* De bron openen langs het pad onder de thuismap, map per map zonder een symlink te volgen, en zijn identiteit
+   (apparaat en inode) in *id zetten. Een weigering van macOS is EPERM. Geeft 0, anders een errno. */
+static int bron_identiteit(const char *home, const char *pad, struct stat *id) {
     char deel[PATH_MAX];
     if (snprintf(deel, sizeof deel, "%s", pad) >= (int)sizeof deel) return ENAMETOOLONG;
     int fd = open(home, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -125,7 +125,15 @@ static int zonder_symlink(const char *home, const char *pad) {
             close(fd);
             return ELOOP;
         }
-        if (rest == NULL) break;
+        if (rest == NULL) {
+            int bron = openat(fd, stuk, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+            int e = errno;
+            close(fd);
+            if (bron < 0) return e;
+            int goed = fstat(bron, id) == 0 && S_ISREG(id->st_mode);
+            close(bron);
+            return goed ? 0 : EINVAL;
+        }
         int volgend = openat(fd, stuk, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         int e = errno;
         close(fd);
@@ -133,7 +141,26 @@ static int zonder_symlink(const char *home, const char *pad) {
         fd = volgend;
     }
     close(fd);
-    return 0;
+    return ENOENT;
+}
+
+/* Codex Q3: leest SQLite precies het bestand dat hierboven gecontroleerd werd? Het begin van unixFile (os_unix.c:
+   methoden, vfs, inode, bestandsdescriptor) is sinds jaren gelijk; klopt het niet, dan faalt de vergelijking en
+   leest de helper niets (veilig dicht). */
+typedef struct {
+    const void *methoden;
+    void *vfs;
+    void *inode;
+    int h;
+} UnixBestand;
+
+static int zelfde_bestand(sqlite3 *db, const char *schema, const struct stat *id) {
+    sqlite3_file *f = NULL;
+    if (sqlite3_file_control(db, schema, SQLITE_FCNTL_FILE_POINTER, &f) != SQLITE_OK || f == NULL || f->pMethods == NULL)
+        return 0;
+    int h = ((const UnixBestand *)f)->h;
+    struct stat st;
+    return h >= 0 && fstat(h, &st) == 0 && st.st_dev == id->st_dev && st.st_ino == id->st_ino;
 }
 
 static const char *uit_errno(int e) {
@@ -244,28 +271,31 @@ int main(int argc, char *argv[]) {
     if (db) sqlite3_busy_timeout(db, 15000);
     for (size_t i = 0; i < set->aantal; i++) {
         char pad[PATH_MAX], wal[PATH_MAX + 8], uri[3 * PATH_MAX], sql[256];
-        struct stat st;
+        struct stat st, id;
         uitkomst[i] = "ok";
         if (snprintf(pad, sizeof pad, "%s/%s", home, set->bronnen[i].pad) >= (int)sizeof pad ||
             snprintf(wal, sizeof wal, "%s-wal", pad) >= (int)sizeof wal ||
             !als_uri(pad, lstat(wal, &st) != 0 && errno == ENOENT, uri, sizeof uri)) {
             uitkomst[i] = "fout";
-        } else if ((errno = zonder_symlink(home, set->bronnen[i].pad)) != 0) {
+        } else if ((errno = bron_identiteit(home, set->bronnen[i].pad, &id)) != 0) {
             uitkomst[i] = uit_errno(errno);
         } else {
-            int test = open(pad, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);   /* een weigering van macOS is EPERM */
-            if (test < 0) {
-                uitkomst[i] = uit_errno(errno);
-            } else {
-                close(test);
-                snprintf(sql, sizeof sql, "ATTACH ?1 AS %s", set->bronnen[i].schema);
-                sqlite3_stmt *st = NULL;
-                int rc = db ? sqlite3_prepare_v2(db, sql, -1, &st, NULL) : SQLITE_ERROR;
-                if (rc == SQLITE_OK) rc = sqlite3_bind_text(st, 1, uri, -1, SQLITE_TRANSIENT);
-                if (rc == SQLITE_OK) rc = sqlite3_step(st) == SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
-                sqlite3_finalize(st);
-                if (rc != SQLITE_OK) uitkomst[i] = rc == SQLITE_AUTH || rc == SQLITE_PERM ? "geweigerd" : "fout";
-            }
+#ifdef BASIS_TEST
+            /* Alleen de testbouw: <bron>.wissel neemt hier de plaats van de gecontroleerde bron in (de race van Q3). */
+            char wissel[PATH_MAX + 16];
+            snprintf(wissel, sizeof wissel, "%s.wissel", pad);
+            rename(wissel, pad);
+#endif
+            snprintf(sql, sizeof sql, "ATTACH ?1 AS %s", set->bronnen[i].schema);
+            sqlite3_stmt *stmt = NULL;
+            int rc = db ? sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) : SQLITE_ERROR;
+            if (rc == SQLITE_OK) rc = sqlite3_bind_text(stmt, 1, uri, -1, SQLITE_TRANSIENT);
+            if (rc == SQLITE_OK) rc = sqlite3_step(stmt) == SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
+            sqlite3_finalize(stmt);
+            if (rc != SQLITE_OK)
+                uitkomst[i] = rc == SQLITE_AUTH || rc == SQLITE_PERM ? "geweigerd" : "fout";
+            else if (!zelfde_bestand(db, set->bronnen[i].schema, &id))
+                uitkomst[i] = "onverwacht";   /* het pad wees intussen naar een ander bestand */
         }
         if (strcmp(uitkomst[i], "ok") != 0 && strcmp(geheel, "geweigerd") != 0)
             geheel = uitkomst[i];
@@ -279,8 +309,12 @@ int main(int argc, char *argv[]) {
         snprintf(vragen, sizeof vragen, set->vragen, begin, begin);
         /* Een leestransactie over alle bronnen: een samenhangend beeld, met de WAL erbij. Een vraag die faalt, wijst
            op een ander schema (een tabel of kolom die er niet meer is): onverwacht, nooit een halve kopie. */
+        /* Codex Q4: de uitvoer zelf draagt de aanvraag-ID, zodat de runner een kopie van een andere start herkent. */
+        char merk[96];
+        snprintf(merk, sizeof merk, "INSERT INTO META VALUES('aanvraag', '%s');", aanvraag);
         int rc = sqlite3_exec(db, "BEGIN", NULL, NULL, NULL);
         if (rc == SQLITE_OK) rc = sqlite3_exec(db, vragen, NULL, NULL, NULL);
+        if (rc == SQLITE_OK) rc = sqlite3_exec(db, merk, NULL, NULL, NULL);
         int fout = rc != SQLITE_OK ? sqlite3_errcode(db) : SQLITE_OK;
         sqlite3_exec(db, rc == SQLITE_OK ? "COMMIT" : "ROLLBACK", NULL, NULL, NULL);
         if (rc != SQLITE_OK) {

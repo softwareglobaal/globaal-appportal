@@ -420,9 +420,16 @@ def test_kopie_hoort_bij_de_eigen_aanvraag():
         def tik(_):
             klok[0] += 1
 
-        def helper(uitkomst="ok", bronnen=None, aanvraag=None):
+        def helper(uitkomst="ok", bronnen=None, aanvraag=None, merk=None):
             def start():
                 id_ = aanvraag or Path(map_, "telefoon", "aanvraag").read_text()
+                uit = Path(map_, "telefoon", "gesprekken.sqlite")
+                uit.unlink(missing_ok=True)
+                maak_telefoon(str(uit))
+                con = sqlite3.connect(uit)
+                con.execute("INSERT INTO META VALUES('aanvraag', ?)", (merk or id_,))
+                con.commit()
+                con.close()
                 Path(map_, "telefoon", "status.json").write_text(json.dumps(
                     {"ts": 1000, "set": "telefoon", "aanvraag": id_, "uitkomst": uitkomst,
                      "bronnen": bronnen or {"oproepen": uitkomst, "contacten": "ok"}}))
@@ -436,6 +443,7 @@ def test_kopie_hoort_bij_de_eigen_aanvraag():
         for start, nood, wie in ((helper(aanvraag="b" * 32), "MacGesprekkenKopie gaf geen verse kopie", "claude-code"),
                                  (helper("geweigerd"), "MacGesprekkenKopie heeft geen volledige schijftoegang", "mehdi"),
                                  (helper("onverwacht"), "Kopie van de databank op de Mac mislukt", "claude-code"),
+                                 (helper(merk="f" * 32), "MacGesprekkenKopie gaf geen verse kopie", "claude-code"),
                                  (lambda: False, "MacGesprekkenKopie staat niet in launchd op de Mac", "claude-code")):
             try:
                 M.kopie_vragen("telefoon", kopie=map_, klok=lambda: klok[0], slaap=tik, start=start)
@@ -672,6 +680,111 @@ def test_helper_weigert_symlink_en_meldt_ander_schema():
         (doel / "aanvraag").write_text("../../etc " + "a" * 22)
         status = json.loads(subprocess.run([helper, "whatsapp"], capture_output=True, text=True).stdout)
         assert status["aanvraag"] == "", status
+
+
+# ------------------------------------------------------------------------------------- bouwcontrole r2 ---
+def test_q1_dubbele_oproep_id_overschrijft_niets():
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
+            ("ZELFDE", a(bxl(2026, 10, 22, 8, 0)), 60.0, 1, 0, "0470000001", "com.apple.Telephony"),
+            ("ZELFDE", a(bxl(2026, 10, 22, 9, 0)), 120.0, 1, 0, "0470000001", "com.apple.Telephony")],
+            nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+        rijen, _ = M.telefoon_rijen(pad, DAGEN)
+    sleutels = [r["uniek"] for r in rijen]
+    assert len(set(sleutels)) == 2 and "telefoon:ZELFDE" in sleutels, sleutels
+    b = NepBord()
+    M.schrijf_en_lees_terug("telefoon", rijen, DAG, DAG, b.call, b.terug)
+    assert len(b.tabel) == 2
+    try:
+        M.schrijf_en_lees_terug("telefoon", rijen + rijen[:1], DAG, DAG, b.call, b.terug)
+    except M.MacFout as e:
+        assert e.nood.startswith("Twee rijen met dezelfde sleutel")
+    else:
+        raise AssertionError("dubbele sleutel geschreven")
+
+
+def test_q2_grens_van_vervallen():
+    def proef(op_bord, bron):
+        b = NepBord()
+        M.schrijf_en_lees_terug("telefoon", [rij(f"telefoon:{i}") for i in range(op_bord)], DAG, DAG, b.call, b.terug)
+        try:
+            return M.schrijf_en_lees_terug("telefoon", [rij(f"telefoon:{i}") for i in range(bron)], DAG, DAG, b.call,
+                                           b.terug)
+        except M.MacFout:
+            return "stop"
+    assert proef(5, 0) == "stop"            # een lege bron en vijf rijen op het bord (de geheugenproef van Codex)
+    assert proef(1, 0) == "stop"            # een lege bron is altijd verdacht
+    assert proef(20, 15) == "stop"          # vijf van twintig: meer dan een vijfde
+    assert proef(100, 95) == 5              # vijf van honderd: gewoon vervallen
+    assert proef(10, 6) == 4                # vier: onder de grens van vijf
+    # alleen dekking is geen gegeven
+    b = NepBord()
+    M.schrijf_en_lees_terug("telefoon", [rij("telefoon:1")], DAG, DAG, b.call, b.terug)
+    try:
+        M.schrijf_en_lees_terug("telefoon", [rij("dekking:telefoon:" + DAG, bron="dekking", dubbel_van=M.DEKKING)],
+                                DAG, DAG, b.call, b.terug)
+    except M.MacFout:
+        pass
+    else:
+        raise AssertionError("bron met alleen dekking markeerde rijen als vervallen")
+
+
+def test_q5_kapotte_waarde_komt_niet_in_de_fout():
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
+            ("U1", "Jan Proef 0470000001", 60.0, 1, 0, "0470000001", "com.apple.Telephony")])
+        try:
+            M.lees_veilig(M.telefoon_rijen, pad, DAGEN)
+        except M.MacFout as e:
+            tekst = f"{e} {e.nood} {e.__cause__} {e.__context__ if not e.__suppress_context__ else ''}"
+        else:
+            raise AssertionError("kapotte waarde gelezen")
+    assert "Jan Proef" not in tekst and "0470000001" not in tekst and "ValueError" in tekst, tekst
+
+
+def test_q6_eindcontrole_zet_fout_met_nood():
+    class Ag:
+        def __init__(self):
+            self.slagen = []
+
+        def noden_bij_breuk(self, nieuw):
+            return [{"tekst": "Een oude nood", "wie": "mehdi"}] + nieuw
+
+        def hartslag(self, status, taak="", detail="", nood=None):
+            self.slagen.append((status, detail, nood))
+
+    ag = Ag()
+    standen = iter([{"status": "klaar", "status_ronde": "a" * 32, "kennis_ronde": "a" * 32}])
+    assert M.eindcontrole(ag, "belwacht", "t", "a" * 32, stand=lambda n: next(standen)) and not ag.slagen
+    standen = iter([{"status": "klaar", "status_ronde": "b" * 32, "kennis_ronde": "a" * 32}, {"status": "fout"}])
+    assert not M.eindcontrole(ag, "belwacht", "t", "a" * 32, stand=lambda n: next(standen))
+    status, detail, nood = ag.slagen[-1]
+    assert status == "fout" and {"tekst": "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt",
+                                 "wie": "claude-code"} in nood and nood[0]["tekst"] == "Een oude nood"
+    for module in (WA, BEL):
+        assert "M.eindcontrole(ag, NAAM, TAAK, ronde_id)" in Path(module.__file__).read_text(encoding="utf-8")
+
+
+def test_q3_helper_leest_geen_verwisselde_bron():
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        _bron_wa(thuis, met_wal=False).close()
+        wa = Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
+        shutil.copy(wa / "ChatStorage.sqlite", wa / "ChatStorage.sqlite.wissel")
+        status = json.loads(subprocess.run([helper, "whatsapp"], capture_output=True, text=True).stdout)
+        assert status["bronnen"]["chat"] == "onverwacht" and status["uitkomst"] == "onverwacht", status
+        doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken/whatsapp")
+        assert not (doel / "gesprekken.sqlite").exists()
+        # zonder wissel: gewoon gelezen, en de uitvoer draagt de aanvraag-ID (Q4)
+        (doel / "aanvraag").write_text("9" * 32)
+        status = json.loads(subprocess.run([helper, "whatsapp"], capture_output=True, text=True).stdout)
+        assert status["uitkomst"] == "ok", status
+        assert M.lees(doel / "gesprekken.sqlite", M.SQL_AANVRAAG) == [("9" * 32,)]
 
 
 if __name__ == "__main__":

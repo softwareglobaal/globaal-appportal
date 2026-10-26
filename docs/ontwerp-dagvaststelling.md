@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.1, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt" en "Antwoord op de ontwerplezing" onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.2, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en "Antwoord op de bouwcontrole r2" onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -426,3 +426,16 @@ Mac blijven staan; Mehdi beslist of ze weg mogen.
 
 Uitrol op de Mac: `mac/uitrol_mac_gesprekken.sh` (eigen worktree op origin/main, helper alleen opnieuw gebouwd als zijn
 bron verandert, vier LaunchAgents; `aan` zet de twee wachten pas aan na de gecontroleerde eerste ronde).
+
+### Antwoord op de bouwcontrole r2 (v2.2, docs/codex/dagvaststelling-fase2-bouw-r2.md, "live: nee")
+
+| punt | antwoord in de code |
+|---|---|
+| Q1 | een tweede iPhone-oproep met dezelfde ID krijgt haar tijdstip in de sleutel (`telefoon:ID-<seconden>`); `schrijf_en_lees_terug` weigert twee rijen met dezelfde sleutel. Test in de module en door de echte `/api/gesprekken` |
+| Q2 | stoppen zonder te markeren als de bron niets meer toont terwijl het bord rijen kent, of als minstens vijf rijen en meer dan een vijfde van het bord tegelijk verdwijnen; alleen dekking telt niet als gegeven. Test op de grenzen (5 van 5, 1 van 1, 5 van 20, 5 van 100, 4 van 10) |
+| Q3 | de helper opent de bron zelf langs de mappen zonder symlink, onthoudt apparaat en inode, en vergelijkt die na de ATTACH met het bestand dat SQLite echt open heeft (SQLITE_FCNTL_FILE_POINTER); een ander bestand is "onverwacht", veilig dicht. Racetest in de proefbouw (een `.wissel` neemt na de controle de plaats van de bron in) |
+| Q4 | de uitvoer draagt zelf de aanvraag-ID (`META aanvraag`); de runner leest ze alleen als die gelijk is aan zijn vraag. Test met een uitvoer van een andere start |
+| Q5 | `mac_gesprekken.lees_veilig`: een leesfout gaat alleen als soort verder (`ValueError`), nooit met een waarde uit de bron. Test met een naam in een tijdveld |
+| Q6 | `mac_gesprekken.eindcontrole`: zonder bevestiging een hartslag fout met de vaste nood "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt" (de open noden blijven), en ook die fout wordt teruggelezen. Test |
+| Q7 | `uitrol_mac_gesprekken.sh`: de vorige helper en LaunchAgents blijven bewaard (`terug`); een nieuwe helper of gewijzigde wacht zet de wachten uit; `proef` doet de toegangsproef onder launchd met het exacte programma en een eerste ronde van elke wacht en schrijft een proefbewijs voor precies die cdhash en commit; `aan` weigert zonder dat bewijs |
+| Q8 | de dagenpagina en de dagpagina tellen alleen rijen van een gespreksbron die geen chat is (`telt_als_gesprek`): ook mail telt niet meer. De dagpagina zegt "N mails en chats tellen niet als gesprek". Test |

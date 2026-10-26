@@ -40,7 +40,7 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
         kopie, gekopieerd = kopie_vragen(KANAAL)
         dagen = M.dagen(gekopieerd, gedekt_tot)
         try:
-            rijen, info = M.telefoon_rijen(kopie, dagen, ONBEKEND_ALS_NUMMER)
+            rijen, info = M.lees_veilig(M.telefoon_rijen, kopie, dagen, ONBEKEND_ALS_NUMMER)
         finally:
             M.wis(kopie)
         ag.prive(M.maskerwoorden(rijen))
@@ -102,13 +102,12 @@ def main(argv=None):
                     bord.PLATFORM, bord.TOKEN = url, token
                     with ag.ronde(TAAK) as r:
                         gedekt = werk(r, ronde_id, stand.get("gedekt_tot"))
-                    if not M.bevestigd(M.bord_stand(NAAM), ronde_id):
-                        # P8: het slot houdt een tweede ronde van mij op deze Mac tegen, dus de status op het bord is
-                        # van mij; zonder bevestiging staat ze op fout, nooit op een oude klaar.
-                        ag.hartslag("fout", taak=TAAK, detail="Bord heeft de ronde niet bevestigd")
+                    if not M.eindcontrole(ag, NAAM, TAAK, ronde_id):
+                        # P8 en Q6: het slot houdt een tweede ronde van mij op deze Mac tegen, dus de status op het bord
+                        # is van mij; zonder bevestiging staat ze op fout met een nood, nooit op een oude klaar.
                         print("ronde niet bevestigd door het bord", file=sys.stderr)
                         return 1
-                    if gedekt:
+                    if gedekt and gedekt > str(stand.get("gedekt_tot") or ""):
                         M.stand_schrijven(NAAM, {**stand, "gedekt_tot": gedekt})
             except M.MacFout as e:
                 if "ssh-tunnel" in str(e):

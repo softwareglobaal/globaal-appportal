@@ -416,7 +416,8 @@ def t_p3_chats_tellen_niet():
          {"uniek": "whatsapp-oproep:PROEF2", "datum": "2026-10-20", "start": "12:00", "minuten": 0, "prive": 1,
           "bron": "whatsapp", "dubbel_van": "buiten:gemist"},
          {"uniek": "dekking:whatsapp:2026-10-20", "datum": "2026-10-20", "bron": "dekking", "prive": 1,
-          "dubbel_van": "buiten:dekking"}])
+          "dubbel_van": "buiten:dekking"},
+         {"uniek": "mail:<proef@x>", "datum": "2026-10-20", "minuten": 0, "bron": "mail", "dubbel_van": ""}])
     gevangen = {}
     echt_render, echt_locatie = A.render_template, A._locatie
     A.render_template = lambda naam, **kw: gevangen.update(kw) or ""
@@ -426,14 +427,14 @@ def t_p3_chats_tellen_niet():
     finally:
         A.render_template = echt_render
     dag = next((d for d in gevangen.get("rijen", []) if d["dag"] == "2026-10-20"), {})
-    check("P3 dagenpagina: Fathom en de beantwoorde oproep tellen, chats, gemist en dekking niet",
+    check("P3 dagenpagina: Fathom en de beantwoorde oproep tellen, chats, mail (Q8), gemist en dekking niet",
           dag.get("gesprekken") == 2 and dag.get("gesprek_min") == FATHOM["minuten"] + 4, dag)
     try:
         html = C.get("/dag/2026-10-20", headers=BEHEER).get_data(as_text=True)
     finally:
         A._locatie = echt_locatie
-    check("P3 dagpagina: twee gesprekken, twee chats, twee buiten", "2 gesprekken tellen, 2 chats tellen niet als gesprek, "
-          "2 dubbel of buiten" in html, html[-2500:])
+    check("P3 dagpagina: twee gesprekken, twee chats en een mail, twee buiten", "2 gesprekken tellen, 3 mails en chats "
+          "tellen niet als gesprek, 2 dubbel of buiten" in html, html[-2500:])
 
 
 def t_p9_teruglezen_van_de_mac():
@@ -461,6 +462,12 @@ def t_p9_teruglezen_van_de_mac():
     zet(rijen[:1])
     check("P9 een terugkerende rij telt weer", bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)
           ["telefoon:U1"]["d"] == "")
+    # Q1: twee oproepen met dezelfde ID krijgen op de Mac twee sleutels (de tweede met haar tijdstip); beide blijven
+    dubbel = [dict(rijen[0], uniek="telefoon:ZELFDE"), dict(rijen[0], uniek="telefoon:ZELFDE-814700000", start="03:30")]
+    zet(dubbel)
+    terug = bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)
+    check("Q1 twee oproepen met dezelfde ID blijven twee rijen", all(terug.get(r["uniek"], {}).get("v")
+          == bordstand.vingerafdruk(r) for r in dubbel), terug)
 
 
 if __name__ == "__main__":

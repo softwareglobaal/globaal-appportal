@@ -81,8 +81,10 @@ SQL_CONTACTEN = "SELECT ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER FROM ZWAADDRE
 SQL_TELEFOON = ("SELECT ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, ZSERVICE_PROVIDER "
                 "FROM ZCALLRECORD ORDER BY ZDATE, ZUNIQUE_ID")
 SQL_NIEUWSTE = "SELECT waarde FROM META WHERE sleutel = 'nieuwste'"
+SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
-       SQL_TELEFOON, SQL_NIEUWSTE)
+       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG)
+MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
 
 
 class MacFout(RuntimeError):
@@ -335,7 +337,7 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
     nummer (Mehdi beslist)."""
     van, tot = _venster(dagenlijst)
     boek = Adresboek(lees(pad, SQL_CONTACTEN))
-    rijen, aanwezig, overgeslagen = [], set(), 0
+    rijen, aanwezig, overgeslagen, gezien = [], set(), 0, set()
     for ident, t, duur, uitgaand, beantwoord, adres, dienst in lees(pad, SQL_TELEFOON):
         moment, duur = tijd(t), float(duur or 0)
         if not van <= apple(moment) < tot:
@@ -352,7 +354,10 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
         thema = f"{soort}, {'uitgaand' if uitgaand else 'inkomend'}"
         if duur <= 0:
             thema += ", niet beantwoord" if uitgaand else ", gemist"
-        rijen.append(_rij(f"telefoon:{ident}", dag_van(moment), start_van(moment), minuten(duur), persoon, thema,
+        # Codex Q1: twee oproepen met dezelfde ID mogen elkaar nooit overschrijven; de tweede krijgt haar tijdstip erbij
+        sleutel = ident if ident not in gezien else f"{ident}-{int(apple(moment))}"
+        gezien.add(ident)
+        rijen.append(_rij(f"telefoon:{sleutel}", dag_van(moment), start_van(moment), minuten(duur), persoon, thema,
                           "telefoon", "" if duur > 0 else GEMIST))
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "overgeslagen": overgeslagen}
 
@@ -560,7 +565,15 @@ def kopie_vragen(kanaal, wacht=KOPIE_WACHT, kopie=None, klok=time.time, slaap=ti
     if status.get("uitkomst") != "ok":
         slecht = ", ".join(sorted(f"{k} {v}" for k, v in bronnen.items() if v != "ok")) or status.get("uitkomst")
         raise MacFout(f"kopie mislukt: {slecht}", "Kopie van de databank op de Mac mislukt")
-    return map_ / "gesprekken.sqlite", datetime.fromtimestamp(int(status["ts"]), timezone.utc)
+    pad = map_ / "gesprekken.sqlite"
+    try:
+        merk = lees(pad, SQL_AANVRAAG)
+    except sqlite3.Error:
+        merk = []
+    if not merk or merk[0][0] != aanvraag:
+        # Codex Q4: de status hoort bij mijn vraag, maar de uitvoer niet (een andere start schreef ze)
+        raise MacFout("uitvoer hoort niet bij de aanvraag", "MacGesprekkenKopie gaf geen verse kopie")
+    return pad, datetime.fromtimestamp(int(status["ts"]), timezone.utc)
 
 
 def wis(pad):
@@ -574,6 +587,8 @@ def schrijf_en_lees_terug(kanaal, rijen, van, tot, call, terug=None):
     (dubbel_van buiten:vervallen); komt ze terug, dan zet de upsert dubbel_van weer leeg. Toont de bron veel minder dan
     het bord kent, dan markeert de ronde niets en stopt ze (P9). Geeft het aantal vervallen rijen."""
     terug = terug or bord_rijen
+    if len({r["uniek"] for r in rijen}) != len(rijen):
+        raise MacFout("twee rijen met dezelfde sleutel", "Twee rijen met dezelfde sleutel: niets geschreven")
     for i in range(0, len(rijen), PER_KEER):
         antwoord = call("/api/gesprekken", {"rijen": rijen[i:i + PER_KEER]})
         if not isinstance(antwoord, dict) or not antwoord.get("ok"):
@@ -584,7 +599,10 @@ def schrijf_en_lees_terug(kanaal, rijen, van, tot, call, terug=None):
         raise MacFout("rijen niet teruggelezen zoals geschreven",
                       "Gesprekkentabel gaf de rijen niet terug zoals geschreven")
     extra = sorted(u for u, x in op_bord.items() if u not in verwacht and (x or {}).get("d") != VERVALLEN)
-    if len(extra) > max(5, len(verwacht) // 5):
+    # Codex Q2: een bron die niets meer toont terwijl het bord rijen kent, of die in een keer minstens vijf rijen en
+    # meer dan een vijfde van het bord kwijt is, is verdacht (een lege of halve databank): niets markeren, stoppen.
+    gegevens = [r for r in rijen if r["bron"] != "dekking"]
+    if extra and (not gegevens or (len(extra) >= MIN_VERVALLEN and len(extra) * 5 > len(op_bord))):
         raise MacFout(f"bron toont veel minder rijen dan het bord ({len(extra)} zouden vervallen)",
                       "De bron toont veel minder rijen dan het bord kent: niets als vervallen gemarkeerd")
     if extra:
@@ -593,6 +611,32 @@ def schrijf_en_lees_terug(kanaal, rijen, van, tot, call, terug=None):
         if any((op_bord.get(u) or {}).get("d") != VERVALLEN for u in extra):
             raise MacFout("vervallen rijen niet gemarkeerd", "Gesprekkentabel gaf de rijen niet terug zoals geschreven")
     return len(extra)
+
+
+def lees_veilig(lezer, *args):
+    """Codex Q5: een fout bij het lezen kan een waarde uit de bron in haar tekst dragen (een naam in een kapot
+    tijdveld), en de ronde zet die tekst in de hartslag voor het masker de namen kent. Hier gaat alleen de soort fout
+    verder."""
+    try:
+        return lezer(*args)
+    except Exception as e:  # noqa: BLE001
+        raise MacFout(f"uitvoer van MacGesprekkenKopie onleesbaar ({type(e).__name__})",
+                      "Uitvoer van MacGesprekkenKopie onleesbaar") from None
+
+
+def eindcontrole(ag, naam, taak, ronde_id, stand=None):
+    """Na de ronde: staan eindhartslag en kennis met mijn ronde-ID op het bord? Zo niet (Codex Q6), dan een
+    hartslag fout met een vaste nood, en die fout zelf ook teruglezen. Geeft True als de ronde bevestigd is."""
+    stand = stand or bord_stand
+    if bevestigd(stand(naam), ronde_id):
+        return True
+    nood = {"tekst": "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt", "wie": "claude-code"}
+    lijst = ag.noden_bij_breuk([nood])
+    ag.hartslag("fout", taak=taak, detail="Bord heeft de ronde niet bevestigd", nood=lijst)
+    na = stand(naam)
+    if not (isinstance(na, dict) and na.get("status") == "fout"):
+        print("ook de hartslag fout staat niet op het bord", flush=True)
+    return False
 
 
 def grenzen_of_stop(werkwijze, grenzen):
