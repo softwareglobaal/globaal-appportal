@@ -280,14 +280,13 @@ def main():
             # nachtronde haalt de dag in, en de nood zegt het.
             ag.log(f"dag {DAG}", "fout", f"dagvaststelling mislukt: {type(e).__name__}: {str(e)[:200]}")
             r.nood("Dagvaststelling mislukt in de ochtendronde, zie werkverslag", wie="claude-code")
-            # Codex-controle mailnood 2 (C1): deze ronde maakte de vaststelling niet af en sluit dus geen noden die ze
-            # niet kon nakijken; wat open stond, blijft open (zoals noden_bij_breuk). Weet het bord niet wat open staat,
-            # dan breekt de ronde toch, zodat het bord niets sluit; de bundels zijn dan al gemaakt.
-            bestaand = ag.open_noden()
-            if bestaand is None:
-                raise
-            for n in bestaand:
-                r.nood(n["tekst"], wie=n["wie"])
+            # Codex-controle mailnood 2 en 3 (C1): deze ronde maakte de vaststelling niet af en sluit dus haar noden niet;
+            # die bleven ongecontroleerd. De noden van de bundels wel, want bundelen() liep. Weet het bord niet wat open
+            # staat, dan breekt de ronde niet: het ochtendbericht wacht op deze ronde (ochtend.py), en een bord dat geen
+            # noden geeft, neemt de afsluitende lijst zelden aan. De nachtronde (die breekt) zegt het dan.
+            for n in ag.open_noden() or []:
+                if n["tekst"].startswith(VASTSTELLING_NODEN):
+                    r.nood(n["tekst"], wie=n["wie"])
         r.detail = "; ".join(d for d in delen if d)
 
 
@@ -560,6 +559,11 @@ SYSTEEMPYTHON = "/usr/bin/python3"
 PLAFOND = 2000                                                # zoveel koppen per map; meer is niet volledig gelezen
 MAILNOOD = "Mail niet volledig gelezen voor de dagvaststelling"  # + ": postvak (soort)"; zonder het staartje: voor 26-10
 MAIL_NIET_GELEZEN = "Mail niet gelezen voor de dagvaststelling"
+# Het begin van elke nood die vastleggen() geeft; een mislukte ochtendvaststelling laat die open (Codex-controle 3). Een
+# test houdt deze lijst gelijk met de noden in vastleggen().
+VASTSTELLING_NODEN = ("Dagboek nog niet bevestigd in Dropbox", "Agenda niet volledig gelezen voor de dagvaststelling",
+                      "Locatie niet gelezen voor de dagvaststelling", "WhatsApp: de WhatsApp-wacht leest",
+                      "Telefoon: de Belwacht leest", MAIL_NIET_GELEZEN, MAILNOOD)
 
 
 def lees_mail(dagen):

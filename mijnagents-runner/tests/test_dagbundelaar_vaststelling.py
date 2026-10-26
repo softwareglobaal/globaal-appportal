@@ -653,9 +653,10 @@ def test_g3_zoom_van_de_ochtendketen():
 
 
 def test_c1_ochtend_sluit_geen_noden_als_de_vaststelling_faalt():
-    """Codex-controle mailnood 2 (C1): in de ochtendketen vangt main een mislukte vaststelling op en de ronde eindigt
-    gewoon. Dan blijven de noden die open stonden open, naast "Dagvaststelling mislukt"; weet het bord niet wat open
-    staat, dan breekt de ronde, zodat het bord niets sluit."""
+    """Codex-controle mailnood 2 en 3 (C1): in de ochtendketen vangt main een mislukte vaststelling op en de ronde eindigt
+    gewoon. Dan blijven de noden van de vaststelling die open stonden open, naast "Dagvaststelling mislukt"; een
+    bundelnood die bundelen() in dezelfde ronde niet meer gaf, sluit wel. Weet het bord niet wat open staat, dan breekt
+    de ronde niet, want het ochtendbericht wacht op haar."""
     gemeld = []
 
     class R:
@@ -680,24 +681,39 @@ def test_c1_ochtend_sluit_geen_noden_als_de_vaststelling_faalt():
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
     D.ag.ronde = lambda taak, **k: R()
     D.ag.log = lambda *a, **k: None
+    bundel = "Bron zonder dossier: een opname wacht op een toewijzing"
     try:
-        D.ag.open_noden = lambda: [{"tekst": hot, "wie": "claude-code"}]
+        D.ag.open_noden = lambda: [{"tekst": hot, "wie": "claude-code"}, {"tekst": bundel, "wie": "mehdi"},
+                                   {"tekst": "WhatsApp: de WhatsApp-wacht leest de databank op de Mac nog niet (fase 2 "
+                                             "van de dagvaststelling)", "wie": "claude-code"}]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
         assert hot in gemeld and "Dagvaststelling mislukt in de ochtendronde, zie werkverslag" in gemeld, gemeld
+        assert any(n.startswith("WhatsApp:") for n in gemeld), gemeld
+        assert bundel not in gemeld, "de bundels liepen wel: hun opgeloste nood sluit"
+        del gemeld[:]
         D.ag.open_noden = lambda: None
-        try:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                D.main()
-            gebroken = False
-        except RuntimeError:
-            gebroken = True
-        assert gebroken, "bord onbekend: de ronde breekt, zodat noden_bij_breuk niets sluit"
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            D.main()
+        assert gemeld == ["Dagvaststelling mislukt in de ochtendronde, zie werkverslag"], gemeld
     finally:
         D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen = oud
         for naam in ("ronde", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
 
+
+def test_vaststelling_noden_staan_in_de_lijst():
+    """Codex-controle mailnood 3: VASTSTELLING_NODEN moet het begin van elke nood van vastleggen() kennen, anders sluit
+    een mislukte ochtendvaststelling die nood toch."""
+    import inspect
+    import re
+    bron = inspect.getsource(D.vastleggen)
+    letterlijk = re.findall(r'r\.nood\(\s*"([^"]+)"', bron)
+    assert len(letterlijk) >= 5, letterlijk
+    for tekst in letterlijk:
+        assert tekst.startswith(D.VASTSTELLING_NODEN), tekst
+    assert set(re.findall(r'r\.nood\(\s*f?"?\{?(MAIL\w+)', bron)) == {"MAIL_NIET_GELEZEN", "MAILNOOD"}, bron
+    assert {D.MAILNOOD, D.MAIL_NIET_GELEZEN} <= set(D.VASTSTELLING_NODEN)
 
 def _kopie(pad, uren, vanaf):
     d = {"gemaakt": (datetime.now(timezone.utc) - timedelta(hours=uren)).isoformat(), "berichten": [

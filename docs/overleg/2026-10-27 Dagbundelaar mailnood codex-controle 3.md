@@ -1,0 +1,9 @@
+**Punt 1 (hoog): opgelost voor het sluiten van open noden.** Bij een mislukte ochtendvaststelling neemt [main()](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/dagbundelaar.py:276) de bestaande noden mee; bij een onbekend bord breekt de ronde en stuurt [Ronde.__exit__()](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/koppelingen/bord.py:435) geen afsluitende lijst. De nachtronde blijft breken. Dit is bevestigd met een alleen-lezen proef via `main()` en de echte `Ronde`.
+
+**Punt 2 (laag): opgelost voor nieuwe vaststellingen, met een restgeval.** De nieuwe tekst bevat geen fouttype meer ([dagbundelaar.py:804](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/dagbundelaar.py:804)). Een eerder gemaakt dagbestand mét fouttype wordt bij ongewijzigde inhoud echter hergebruikt ([dagbundelaar.py:786](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/dagbundelaar.py:786)); dat oude fouttype kan dus blijven staan.
+
+**Nieuw risico (middel):** bij een onbekend bord geeft de ochtendronde nu exit 1 ([dagbundelaar.py:287](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/dagbundelaar.py:287)). [ochtend.py:200](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/koppelingen/ochtend.py:200) wacht daardoor met het ochtendbericht tot 10:30, hoewel de bundels al gemaakt zijn. Een proef bevestigde: niet vrij om 08:21, wel om 10:31. Leg het slagen van de bundels apart vast en toets die route.
+
+**Nieuw risico (laag):** na een fout voegt [main()](/Users/mehdichegini/dev/_dagbundelaar-af/mijnagents-runner/dagbundelaar.py:286) *alle* oude noden opnieuw toe. Daardoor blijft ook een bundelnood open die `bundelen()` in diezelfde ronde heeft opgelost. Bewaar alleen noden die de mislukte vaststelling niet kon controleren.
+
+**BESLISSING: niet klaar.**
