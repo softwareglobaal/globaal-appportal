@@ -54,6 +54,8 @@ MAP = tempfile.mkdtemp(prefix="bord-lees-")
 
 
 # ------------------------------------------------------------------------------------------- de databank ---
+RUNNER_MAP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def bord_db(naam):
     """Een tijdelijke BORD_DB zoals het bord ze maakt (init_db van mijnagents/app.py), met een paar rijen."""
     pad = os.path.join(MAP, naam + ".db")
@@ -636,16 +638,22 @@ def dagbundel_ronde(items, dag):
     def call(pad, payload=None, method=None):
         if pad.startswith("/api/klaarzet?"):
             return {"items": [dict(it) for it in items if "soort=zoom" not in pad or it["soort"] == "zoom"]}
+        # De Dagbundelaar gaat sinds 26-10-2026 door de gedeelde ronde (N12): ze leest haar werkwijze en de collega's
+        if pad == "/api/agent/dagbundelaar/werkwijze" and payload is None:
+            return {"werkwijze": open(os.path.join(RUNNER_MAP, "werkwijze", "dagbundelaar.md"), encoding="utf-8").read()}
+        if pad == "/api/agents":
+            return []
         gezet.setdefault(pad, []).append(payload)
         return {"nieuw": len((payload or {}).get("items") or [])}
 
-    oud = (bord.call, bord.opgepakt, D.DAG)
-    bord.call, bord.opgepakt, D.DAG = call, (lambda kid, door: None), dag
+    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
+    bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT = call, (lambda kid, door: None), dag, True, False
+    D.vastleggen = lambda r, dagen, **k: ""          # de dagvaststelling heeft eigen tests (test_dagbundelaar_vaststelling.py)
     try:
         with redirect_stdout(io.StringIO()) as scherm:
             D.main()
     finally:
-        bord.call, bord.opgepakt, D.DAG = oud
+        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
     return gezet, scherm.getvalue()
 
 

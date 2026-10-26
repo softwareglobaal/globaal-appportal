@@ -428,7 +428,9 @@ class DagbundelaarTaken(unittest.TestCase):
         with patch.object(dag, "ag", agent), patch.object(dag.bord, "call", return_value={"items": items}), \
                 patch.object(dag.bord, "opgepakt", lambda kid, door: afgevinkt.append((kid, door))), \
                 patch.object(dag.LC, "dag_heeft_dagboek", return_value=False):
-            dag.main()
+            # het bundelen zelf; main gaat sinds 26-10-2026 door de gedeelde ronde en maakt daarna de dagvaststelling
+            # (tests/test_dagbundelaar.py en test_dagbundelaar_vaststelling.py)
+            dag.bundelen()
         self.assertEqual(afgevinkt, [(2, dag.NAAM), (3, dag.NAAM)])
         inhoud_bundel = "\n".join(it["inhoud"] for groep in agent.gestuurd for it in groep)
         self.assertNotIn("Fototaak", inhoud_bundel)
