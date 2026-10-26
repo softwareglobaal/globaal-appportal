@@ -112,11 +112,11 @@ def main(argv=None):
                 raise
     except M.Bezet:
         print("er loopt al een ronde van De WhatsApp-wacht")
-        return 0
+        return M.BEZET
     except (M.MacFout, bord.RondeGestopt) as e:
         print(f"ronde mislukt: {e}", file=sys.stderr)
         return 1
-    print(f"{datetime.now().isoformat(timespec='seconds')} De WhatsApp-wacht: ronde gelukt")
+    print(f"{datetime.now().isoformat(timespec='seconds')} De WhatsApp-wacht: ronde gelukt, ronde-id:{ronde_id}")
     return 0
 
 

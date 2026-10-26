@@ -9,9 +9,11 @@
 
    Venster: de laatste VENSTER_DAGEN dagen (de runner leest er hoogstens zestig van). De vragen lopen in een
    leestransactie over de bron, dus met de WAL erbij (Codex P2). Het resultaat staat eerst in het geheugen en gaat
-   dan atomisch naar ~/Library/Caches/mijnagents/mac-gesprekken/<set>/gesprekken.sqlite (0600, map 0700). Daarna
+   dan atomisch naar ~/Library/Caches/mijnagents/mac-gesprekken/<set>/gesprekken-<aanvraag>.sqlite (0600, map 0700):
+   elke aanvraag haar eigen uitvoer (Codex R2). Daarna
    status.json met het tijdstip, de aanvraag-ID van de runner (uit het bestand aanvraag, alleen 32 hextekens) en de
    uitkomst per bron: ok, geweigerd, ontbreekt, onverwacht (ander schema) of fout. Geen inhoud, geen paden. */
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -212,6 +214,28 @@ static int schrijf(int dirfd, const char *naam, const unsigned char *buf, size_t
     return 0;
 }
 
+/* Wat een vroegere ronde liet liggen (een uitvoer die niemand las, of die een runner niet meer wiste), na tien minuten
+   weg: nooit ouder dan dat staan er namen in de map. */
+static void ruim_op(int dirfd) {
+    int kopie = dup(dirfd);
+    DIR *d = kopie >= 0 ? fdopendir(kopie) : NULL;
+    if (d == NULL) {
+        if (kopie >= 0) close(kopie);
+        return;
+    }
+    struct dirent *e;
+    time_t grens = time(NULL) - 600;
+    while ((e = readdir(d)) != NULL) {
+        size_t n = strlen(e->d_name);
+        int uitvoer = (strncmp(e->d_name, "gesprekken", 10) == 0 || strncmp(e->d_name, ".lezen-", 7) == 0) &&
+                      n > 7 && strcmp(e->d_name + n - 7, ".sqlite") == 0;
+        struct stat st;
+        if (uitvoer && fstatat(dirfd, e->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 && st.st_mtime < grens)
+            unlinkat(dirfd, e->d_name, 0);
+    }
+    closedir(d);
+}
+
 /* De aanvraag-ID die de runner net voor zijn vraag schreef: precies 32 kleine hextekens, anders leeg. */
 static void lees_aanvraag(int dirfd, char aanvraag[33]) {
     aanvraag[0] = 0;
@@ -259,9 +283,11 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "MacGesprekkenKopie: privemap niet veilig of niet te maken\n");
         return EX_CANTCREAT;
     }
-    char aanvraag[33];
+    char aanvraag[33], uitnaam[64];
     lees_aanvraag(fd, aanvraag);
-    unlinkat(fd, "gesprekken.sqlite", 0);   /* een oude kopie blijft nooit staan als de nieuwe niet lukt */
+    snprintf(uitnaam, sizeof uitnaam, aanvraag[0] ? "gesprekken-%s.sqlite" : "gesprekken.sqlite", aanvraag);
+    ruim_op(fd);
+    unlinkat(fd, uitnaam, 0);   /* een oude uitvoer met deze naam blijft nooit staan als de nieuwe niet lukt */
 
     const char *uitkomst[8] = {0};
     const char *geheel = "ok";
@@ -327,7 +353,7 @@ int main(int argc, char *argv[]) {
             }
             sqlite3_exec(db, "DROP TABLE IF EXISTS temp.adressen; DROP TABLE IF EXISTS temp.nummers", NULL, NULL, NULL);
             buf = sqlite3_serialize(db, "main", &n, 0);
-            if (buf == NULL || n < 100 || !schrijf(fd, "gesprekken.sqlite", buf, (size_t)n)) geheel = "fout";
+            if (buf == NULL || n < 100 || !schrijf(fd, uitnaam, buf, (size_t)n)) geheel = "fout";
         }
     }
     sqlite3_free(buf);

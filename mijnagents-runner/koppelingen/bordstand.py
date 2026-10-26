@@ -8,7 +8,7 @@ niet lezen. Na zijn ronde vraagt de runner het hier over ssh na; pas als beide v
 (Codex DT09, 19-10-2026).
 
     bordstand.py <naam>           JSON op stdout: status en kennisdatum
-    bordstand.py <naam> --ronde   ook twee geëxtraheerde ronde-ID's, nooit detail of kennistekst
+    bordstand.py <naam> --ronde   ook twee geëxtraheerde ronde-ID's en de open noodteksten, nooit detail of kennis
     bordstand.py --gesprekken <kanaal> <van> <tot>
                                   per rij van dat kanaal in de gesprekkentabel (datum van..tot) een vingerafdruk en
                                   dubbel_van, nooit de andere velden: zo leest De WhatsApp-wacht of De Belwacht op de
@@ -81,6 +81,11 @@ def stand(naam, db=None, met_ronde=False):
                          (naam,)).fetchone()
         ke = con.execute("select kennis_ts" + (", kennis" if met_ronde else "") + " from agent where naam=?",
                          (naam,)).fetchone()
+        # de open noden van de agent (vaste teksten, N10), zodat een Mac-runner zijn eigen fout kan bevestigen (R3)
+        try:
+            noden = sorted(r[0] for r in con.execute("select tekst from nood where naam=? and open=1", (naam,)))
+        except sqlite3.OperationalError:
+            noden = None
     finally:
         con.close()
     uit = {"status": st[0] if st else None, "ts": st[1] if st else None,
@@ -88,6 +93,7 @@ def stand(naam, db=None, met_ronde=False):
     if met_ronde:
         uit["status_ronde"] = _enige_ronde(st[2], STATUS_RONDE) if st else None
         uit["kennis_ronde"] = _enige_ronde(ke[1], KENNIS_RONDE) if ke else None
+        uit["noden"] = noden
     return uit
 
 

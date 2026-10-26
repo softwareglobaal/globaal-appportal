@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.2, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en "Antwoord op de bouwcontrole r2" onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.3, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 en r3 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -439,3 +439,16 @@ bron verandert, vier LaunchAgents; `aan` zet de twee wachten pas aan na de gecon
 | Q6 | `mac_gesprekken.eindcontrole`: zonder bevestiging een hartslag fout met de vaste nood "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt" (de open noden blijven), en ook die fout wordt teruggelezen. Test |
 | Q7 | `uitrol_mac_gesprekken.sh`: de vorige helper en LaunchAgents blijven bewaard (`terug`); een nieuwe helper of gewijzigde wacht zet de wachten uit; `proef` doet de toegangsproef onder launchd met het exacte programma en een eerste ronde van elke wacht en schrijft een proefbewijs voor precies die cdhash en commit; `aan` weigert zonder dat bewijs |
 | Q8 | de dagenpagina en de dagpagina tellen alleen rijen van een gespreksbron die geen chat is (`telt_als_gesprek`): ook mail telt niet meer. De dagpagina zegt "N mails en chats tellen niet als gesprek". Test |
+
+### Antwoord op de bouwcontrole r3 (v2.3, docs/codex/dagvaststelling-fase2-bouw-r3.md, "live: nee")
+
+Vooruitgang: Q2, Q3, Q5 en Q8 waren opgelost; R1 tot R6 gaan dieper op Q1, Q4, Q6 en Q7.
+
+| punt | antwoord in de code |
+|---|---|
+| R1 | elke oproepsleutel draagt haar eigen begin: `telefoon:<ZUNIQUE_ID>-<seconden>` en `whatsapp-oproep:<oproep-ID>-<seconden van het begin>`. De groepering van WhatsApp-gebeurtenissen loopt over alles wat de helper gaf (62 dagen), de rijen alleen over het venster (hoogstens 60): de sleutel verandert niet als het venster opschuift. Test met twee opeenvolgende vensters, ook een oproep die over middernacht opnieuw verbonden werd. Het voorvoegsel (het contract met De Dagbundelaar) blijft |
+| R2 | de helper schrijft per aanvraag een eigen uitvoer (`gesprekken-<aanvraag>.sqlite`) en ruimt wat ouder is dan tien minuten op; de runner zet ze eerst om naar een naam die alleen hij kent (`.lezen-<aanvraag>.sqlite`) en leest dan pas. Test met twee aanvragen na elkaar en de opruiming |
+| R3 | de hartslag fout van de eindcontrole draagt de ronde-ID; `bordstand.py --ronde` geeft ook de open noodteksten van de agent; de eindcontrole bevestigt fout, ronde-ID en nood samen. Test met een fout die niet aankwam, een oude fout en een fout zonder nood |
+| R4 | een uitrol zet eerst de wachten uit (en wist het proefbewijs), elke keer, ook bij alleen gewijzigde Python-code; daarna blijven ze uit tot `proef` en `aan` |
+| R5 | een bezette wacht eindigt met 75; een geslaagde ronde drukt haar ronde-ID af; `proef` eist per wacht exit 0, precies een ronde-ID en die ID in eindhartslag en kennis op het bord (`mac_gesprekken.proefronde`). Test |
+| R6 | de uitrol bewaart de vorige versie als geheel (commit, helper, BRON_SHA256, alle LaunchAgents) en `terug` zet dat geheel terug, ook een LaunchAgent die er toen niet was. Test met nagebootste launchctl, codesign en cc: drie uitrollen na elkaar, `aan` geweigerd zonder proefbewijs, terug naar versie 2, `aan` met een proefbewijs voor precies die versie |

@@ -28,6 +28,7 @@ import socket
 import sqlite3
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
@@ -85,6 +86,8 @@ SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
        SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG)
 MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
+NIET_BEVESTIGD = "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt"
+BEZET = 75                                              # exit van een wacht die niet liep omdat er al een ronde liep
 
 
 class MacFout(RuntimeError):
@@ -284,23 +287,23 @@ def whatsapp_rijen(pad, dagenlijst):
                           f"{uur_van(x['laatste'])}", "whatsapp"))
 
     # Oproepen. Een oproep-ID kan twee gebeurtenissen hebben (opnieuw verbonden): binnen ZELFDE_OPROEP van de eerste
-    # tellen ze samen; verder weg is het een andere oproep met dezelfde ID, met een eigen sleutel (P6).
+    # tellen ze samen; verder weg is het een andere oproep met dezelfde ID (P6). De sleutel draagt het begin van de
+    # oproep en wordt bepaald over alles wat de helper gaf (62 dagen), ook buiten het venster: zo blijft ze dezelfde als
+    # het venster opschuift (Codex R1). Rijen alleen voor een oproep die in het venster begint.
     meldingen = {str(s): pk for s, pk in lees(pad, SQL_OPROEPMELDINGEN) if s}
     deelnemers = defaultdict(list)
     for gebeurtenis, jid in lees(pad, SQL_WA_DEELNEMERS):
         if jid:
             deelnemers[gebeurtenis].append(str(jid))
-    samen, eerste_van = {}, {}
+    samen, begin_van = {}, {}
     for pk, ident, t, duur, inkomend, gemist, video, beller, groep in lees(pad, SQL_WA_OPROEPEN):
         moment = tijd(t)
-        if not van <= apple(moment) < tot:
-            continue
-        aanwezig.add(dag_van(moment))
+        if van <= apple(moment) < tot:
+            aanwezig.add(dag_van(moment))
         ident = re.sub(r"[^A-Za-z0-9-]", "", str(ident or "")) or f"pk{pk}"
-        sleutel = ident
-        if ident in eerste_van and moment - eerste_van[ident] > ZELFDE_OPROEP:
-            sleutel = f"{ident}-{pk}"
-        eerste_van.setdefault(ident, moment)
+        if ident not in begin_van or moment - begin_van[ident] > ZELFDE_OPROEP:
+            begin_van[ident] = moment
+        sleutel = f"{ident}-{int(apple(begin_van[ident]))}"
         x = samen.setdefault(sleutel, {"ident": ident, "begin": moment, "duur": 0.0, "inkomend": inkomend,
                                        "gemist": bool(gemist), "video": bool(video), "beller": beller, "groep": groep,
                                        "jids": []})
@@ -310,6 +313,8 @@ def whatsapp_rijen(pad, dagenlijst):
         x["gemist"] &= bool(gemist)
         x["jids"] += [j for j in deelnemers.get(pk, []) if j not in x["jids"]]
     for sleutel, x in sorted(samen.items(), key=lambda kv: (kv[1]["begin"], kv[0])):
+        if not van <= apple(x["begin"]) < tot:
+            continue
         if x["groep"]:
             pk = per_jid.get(str(x["groep"]))
             persoon = gespreksnaam(pk) if pk is not None else "groep"
@@ -337,7 +342,7 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
     nummer (Mehdi beslist)."""
     van, tot = _venster(dagenlijst)
     boek = Adresboek(lees(pad, SQL_CONTACTEN))
-    rijen, aanwezig, overgeslagen, gezien = [], set(), 0, set()
+    rijen, aanwezig, overgeslagen = [], set(), 0
     for ident, t, duur, uitgaand, beantwoord, adres, dienst in lees(pad, SQL_TELEFOON):
         moment, duur = tijd(t), float(duur or 0)
         if not van <= apple(moment) < tot:
@@ -354,10 +359,9 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
         thema = f"{soort}, {'uitgaand' if uitgaand else 'inkomend'}"
         if duur <= 0:
             thema += ", niet beantwoord" if uitgaand else ", gemist"
-        # Codex Q1: twee oproepen met dezelfde ID mogen elkaar nooit overschrijven; de tweede krijgt haar tijdstip erbij
-        sleutel = ident if ident not in gezien else f"{ident}-{int(apple(moment))}"
-        gezien.add(ident)
-        rijen.append(_rij(f"telefoon:{sleutel}", dag_van(moment), start_van(moment), minuten(duur), persoon, thema,
+        # Codex Q1 en R1: de sleutel draagt de ID en het tijdstip van de oproep. Twee oproepen met dezelfde ID
+        # overschrijven elkaar zo nooit, en de sleutel blijft dezelfde als het venster opschuift.
+        rijen.append(_rij(f"telefoon:{ident}-{int(apple(moment))}", dag_van(moment), start_van(moment), minuten(duur), persoon, thema,
                           "telefoon", "" if duur > 0 else GEMIST))
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "overgeslagen": overgeslagen}
 
@@ -565,10 +569,13 @@ def kopie_vragen(kanaal, wacht=KOPIE_WACHT, kopie=None, klok=time.time, slaap=ti
     if status.get("uitkomst") != "ok":
         slecht = ", ".join(sorted(f"{k} {v}" for k, v in bronnen.items() if v != "ok")) or status.get("uitkomst")
         raise MacFout(f"kopie mislukt: {slecht}", "Kopie van de databank op de Mac mislukt")
-    pad = map_ / "gesprekken.sqlite"
+    # Codex R2: elke aanvraag heeft haar eigen uitvoer, en die gaat eerst naar een naam die alleen deze ronde kent;
+    # een latere start van de helper kan ze dan niet meer vervangen terwijl ik lees.
+    pad = map_ / f".lezen-{aanvraag}.sqlite"
     try:
+        os.replace(map_ / f"gesprekken-{aanvraag}.sqlite", pad)
         merk = lees(pad, SQL_AANVRAAG)
-    except sqlite3.Error:
+    except (OSError, sqlite3.Error):
         merk = []
     if not merk or merk[0][0] != aanvraag:
         # Codex Q4: de status hoort bij mijn vraag, maar de uitvoer niet (een andere start schreef ze)
@@ -630,13 +637,27 @@ def eindcontrole(ag, naam, taak, ronde_id, stand=None):
     stand = stand or bord_stand
     if bevestigd(stand(naam), ronde_id):
         return True
-    nood = {"tekst": "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt", "wie": "claude-code"}
-    lijst = ag.noden_bij_breuk([nood])
-    ag.hartslag("fout", taak=taak, detail="Bord heeft de ronde niet bevestigd", nood=lijst)
+    lijst = ag.noden_bij_breuk([{"tekst": NIET_BEVESTIGD, "wie": "claude-code"}])
+    # Codex R3: ook de fout draagt de ronde-ID, zodat het teruglezen een oude fout niet voor deze aanziet
+    ag.hartslag("fout", taak=taak, detail=f"Bord heeft de ronde niet bevestigd; ronde-id:{ronde_id}", nood=lijst)
     na = stand(naam)
-    if not (isinstance(na, dict) and na.get("status") == "fout"):
-        print("ook de hartslag fout staat niet op het bord", flush=True)
+    if not (isinstance(na, dict) and na.get("status") == "fout" and na.get("status_ronde") == ronde_id
+            and NIET_BEVESTIGD in (na.get("noden") or [])):
+        print("ook de hartslag fout met de nood staat niet op het bord", flush=True)
     return False
+
+
+def proefronde(runner, naam, python=None, stand=None):
+    """Een ronde van een wacht als proef van de uitrol (Codex R5): ze moet zelf gelopen hebben (een bezette wacht
+    eindigt met 75), slagen, en haar ronde-ID moet in eindhartslag en kennis op het bord staan. Geeft de ronde-ID."""
+    r = subprocess.run([python or sys.executable, "-I", str(runner)], stdin=subprocess.DEVNULL, capture_output=True,
+                       text=True, timeout=900, check=False)
+    ids = re.findall(r"ronde gelukt, ronde-id:([0-9a-f]{32})", r.stdout)
+    if r.returncode != 0 or len(ids) != 1:
+        raise MacFout(f"proefronde van {naam} niet gelukt (exit {r.returncode})")
+    if not bevestigd((stand or bord_stand)(naam), ids[0]):
+        raise MacFout(f"proefronde van {naam} niet bevestigd door het bord")
+    return ids[0]
 
 
 def grenzen_of_stop(werkwijze, grenzen):
