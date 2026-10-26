@@ -116,7 +116,9 @@ ANTWOORD_OF_DOORGESTUURD = re.compile(r"^\s*(re|antw|aw|fw|fwd|tr|wg|doorst)\s*:
 KLANT_DAGEN = 730           # wie we in twee jaar mailden, vanuit welk postvak ook, is een klant (X3, K2)
 KLANT_PLAFOND = 20000       # zoveel verzonden berichten per map; meer is niet volledig gelezen, en dan niemand uitschrijven
 KLANT_CACHE = os.path.join(postvak.DATA, "mail-ooit-gemaild.json")
-BRON_MAX_DAGEN = 7          # het hotmail-bestand van de Mac mag hoogstens zo oud zijn voor de klantenlijst
+# Zo oud mag het hotmail-bestand hoogstens zijn voor de klantenlijst. Tot 26-10-2026 7 dagen, want de Mac sliep soms;
+# nu maakt de server het elk uur (hotmail_server.py), en een oudere kopie mist misschien wie Mehdi net mailde (Codex).
+BRON_MAX_UREN = postvak.BRON_VERS_UREN
 BEZIG_ONDERBROKEN_MIN = 10  # een 'bezig' zonder uitslag die ouder is, was een onderbroken poging (X4, K3)
 
 
@@ -274,9 +276,18 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
     """Elk adres waarnaar we in KLANT_DAGEN mailden, vanuit elk postvak van elke wacht: een klant van H-Invest die mch@
     ooit mailde, is ook bij info@ H-Architects een klant (X3, K2). Een keer per dag gelezen en bewaard. None als het niet
     volledig gelezen is: dan schrijft geen enkele wacht iemand uit. Hotmail komt uit het bestand van de Mac
-    (mac/hotmail_koppen.py): dat moet twee jaar verzonden post bevatten en hoogstens BRON_MAX_DAGEN oud zijn (tweede
+    (hotmail_server.py): dat moet twee jaar verzonden post bevatten en hoogstens BRON_MAX_UREN oud zijn (tweede
     toets 20-10-2026, X1: wie Mehdi alleen vanuit hotmail mailde, is ook een klant)."""
     vandaag = nu.date().isoformat()
+    cfg_alles = cfg_alles or postvak.wachten()
+    # Ook de bewaarde lijst van vandaag geldt alleen zolang elk bestand uit 'bronnen' vers is: faalt het verversen van
+    # hotmail, dan schrijft niemand uit tot het weer lukt (Codex-hercontrole 26-10-2026).
+    for adres in (cfg_alles.get("bronnen") or {}):
+        if adres.startswith("_"):
+            continue
+        oud = postvak.bron_uren_oud(postvak.postvak(adres), nu)
+        if oud is None or oud > BRON_MAX_UREN:
+            return None
     try:
         with open(pad, encoding="utf-8") as f:
             c = json.load(f)
@@ -285,7 +296,6 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
     except (OSError, ValueError):
         pass
     koppen = koppen or postvak.koppen
-    cfg_alles = cfg_alles or postvak.wachten()
     adressen = []
     for cfg in cfg_alles.values():
         if isinstance(cfg, dict) and cfg.get("postvakken"):
@@ -303,7 +313,7 @@ def ooit_gemaild(nu, cfg_alles=None, koppen=None, pad=KLANT_CACHE):
                 gemaakt = datetime.fromisoformat(d["gemaakt"])
             except (OSError, ValueError, KeyError, TypeError):
                 return None
-            if int(d.get("verzonden_dagen") or 0) < KLANT_DAGEN or nu - gemaakt > timedelta(days=BRON_MAX_DAGEN):
+            if int(d.get("verzonden_dagen") or 0) < KLANT_DAGEN or nu - gemaakt > timedelta(hours=BRON_MAX_UREN):
                 return None
             uit |= {postvak._adres(a) for s in d.get("berichten", []) if s.get("map") == "Sent"
                     for a in (s.get("aan") or []) + (s.get("cc") or []) if postvak._adres(a)}
