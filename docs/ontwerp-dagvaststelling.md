@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 2.7, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r7 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 2.8, 26-10-2026: fase 2 uitgewerkt (blokken "Fase 2 uitgewerkt", "Antwoord op de ontwerplezing" en de antwoorden op de bouwcontroles r2 tot r8 onderaan). Versie 1.9, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -491,3 +491,11 @@ Vooruitgang: U1 opgelost; V1 (middel, nieuw) en V2, V3 (laag).
 | V1 | `dagbundelaar.gedekte_dagen`: een dekkingsrij met `buiten:vervallen` bewijst niets meer; ook de inhaalbeurt van de nacht kijkt alleen naar actieve dekking. Test over de hele route: drie dagen oproepen, dan verdwijnen de oproepen van een dag; de ronde markeert ze en de dekking als vervallen, en het dagoverzicht toont die dag als "telefoon: onbekend (onbekend voor deze dag)" |
 | V2 | laag, bewust zo gelaten: de sleutel en de sloten houden een vergissing tegen (twee uitrollen of een uitrol tijdens een proef). Een proces van dezelfde gebruiker dat dat bewust omzeilt, kan de worktree evengoed rechtstreeks wijzigen; daartegen beschermt geen slot in een script. De echte grens is de helper: die voert geen code uit de worktree uit, en zijn toestemming hangt aan zijn cdhash |
 | V3 | de helper geeft van oproepen van andere apps alleen het tijdstip (`ANDERE_APPS`, geen nummer of dienst); de runner telt ze in zijn eigen venster. Test |
+
+### Antwoord op de bouwcontrole r8 (v2.8, docs/codex/dagvaststelling-fase2-bouw-r8.md, "live: nee")
+
+Vooruitgang: V1 en V3 opgelost, de reden voor V2 (laag) aanvaard; W1 (middel) blijft.
+
+| punt | antwoord in de code |
+|---|---|
+| W1 | `/api/gesprekken/koppel` zet `ts` als een koppeling iets verandert (zoals een upsert), en laat ze staan als er niets verandert; alleen De Dagbundelaar leest die ts (gemeten in de code). De inhaalbeurt kijkt naar elke wijziging van een dekkingsrij, ook een vervallen verklaring: een oudere, al vastgestelde dag die zijn dekking verliest, wordt in de nacht opnieuw vastgesteld en toont dan "onbekend". Tests: de ts in de API (wel en niet veranderd), en de route met een vastgestelde dag van 26 dagen terug (inhaalkeuze met de echte functie, dan de dagtekst) |

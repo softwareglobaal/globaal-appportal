@@ -850,8 +850,37 @@ def test_v1_vervallen_dekking_is_geen_bewijs():
     tekst = V.tekst(V.vaststellen(DAG, [], [], rijen, {}, [], "volledig", None, {"whatsapp": "niet aangesloten",
                                   "telefoon": stand}, lambda x: False))
     assert "- telefoon: onbekend (onbekend voor deze dag)" in tekst, tekst
-    # de inhaalbeurt van de nacht kijkt ook alleen naar actieve dekking
-    assert "buiten:vervallen" in Path(D.__file__).read_text(encoding="utf-8").split("def inhaaldagen", 1)[1][:900]
+
+
+def test_w1_oudere_dag_die_zijn_dekking_verliest_wordt_opnieuw_vastgesteld():
+    """Codex W1: een dag buiten het nachtvenster, al vastgesteld met een telling, verliest later zijn dekking (een
+    inhaalronde van de Mac verklaart ze vervallen, met een nieuwere ts). De nacht kiest die dag opnieuw, en dan toont
+    het overzicht 'onbekend' in plaats van de oude telling."""
+    nu = datetime(2026, 10, 26, 23, 30, tzinfo=timezone.utc)
+    oud = "2026-10-01"
+    vastgesteld = (nu - timedelta(days=20)).isoformat()
+    # de dekking vervalt alleen als de dag geen oproep meer toont: ook zijn oproep is dan vervallen
+    rijen = [dict(rij(tel(1), dag=oud, dubbel_van=M.VERVALLEN), ts=(nu - timedelta(hours=2)).isoformat()),
+             dict(rij(f"dekking:telefoon:{oud}", dag=oud, bron="dekking", dubbel_van=M.VERVALLEN),
+                  ts=(nu - timedelta(hours=2)).isoformat())]
+    with tempfile.TemporaryDirectory() as map_:
+        oud_staat, oud_inhaal, oud_lees = D.STAAT, D.INHAALSTAAT, bord.db_lees
+        D.STAAT, D.INHAALSTAAT = os.path.join(map_, "staat.json"), os.path.join(map_, "inhaal.json")
+        try:
+            with open(D.STAAT, "w") as f:
+                json.dump({oud: {"versie": 1, "ts": vastgesteld}}, f)
+
+            def lees(sql, args=()):
+                assert "bron = 'dekking'" in sql and "vervallen" not in sql, sql
+                return [{"datum": oud, "ts": max(r["ts"] for r in rijen if r["bron"] == "dekking")}]
+            bord.db_lees = lees
+            assert D.inhaaldagen(nu, V.venster(nu, D.NACHTVENSTER)) == [oud]
+        finally:
+            D.STAAT, D.INHAALSTAAT, bord.db_lees = oud_staat, oud_inhaal, oud_lees
+    stand = D.kanaal_van_dag("aangesloten", "telefoon", oud, D.gedekte_dagen(rijen))
+    tekst = V.tekst(V.vaststellen(oud, [], [], rijen, {}, [], "volledig", None,
+                                  {"whatsapp": "niet aangesloten", "telefoon": stand}, lambda x: False))
+    assert "- telefoon: onbekend (onbekend voor deze dag)" in tekst, tekst
 
 
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():

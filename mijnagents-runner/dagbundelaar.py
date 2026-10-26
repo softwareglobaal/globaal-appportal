@@ -336,15 +336,16 @@ def ontvangst():
 
 
 def inhaaldagen(nu, venster):
-    """Codex P7: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
-    dekkingsrij schreef die nieuwer is dan de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
+    """Codex P7 en W1: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
+    dekkingsrij schreef of vervallen verklaarde na de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
     hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
     oudste = date.fromisoformat(min(venster))
     vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
     if vroegste >= oudste:
         return []
-    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' "
-                         "AND COALESCE(dubbel_van, '') != 'buiten:vervallen' AND datum BETWEEN ? AND ? "
+    # elke wijziging van een dekkingsrij telt, ook een die vervallen werd (Codex W1): dan is de dag niet meer gedekt
+    # en moet zijn vaststelling 'onbekend' worden in plaats van de oude telling
+    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' AND datum BETWEEN ? AND ? "
                          "GROUP BY datum", (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
     try:
         staat = json.loads(_lees(STAAT) or "{}")

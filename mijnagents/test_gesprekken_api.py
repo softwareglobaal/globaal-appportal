@@ -456,7 +456,13 @@ def t_p9_teruglezen_van_de_mac():
         check("P9 teruglezen: elke vingerafdruk gelijk",
               {u: x["v"] for u, x in terug.items()} == {r["uniek"]: bordstand.vingerafdruk(r) for r in rijen}, terug)
         check("P9 dubbel_van terug", terug["telefoon:U2"]["d"] == "buiten:gemist" and terug["telefoon:U1"]["d"] == "")
+    ts_voor = sqlite3.connect(db).execute("SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0]
     koppel([{"uniek": "telefoon:U1", "dubbel_van": "buiten:vervallen"}])
+    ts_na = sqlite3.connect(db).execute("SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0]
+    check("W1 een koppeling die iets verandert, zet ts", ts_na > ts_voor, (ts_voor, ts_na))
+    koppel([{"uniek": "telefoon:U1", "dubbel_van": "buiten:vervallen"}])
+    check("W1 een koppeling die niets verandert, laat ts staan", sqlite3.connect(db).execute(
+        "SELECT ts FROM gesprek_log WHERE uniek='telefoon:U1'").fetchone()[0] == ts_na)
     check("P9 vervallen gemarkeerd", bordstand.gesprekken("telefoon", "2026-10-20", "2026-10-20", db)["telefoon:U1"]["d"]
           == "buiten:vervallen")
     zet(rijen[:1])

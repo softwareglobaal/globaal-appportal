@@ -750,7 +750,9 @@ def api_gesprekken_koppel():
     geweigerd += [{"uniek": "", "reden": "koppeling zonder uniek"} for k in lijst if not (isinstance(k, dict) and k.get("uniek"))]
     for k in sorted(goed, key=lambda k: bool(k.get("dubbel_van"))):
         uniek = str(k["uniek"])[:200]
-        if not conn.execute("SELECT 1 FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone():
+        huidig = conn.execute("SELECT COALESCE(sessie, '') AS sessie, COALESCE(dubbel_van, '') AS dubbel_van "
+                              "FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone()
+        if not huidig:
             onbekend.append(uniek)
             continue
         velden = {v: str(k.get(v) or "")[:200] for v in ("sessie", "dubbel_van") if v in k}
@@ -769,7 +771,11 @@ def api_gesprekken_koppel():
             if rij["dubbel_van"]:
                 geweigerd.append({"uniek": uniek, "reden": f"doel {doel} is zelf een dubbel"})
                 continue
-        conn.execute(f"UPDATE gesprek_log SET {', '.join(v + '=?' for v in velden)} WHERE uniek=?", (*velden.values(), uniek))
+        # Codex W1 (fase 2 van de dagvaststelling): een koppeling die iets verandert, is een wijziging van de rij en zet
+        # ts, zoals een upsert; zo ziet de inhaalbeurt van De Dagbundelaar ook een dekking die vervallen werd
+        if any(huidig[v] != w for v, w in velden.items()):
+            conn.execute(f"UPDATE gesprek_log SET {', '.join(v + '=?' for v in velden)}, ts=? WHERE uniek=?",
+                         (*velden.values(), nu(), uniek))
         gezet.append(uniek)
     conn.commit()
     return jsonify(ok=True, gezet=gezet, onbekend=onbekend, geweigerd=geweigerd)
