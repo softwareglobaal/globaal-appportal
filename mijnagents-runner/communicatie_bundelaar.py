@@ -17,6 +17,7 @@ waarom, link, archief of project, en een privérij is alleen een aantal, nooit e
 
 Draaien: python3 communicatie_bundelaar.py            (een ronde)
          python3 communicatie_bundelaar.py --droog    (geen ronde, geen klaarzet: toont wat ik zou klaarzetten)
+         python3 communicatie_bundelaar.py --droog --zaad   (idem, met de werkwijze uit werkwijze/ in plaats van het bord)
 """
 import json
 import os
@@ -63,9 +64,11 @@ def is_prive(rij):
 
 
 def namen(personen):
-    """De namen uit de kolom personen: gesplitst op komma, zonder de toevoeging tussen haakjes."""
-    for deel in (personen or "").split(","):
-        n = HAAKJES.sub("", deel).strip()
+    """De namen uit de kolom personen. Eerst gaat alles tussen haakjes weg, want daar staan ook komma's in ("Speaker 1
+    (onbekend, mogelijk X of Y)"); dan splitsen op komma, en van elke naam alleen het deel voor de eerste dubbelepunt
+    (een Zoom-chat heet soms "Naam: FIRMA: Offerte", en dat label is geen naam)."""
+    for deel in HAAKJES.sub("", personen or "").split(","):
+        n = deel.split(":", 1)[0].strip()
         if n:
             yield n
 
@@ -229,8 +232,9 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, herk
     return dagen
 
 
-def droog():
-    """Geen ronde: geen hartslag, kennis of klaarzet. Toont de items zoals ze klaargezet zouden worden."""
+def droog(zaad=False):
+    """Geen ronde: geen hartslag, kennis of klaarzet. Toont de items zoals ze klaargezet zouden worden. Met zaad de
+    werkwijze uit werkwijze/, om een nieuwe versie te proeven voor ze op het bord staat."""
     class Droog:
         werkwijze, detail = "", ""
 
@@ -238,8 +242,9 @@ def droog():
             print(f"(droog) nood voor {wie}: {tekst}")
     d = Droog()
     try:
-        d.werkwijze = ag.werkwijze_lezen()
-    except bord.RondeGestopt as e:
+        d.werkwijze = open(os.path.join(HIER, "werkwijze", f"{NAAM}.md"), encoding="utf-8").read() if zaad \
+            else ag.werkwijze_lezen()
+    except (OSError, bord.RondeGestopt) as e:
         print(f"(droog) werkwijze niet gelezen: {e}")
         return
     gezet = []
@@ -252,7 +257,7 @@ def droog():
 
 if __name__ == "__main__":
     if "--droog" in sys.argv:
-        droog()
+        droog(zaad="--zaad" in sys.argv)
     else:
         with ag.ronde("communicatie bundelen") as r:
             werk(r)

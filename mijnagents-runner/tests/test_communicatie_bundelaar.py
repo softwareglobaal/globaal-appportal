@@ -143,6 +143,13 @@ def test_venster_zeven_dagen_voor_vandaag():
     assert C.venster(VANDAAG)[:2] == ("2026-10-19", "2026-10-25")
 
 
+def test_namen_haakjes_met_komma_en_label_na_dubbelepunt():
+    """Gemeten bij de droge proef op de VM, 26-10-2026: een komma tussen haakjes maakte van een deel van de uitleg een
+    persoon, en een Zoom-chat met een label na de naam werd een tweede persoon naast dezelfde naam."""
+    assert list(C.namen("Mehdi, Speaker 1 (onbekend, mogelijk Zeta of Omega), Klant Omega: FIRMA: Offerte")) == \
+        ["Mehdi", "Speaker 1", "Klant Omega"]
+
+
 def test_geen_inhoudskolommen_gelezen():
     sql = C.SQL.lower()
     for kolom in ("thema", "waarom", "link", "archief", "project", "select *"):
