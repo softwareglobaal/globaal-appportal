@@ -315,5 +315,26 @@ for combi in _it.product(POOL, repeat=3):
         kapot.append((tekst, uit))
 check(f"mengtest: {len(POOL) ** 3} combinaties zonder gebroken markering of tijdstip", not kapot, kapot[:3])
 
+# Zevende review 26-10-2026: een weggevallen zin laat de regelovergang staan; 'verwijst naar de opname van de bestaande
+# toestand' is een opmeting
+for tekst, verwacht in [
+        ("Rondgang met de aannemer:\n- De dorpel ligt 2 cm te laag. De architect sprak zijn vaststellingen ter plaatse in.\n- De dakgoot lekt.",
+         "Rondgang met de aannemer:\n- De dorpel ligt 2 cm te laag.\n- De dakgoot lekt."),
+        ("Alinea een. Een tijdstip tussen haakjes verwijst naar de opname.\n\nAlinea drie.", "Alinea een.\n\nAlinea drie."),
+        ("A.\nDe architect sprak zijn vaststellingen in.\nB.", "A.\nB."),
+        ("A.\nDe architect sprak zijn vaststellingen in.\n\nB.", "A.\n\nB."),
+        ("Het uitvoeringsplan verwijst naar de opname van de bestaande toestand door de landmeter. De dorpel ligt goed.",
+         "Het uitvoeringsplan verwijst naar de opname van de bestaande toestand door de landmeter. De dorpel ligt goed.")]:
+    t7, _ = S.toepassen(tekst)
+    check(f"S4 regels en opmeting: '{tekst[:35]}'", t7 == verwacht, repr(t7))
+kapot = []
+for combi in _it.product(POOL, repeat=3):
+    for scheiding in ("\n", "\n\n- "):
+        uit, _ = S.toepassen(scheiding.join(combi))
+        regels_in, regels_uit = scheiding.join(combi).count("\n"), uit.count("\n")
+        if uit.count("(geschrapt:") != uit.count("kantoor)") or re.search(r"\d{1,2}:\d{2}", uit) or regels_uit > regels_in:
+            kapot.append((scheiding.join(combi), uit))
+check(f"mengtest met regelovergangen: {2 * len(POOL) ** 3} combinaties heel", not kapot, kapot[:3])
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

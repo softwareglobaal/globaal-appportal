@@ -412,6 +412,14 @@ def test_herlayout_zet_alleen_de_herkomstregels_om_en_laat_de_rest_letterlijk(ru
     assert laatste == oud.replace("Herkomst: transcript.txt 00:12:00", "Herkomst: V <!-- bron: transcript.txt 00:12:00 -->")
 
 
+def test_herlayout_van_een_proces_verbaal_geeft_een_duidelijke_melding(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md="# Proces-verbaal van voorlopige oplevering 9999", proef_pad="/proef/pv.docx",
+               proef_info={"verslagtype": "voorlopige_oplevering"})
+    with pytest.raises(RuntimeError, match="proces-verbaal"):
+        p.herlayout(Agent(), "9999", 1)
+
+
 def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
     p, rij = runtime.p, runtime.rij
     rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})

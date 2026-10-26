@@ -215,5 +215,14 @@ c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"],
     "pdf": "2145-1 werfverslag (concept).pdf", "map": "../geheim"}})]}, headers=K)
 check("een map die geen rijnummer is: 404", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER).status_code == 404)
 
+# Zevende review: een proces-verbaal of een mislukte lokale kopie krijgt geen onjuiste tip "van vóór 23-10-2026"
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "voorlopige_oplevering"})]}, headers=K)
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("proces-verbaal: uitleg zonder Herlayout-tip", "Een proces-verbaal heeft geen downloadknoppen" in pag and "van vóór 23-10-2026" not in pag)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag",
+                                                                                              "bestanden": {"fout": "lokale kopie niet geschreven"}})]}, headers=K)
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("mislukte lokale kopie: zegt dat, geen knoppen", "Downloads niet klaargezet" in pag and "Word downloaden" not in pag)
+
 print(f"\n{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

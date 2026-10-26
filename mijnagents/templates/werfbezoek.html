@@ -206,12 +206,14 @@
 <div class="melding"><strong>Nog geen concept in de werfapp:</strong> deze proef is van vóór de brug (16-10-2026). Doorzetten kost geen tokens: <code>werfverslag_schrijver.py --naar-werfapp {{ b.dossier }} {{ b.bronnen.nr_label or b.volgnr }}</code>.</div>
 {% endif %}
 {% set best = (b.proef_info or {}).get('bestanden') or {} %}
-{% if best %}<p>
+{% if best.docx or best.pdf or best.md %}<p>
   {% if best.docx %}<a class="groteknop" href="{{ url_for('werfbezoek_bestand', dossier=b.dossier, volgnr=b.volgnr, soort='docx', rij_id=b.id) }}">Word downloaden</a>{% endif %}
   {% if best.pdf %} <a class="groteknop" href="{{ url_for('werfbezoek_bestand', dossier=b.dossier, volgnr=b.volgnr, soort='pdf', rij_id=b.id) }}">PDF downloaden</a>{% endif %}
   {% if best.md %} <a class="stil" href="{{ url_for('werfbezoek_bestand', dossier=b.dossier, volgnr=b.volgnr, soort='md', rij_id=b.id) }}">tekst (.md)</a>{% endif %}
   {% if best.pdf_fout %}<span class="stil">PDF niet gemaakt ({{ best.pdf_fout }}); zie het logboek.</span>{% endif %}
-</p>{% else %}<p class="stil">Nog geen downloadknoppen: deze proef is van vóór 23-10-2026. Een nieuwe opmaak (Herlayout, geen tokens) zet Word en PDF klaar.</p>{% endif %}
+</p>{% elif best.fout %}<p class="stil">Downloads niet klaargezet ({{ best.fout }}); zie het logboek. Het Word-concept staat wel in de bezoekmap.</p>
+{% elif (b.proef_info or {}).get('verslagtype') in ('voorlopige_oplevering', 'definitieve_oplevering') %}<p class="stil">Een proces-verbaal heeft geen downloadknoppen: het ingevulde Word-sjabloon staat in de bezoekmap.</p>
+{% else %}<p class="stil">Nog geen downloadknoppen: deze proef is van vóór 23-10-2026. Een nieuwe opmaak (Herlayout, geen tokens) zet Word en PDF klaar.</p>{% endif %}
 {% if (b.proef_info or {}).get('schrijfregels') %}<div class="melding"><strong>Schrijfregels toegepast:</strong> {% for k, n in b.proef_info.schrijfregels.items() %}{{ k }} x{{ n }}{{ ", " if not loop.last }}{% endfor %}. Geschrapte zinnen staan als "(geschrapt: schrijfregel ...)" in het concept en in het logboek.</div>{% endif %}
 <div class="melding"><strong>Word-concept:</strong> <code>{{ b.proef_pad }}</code><br>
   <span class="stil">Gemaakt op {{ b.proef_ts }}{% if b.proef_info %} · {{ b.proef_info.verslagtype }} · {{ b.proef_info.punten }} punten · {{ b.proef_info.fotos }} foto's · {{ b.proef_info.docx_kb }} kB{% if b.proef_info.open %} · nog {{ b.proef_info.open.in_te_vullen }} in te vullen, {{ b.proef_info.open.na_te_kijken }} na te kijken, {{ b.proef_info.open.raming_open }} ramingen{% endif %}{% endif %}. Dezelfde tekst staat ernaast als .md. Jij legt er je laag overheen en verstuurt; de agents versturen nooit.</span></div>

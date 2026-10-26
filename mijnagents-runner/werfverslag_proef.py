@@ -551,6 +551,7 @@ def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettek
             uit["pdf_fout"] = f"{type(e).__name__}"
     except OSError as e:
         ag.log(f"{dossier}-{volgnr}", "fout", f"lokale kopie voor de bezoekpagina niet geschreven: {e.strerror or e}")
+        uit = {"fout": "lokale kopie niet geschreven"}
     return uit
 
 
@@ -1023,6 +1024,8 @@ def herlayout(ag, dossier, volgnr):
     if not md.strip():
         raise RuntimeError("geen bewaarde proef (verslag_md) om opnieuw op te maken")
     info = rij.get("proef_info") or {}
+    if info.get("verslagtype") in pv.SOORTEN:
+        raise RuntimeError("een proces-verbaal heeft geen nieuwe opmaak: het Word-sjabloon staat in de bezoekmap; opnieuw Maak concept")
     if info.get("verslagtype") == vb.SOORT:
         if not info.get("bevindingen"):
             raise RuntimeError("verslag van bevindingen zonder bewaarde gegevens; opnieuw Maak concept")

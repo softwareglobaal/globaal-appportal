@@ -85,13 +85,13 @@ _Z = r"(?:[^.!?\n]|(?<=\d)\.(?=\d)|" + _AFK + ")"
 SPRAK = re.compile(r"\bsprak\s+(?:zijn|haar|de)\s+(?:vaststellingen|bevindingen|opmerkingen)\s+(?:ter\s+plaatse\s+)?in\b", re.I)
 _TIJD = re.compile(r"\d{1,2}[:.u]\d{2}(?:[:.]\d{2})?", re.I)
 _VULWOORD = re.compile(r"\b(?:om|tussen|van|vanaf|tot|en|rond|omstreeks|ter|plaatse|de|het|opname|geluidsopname)\b", re.I)
+_OPMETING = (r"(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|"
+             r"plaatsbeschrijving|aanpalende|landmeter|terrein|opmeting|\w*expert|\w*verslaggever)\b)")
 OPNAME_ZINNEN = [
     re.compile(_T + r"*\b(?:een\s+)?tijdstip\s+tussen\s+haakjes\b" + _T + r"*\.?", re.I),
-    re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _T + r"*\.?", re.I),
+    re.compile(_T + r"*\bverwijst\s+naar\s+(?:die|de)\s+opname\b" + _OPMETING + _T + r"*\.?", re.I),
 ]
-OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b(?!\s+(?:(?:van|door)\s+)?(?:de\s+|het\s+|een\s+)?"
-                            r"(?:bestaande\s+(?:toestand|situatie)|plaatsgesteldheid|plaatsbeschrijving|aanpalende|landmeter|"
-                            r"terrein|opmeting|\w*expert)\b)", re.I)
+OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname|geluidsopname)\b" + _OPMETING, re.I)
 
 _ZIN = re.compile(_Z + r"+[.!?]?\s*")
 
@@ -105,6 +105,17 @@ def _opname_weg(tekst):
     ingrepen = []
     delen = []
     markering = MARKERING.format(regel="S4")
+
+    def weg(staart):
+        # de zin valt weg, de regelovergang erna blijft (lijstpunten en alinea's plakken niet aan elkaar)
+        if "\n" in staart:
+            nieuw = staart[staart.index("\n"):]
+            if delen:
+                delen[-1] = delen[-1].rstrip(" \t")
+                if delen[-1].endswith("\n"):
+                    nieuw = nieuw[1:]
+            delen.append(nieuw)
+
     for zin in _ZIN.findall(tekst):
         kern = zin.strip()
         kop, staart = zin[:len(zin) - len(zin.lstrip())], zin[len(zin.rstrip()):]
@@ -114,6 +125,8 @@ def _opname_weg(tekst):
             rest = _VULWOORD.sub("", _TIJD.sub("", kern[m.end():]))
             if _woorden(rest) or re.search(r"[;:](?!\d)", kern[:m.start()]):
                 delen.append(kop + markering + staart)
+            else:
+                weg(staart)
             continue
         m = next((m for p in OPNAME_ZINNEN for m in [p.search(kern)] if m), None)
         if m:
@@ -122,6 +135,8 @@ def _opname_weg(tekst):
             over = (voor + " " + na).strip() if voor else na[:1].upper() + na[1:]
             if len(_woorden(over)) >= 2:
                 delen.append(kop + over + ("" if over.endswith((".", "!", "?")) else ".") + staart)
+            else:
+                weg(staart)
             continue
         if OPNAME_VOLGENS.search(kern):
             ingrepen.append(("S4", kern))
