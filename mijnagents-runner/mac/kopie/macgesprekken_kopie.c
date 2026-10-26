@@ -56,10 +56,16 @@ static const Bron TELEFOON[] = {
 };
 
 /* Alleen deze kolommen verlaten de bron. ZSTANZAID alleen van de melding van een oproep (soort 59): die wijst het
-   gesprek van de oproep aan. Contacten alleen als ze bij een gesprek, oproep of nummer van het venster horen. */
+   gesprek van de oproep aan. Contacten alleen als ze bij een gesprek, oproep of nummer van het venster horen.
+   Codex U1: wat de wachten niet tellen, verlaat de bron ook niet. Bij WhatsApp alleen gesprekken met een persoon of
+   een groep (ZSESSIONTYPE 0 en 1; geen status, uitzendlijst of kanaal), bij de iPhone alleen gewone oproepen en
+   FaceTime (geen WhatsApp of een andere app; van die alleen het aantal). Zoals mac_gesprekken.PERSOON, GROEP en
+   TEL_DIENSTEN. */
 static const char WHATSAPP_VRAGEN[] =
+    "CREATE TEMP TABLE toegelaten AS SELECT Z_PK FROM chat.ZWACHATSESSION WHERE ZSESSIONTYPE IN (0, 1);"
     "CREATE TABLE ZWAMESSAGE AS SELECT ZCHATSESSION, ZMESSAGEDATE, ZISFROMME, ZMESSAGETYPE, "
-    "  CASE WHEN ZMESSAGETYPE = 59 THEN ZSTANZAID END AS ZSTANZAID FROM chat.ZWAMESSAGE WHERE ZMESSAGEDATE >= %.0f;"
+    "  CASE WHEN ZMESSAGETYPE = 59 THEN ZSTANZAID END AS ZSTANZAID FROM chat.ZWAMESSAGE WHERE ZMESSAGEDATE >= %.0f "
+    "  AND ZCHATSESSION IN (SELECT Z_PK FROM temp.toegelaten);"
     "CREATE TABLE ZWACDCALLEVENT AS SELECT Z_PK, ZCALLIDSTRING, ZDATE, ZDURATION, Z1CALLEVENTS, "
     "  ZGROUPCALLCREATORUSERJIDSTRING, ZGROUPJIDSTRING FROM oproepen.ZWACDCALLEVENT WHERE ZDATE >= %.0f;"
     "CREATE TABLE ZWAAGGREGATECALLEVENT AS SELECT Z_PK, ZINCOMING, ZMISSED, ZVIDEO FROM oproepen.ZWAAGGREGATECALLEVENT "
@@ -69,22 +75,28 @@ static const char WHATSAPP_VRAGEN[] =
     "CREATE TEMP TABLE adressen AS SELECT ZJIDSTRING AS jid FROM main.ZWACDCALLEVENTPARTICIPANT "
     "  UNION SELECT ZGROUPCALLCREATORUSERJIDSTRING FROM main.ZWACDCALLEVENT UNION SELECT ZGROUPJIDSTRING FROM main.ZWACDCALLEVENT;"
     "CREATE TABLE ZWACHATSESSION AS SELECT Z_PK, ZCONTACTJID, ZPARTNERNAME, ZSESSIONTYPE FROM chat.ZWACHATSESSION "
-    "  WHERE Z_PK IN (SELECT ZCHATSESSION FROM main.ZWAMESSAGE) OR ZCONTACTJID IN (SELECT jid FROM temp.adressen);"
+    "  WHERE ZSESSIONTYPE IN (0, 1) "
+    "  AND (Z_PK IN (SELECT ZCHATSESSION FROM main.ZWAMESSAGE) OR ZCONTACTJID IN (SELECT jid FROM temp.adressen));"
     "INSERT INTO temp.adressen SELECT ZCONTACTJID FROM main.ZWACHATSESSION;"
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
     "  AND (ZWHATSAPPID IN (SELECT jid FROM temp.adressen) OR ZLID IN (SELECT jid FROM temp.adressen));"
-    "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZMESSAGEDATE) FROM chat.ZWAMESSAGE) AS waarde;";
+    "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZMESSAGEDATE) FROM chat.ZWAMESSAGE "
+    "  WHERE ZCHATSESSION IN (SELECT Z_PK FROM temp.toegelaten)) AS waarde;";
 
 static const char TELEFOON_VRAGEN[] =
     "CREATE TABLE ZCALLRECORD AS SELECT ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, "
-    "  ZSERVICE_PROVIDER FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f;"
+    "  ZSERVICE_PROVIDER FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
+    "  AND ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime');"
     "CREATE TEMP TABLE nummers AS SELECT DISTINCT " NORM("ZADDRESS") " AS n FROM main.ZCALLRECORD "
     "  WHERE length(ZADDRESS) >= 6;"
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
     "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
-    "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD) AS waarde;";
+    "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD "
+    "  WHERE ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime')) AS waarde "
+    "  UNION ALL SELECT 'andere_apps', (SELECT COUNT(*) FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
+    "  AND COALESCE(ZSERVICE_PROVIDER, '') NOT IN ('com.apple.Telephony', 'com.apple.FaceTime'));";
 
 static const Set SETS[] = {
     {"whatsapp", WHATSAPP, sizeof WHATSAPP / sizeof *WHATSAPP, WHATSAPP_VRAGEN},
@@ -358,7 +370,8 @@ int main(int argc, char *argv[]) {
                 snprintf(sql, sizeof sql, "DETACH %s", set->bronnen[i].schema);
                 sqlite3_exec(db, sql, NULL, NULL, NULL);
             }
-            sqlite3_exec(db, "DROP TABLE IF EXISTS temp.adressen; DROP TABLE IF EXISTS temp.nummers", NULL, NULL, NULL);
+            sqlite3_exec(db, "DROP TABLE IF EXISTS temp.adressen; DROP TABLE IF EXISTS temp.nummers; "
+                             "DROP TABLE IF EXISTS temp.toegelaten", NULL, NULL, NULL);
             buf = sqlite3_serialize(db, "main", &n, 0);
             if (buf == NULL || n < 100 || !schrijf(fd, uitnaam, buf, (size_t)n)) geheel = "fout";
         }

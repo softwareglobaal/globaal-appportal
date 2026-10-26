@@ -632,6 +632,9 @@ def _bron_wa(thuis, met_wal=True, schema_fout=False):
     nu = M.apple(datetime.now(timezone.utc))
     chat.execute("INSERT INTO ZWACHATSESSION VALUES(1, 'x@s.whatsapp.net', 'Jan Proef', 0, 'GEHEIM VOORBEELD')")
     chat.execute("INSERT INTO ZWAMESSAGE VALUES(1, 1, ?, 0, 0, NULL, 'GEHEIME TEKST')", (nu - 3600,))
+    # U1: een status (ZSESSIONTYPE 3) met een bericht en een contact: verlaat de bron niet
+    chat.execute("INSERT INTO ZWACHATSESSION VALUES(3, 's@status', 'Statusnaam Proef', 3, NULL)")
+    chat.execute("INSERT INTO ZWAMESSAGE VALUES(3, 3, ?, 0, 0, NULL, NULL)", (nu - 30,))
     chat.commit()
     if met_wal:
         # een transactie die alleen in de WAL staat (P2): de verbinding blijft open, zonder checkpoint
@@ -648,6 +651,9 @@ def _bron_wa(thuis, met_wal=True, schema_fout=False):
     kont.execute("CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER, ZABOUTTEXT)")
     kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(1, 'Jan Proef', 'x@s.whatsapp.net', NULL, '+3247', 'STATUS')")
     kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(2, 'Piet Proef', 'y@s.whatsapp.net', NULL, '+3248', 'S')")
+    kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(3, 'Statusnaam Proef', 's@status', NULL, '+3249', 'S')")
+    kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(4, 'Kees Proef', NULL, NULL, '+32470000001', 'S')")
+    kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(5, 'Andere App Proef', NULL, NULL, '+32470000002', 'S')")
     kont.commit()
     kont.close()
     return chat
@@ -674,12 +680,48 @@ def test_helper_leest_wal_en_schrijft_geen_tekst():
         uit = doel / f"gesprekken-{'e' * 32}.sqlite"
         assert os.stat(uit).st_mode & 0o077 == 0 and os.stat(doel).st_mode & 0o077 == 0
         ruw = uit.read_bytes()
-        for geheim in (b"GEHEIME TEKST", b"NOG GEHEIMER", b"GEHEIM VOORBEELD", b"STATUS", b"Piet Proef"):
+        for geheim in (b"GEHEIME TEKST", b"NOG GEHEIMER", b"GEHEIM VOORBEELD", b"STATUS", b"Piet Proef",
+                       b"Statusnaam Proef", b"s@status"):
             assert geheim not in ruw, geheim
         rijen, info = M.whatsapp_rijen(uit, M.dagen(datetime.now(timezone.utc)))
         assert sum(int(x["thema"].split()[0]) for x in rijen) == 2, rijen      # ook het bericht uit de WAL
+        assert M.lees(uit, M.SQL_NIEUWSTE)[0][0] < M.apple(datetime.now(timezone.utc)) - 50   # niet die van de status
         assert rijen[0]["personen"] == "Jan Proef"
         assert "Jan Proef" not in r.stdout                                     # stdout is alleen de status
+
+
+def test_u1_helper_laat_andere_apps_weg():
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        _bron_wa(thuis, met_wal=False).close()
+        geschiedenis = Path(thuis, "Library/Application Support/CallHistoryDB")
+        geschiedenis.mkdir(parents=True)
+        con = sqlite3.connect(geschiedenis / "CallHistory.storedata")
+        con.execute("CREATE TABLE ZCALLRECORD(ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, "
+                    "ZSERVICE_PROVIDER, ZNAME)")
+        nu = M.apple(datetime.now(timezone.utc))
+        con.executemany("INSERT INTO ZCALLRECORD VALUES(?,?,?,?,?,?,?,NULL)", [
+            ("T1", nu - 600, 60.0, 1, 0, "0470000001", "com.apple.Telephony"),
+            ("W1", nu - 300, 60.0, 0, 1, "+32470000002", "net.whatsapp.WhatsApp")])
+        con.commit()
+        con.close()
+        doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken/telefoon")
+        doel.mkdir(parents=True, mode=0o700)
+        os.chmod(doel.parent, 0o700)
+        (doel / "aanvraag").write_text("c" * 32)
+        status = json.loads(subprocess.run([helper, "telefoon"], capture_output=True, text=True).stdout)
+        assert status["uitkomst"] == "ok", status
+        uit = doel / f"gesprekken-{'c' * 32}.sqlite"
+        ruw = uit.read_bytes()
+        assert b"Andere App Proef" not in ruw and b"W1" not in ruw and b"net.whatsapp" not in ruw
+        rijen, info = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert [r["personen"] for r in rijen] == ["Kees Proef"] and info["overgeslagen"] == 1, (rijen, info)
+        assert M.lees(uit, M.SQL_NIEUWSTE)[0][0] == nu - 600
 
 
 def test_helper_weigert_symlink_en_meldt_ander_schema():
@@ -989,6 +1031,23 @@ def test_r6_drie_uitrollen_en_terug():
             r = subprocess.run(["zsh", str(script), intern], env={**omgeving, "UITROL_SLOT": "1", "REF": shas[0]},
                                capture_output=True, text=True)
             assert r.returncode == 64 and "niet vast" in r.stderr, (intern, r.stderr)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[2]
+        # U2: dezelfde directe aanroep terwijl een andere uitrol alle sloten houdt (nagebootst): ook geweigerd
+        houders = []
+        for slotpad in (basis / "mac-gesprekken" / ".uitrol.lock", basis / "whatsapp-wacht" / "ronde.lock",
+                        basis / "belwacht" / "ronde.lock"):
+            slotpad.parent.mkdir(parents=True, exist_ok=True)
+            houders.append(os.open(slotpad, os.O_CREAT | os.O_RDWR, 0o600))
+            fcntl.flock(houders[-1], fcntl.LOCK_EX | fcntl.LOCK_NB)
+        (basis / "mac-gesprekken" / ".uitrol.sleutel").write_text("andere uitrol\n")
+        try:
+            for intern in ("__installeer", "__terug"):
+                r = subprocess.run(["zsh", str(script), intern], env={**omgeving, "UITROL_SLOT": "1", "REF": shas[0]},
+                                   capture_output=True, text=True)
+                assert r.returncode == 64 and "hoort niet bij de uitrol" in r.stderr, (intern, r.stderr)
+        finally:
+            for fd in houders:
+                os.close(fd)
         assert git("rev-parse", "HEAD", cwd=werk) == shas[2]
         # aan zonder proef: geweigerd
         assert "eerst" in uitrol("aan", ok=False)

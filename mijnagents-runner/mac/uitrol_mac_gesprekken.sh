@@ -100,7 +100,8 @@ bewaar_vorige() {
 
 if [[ $modus != controleer && -z ${UITROL_SLOT:-} ]]; then
     mkdir -p -m 700 "$BASIS" "$HMAP"
-    export UITROL_SLOT=1
+    # Codex U2: een sleutel per uitrol; alleen wie hem kent (dit proces en zijn kinderen), kan de wissel starten
+    export UITROL_SLOT=1 UITROL_SLEUTEL=$(/usr/bin/od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
     exec "$LOCKF" -k -t 0 "$HMAP/.uitrol.lock" /bin/zsh "$SCRIPT" "$@"
 fi
 vast() {
@@ -114,6 +115,10 @@ fi
 if [[ $modus == __* ]]; then
     vast "$BASIS/whatsapp-wacht/ronde.lock" && vast "$BASIS/belwacht/ronde.lock" ||
         { print -u2 "De rondesloten zitten niet vast; niets gewisseld"; exit 64; }
+    [[ -n ${UITROL_SLEUTEL:-} && "$(cat "$HMAP/.uitrol.sleutel" 2>/dev/null)" == "$UITROL_SLEUTEL" ]] ||
+        { print -u2 "Deze wissel hoort niet bij de uitrol die de sloten houdt; niets gewisseld"; exit 64; }
+elif [[ $modus != controleer ]]; then
+    (umask 077; print -r -- "${UITROL_SLEUTEL:-}" > "$HMAP/.uitrol.sleutel")
 fi
 
 case $modus in
