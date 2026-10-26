@@ -168,6 +168,10 @@ def test_agenda_en_standen():
     eis("agenda niet gelezen: onbekend" in t and "locatie: niet gelezen" in t and "mail: niet gelezen" in t,
         "niets gelezen is onbekend, geen nul")
     eis("Zoom-stand onbekend" in t and "Zoom-chat: onbekend" in t and "0 chatgesprek" not in t, f"F5: Zoom onbekend\n{t}")
+    t = V.tekst(V.vaststellen(DAG, [], set(), [rij("zoom:chat:a:2026-10-22", "09:00", 0, "Ruben")], {}, [], "volledig",
+                              V.mail_telling(DAG, {}, {}), None, is_prive, chatstand="ondergrens"))
+    eis("Zoom-chat: minstens 1 chatgesprek" in t and "gesprekken in Zoom, Fathom en Plaud: 0, 0 min" in t,
+        f"de chat heeft haar eigen stand\n{t}")
     eis("WhatsApp: nog niet aangesloten" in t and "telefoon: nog niet aangesloten" in t, "zonder kanaalstand: niet aangesloten")
     t = V.tekst(vast(rijen=[rij("zoom:meeting:a", "09:00", 20, "Ruben")], zoom="ondergrens"))
     eis("gesprekken in Zoom, Fathom en Plaud: minstens 1, minstens 20 min (verdeling onbekend)" in t

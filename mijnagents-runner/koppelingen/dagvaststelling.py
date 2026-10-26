@@ -211,7 +211,7 @@ def bewijs(a, gesprekken, locatie=None):
 
 # ------------------------------------------------------------------------------------------- vaststelling ---
 def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken, zoomstand, mail, kanalen,
-                prive_afspraak, locatiestand=""):
+                prive_afspraak, locatiestand="", chatstand=None):
     """De vaststelling van een dag als gewone gegevens.
 
     afspraken: de afspraken van die dag, met de archiefagenda's (zonder fout, hele dag of rit); ongelezen: de agenda's die
@@ -252,7 +252,7 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
         "niet_gepland": {"voorbehoud": agenda_stand != "volledig", "gesprekken": ongepland, "bezoeken": bezoeken,
                          "locatiestand": locatiestand},
         "gesprekken": gesprekken,
-        "zoom": {"stand": zoomstand or "onbekend",
+        "zoom": {"stand": zoomstand or "onbekend", "chatstand": chatstand or zoomstand or "onbekend",
                  "chats": len([g for g in leidend if str(g.get("uniek")).startswith("zoom:chat:")])},
         "whatsapp": {"stand": kanalen.get("whatsapp") or "niet aangesloten",
                      "gesprekken": len([g for g in wa if soort(g) == "chat"]),
@@ -357,10 +357,13 @@ def tekst(v, prive_postvakken=(), over=None):
     else:
         r.append(f"- gesprekken in Zoom, Fathom en Plaud: {g['aantal']}, {g['minuten']} min ({g['met_opname']} met "
                  f"opname, {g['alleen_zoom']} alleen in Zoom)")
-    if z["stand"] == "onbekend" and not z["chats"]:
-        r.append("- Zoom-chat: onbekend (Zoom-stand onbekend)")
+    # De chat heeft een eigen telling in de dagregel (meestal een ondergrens: niet elk chatgesprek is leesbaar)
+    cs = z.get("chatstand") or z["stand"]
+    if cs == "onbekend" and not z["chats"]:
+        r.append("- Zoom-chat: onbekend")
     else:
-        r.append(f"- Zoom-chat: {minstens}{z['chats']} chatgesprek(ken){stand}")
+        r.append(f"- Zoom-chat: {'' if cs == 'volledig' else 'minstens '}{z['chats']} chatgesprek(ken)"
+                 + (" (stand onbekend)" if cs == "onbekend" else ""))
     w = v["whatsapp"]
     if w["stand"] == "niet aangesloten":
         r.append("- WhatsApp: nog niet aangesloten")

@@ -57,12 +57,14 @@ class Wereld:
         self.status = {"whatsapp-wacht": {"naam": "whatsapp-wacht", "status": "rust", "taak": "", "ts": NU.isoformat()},
                        "belwacht": {"naam": "belwacht", "status": "rust", "taak": "", "ts": NU.isoformat()}}
         self.items, self.vervals = {}, None
+        self.dagregel = json.dumps({"telling": "volledig", "bronnen": {"rapport": "ok", "chat": "ok"},
+                                    "chat": {"telling": "ondergrens"}})
 
     def db_lees(self, sql, args=()):
         if "FROM gesprek_log" in sql:
             return [dict(r) for r in self.rijen]
         if "FROM klaarzet" in sql:
-            return [{"uniek": f"zoom:dag:{DAG}", "inhoud": '{"telling": "volledig"}'}]
+            return [{"uniek": f"zoom:dag:{DAG}", "inhoud": self.dagregel}] if self.dagregel is not None else []
         if "FROM mailbericht" in sql:
             return [{"postvak": "info@h-architects.be", "message_id": "<w1@x>", "datum": f"{DAG}T08:36:57+02:00", "soort": "koud"},
                     {"postvak": "info@h-architects.be", "message_id": "<w2@x>", "datum": f"{DAG}T09:00:00+02:00", "soort": "koud"}]
@@ -330,25 +332,27 @@ def test_f4_locatie_met_dezelfde_afspraken_en_stand():
 
 
 def test_g2_locatie_zonder_meting():
-    """G2: 'afgesloten' zegt alleen dat de tijd verstreek. Zonder geldige meting die dag is de locatie niet gelezen; valt
-    het uur van een afspraak in een gat van de tracker, dan is 'niet gezien' onbekend."""
-    t0 = datetime.fromisoformat(f"{DAG}T12:30:00+02:00").timestamp()
-    gezien = {"geldig": 566}
+    """G2: 'afgesloten' zegt alleen dat de tijd verstreek, en een parkeerstuk uit de indeling is afgeleid. 'Niet gezien'
+    blijft alleen staan als er op dat uur (met 30 minuten marge) een echte meting is; anders 'auto zonder meting op dat
+    uur'. Zonder geldige meting die dag is de locatie niet gelezen."""
+    t = lambda uur: datetime.fromisoformat(f"{DAG}T{uur}:00+02:00").timestamp()  # noqa: E731
+    gezien = {"geldig": 566, "meettijden": [t("16:30"), t("17:20")]}
 
     def maak(dag, afspraken=None):
-        return {"status": "afgesloten", "geldig": gezien["geldig"], "gaten": [(t0 + 180, t0 + 2340)],
-                "per_id": {"leuven": {"uitkomst": "niet_gezien"}, "ander": {"uitkomst": "niet_gezien"}},
+        return {"status": "afgesloten", "geldig": gezien["geldig"], "meettijden": gezien["meettijden"],
+                "per_id": {"ochtend": {"uitkomst": "niet_gezien"}, "avond": {"uitkomst": "niet_gezien"}},
                 "werf": [], "twijfel": [], "elders": []}
     LW = Module(maak=maak, uur=lambda x: "00:00", online=lambda t: False)
     W = Module(lees_titel=lambda t: {"buiten": True, "soort": "KB"}, BUITEN_SOORTEN=("KB",))
-    afs = [{"id": "leuven", "titel": "!! Mehdi: [HA] 2616 Leuven", "start": f"{DAG}T12:30:00+02:00", "einde": f"{DAG}T13:30:00+02:00"},
-           {"id": "ander", "titel": "!! Mehdi: [HA] 2617 Gent", "start": f"{DAG}T17:00:00+02:00", "einde": f"{DAG}T18:00:00+02:00"}]
+    afs = [{"id": "ochtend", "titel": "!! Mehdi: [HA] 2616 Leuven", "start": f"{DAG}T10:00:00+02:00", "einde": f"{DAG}T11:00:00+02:00"},
+           {"id": "avond", "titel": "!! Mehdi: [HA] 2617 Gent", "start": f"{DAG}T17:00:00+02:00", "einde": f"{DAG}T18:00:00+02:00"}]
     h1, h2 = met_module("locatie_wacht", LW), met_module("agenda_wacht", W)
     try:
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
-        assert per_id["leuven"] == {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}, per_id
-        assert per_id["ander"] == {"uitkomst": "niet_gezien"} and stand == "afgesloten" and bezoeken == [], per_id
-        gezien["geldig"] = 0
+        # Codex' tegenproef: een afgeleid parkeerstuk vanaf middernacht en een eerste meting pas om 16:30
+        assert per_id["ochtend"] == {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}, per_id
+        assert per_id["avond"] == {"uitkomst": "niet_gezien"} and stand == "afgesloten" and bezoeken == [], per_id
+        gezien["geldig"], gezien["meettijden"] = 0, []
         per_id, bezoeken, stand, reden = D.lees_locatie(DAG, afs)
         assert bezoeken is None and reden == "geen meting die dag", (bezoeken, reden)
         assert all(u["uitkomst"] == "onbekend" for u in per_id.values()), per_id
@@ -357,46 +361,52 @@ def test_g2_locatie_zonder_meting():
         h2()
 
 
-def test_g2_meetgaten():
-    """G2, tweede ronde: wat voor de eerste meting van de dag ligt, een pauze, een gat en een verblijf zonder meetpunt
-    zijn ongemeten; bij twee sporen alleen wat in beide ongemeten is."""
+def test_g2_meettijden():
     import locatie_wacht as LW
-    b = datetime.fromisoformat(f"{DAG}T00:00:00").replace(tzinfo=LW.BRUSSEL).timestamp()
-    u = 3600
-    laat = {"sporen": {"auto": {"indeling": [{"soort": "bezoek", "van": b + 17 * u, "tot": b + 24 * u, "punten": 4}]}}}
-    assert LW.meetgaten(laat, DAG) == [(b, b + 17 * u)], "de ochtend zonder meting"
-    geparkeerd = {"sporen": {"auto": {"indeling": [
-        {"soort": "bezoek", "van": b, "tot": b + 10 * u, "punten": 0},
-        {"soort": "verplaatsing", "van": b + 10 * u, "tot": b + 11 * u, "punten": None},
-        {"soort": "gat", "van": b + 12 * u, "tot": b + 13 * u, "punten": None},
-        {"soort": "bezoek", "van": b + 13 * u, "tot": b + 24 * u, "punten": 9}]}}}
-    assert LW.meetgaten(geparkeerd, DAG) == [(b, b + 10 * u), (b + 11 * u, b + 12 * u), (b + 12 * u, b + 13 * u)]
-    twee = {"sporen": {"auto": laat["sporen"]["auto"],
-                       "telefoon": {"indeling": [{"soort": "bezoek", "van": b + 8 * u, "tot": b + 24 * u, "punten": 30}]}}}
-    assert LW.meetgaten(twee, DAG) == [(b, b + 8 * u)], LW.meetgaten(twee, DAG)
-    assert LW.meetgaten({"sporen": {}}, DAG) == [(b, b + 24 * u)], "geen sporen"
+    db = {"punten": [{"tijd": f"{DAG}T10:42:00+02:00", "geldig": True}, {"tijd": f"{DAG}T09:00:00+02:00", "geldig": False},
+                     {"tijd": f"{DAG}T08:15:00+02:00", "geldig": True}, {"geldig": True}, "rommel"]}
+    assert LW.meettijden(db) == [datetime.fromisoformat(f"{DAG}T08:15:00+02:00").timestamp(),
+                                 datetime.fromisoformat(f"{DAG}T10:42:00+02:00").timestamp()]
+    assert LW.meettijden({}) == []
 
 
-def test_g3_twee_mislukte_zoomnachten():
-    """G3: een dag waarvoor De Zoomwacht faalde, blijft een ondergrens, ook na een tweede mislukte nacht, tot een
-    geslaagde Zoomwacht hem in haar venster opnieuw las."""
+def test_g3_zoom_onzeker_tot_een_volledige_herlezing():
+    """G3: een dag waarvoor De Zoomwacht faalde, blijft een ondergrens, ook na een tweede mislukte nacht en ook na een
+    'geslaagde' ronde die de dagregel niet herschreef (een gedeeltelijke uitval verlaagt een regel nooit). Pas een
+    herschreven regel met elke bron ok maakt hem weer volledig; een herschreven regel met een falende bron niet."""
     with tempfile.TemporaryDirectory() as m:
         w = Wereld(m)
         pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
         oud = D.V.gisteren
+        D.V.gisteren = lambda nu: DAG
+
+        def regel():
+            return next(x for x in lees(pad).splitlines() if x.startswith("- gesprekken in Zoom"))
         try:
-            for gisteren, gelezen, verwacht in (("2026-10-22", False, "minstens"), ("2026-10-23", False, "minstens"),
-                                                ("2026-10-23", None, "minstens"), ("2026-10-24", True, "1, 6 min (1 met")):
-                D.V.gisteren = lambda nu, g=gisteren: g
-                ronde(w, zoom_gelezen=gelezen)
-                t = lees(pad)
-                regel = next(x for x in t.splitlines() if x.startswith("- gesprekken in Zoom"))
-                assert verwacht in regel or (verwacht == "1, 6 min (1 met" and "6 min (0 met opname, 1 alleen in Zoom)" in regel), \
-                    (gisteren, gelezen, regel)
-            staat = json.load(open(os.path.join(m, "staat.json")))
-            assert staat[D.ZOOM_ONZEKER] == [], staat
+            ronde(w, zoom_gelezen=False)
+            assert "minstens" in regel(), regel()
+            ronde(w, zoom_gelezen=False)                  # tweede mislukte nacht
+            assert "minstens" in regel(), regel()
+            ronde(w, zoom_gelezen=True)                   # exit 0, maar de dagregel bleef dezelfde
+            assert "minstens" in regel(), "een geslaagde exit alleen wist de onzekerheid niet"
+            w.dagregel = json.dumps({"telling": "volledig", "bronnen": {"rapport": "fout", "chat": "ok"}, "x": 1})
+            ronde(w, zoom_gelezen=True)                   # herschreven, maar een bron faalde
+            assert "minstens" in regel(), regel()
+            w.dagregel = json.dumps({"telling": "volledig", "bronnen": {"rapport": "ok", "chat": "ok"}, "x": 2,
+                                     "chat": {"telling": "ondergrens"}})
+            ronde(w, zoom_gelezen=None)                   # herschreven door een volledige ronde
+            assert "minstens" not in regel() and "(0 met opname, 1 alleen in Zoom)" in regel(), regel()
+            assert json.load(open(os.path.join(m, "staat.json")))[D.ZOOM_ONZEKER] == {}
         finally:
             D.V.gisteren = oud
+
+
+def test_g3_zoomstand_uit_de_dagregel():
+    assert D.zoomstand(json.dumps({"telling": "volledig", "bronnen": {"a": "ok"}, "chat": {"telling": "ondergrens"}})) \
+        == ("volledig", "ondergrens")
+    assert D.zoomstand(json.dumps({"telling": "volledig"})) == ("ondergrens", "onbekend"), "zonder bronnen geen volledig"
+    assert D.zoomstand(json.dumps({"telling": "volledig", "bronnen": {"a": "ok", "b": "geen recht: x"}}))[0] == "ondergrens"
+    assert D.zoomstand("") == ("onbekend", "onbekend") and D.zoomstand("{kapot") == ("onbekend", "onbekend")
 
 
 def test_h1_antwoordadressen_van_een_privewacht():

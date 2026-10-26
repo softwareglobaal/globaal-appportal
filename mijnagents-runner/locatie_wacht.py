@@ -263,32 +263,19 @@ def lijn(v):
     return f"- {uur(v['van'])}-{uur(v['tot'])} ({duur(v['minuten'])}) {v['waar']}{zeker}{link}"
 
 
-def meetgaten(dagboek, dag):
-    """De stukken van de dag (epoch, van tot tot) waarin geen enkel spoor mat (Codex G2 en G2 tweede ronde, dagvaststelling).
-    Per spoor: wat voor het eerste en na het laatste stuk van de dag ligt, een pauze tussen twee stukken, een gat, en een
-    verblijf zonder een enkel meetpunt (geparkeerd 'al van daarvoor': de plek is afgeleid, niet gemeten). Een dag zonder
-    sporen is een gat. Bij meer sporen telt alleen wat in elk spoor ongemeten is (de doorsnede)."""
-    begin = datetime.fromisoformat(dag).replace(tzinfo=BRUSSEL).timestamp()
-    einde = (datetime.fromisoformat(dag) + timedelta(days=1)).replace(tzinfo=BRUSSEL).timestamp()
-    per_spoor = []
-    for sp in (dagboek.get("sporen") or {}).values():
-        gaten, t = [], begin
-        for seg in sorted(sp.get("indeling") or [], key=lambda x: x.get("van") or 0):
-            van, tot = max(seg.get("van") or begin, begin), min(seg.get("tot") or begin, einde)
-            if van > t + 60:
-                gaten.append((t, van))
-            if seg.get("soort") == "gat" or (seg.get("soort") == "bezoek" and not seg.get("punten")):
-                gaten.append((van, tot))
-            t = max(t, tot)
-        if t < einde - 60:
-            gaten.append((t, einde))
-        per_spoor.append(gaten)
-    if not per_spoor:
-        return [(begin, einde)]
-    uit = per_spoor[0]
-    for andere in per_spoor[1:]:
-        uit = [(max(a0, b0), min(a1, b1)) for a0, a1 in uit for b0, b1 in andere if max(a0, b0) < min(a1, b1)]
-    return uit
+def meettijden(dagboek):
+    """De tijden (epoch, oplopend) van de geldige meetpunten van de dag, van alle sporen (Codex G2, dagvaststelling). De
+    indeling van het dagboek leidt een parkeerstuk af en kan het samenvoegen met een later bezoek; alleen een echte meting
+    bewijst waar de auto op een uur was."""
+    uit = []
+    for p in dagboek.get("punten") or []:
+        if not isinstance(p, dict) or not p.get("geldig") or not p.get("tijd"):
+            continue
+        try:
+            uit.append(datetime.fromisoformat(str(p["tijd"])).timestamp())
+        except ValueError:
+            continue
+    return sorted(uit)
 
 
 def maak(dag, afspraken=None):
@@ -336,8 +323,8 @@ def maak(dag, afspraken=None):
             "verblijven": verblijven, "doorgegaan": doorgegaan, "niet_gezien": niet_gezien,
             "zonder_adres": zonder_adres, "overig": overig, "werf": werf, "twijfel": twijfel, "elders": elders,
             "per_id": per_id,
-            # G2 (dagvaststelling): waar de tracker niets mat, en hoeveel geldige punten de dag had
-            "gaten": meetgaten(db, dag),
+            # G2 (dagvaststelling): wanneer de tracker echt mat, en hoeveel geldige punten de dag had
+            "meettijden": meettijden(db),
             "geldig": sum(int(sp.get("geldig") or 0) for sp in (db.get("sporen") or {}).values()),
             "context": ctx, "wcache": wcache if wcache != wcache_voor else None,
             "projecten": sorted({"%s %s" % (v["project"].get("firma"), v["project"].get("nummer"))

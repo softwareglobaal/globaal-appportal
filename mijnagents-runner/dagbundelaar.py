@@ -73,7 +73,6 @@ NACHTVENSTER = 14                                             # zoveel dagen her
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel in de staat: dagen waarvoor De Zoomwacht faalde
-ZOOM_VENSTER = 7                                              # zoveel dagen leest een ronde van De Zoomwacht opnieuw
 
 
 def bundelen():
@@ -390,12 +389,14 @@ def lees_locatie(dag, afspraken):
         if stand in ("afgesloten", "voorlopig") and not int(d.get("geldig") or 0):
             stand, reden = "", "geen meting die dag"            # G2: afgesloten zegt alleen dat de tijd verstreek
         if stand in ("afgesloten", "voorlopig"):
-            # G2: 'niet gezien' geldt alleen als de tracker op dat uur mat; een gat maakt het onbekend
+            # G2: 'niet gezien' geldt alleen als er op dat uur (met 30 minuten marge) een echte meting is; een afgeleid
+            # parkeerstuk is geen meting
             vensters = {a.get("id"): (V.afspraak_venster(a)[0].timestamp() - 1800, V.afspraak_venster(a)[1].timestamp() + 1800)
                         for a in afspraken}
+            tijden = d.get("meettijden") or []
             for aid, u in d["per_id"].items():
                 van, tot = vensters.get(aid, (None, None))
-                if u.get("uitkomst") == "niet_gezien" and van is not None and any(g0 < tot and van < g1 for g0, g1 in d.get("gaten") or []):
+                if u.get("uitkomst") == "niet_gezien" and (van is None or not any(van <= t <= tot for t in tijden)):
                     d["per_id"][aid] = {"uitkomst": "onbekend", "tekst": "auto zonder meting op dat uur"}
             bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar"),
                          "soort": soort} for soort, lijst in (("project", d["werf"]), ("twijfel", d["twijfel"]),
@@ -504,13 +505,25 @@ def _lees_mail(dagen):
     return ontvangen, verzonden, prive
 
 
+def _telling(t):
+    t = str(t or "")
+    return "volledig" if t == "volledig" else ("ondergrens" if t.startswith(("ondergrens", "minstens", "laatst")) else "onbekend")
+
+
 def zoomstand(inhoud):
-    """De stand uit de Zoom-dagregel (inhoud.telling van De Zoomwacht): volledig, ondergrens of onbekend."""
+    """(gesprekken, chat) uit de Zoom-dagregel van De Zoomwacht. Gesprekken zijn alleen volledig als de telling volledig is
+    en elke bron van de ronde die de regel schreef 'ok' was (G3: een regel zonder bronnen is hoogstens een ondergrens); de
+    chat heeft haar eigen telling (meestal een ondergrens)."""
     try:
-        t = str((json.loads(inhoud or "{}") or {}).get("telling") or "")
+        d = json.loads(inhoud or "{}") or {}
     except ValueError:
-        return "onbekend"
-    return "volledig" if t == "volledig" else ("ondergrens" if t.startswith(("ondergrens", "minstens")) else "onbekend")
+        return "onbekend", "onbekend"
+    stand = _telling(d.get("telling"))
+    bronnen = d.get("bronnen")
+    if stand == "volledig" and not (isinstance(bronnen, dict) and bronnen and all(v == "ok" for v in bronnen.values())):
+        stand = "ondergrens"
+    chat = d.get("chat")
+    return stand, (_telling(chat.get("telling")) if isinstance(chat, dict) else "onbekend")
 
 
 def vastleggen(r, dagen, zoom_gelezen=None):
@@ -522,14 +535,15 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     venster opnieuw las (F9, G3). Geeft het detail."""
     nu = datetime.now(timezone.utc)
     eerste, laatste = min(dagen), max(dagen)
+    gisteren = V.gisteren(nu)
     per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
     rijen = bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
                          "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?", (eerste, laatste))
     gedekt = {(x["uniek"].split(":")[1], x["datum"]) for x in rijen
               if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2}
-    zoom = {x["uniek"][9:]: zoomstand(x["inhoud"]) for x in bord.db_lees(
-        "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{laatste}"))}
-    gisteren = V.gisteren(nu)
+    dagregels = {x["uniek"][9:]: x["inhoud"] or "" for x in bord.db_lees(
+        "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
+    zoom = {d: zoomstand(i) for d, i in dagregels.items()}
     gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
                                        "AND COALESCE(message_id, '') != ''", (eerste, laatste))
     soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
@@ -553,17 +567,19 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         staat = json.loads(_lees(STAAT) or "{}")
     except ValueError:
         staat = {}
-    # G3: de dagen waarvoor De Zoomwacht faalde, bewaard tot ze die dag aantoonbaar opnieuw las
-    onzeker = set(staat.get(ZOOM_ONZEKER) or [])
-    if zoom_gelezen is False:
-        onzeker.add(gisteren)
-    elif zoom_gelezen is True:
-        grens = (date.fromisoformat(gisteren) - timedelta(days=ZOOM_VENSTER - 1)).isoformat()
-        onzeker = {d for d in onzeker if d < grens}
-    for d in onzeker:
-        if zoom.get(d) == "volledig":
-            zoom[d] = "ondergrens"
-    staat[ZOOM_ONZEKER] = sorted(onzeker)
+    # G3: een dag waarvoor De Zoomwacht faalde, blijft een ondergrens tot zijn dagregel daarna herschreven is door een
+    # ronde waarin elke bron ok was (de regel verschilt van wat er stond bij de fout, en zoomstand zegt volledig). Een
+    # geslaagde exit alleen bewijst dat niet: bij een gedeeltelijke uitval verlaagt De Zoomwacht een regel nooit.
+    onzeker = staat.get(ZOOM_ONZEKER)
+    onzeker = dict(onzeker) if isinstance(onzeker, dict) else {}
+    if zoom_gelezen is False and gisteren not in onzeker:
+        onzeker[gisteren] = _sha(dagregels.get(gisteren, ""))
+    for d, bij_fout in list(onzeker.items()):
+        if d in dagregels and _sha(dagregels[d]) != bij_fout and zoom[d][0] == "volledig":
+            del onzeker[d]
+        elif d in zoom and zoom[d][0] == "volledig":
+            zoom[d] = ("ondergrens", zoom[d][1])
+    staat[ZOOM_ONZEKER] = onzeker
     _schrijf(STAAT, json.dumps(staat, ensure_ascii=False, indent=1, sort_keys=True))
     bewijs, nieuw, fouten, locatiefout = ontvangst(), [], [], set()
     for dag in sorted(dagen):
@@ -573,8 +589,9 @@ def vastleggen(r, dagen, zoom_gelezen=None):
             locatiefout.add(lf)
         mail = None if ontvangen is None else V.mail_telling(dag, ontvangen, verzonden, soorten)
         kanalen_dag = {k: kanaal_van_dag(s, k, dag, gedekt) for k, s in kanalen.items()}
-        v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoom.get(dag, "onbekend"), mail, kanalen_dag,
-                          prive_afspraak, locatiestand)
+        zoomdag, chatdag = zoom.get(dag, ("onbekend", "onbekend"))
+        v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoomdag, mail, kanalen_dag,
+                          prive_afspraak, locatiestand, chatstand=chatdag)
         oud = _lees(dagpad(dag))
         # Het masker van het bord al voor het schrijven: bord, bestand en Dropbox dragen dezelfde tekst (E6)
         concept = ag.maskeer(V.tekst(v, prive_postvakken))

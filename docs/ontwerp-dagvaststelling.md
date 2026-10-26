@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.5, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.6, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -239,3 +239,17 @@ over acht adressen; gewone verblijven zonder plek; hotmail onvolledig (Mac-kopie
 | G2 | `locatie_wacht.meetgaten`: ongemeten is wat voor de eerste en na de laatste meting van de dag ligt, een pauze tussen twee stukken, een gat, en een verblijf zonder een enkel meetpunt (geparkeerd 'al van daarvoor'); bij meer sporen de doorsnede. 'Niet gezien' wordt in zo'n stuk 'auto zonder meting op dat uur' |
 | G3 | de staat bewaart de dagen waarvoor De Zoomwacht faalde (`_zoom_onzeker`); zo'n dag blijft een ondergrens tot een geslaagde Zoomwacht hem in haar venster van zeven dagen opnieuw las; een ronde buiten een keten verandert niets (tri-state zoom_gelezen); test met twee mislukte nachten na elkaar |
 | H1 | ook de adressen waaruit een privéwacht antwoordt (info@, light@, standaard@ voor mch@) zijn privé: geen ontvangers bij naam |
+
+## Wijzigingen in v1.6 (antwoord op ronde 6, docs/codex/dagvaststelling-bouw-r6.md)
+
+| punt | antwoord in de code |
+|---|---|
+| G2 | geen indeling meer als bewijs: `locatie_wacht.meettijden` geeft de tijden van de geldige meetpunten; 'niet gezien' blijft alleen staan als er op het uur van de afspraak (met 30 minuten marge) een echte meting is, anders 'auto zonder meting op dat uur'. Een afgeleid of samengevoegd parkeerstuk telt niet als meting |
+| G3 | de Zoom-stand komt uit de dagregel zelf: volledig alleen als de telling volledig is en elke bron van de ronde die de regel schreef 'ok' was; de chat heeft haar eigen telling (meestal ondergrens). Een dag waarvoor De Zoomwacht faalde, wordt bewaard met de vingerafdruk van zijn dagregel op dat moment, en blijft een ondergrens tot de regel herschreven is door zo'n volledige ronde; een geslaagde exit alleen wist niets |
+
+Bij het live zetten hoort ook: de nieuwe Mac-sync installeren als ~/bin/data_uit_mehdi_sync.sh (de LaunchAgent gebruikt die
+kopie) en teruglezen.
+
+Gezien bij de droge proef, buiten deze opdracht: De Locatiewacht toetst een afspraak met een projectnummer aan de plek van
+het project, ook als de titel een ander adres noemt (22-10: vooroverleg 2616 op het stadskantoor van Leuven). De
+vaststelling zegt dan 'auto niet gezien op de plek' met de vraag of het doorging; ze bevestigt niets ten onrechte.
