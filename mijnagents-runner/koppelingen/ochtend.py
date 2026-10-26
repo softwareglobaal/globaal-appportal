@@ -223,6 +223,14 @@ def zoom_telling(regel):
     met = regel.get("met_fathom")
     if _getal(met) and 0 <= met <= n:
         tekst += f", {n - met} alleen in Zoom"
+        waar = regel.get("zonder_fathom_waar")
+        if n - met and isinstance(waar, dict):
+            # Overleg 26-10-2026 X5: waar Fathom miste, zoals De Zoomwacht het zag; zonder dat veld blijft de regel gelijk.
+            delen = [f"{waar[k]} {k}" for k in ("vaste vergaderruimte", "eigen meeting", "meeting van een ander",
+                                                 "ruimte onbekend", "nog onbekend")
+                     if _getal(waar.get(k)) and waar[k] > 0]
+            if delen:
+                tekst += f" ({', '.join(delen)})"
     stand = regel.get("stand")
     if str(stand.get("stand") if isinstance(stand, dict) else stand or "").startswith("voorlopig"):
         tekst += " (voorlopig)"

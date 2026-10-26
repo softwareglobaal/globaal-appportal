@@ -382,7 +382,28 @@ def z12_pagina_en_telling():
     check("Z12 dagpagina zonder gedachtestreepje", "\N{EM DASH}" not in html and "\N{EN DASH}" not in html)
 
 
+def t_o26_dagenpagina_zonder_privenamen():
+    """Controle Codex 26-10-2026: de dagenpagina nam de namen van een privérij over. Ze telt de rij, zonder namen."""
+    verse_db("o26")
+    zet([FATHOM, dict(FATHOM, uniek="zoom:chat:kanaal-p:2026-10-20", personen="Familie Proef", prive=True, bron="zoom"),
+         dict(FATHOM, uniek="fathom:3", personen="Kees Proef", afdeling="prive")])
+    gevangen = {}
+    echt_render, echt_locatie = A.render_template, A._locatie
+    A.render_template = lambda naam, **kw: gevangen.update(kw) or ""
+    A._locatie = lambda pad, standaard=None: standaard
+    try:
+        C.get("/dagen", headers=BEHEER)
+    finally:
+        A.render_template, A._locatie = echt_render, echt_locatie
+    dag = next((d for d in gevangen.get("rijen", []) if d["dag"] == "2026-10-20"), {})
+    check("O26 de dagenpagina telt privérijen mee", dag.get("gesprekken") == 3, dag)
+    tekst = str(dag.get("personen"))
+    check("O26 de dagenpagina noemt geen privénamen", "Familie Proef" not in tekst and "Kees Proef" not in tekst
+          and "Jan Proef" in tekst, tekst)
+
+
 if __name__ == "__main__":
+    t_o26_dagenpagina_zonder_privenamen()
     t01_oude_databank()
     t01_twee_verbindingen()
     t02_upsert_wist_koppeling_niet()

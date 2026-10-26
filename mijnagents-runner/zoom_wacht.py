@@ -487,7 +487,29 @@ def chat_sleutel(s):
     return re.sub(r"[^a-z0-9@._-]+", "-", (s.get("peer_contact_email") or s.get("channel_id") or naam).lower())[:80]
 
 
-def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
+OUDERDOM_GROEPEN = ("jonger dan 2 dagen", "2 tot 7 dagen", "ouder dan 7 dagen", "zonder tijd")
+
+
+def ouderdom_groep(tijd, tot):
+    """Overleg 26-10-2026 X3: hoe oud het laatste bericht van een onleesbaar chatgesprek is (last_message_sent_time,
+    gemeten 26-10-2026 op elke sessie), zonder naam. Zo is te zien of de 404's oude of nieuwe gesprekken zijn; een
+    oorzaak leid ik er niet uit af."""
+    try:
+        t = datetime.fromisoformat(str(tijd).replace("Z", "+00:00"))
+        dagen = (tot - t).total_seconds() / 86400
+    except (TypeError, ValueError):
+        return "zonder tijd"
+    return "jonger dan 2 dagen" if dagen < 2 else "2 tot 7 dagen" if dagen <= 7 else "ouder dan 7 dagen"
+
+
+def kanaal_soort(naam):
+    """Overleg 26-10-2026 X1: (afdeling, privé) van een groepskanaal. Werk alleen als de naam een werkafdeling noemt en
+    niets van privé; een kanaal zonder afdeling, met de afdeling prive of met 'priv' in de naam is privé."""
+    afd = afdeling_uit_naam(naam) or ("regie" if "automation" in (naam or "").lower() else "onbekend")
+    return afd, afd in ("onbekend", "prive") or is_prive_naam(naam) or "priv" in (naam or "").casefold()
+
+
+def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
     """Eén rij per chatgesprek per dag: aantallen en tijden, nooit de inhoud. Een 1:1 is werk als de ander bekend is op
     e-mailadres of teamdomein (H2), anders privé, bij twijfel privé; zonder personentabel is elke 1:1 privé (T26). De
     naam van een privé-1:1 gaat naar het masker van het bord.
@@ -517,6 +539,8 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
         berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if berichten is None:
             weg += 1
+            if ouderdom is not None:
+                ouderdom.append(s.get("last_message_sent_time"))
             continue
         if not berichten:
             continue
@@ -541,10 +565,13 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen):
             if prive and not vast_woord(naam):
                 ag.prive([naam])         # een 1:1 zonder naam heet 'gesprek': dat woord nooit in het masker (ZOO-06)
         else:
-            afd = afdeling_uit_naam(naam) or ("regie" if "automation" in naam.lower() else "onbekend")
-            prive = False
-            zeker = "hoog" if afd != "onbekend" else "middel"
-            waarom = "kanaal; afdeling uit de kanaalnaam" if afd != "onbekend" else "kanaal; afdeling niet uit de naam af te leiden"
+            # Overleg 26-10-2026 X1: een kanaal zonder afdeling in de naam (een familiegroep) is niet bewezen werk: privé.
+            afd, prive = kanaal_soort(naam)
+            zeker = "middel" if prive else "hoog"
+            waarom = (KANAAL_ONBEKEND + ": bij twijfel privé" if prive else
+                      "kanaal; afdeling uit de kanaalnaam")
+            if prive and not vast_woord(naam):
+                ag.prive([naam])
         sleutel = chat_sleutel(s)
         for dag, lijst in sorted(per_dag.items()):
             if not dag:
@@ -1066,11 +1093,14 @@ def lezen(a, klok, staat, personen, domeinen):
     w = zoom_lezen(van, klok, staat, klok)
     # de chat: in chat de rijen die deze ronde schrijft, in chat_redenen waarom ze niet alles las; de telling (chat_dag en
     # chat_stand) komt pas na het schrijven uit de gesprekkentabel (chat_tellen, RZ10)
-    w.update(vandaag=vandaag, eerste=eerste, chat=[], chat_redenen=[], chat_dag={}, chat_stand=None)
+    w.update(vandaag=vandaag, eerste=eerste, chat=[], chat_redenen=[], chat_dag={}, chat_stand=None,
+             chat_ouderdom=Counter())
     if w["ik"]:
         try:
+            tijden = []
             w["chat"], w["chat_redenen"] = chat_rijen(w["ik"], eerste, (date.fromisoformat(vandaag) + timedelta(days=1)).isoformat(),
-                                                      personen, domeinen)
+                                                      personen, domeinen, tijden)
+            w["chat_ouderdom"] = Counter(ouderdom_groep(t, klok) for t in tijden)   # gemeten vanaf de rondetijd
             w["bronnen"]["chat"] = "ok"
         except Exception as e:  # noqa: BLE001
             w["bronnen"]["chat"] = toestand_van(e)
@@ -1247,10 +1277,31 @@ def _inhoud(item):
     return d if isinstance(d, dict) else {}
 
 
+def bestaande_tekst_items(nodig):
+    """Mijn bestaande zoom-tekst-items, bladerend met tot_id tot elk gezocht uniek gevonden is of de bak op is.
+    Overleg 26-10-2026 X2: het bord geeft hoogstens 500 per keer; een ouder item bleef onzichtbaar, zodat een vangnet
+    dat Fathom later toch had nooit 'vervallen' werd."""
+    bestaand, tot_id = {}, None
+    while True:
+        q = {"soort": "zoom-tekst", "n": 500}
+        if tot_id:
+            q["tot_id"] = tot_id
+        blad = klaarzet_lezen(**q)
+        for it in blad:
+            if it.get("van") == NAAM:
+                bestaand.setdefault(it["uniek"], it)
+        if len(blad) < 500 or nodig <= bestaand.keys():
+            return bestaand
+        laagste = min(it["id"] for it in blad)
+        if tot_id is not None and laagste >= tot_id:
+            return bestaand                # het bord bladert niet verder: stoppen, nooit eindeloos lezen
+        tot_id = laagste
+
+
 def tekst_items(info, ik):
     """De zoom-tekst-items van deze ronde, plus 'vervallen' voor een vangnet dat Fathom later toch heeft (Z6, T14): nog op
     klaar gewoon bijgewerkt, al opgepakt met revisie. De map blijft staan."""
-    bestaand = {it["uniek"]: it for it in klaarzet_lezen(soort="zoom-tekst", n=500) if it.get("van") == NAAM}
+    bestaand = bestaande_tekst_items({f"zoom-tekst:{x['s']['uuid']}" for x in info})
     items = []
     for x in info:
         uniek = f"zoom-tekst:{x['s']['uuid']}"
@@ -1313,7 +1364,26 @@ def dag_inhoud(dag, w, info, tel, redenen):
             "alleen_zoom_tekst": sum(1 for x in gesprekken if x["toestand"] == "vangnet: tekst bewaard"),
             "opname_zonder_tekst": sum(1 for x in gesprekken if x["toestand"] == "vangnet: opname zonder tekst"),
             "zonder_opname": sum(1 for x in gesprekken if x["toestand"] == "zonder opname"),
-            "wacht": len(wacht), "alleen_mehdi": len(eigen) - len(gesprekken), "chat": chat, "werk": werklijst}
+            "wacht": len(wacht), "alleen_mehdi": len(eigen) - len(gesprekken), "chat": chat, "werk": werklijst,
+            # Overleg 26-10-2026 X5: waar de gesprekken zonder Fathom waren, alleen wat Zoom zelf zegt, geen oorzaak.
+            "zonder_fathom_waar": zonder_fathom_waar(gesprekken, w["ik"])}
+
+
+def zonder_fathom_waar(gesprekken, ik):
+    """Overleg 26-10-2026 X5 en de controle van Codex: per soort ruimte de gesprekken die Fathom zeker niet heeft (vangnet
+    of zonder opname); wat nog wacht of onbekend is, apart als 'nog onbekend'. Zonder host_id buiten de vaste ruimte zegt
+    Zoom niet wiens meeting het was: 'ruimte onbekend', nooit 'eigen meeting'."""
+    tel = Counter()
+    for x in gesprekken:
+        t = x["toestand"]
+        if t == "fathom":
+            continue
+        if t.startswith("wacht") or t == "onbekend" or t == "api":
+            tel["nog onbekend"] += 1
+            continue
+        ruimte = ruimte_van(x["s"], ik)
+        tel["ruimte onbekend" if ruimte == "eigen meeting" and not x["s"].get("host_id") else ruimte] += 1
+    return dict(tel)
 
 
 def sessie_thema(s, ik):
@@ -1457,6 +1527,32 @@ def schrijf_rijen(rijen):
         bord.call("/api/gesprekken", {"rijen": rijen[i:i + 200]})
 
 
+KANAAL_ONBEKEND = "kanaal; afdeling niet uit de naam af te leiden"
+
+
+def kanalen_herzien():
+    """Overleg 26-10-2026 X1: een kanaalrij van voor die dag die volgens kanaal_soort privé is, staat nog als werk, ook
+    buiten het venster en als Zoom het gesprek nu niet meer laat lezen. Ik beoordeel elke kanaalrij die werk is opnieuw
+    op haar naam en zet ze zo nodig op privé, met dezelfde inhoud; ik verwijder niets. Geeft het aantal herziene rijen,
+    of None als de tabel niet te lezen was."""
+    try:
+        oud = bord.db_lees("SELECT * FROM gesprek_log WHERE uniek LIKE 'zoom:chat:%' AND COALESCE(prive, 0)=0 "
+                           "AND waarom LIKE 'kanaal;%'")
+    except bord.BordOnbekend:
+        return None
+    rijen = []
+    for r in oud:
+        if not kanaal_soort(r.get("personen"))[1]:
+            continue
+        rij = {k: r.get(k) for k in ("uniek", "datum", "start", "minuten", "personen", "bedrijf", "afdeling", "thema", "project",
+                                     "zekerheid", "archief", "link", "opgenomen_door", "bron")}
+        if rij["personen"] and not vast_woord(rij["personen"]):
+            ag.prive([rij["personen"]])
+        rijen.append(dict(rij, prive=True, zekerheid="middel", waarom=KANAAL_ONBEKEND + ": bij twijfel privé"))
+    schrijf_rijen(rijen)
+    return len(rijen)
+
+
 def zonder_link(rij):
     """Dezelfde volledige rij zoals db_lees ze gaf, met alleen link leeg (J12)."""
     return {**{k: v for k, v in rij.items() if k != "ts"}, "link": "", "prive": bool(rij.get("prive")), "bron": rij.get("bron") or "zoom"}
@@ -1575,6 +1671,7 @@ def werk(r, a, klok):
             rijen.append(sessie_rij(x, w["ik"], personen, domeinen, dubbel_van))
         n_rijen = len(rijen)
         schrijf_rijen(rijen + w["chat"])
+        n_kanalen = kanalen_herzien()
         chat_tellen(w)                     # RZ10: het chatcijfer uit de gesprekkentabel, na het schrijven
         n_alleen, alleen_ok = alleen_mehdi_rijen([f"zoom:meeting:{x['s']['uuid']}" for x in info if not x["gesprek"]],
                                                  {f"zoom:meeting:{u}" for u in w["sessies"]})
@@ -1613,7 +1710,8 @@ def werk(r, a, klok):
             ag.log("Zoom-account", "fout", f"accountscan mislukt ({type(e).__name__})")
     if schrijven:
         ag.log("Zoom", "schrijf", f"gesprekkentabel: {n_rijen} sessierijen en {len(w['chat'])} chatrijen (bron zoom), "
-               f"{n_alleen} bestaande rij(en) met alleen Mehdi gemarkeerd; "
+               f"{n_alleen} bestaande rij(en) met alleen Mehdi gemarkeerd, "
+               f"{n_kanalen if n_kanalen is not None else 'onbekend'} oude kanaalrij(en) naar privé; "
                f"koppelingen: {gestuurd} gestuurd, {len(bevestigd) if bevestigd is not None else 'onbekend'} van {len(wens)} bevestigd"
                + (f", {len(gehouden)} buiten niet gezet (rij hoort bij een sessie buiten deze ronde)" if gehouden else "")
                + f"; zoom-tekst: {_tel(uit_items)}; dagregels: {_tel(uit_dag)}")
@@ -1636,7 +1734,10 @@ def chat_verslag(w):
     stand = w.get("chat_stand")
     if stand is None:
         return "; chat niet geteld" + (f" ({', '.join(w['chat_redenen'])})" if w["chat_redenen"] else "")
-    return f"; chat {stand['telling']}" + (f": {', '.join(stand['redenen'])}" if stand["redenen"] else "")
+    oud = w.get("chat_ouderdom") or {}
+    leeftijd = ", ".join(f"{oud[g]} {g}" for g in OUDERDOM_GROEPEN if oud.get(g))
+    return (f"; chat {stand['telling']}" + (f": {', '.join(stand['redenen'])}" if stand["redenen"] else "")
+            + (f" (laatste bericht van de onleesbare: {leeftijd})" if leeftijd else ""))
 
 
 def leesapp_stand():
