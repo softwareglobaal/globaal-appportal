@@ -28,6 +28,8 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_communicatie_bundelaar.py",
     "mijnagents-runner/tests/test_codex_ronde2_bode.py",
     "mijnagents-runner/tests/test_dagbundelaar.py",
+    "mijnagents-runner/tests/test_dagbundelaar_vaststelling.py",
+    "mijnagents-runner/tests/test_dagvaststelling.py",
     "mijnagents-runner/tests/test_geen_echte_namen.py",
     "mijnagents-runner/tests/test_keten.py",
     "mijnagents-runner/tests/test_plaud_wacht.py",
@@ -45,6 +47,11 @@ BESTANDEN = (
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige
 # onderwerpen, echte e-mailadressen en een klantnaam. Bewust zonder de woorden zelf; ze horen niet in een publieke repo.
 VERBODEN = frozenset({
+    # 26-10-2026, dagvaststelling: twee klantnamen, een collega en een plek uit de agenda en het locatielogboek
+    "bafcc32a730b68bf8cad24a6f973b5b730c04cd5be74d7fea46ed62a8630e9e1",
+    "09474e10a624857feafeaaa47336b1117a1465b6e13bca9287df603fab8ec717",
+    "8a84602811a8049988848babd8ded0a764daaea62a26c212bff091c20180a466",
+    "315ced1d1d231ddaf8c7634c12615113bcb3cbeba4fee7b83b787ff82b92df7f",
     "2b2a0ff8f9def3f17d58512ab10d7b1b40e5ae06dabbddfd4d9278a428a3700c",
     "79a6a933dfc9b1975e444d4e8481c64c771d8ab40b7ac72f8bc1a1bca1718bef",
     "3f2e23b2ee1991da34bdc689a44a229d1b64f3b617d6569ffb6e19f760acfded",
@@ -95,7 +102,7 @@ def treffers(tekst, verboden=VERBODEN):
 
 
 def test_de_lijsten_zijn_volledig():
-    assert len(VERBODEN) == 15 and all(re.fullmatch(r"[0-9a-f]{64}", h) for h in VERBODEN), "vijftien sha256-hashes"
+    assert len(VERBODEN) == 19 and all(re.fullmatch(r"[0-9a-f]{64}", h) for h in VERBODEN), "negentien sha256-hashes"
     assert len(set(BESTANDEN)) == len(BESTANDEN), "een bestand staat twee keer in BESTANDEN"
     ontbreekt = [p for p in BESTANDEN if not os.path.isfile(os.path.join(REPO, p))]
     assert not ontbreekt, f"deze testbestanden bestaan niet meer (hernoemd? pas BESTANDEN aan): {ontbreekt}"

@@ -1635,12 +1635,16 @@ def dagen_pagina():
         elif s == "signaal":
             r["signalen"] += 1
     # Telregel (Z10): een rij met dubbel_van telt niet, anders telt een gesprek in Zoom en Fathom twee keer.
-    for g in conn.execute("SELECT datum, minuten, personen, prive FROM gesprek_log WHERE COALESCE(dubbel_van, '')=''").fetchall():
+    for g in conn.execute("SELECT datum, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling FROM gesprek_log "
+                          "WHERE COALESCE(dubbel_van, '')=''").fetchall():
         r = dagen.setdefault(g["datum"], {"dag": g["datum"], "afspraken": 0, "gesprekken": 0, "gesprek_min": 0, "personen": set(), "bezoeken": 0,
                                           "km": 0.0, "onderweg_min": 0, "fotos": 0, "slaap": "", "hartslag": "", "spiegel": "", "bundels": 0,
                                           "signalen": 0, "transcripten": 0})
         r["gesprekken"] += 1
         r["gesprek_min"] += int(g["minuten"] or 0)
+        # Controle Codex 26-10-2026: een privérij telt mee, maar zijn namen komen niet in het dagoverzicht.
+        if g["prive"] or g["afdeling"].strip().casefold() in ("prive", "privé"):
+            continue
         for p in (g["personen"] or "").split(","):
             if p.strip():
                 r["personen"].add(p.strip())

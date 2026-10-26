@@ -437,7 +437,7 @@ def test_rz4_04_planning_zonder_eigen_regel_voor_de_dagbundelaar():
     import re  # noqa: PLC0415
     regels = [r for r in open(CRON_ECHT, encoding="utf-8").read().splitlines() if r.strip() and not r.startswith("#")]
     assert not [r for r in regels if "dagbundelaar" in r], regels
-    keten = [r for r in regels if "keten.py" in r]
+    keten = [r for r in regels if "keten.py" in r and "--nacht" not in r]
     assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w ") and "/tmp/gesprekken.lock" in keten[0], keten
     # tegenproef op RZ4-04: een keten die het slot niet kreeg, staat in keten.log (flock -E 75 en een regel)
     assert " -E 75 /tmp/gesprekken.lock " in keten[0] and "; if [ $? -eq 75 ]; then " in keten[0], keten
@@ -445,6 +445,42 @@ def test_rz4_04_planning_zonder_eigen_regel_voor_de_dagbundelaar():
     assert wacht < K.OCHTENDVENSTER.total_seconds() == 3600, (wacht, K.OCHTENDVENSTER)
     langste = sum(s[2] for s in K.STAPPEN + (K.DAGBUNDELAAR,)) + (len(K.STAPPEN) + 1) * K.NADRUK
     assert langste == 4890, langste
+
+
+def test_nachtketen():
+    """Codex F9 (ontwerp dagvaststelling v1.2): keten.py --nacht draait De Zoomwacht en daarna De Dagbundelaar --nacht,
+    ook als De Zoomwacht faalt; ze schrijft nacht.json (met einde null tot het einde, zodat De Dagbundelaar ziet dat hij
+    in een lopende nachtketen draait) en raakt keten.json nooit aan. Het startuur van de keten slaat de nachtregel over."""
+    import sys as _sys  # noqa: PLC0415
+    _sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
+    import ochtend  # noqa: PLC0415
+    for gedrag, verwacht in (({}, 0), ({"zoom_wacht.py": {"exit": 3}}, 1)):
+        p = Proef(gedrag)
+        nachtpad = os.path.join(p.map, "data", "nacht.json")
+        zie = ("import json as _j; _d = _j.load(open(os.environ['KETEN_NACHT']))\n"
+               "open(os.environ['KETEN_ZAG'], 'w').write(_j.dumps({'argv': sys.argv[1:], 'nacht': _d}))\n")
+        with open(os.path.join(p.runners, "dagbundelaar.py"), "w", encoding="utf-8") as f:
+            f.write(NEP.replace('print("uitvoer van "', zie + 'print("uitvoer van "'))
+        os.environ["KETEN_NACHT"] = nachtpad
+        oud = (K.HIER, K.KETEN, K.NACHT, K.LOGMAP, K.PYTHON, K.NADRUK, K.nu)
+        K.HIER, K.KETEN, K.NACHT, K.LOGMAP, K.PYTHON, K.NADRUK = p.runners, p.keten, nachtpad, p.logmap, sys.executable, 5
+        K.nu = klok(datetime(2026, 10, 26, 23, 30, 5, tzinfo=UTC))
+        try:
+            with redirect_stdout(io.StringIO()):
+                code = K.nachtketen()
+        finally:
+            K.HIER, K.KETEN, K.NACHT, K.LOGMAP, K.PYTHON, K.NADRUK, K.nu = oud
+        assert code == verwacht, (gedrag, code)
+        assert p.spoorregels() == ["zoom_wacht.py start", "dagbundelaar.py start"], p.spoorregels()
+        assert not os.path.exists(p.keten), "de nachtketen schrijft geen keten.json"
+        zag = json.load(open(p.zag, encoding="utf-8"))
+        assert zag["argv"] == ["--nacht"] and zag["nacht"]["einde"] is None, zag
+        assert zag["nacht"]["stappen"]["zoom-wacht"]["exit"] == gedrag.get("zoom_wacht.py", {}).get("exit", 0), zag
+        n = json.load(open(nachtpad, encoding="utf-8"))
+        assert n["einde"] and list(n["stappen"]) == ["zoom-wacht", "dagbundelaar"], n
+    cron = open(CRON_ECHT, encoding="utf-8").read()
+    assert "keten.py --nacht" in cron and ochtend.ketenstart(cron) == (7, 0), "het startuur blijft 07:00"
+    assert ochtend.ketenstart("30 23 * * * x keten.py --nacht\n0 7,13 * * * x keten.py\n") == (7, 0), "ook als de nacht eerst staat"
 
 
 def test_bron():

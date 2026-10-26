@@ -322,8 +322,8 @@ def test_terug_lezen_geeft_nood_als_het_bord_anders_is():
 
 def test_dagbundelaar_slaat_communicatie_over():
     bron = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
-    regel = next(r for r in bron.splitlines() if '"zoom-tekst", "ochtendbericht"' in r)
-    assert '"communicatie"' in regel, regel
+    lijst = bron.split('if it.get("soort") in (', 1)[1].split(")", 1)[0]
+    assert '"communicatie"' in lijst, lijst
 
 
 def test_zonder_grenzen_geen_werk():

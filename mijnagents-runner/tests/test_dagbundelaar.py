@@ -63,11 +63,35 @@ class NepBord:
         raise AssertionError("onverwachte bordoproep " + pad)
 
 
-def bundelen(dag, nb):
-    oud = (bord.call, bord.opgepakt, D.DAG)
+class NepRonde:
+    """De gedeelde ronde (N12) zonder bord: de noden en het detail komen als laatste hartslag in nb.harten."""
+
+    def __init__(self, nb, taak):
+        self.nb, self.taak, self.noden, self.detail = nb, taak, [], ""
+
+    def __enter__(self):
+        return self
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append({"tekst": tekst, "wie": wie})
+
+    def bron(self, naam, inhoud):
+        pass
+
+    def __exit__(self, *fout):
+        self.nb.harten.append({"taak": self.taak, "nood": self.noden, "detail": self.detail, "fout": fout[0]})
+        return False
+
+
+def bundelen(dag, nb, nacht=False):
+    """De ochtendronde van De Dagbundelaar met een nagebootst bord; de dagvaststelling heeft eigen tests
+    (test_dagbundelaar_vaststelling.py) en is hier een lege stap."""
+    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
     bord.call = nb.call
     bord.opgepakt = lambda kid, door: nb.opgepakt.append(kid)
-    D.DAG = dag
+    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, True, nacht
+    D.vastleggen = lambda r, dagen, **k: nb.logs.append(("vastleggen", dagen)) or "vastgelegd"
+    D.ag.ronde = lambda taak, **k: NepRonde(nb, taak)
     D.ag.klaarzet = lambda items: nb.bundels.extend(items) or {"nieuw": len(items)}
     D.ag.hartslag = lambda *a, **k: nb.harten.append(k)
     D.ag.log = lambda *a, **k: nb.logs.append(a)
@@ -76,8 +100,8 @@ def bundelen(dag, nb):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
     finally:
-        bord.call, bord.opgepakt, D.DAG = oud
-        for naam in ("klaarzet", "hartslag", "log", "log_verstuur"):
+        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
+        for naam in ("ronde", "klaarzet", "hartslag", "log", "log_verstuur"):
             D.ag.__dict__.pop(naam, None)
     return nb
 
@@ -244,9 +268,10 @@ exit "${NEP_EXIT:-0}"
 
 
 def cronregel(script):
+    """De regel van dit script; 'keten.py' is de ochtend- en middagketen, 'keten.py --nacht' de nachtketen."""
     regels = [r for r in open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
               if r.strip() and not r.startswith("#")]
-    gevonden = [r for r in regels if script in r]
+    gevonden = [r for r in regels if script in r and (script.endswith("--nacht") or "keten.py --nacht" not in r)]
     assert len(gevonden) == 1, gevonden
     return gevonden[0]
 
@@ -302,6 +327,9 @@ TIJDEN = "# 07:00 UTC is 09:00 Brussel tot en met 24-10-2026, vanaf 25-10 08:00;
 KETEN = (f"0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock {PY} {RN}/keten.py >> {LG}/keten.log 2>&1;"
          f' if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: keten niet'
          f' gestart" >> {LG}/keten.log; fi')
+NACHTKETEN = (f"30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock {PY} {RN}/keten.py --nacht >> {LG}/keten.log "
+              f"2>&1; if [ $? -eq 75 ]; then echo \"$(date -u -Iseconds) slot /tmp/gesprekken.lock na 1800 s niet vrij: "
+              f"nachtketen niet gestart\" >> {LG}/keten.log; fi")
 KETEN_VORIG = f"0 7,13 * * * /usr/bin/flock -w 1800 /tmp/gesprekken.lock {PY} {RN}/keten.py >> {LG}/keten.log 2>&1"
 VORIG_BUNDEL =(f"5 7 * * 1-5 /usr/bin/flock -w 5400 -E 75 /tmp/gesprekken.lock {PY} {RN}/dagbundelaar.py >> {LG}/dagbundelaar.log 2>&1;"
                 f' if [ $? -eq 75 ]; then echo "$(date -u -Iseconds) slot /tmp/gesprekken.lock na 5400 s niet vrij: De Dagbundelaar'
@@ -325,7 +353,7 @@ def test_rz4_04_zetscript_vervangt_het_vorige_blok_en_de_losse_regels():
                                 (["MAILTO=''", bode] + LOS, 3)):
         doel, oud = M.samenvoegen(huidig, cron)
         assert oud == oude_regels, (oud, huidig)
-        assert doel[doel.index(M.BEGIN):] == [M.BEGIN, TIJDEN, KETEN, M.EINDE], doel
+        assert doel[doel.index(M.BEGIN):] == [M.BEGIN, TIJDEN, KETEN, NACHTKETEN, M.EINDE], doel
         assert not any("dagbundelaar" in r for r in doel), doel
         assert "MAILTO=''" in doel and bode in doel and M.samenvoegen(doel, cron) == (doel, 0), "twee keer samenvoegen geeft hetzelfde"
 
@@ -506,6 +534,43 @@ def test_rz3_02_zetten_alleen_als_het_bord_herbouwd_is():
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def test_vaststelling_ochtend_en_nacht():
+    """Ontwerp dagvaststelling v1.2 (Codex D1, D2): de ochtendronde bundelt en stelt gisteren vast in een ronde met taak
+    'bundels en dagvaststelling'; de nachtronde bundelt niet en heet 'dagvaststelling' (ochtend.NACHTTAAK). Een item
+    dagvaststelling komt nooit in een bundel en wordt nooit opgepakt; de oude noden over WhatsApp-exports en Xelion zijn
+    weg (die meldt de dagvaststelling zelf, naar de hartslag van hun wacht)."""
+    vast = item(31, "dagbundelaar", "mehdi", "dagvaststelling", f"Dag {DAG} vastgesteld", sleutel=DAG,
+                inhoud="# Dag vastgesteld", uniek=f"vaststelling:{DAG}")
+    nb = bundelen(DAG, NepBord([WERK, vast]))
+    assert nb.harten[-1]["taak"] == "bundels en dagvaststelling" and nb.harten[-1]["fout"] is None, nb.harten
+    assert ("vastleggen", [DAG]) in nb.logs, nb.logs
+    assert 31 not in nb.opgepakt and all(vast["titel"] not in tekst_van(b) for b in nb.bundels), "vaststelling gebundeld"
+    noden = " ".join(n["tekst"] for n in nb.harten[-1]["nood"])
+    assert "chat-export" not in noden and "Xelion" not in noden, noden
+    nb = bundelen(DAG, NepBord([WERK, vast]), nacht=True)
+    import ochtend
+    assert nb.harten[-1]["taak"] == ochtend.NACHTTAAK and not nb.bundels and not nb.opgepakt, nb.harten
+
+
+def test_nachtketen_in_het_beheerde_blok():
+    """Codex F9: de nachtketen staat in het beheerde blok (anders weigert het zetscript haar als onbekende planning van
+    keten.py). Het zetscript aanvaardt het blok zoals het tot 26-10-2026 op de VM stond (BLOK_VOOR_NACHT) en vervangt
+    het door het blok met de nachtketen; een losse nachtregel buiten het blok weigert het."""
+    M = _zetscript()
+    cron = open(os.path.join(PLANNING, "gesprekken.cron"), encoding="utf-8").read().splitlines()
+    assert cronregel("keten.py --nacht") == NACHTKETEN and cronregel("keten.py") == KETEN
+    bode = f"* * * * * {PY} {RN}/bode.py >> {LG}/bode.log 2>&1"
+    voor = ["MAILTO=''", bode, "", M.BEGIN, TIJDEN, KETEN, M.EINDE]
+    assert list(M.BLOK_VOOR_NACHT) == [TIJDEN, KETEN]
+    doel, oud = M.samenvoegen(voor, cron)
+    assert oud == 0 and doel[doel.index(M.BEGIN):] == [M.BEGIN, TIJDEN, KETEN, NACHTKETEN, M.EINDE], doel
+    try:
+        M.samenvoegen(voor + [NACHTKETEN], cron)
+        raise AssertionError("een losse nachtregel buiten het blok moet geweigerd worden")
+    except ValueError as e:
+        assert "keten.py buiten het blok" in str(e), e
 
 
 def test_bron_houdt_de_bestaande_grendels():

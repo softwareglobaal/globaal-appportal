@@ -195,6 +195,8 @@ class Wereld:
         return code, tellers, r.noden
 
 
+RUNNER_MAP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def werftaak(kid, dossier="2531", datum="2026-10-08", bezoekmap=BEZOEK):
     return {"id": kid, "soort": "taak", "van": "werfverslag-voorbereider", "uniek": f"werf:{dossier}:{datum}:plaud-wacht",
             "inhoud": json.dumps({"dossier": dossier, "datum": datum, "adres": "Proefstraat 1", "bezoekmap": bezoekmap,
@@ -326,16 +328,22 @@ def dagbundelaar_op(items, dag):
     def call(pad, payload=None, method=None):
         if pad.startswith("/api/klaarzet?"):
             return {"items": [dict(it) for it in items if "soort=zoom" not in pad or it["soort"] == "zoom"]}
+        # De Dagbundelaar gaat sinds 26-10-2026 door de gedeelde ronde (N12): ze leest haar werkwijze en de collega's
+        if pad == "/api/agent/dagbundelaar/werkwijze" and payload is None:
+            return {"werkwijze": open(os.path.join(RUNNER_MAP, "werkwijze", "dagbundelaar.md"), encoding="utf-8").read()}
+        if pad == "/api/agents":
+            return []
         gezet.setdefault(pad, []).append(payload)
         return {"nieuw": len((payload or {}).get("items") or [])}
 
-    oud = (D.bord.call, D.bord.opgepakt, D.DAG)
-    D.bord.call, D.bord.opgepakt, D.DAG = call, (lambda kid, door: None), dag
+    oud = (D.bord.call, D.bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
+    D.bord.call, D.bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT = call, (lambda kid, door: None), dag, True, False
+    D.vastleggen = lambda r, dagen, **k: ""          # de dagvaststelling heeft eigen tests (test_dagbundelaar_vaststelling.py)
     try:
         with redirect_stdout(io.StringIO()):
             D.main()
     finally:
-        D.bord.call, D.bord.opgepakt, D.DAG = oud
+        D.bord.call, D.bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
     return gezet["/api/klaarzet"][0]["items"], [r for p in gezet.get("/api/logboek", []) for r in p["regels"]]
 
 

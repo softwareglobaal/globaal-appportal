@@ -1181,7 +1181,7 @@ def test_t25_bron_en_zaad():
     assert any("ander Fathom-account" in p for p in beslist), "13.1: de opnames van een ander account staan bij Wat Mehdi beslist"
     assert "\N{EM DASH}" not in ZAAD and "\N{EN DASH}" not in ZAAD and not bord.HTML.search(ZAAD), "N9 en NA44"
     assert "```" not in ZAAD and "~~~" not in ZAAD and len(ZAAD) >= 500
-    assert ZAAD.splitlines()[2].startswith("Versie 2.3 ("), ZAAD.splitlines()[2]
+    assert ZAAD.splitlines()[2].startswith("Versie 2.4 ("), ZAAD.splitlines()[2]
     # RZ4-02 en RZ4-04 (22-10-2026): het zaad zegt wat de code doet bij een vreemde Zoom-gebruiker, wanneer de leesapp
     # sleutels bewaart, en dat De Dagbundelaar de laatste stap van de ochtendketen is (geen eigen wachttijd meer)
     zaad = " ".join(ZAAD.split())
@@ -1415,8 +1415,11 @@ def test_t30_planning():
     doel, oud = M.samenvoegen(huidig, cron)
     assert oud == 3, oud
     actief = [r for r in doel if r.strip() and not r.startswith("#") and not r.startswith("MAILTO")]
-    keten = [r for r in actief if "keten.py" in r]
+    keten = [r for r in actief if "keten.py" in r and "--nacht" not in r]
     assert len(keten) == 1 and keten[0].startswith("0 7,13 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), keten
+    # de nachtketen van de dagvaststelling (keten.py --nacht, 23:30 UTC) staat in hetzelfde beheerde blok
+    nacht = [r for r in actief if "keten.py --nacht" in r]
+    assert len(nacht) == 1 and nacht[0].startswith("30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), nacht
     assert "; if [ $? -eq 75 ]; then " in keten[0], "een keten die het slot niet kreeg, staat in keten.log (RZ4-04)"
     assert not any("fathom_wacht.py" in r or "zoom_wacht.py" in r for r in actief), "de losse regels zijn weg"
     # RZ4-04: De Dagbundelaar heeft geen eigen regel meer; hij is de laatste stap van keten.py (tests/test_keten.py)
@@ -2989,7 +2992,7 @@ def test_rz10_01_een_gesprek_dat_uit_de_sessielijst_verdwijnt_telt_mee():
     mee: de dagregel zei 0 en een opgepakte regel werd van 1 naar 0 herzien. Nu komt het chatcijfer uit de
     gesprekkentabel, waar de rijen van eerdere rondes blijven staan: het gesprek telt mee en het cijfer daalt niet."""
     w = Wereld()
-    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-zeta", "name": "H-Architects proefkanaal"},
                     [{"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"},
                      {"date_time": "2026-10-20T09:10:00Z", "sender": TEAM_ADRES}])]
     assert w.ronde(NU) is None
@@ -3014,7 +3017,7 @@ def test_rz10_03_elk_chatgesprek_404_telt_de_rijen_uit_de_tabel():
     w = Wereld()
     w.zoom.chat = [({"type": "1:1", "peer_contact_email": TEAM_ADRES, "name": "Proefpersoon Ypsilon"},
                     [{"date_time": "2026-10-19T08:00:00Z", "sender": TEAM_ADRES}]),
-                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+                   ({"type": "group", "channel_id": "kanaal-zeta", "name": "H-Architects proefkanaal"},
                     [{"date_time": "2026-10-19T09:00:00Z", "sender": "info@h-invest.test"},
                      {"date_time": "2026-10-20T09:00:00Z", "sender": "info@h-invest.test"}])]
     assert w.ronde(NU) is None
@@ -3393,6 +3396,145 @@ def test_eigen3_eigen_account_alleen_op_een_exact_adres():
             os.environ.pop("FATHOM_MEHDI_ADRESSEN", None)
         else:
             os.environ["FATHOM_MEHDI_ADRESSEN"] = oud
+
+
+def test_o26_x2_een_oud_vangnetitem_voorbij_500_wordt_toch_vervallen():
+    """Overleg 26-10-2026 X2 (K5): het bord geeft hoogstens 500 items per keer, nieuwste eerst. Een vangnetitem achter
+    die 500 werd niet gezien: kreeg Fathom het gesprek later, dan bleef bij Mehdi 'alleen in Zoom' staan. Nu bladert De
+    Zoomwacht met tot_id verder, tot het item gevonden is."""
+    alle = [{"id": 1, "van": ZW.NAAM, "voor": "regisseur", "uniek": "zoom-tekst:oud", "titel": "Zoom-gesprek",
+             "status": "opgepakt", "inhoud": json.dumps({"stand": "vangnet: tekst bewaard"})}]
+    alle += [{"id": i, "van": ZW.NAAM, "voor": "regisseur", "uniek": f"zoom-tekst:n{i}", "titel": "Zoom-gesprek",
+              "status": "klaar", "inhoud": "{}"} for i in range(2, 502)]
+    gevraagd, echt = [], ZW.klaarzet_lezen
+
+    def nep(**q):
+        gevraagd.append(q)
+        rest = sorted((it for it in alle if not q.get("tot_id") or it["id"] < q["tot_id"]), key=lambda it: -it["id"])
+        return rest[:min(q.get("n", 100), 500)]
+    try:
+        ZW.klaarzet_lezen = nep
+        items = ZW.tekst_items([{"s": {"uuid": "oud"}, "toestand": "fathom", "gesprek": True}], {})
+    finally:
+        ZW.klaarzet_lezen = echt
+    assert len(gevraagd) == 2 and gevraagd[1]["tot_id"] == 2, gevraagd
+    assert [(it["uniek"], it["inhoud"]["stand"], it.get("revisie")) for it in items] == [("zoom-tekst:oud", ZW.VERVALLEN, True)], items
+
+
+@bord_nodig
+def test_o26_x3_onleesbare_chats_naar_ouderdom_zonder_namen():
+    """Overleg 26-10-2026 X3: het aantal onleesbare chatgesprekken steeg (17 naar 22) en niemand kon zeggen of dat oude of
+    nieuwe gesprekken waren. Het werkverslag geeft nu per ouderdom van het laatste bericht (last_message_sent_time) een
+    aantal, zonder naam; de reden in de dagregel blijft dezelfde."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-a", "name": "Proefkanaal Alfa", "weg": True,
+                     "last_message_sent_time": "2026-10-19T09:00:00Z"}, []),
+                   ({"type": "group", "channel_id": "kanaal-b", "name": "Proefkanaal Beta", "weg": True,
+                     "last_message_sent_time": "2026-10-14T06:00:00Z"}, []),
+                   ({"type": "1:1", "peer_contact_email": "gamma@elders.test", "name": "Proefpersoon Gamma", "weg": True}, [])]
+    assert w.ronde(NU) is None
+    bron = _bronregel(w)
+    assert "chat ondergrens: 3 chatgesprek(ken) niet leesbaar" in bron, bron
+    assert "(laatste bericht van de onleesbare: 1 jonger dan 2 dagen, 1 ouder dan 7 dagen, 1 zonder tijd)" in bron, bron
+    assert not any(n in bron for n in ("Alfa", "Beta", "Gamma", "kanaal-a")), bron
+    _, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["redenen"] == ["3 chatgesprek(ken) niet leesbaar"], inhoud["chat"]
+
+
+@bord_nodig
+def test_o26_x5_dagregel_en_ochtendbericht_zeggen_waar_fathom_miste():
+    """Overleg 26-10-2026 X5: op 23-10 had de helft van de gesprekken geen Fathom, en Mehdi zag alleen het aantal. De
+    dagregel zegt nu per soort ruimte hoeveel gesprekken zonder Fathom waren (vaste vergaderruimte, eigen meeting,
+    meeting van een ander), zoals Zoom het geeft; het ochtendbericht toont het achter 'alleen in Zoom'."""
+    _, ochtend = _regisseur()
+    w = Wereld()
+    dag_twintig(w, n_pmr=3, met_gepland=True, zonder_fathom=(0, 3))
+    assert w.ronde(NU) is None
+    _, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["zonder_fathom_waar"] == {"vaste vergaderruimte": 1, "eigen meeting": 1}, inhoud["zonder_fathom_waar"]
+    assert inhoud["gesprekken"] - inhoud["met_fathom"] == 2, inhoud
+    tekst = ochtend.zoom_telling(inhoud)
+    assert "2 alleen in Zoom (1 vaste vergaderruimte, 1 eigen meeting)" in tekst, tekst
+    zonder_veld = {k: v for k, v in inhoud.items() if k != "zonder_fathom_waar"}
+    assert ochtend.zoom_telling(zonder_veld).endswith("2 alleen in Zoom") or "(voorlopig)" in ochtend.zoom_telling(zonder_veld)
+
+
+@bord_nodig
+def test_o26_x1_oude_kanaalrij_wordt_prive_zonder_verlies():
+    """Controle Codex 26-10-2026 op X1: een kanaalrij van voor de herstelling (ook buiten het venster, en als Zoom het
+    gesprek niet meer laat lezen) bleef werk. Elke ronde zet zo'n rij op privé, met dezelfde inhoud; niets verdwijnt.
+    Een kanaal met 'prive' in de naam is ook privé."""
+    w = Wereld()
+    oud = {"uniek": "zoom:chat:kanaal-oud:2026-10-01", "datum": "2026-10-01", "start": "10:00", "minuten": 0,
+           "personen": "Proefkanaal Oud", "bedrijf": "", "afdeling": "onbekend", "thema": "Zoom-chat: 3 bericht(en), 1 van Mehdi, 10:00 tot 10:05",
+           "project": "", "prive": False, "zekerheid": "middel", "waarom": ZW.KANAAL_ONBEKEND, "archief": "", "link": "",
+           "opgenomen_door": "Zoom-chat", "bron": "zoom"}
+    oud_ha = dict(oud, uniek="zoom:chat:kanaal-ha:2026-10-01", personen="H-Architects privé", afdeling="h-architects",
+                  zekerheid="hoog", waarom="kanaal; afdeling uit de kanaalnaam")
+    werk = dict(oud_ha, uniek="zoom:chat:kanaal-w:2026-10-01", personen="H-Architects werf")
+    w.bord.call("/api/gesprekken", {"rijen": [oud, oud_ha, werk]})
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-p", "name": "Prive proefgroep"},
+                    [{"date_time": "2026-10-20T09:00:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    r = w.bord.sql("SELECT * FROM gesprek_log WHERE uniek=?", (oud["uniek"],))[0]
+    assert r["prive"] == 1 and r["thema"] == oud["thema"] and r["datum"] == "2026-10-01" and r["personen"] == "Proefkanaal Oud", r
+    assert w.bord.sql("SELECT prive FROM gesprek_log WHERE uniek=?", (oud_ha["uniek"],))[0]["prive"] == 1
+    assert w.bord.sql("SELECT prive FROM gesprek_log WHERE uniek=?", (werk["uniek"],))[0]["prive"] == 0
+    assert ZW.kanaal_soort("H-Architects privé") == ("h-architects", True) and ZW.kanaal_soort("UNABO verkoop")[1] is False
+    p = w.bord.sql("SELECT prive FROM gesprek_log WHERE uniek LIKE 'zoom:chat:kanaal-p:%'")
+    assert p and all(x["prive"] for x in p), p
+    assert "2 oude kanaalrij(en) naar privé" in json.dumps(w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
+    assert w.ronde(NU + timedelta(minutes=10)) is None
+    assert "0 oude kanaalrij(en) naar privé" in w.bord.sql("SELECT tekst FROM logboek WHERE naam='zoom-wacht' AND stap='schrijf' ORDER BY id DESC LIMIT 1")[0]["tekst"]
+
+
+def test_o26_x2_bladeren_stopt_als_het_bord_niet_verder_gaat():
+    """Controle Codex 26-10-2026 op X2: geeft het bord telkens dezelfde volle pagina, dan stopt het bladeren."""
+    blad = [{"id": i, "van": ZW.NAAM, "uniek": f"zoom-tekst:n{i}"} for i in range(1, 501)]
+    gevraagd, echt = [], ZW.klaarzet_lezen
+    try:
+        ZW.klaarzet_lezen = lambda **q: gevraagd.append(q) or blad
+        assert len(ZW.bestaande_tekst_items({"zoom-tekst:weg"})) == 500
+    finally:
+        ZW.klaarzet_lezen = echt
+    assert len(gevraagd) == 2, gevraagd
+
+
+def test_o26_x5_wacht_en_zonder_host_zijn_geen_eigen_meeting():
+    """Controle Codex 26-10-2026 op X5: een gesprek dat nog wacht of onbekend is, telt als 'nog onbekend', en een sessie
+    zonder host_id buiten de vaste ruimte als 'ruimte onbekend'."""
+    ik = {"id": "mehdi-id", "pmi": PMI}
+    g = [{"toestand": "fathom", "s": {"nummer": PMI, "host_id": "mehdi-id"}},
+         {"toestand": "wacht: opname in verwerking", "s": {"nummer": PMI, "host_id": "mehdi-id"}},
+         {"toestand": "onbekend", "s": {"nummer": "8200000002"}},
+         {"toestand": "vangnet: tekst bewaard", "s": {"nummer": "8200000002"}},
+         {"toestand": "zonder opname", "s": {"nummer": "8200000003", "host_id": "ander"}},
+         {"toestand": "vangnet: opname zonder tekst", "s": {"nummer": PMI, "host_id": "mehdi-id"}}]
+    assert ZW.zonder_fathom_waar(g, ik) == {"nog onbekend": 2, "ruimte onbekend": 1, "meeting van een ander": 1,
+                                            "vaste vergaderruimte": 1}
+
+
+@bord_nodig
+def test_o26_x1_een_kanaal_zonder_afdeling_is_prive():
+    """Overleg 26-10-2026 X1: een groepskanaal zonder afdeling in de naam (zoals een familiegroep) kreeg altijd privé =
+    nee, zodat zijn naam in de gesprekkentabel en bij De Regisseur stond. Nu is het privé; een kanaal met een afdeling
+    in de naam blijft werk."""
+    R, _ = _regisseur()
+    w = Wereld()
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-zeta", "name": "Proefkanaal Zeta"},
+                    [{"date_time": "2026-10-20T09:00:00Z", "sender": TEAM_ADRES}]),
+                   ({"type": "group", "channel_id": "kanaal-omega", "name": "H-Architects proefkanaal"},
+                    [{"date_time": "2026-10-20T10:00:00Z", "sender": TEAM_ADRES}])]
+    assert w.ronde(NU) is None
+    zeta = w.bord.sql("SELECT prive, afdeling, waarom FROM gesprek_log WHERE uniek LIKE 'zoom:chat:kanaal-zeta:%'")
+    omega = w.bord.sql("SELECT prive, afdeling FROM gesprek_log WHERE uniek LIKE 'zoom:chat:kanaal-omega:%'")
+    assert zeta and all(r["prive"] for r in zeta) and "bij twijfel privé" in zeta[0]["waarom"], zeta
+    assert omega and not any(r["prive"] for r in omega) and omega[0]["afdeling"] == "h-architects", omega
+    _, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["gesprekken"] == 2 and inhoud["chat"]["prive_gezien"] == 1, inhoud["chat"]
+    assert R.gesprekken_lees("2026-10-20", "2026-10-20", soort="chat")["chats"]["prive_gezien"] == 1
+    verslag = json.dumps(w.bord.sql("SELECT onderwerp, tekst, detail FROM logboek WHERE naam='zoom-wacht'"), ensure_ascii=False)
+    assert "Proefkanaal Zeta" not in verslag, "een privékanaal staat niet in het werkverslag"
 
 
 if __name__ == "__main__":
