@@ -357,7 +357,8 @@ def tekst(v, prive_postvakken=(), over=None):
     z, g = v["zoom"], v["gesprekken"]
     # F5: een Zoom-stand die niet volledig is, maakt elk getal van Zoom een ondergrens; zonder stand is de chat onbekend
     minstens = "" if z["stand"] == "volledig" else "minstens "
-    stand = {"volledig": "", "ondergrens": "", "onbekend": " (Zoom-stand onbekend)"}.get(z["stand"], f" ({z['stand']})")
+    stand = {"volledig": "", "ondergrens": "", "onbekend": " (Zoom-stand onbekend)",
+             "voorlopig": " (voorlopig: De Zoomwacht kan de dag nog aanvullen)"}.get(z["stand"], f" ({z['stand']})")
     if minstens:
         # G5: zonder volledige Zoom-stand is elk getal een ondergrens, en de verdeling is niet te kennen
         r.append(f"- gesprekken in Zoom, Fathom en Plaud: minstens {g['aantal']}, minstens {g['minuten']} min "

@@ -1,6 +1,6 @@
 # Ontwerp: de dagvaststelling (De Dagbundelaar, uitbreiding)
 
-Versie 1.7, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
+Versie 1.8, 26-10-2026. Claude 2. v1.0 en v1.1 gingen naar Codex (docs/codex/dagvaststelling-ontwerp-r1.md en -r2.md,
 telkens "bouwen nee"). Deze versie beantwoordt ronde 2 (E1 tot E6) en beschrijft fase 1 zoals ze nu gebouwd is, met de
 uitkomst van een droge proef op de VM met de echte gegevens van 22-10-2026. Waar v1.2 afwijkt van wat hieronder in v1.1
 staat, geldt het blok "Wijzigingen in v1.2".
@@ -284,3 +284,10 @@ Zoomwacht faalde in de nacht), dan is Zoom onbekend; de ochtendketen schrijft de
 gisteren.
 
 Verder: namen zonder accenten vergelijken; de uitleg van een aanwijzing noemt hoogstens drie gesprekken, op volgorde.
+
+## Wijzigingen in v1.8 (antwoord op ronde 8, docs/codex/dagvaststelling-bouw-r8.md)
+
+| punt | antwoord in de code |
+|---|---|
+| K1 | 'ok' zegt dat een bron antwoordde, niet dat elke opname er al was. De Zoomwacht kan een dagregel nog herzien tot zes dagen na de dag (zoom_wacht.TERUGBLIK) en daarna nooit meer. Tot dan is een volledige regel 'voorlopig': 'minstens N, minstens M min (voorlopig: De Zoomwacht kan de dag nog aanvullen)'. Daarna exact; de nachtronde herberekent veertien dagen, dus de dag krijgt dan vanzelf een nieuwe versie |
+| K2 | de bezoeken zonder afspraak komen niet meer uit de lijsten van De Locatiewacht (die een samengevoegd parkeerstuk aan een ochtendafspraak kan hangen), maar uit haar verblijven met de echte meettijden (eerste en laatste meting binnen 300 m: aankomen en vertrekken) en de eigen koppeling: een verblijf hoort bij een afspraak alleen als die volgens de metingen doorging, binnen 300 m van haar plek en in haar venster |

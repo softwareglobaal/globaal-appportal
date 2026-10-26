@@ -73,6 +73,7 @@ NACHTVENSTER = 14                                             # zoveel dagen her
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
+ZOOM_TERUGBLIK = 6                                            # zoom_wacht.TERUGBLIK: zolang kan een dagregel nog herzien worden
 
 
 def bundelen():
@@ -403,6 +404,38 @@ def oordeel_uit_metingen(a, plek, punten, straal):
     return {"uitkomst": "niet_gezien", "tekst": f"auto gemeten elders, {V.uur_van(venster[0][0])} tot {V.uur_van(venster[-1][0])}"}
 
 
+def bezoeken_zonder_afspraak(verblijven, punten, gekoppeld, straal, min_minuten):
+    """K2: de bezoeken zonder afspraak, uit de verblijven van het dagboek maar met de echte meettijden en de eigen
+    koppeling aan afspraken (niet die van De Locatiewacht, die een samengevoegd parkeerstuk aan een ochtendafspraak kan
+    hangen). Een verblijf telt alleen met metingen binnen `straal` van zijn plek; van en tot zijn de eerste en de laatste
+    van die metingen (aankomen en vertrekken). Het hoort bij een afspraak als het overlapt met het venster (met MARGE_S)
+    van een afspraak die doorging volgens de metingen en binnen `straal` van haar plek ligt. Een project (waarschijnlijk of
+    bevestigd) of een twijfelgeval altijd; een andere plek alleen vanaf `min_minuten` en nooit een vaste plek (thuis)."""
+    uit = []
+    for v in verblijven:
+        if v.get("zekerheid") == "niet_mehdi" or v.get("lat") is None or v.get("lon") is None:
+            continue
+        gemeten = [p for p in punten if v["van"] - 300 <= p[0] <= v["tot"] + 300
+                   and LW_afstand(v["lat"], v["lon"], p[1], p[2]) <= straal]
+        if not gemeten:
+            continue
+        van, tot = gemeten[0][0], gemeten[-1][0]
+        if any(g0 - MARGE_S <= tot and van <= g1 + MARGE_S and LW_afstand(lat, lon, v["lat"], v["lon"]) <= straal
+               for g0, g1, lat, lon in gekoppeld):
+            continue
+        minuten = round((tot - van) / 60)
+        if v.get("zekerheid") == "onzeker":
+            soort = "twijfel"
+        elif v.get("project") and v.get("zekerheid") in ("waarschijnlijk", "bevestigd"):
+            soort = "project"
+        elif v.get("vaste_plek") or minuten < min_minuten:
+            continue
+        else:
+            soort = "elders"
+        uit.append({"van": V.uur_van(van), "tot": V.uur_van(tot), "minuten": minuten, "waar": v.get("waar"), "soort": soort})
+    return sorted(uit, key=lambda b: b["van"])
+
+
 def LW_afstand(lat1, lon1, lat2, lon2):
     import locatie_wacht as LW
     return LW.afstand_m(lat1, lon1, lat2, lon2)
@@ -433,12 +466,11 @@ def lees_locatie(dag, afspraken):
                 else:
                     per_id[aid] = {"uitkomst": "zonder_adres" if u.get("uitkomst") == "zonder_adres" else "onbekend",
                                    "tekst": u.get("tekst") or "plek onbekend"}
-            # een bezoek telt alleen met een echte meting erin (aankomen of vertrekken); een afgeleid stuk niet
-            bezoeken = [{"van": LW.uur(v["van"]), "tot": LW.uur(v["tot"]), "minuten": v.get("minuten"), "waar": v.get("waar"),
-                         "soort": soort} for soort, lijst in (("project", d["werf"]), ("twijfel", d["twijfel"]),
-                                                              ("elders", d["elders"])) for v in lijst
-                        if any(v["van"] - 300 <= p[0] <= v["tot"] + 300 for p in punten)]
-            return per_id, sorted(bezoeken, key=lambda b: b["van"]), stand, ""
+            gekoppeld = [(V.afspraak_venster(per_dag[aid])[0].timestamp(), V.afspraak_venster(per_dag[aid])[1].timestamp(),
+                          d["per_id"][aid]["lat"], d["per_id"][aid]["lon"])
+                         for aid, u in per_id.items() if u["uitkomst"] == "doorgegaan"]
+            bezoeken = bezoeken_zonder_afspraak(d.get("verblijven") or [], punten, gekoppeld, LW.AFSPRAAK_M, LW.MIN_BEZOEK)
+            return per_id, bezoeken, stand, ""
         reden = reden or f"dagboek {stand or 'zonder stand'}"
     except Exception as e:  # noqa: BLE001
         reden = type(e).__name__
@@ -547,12 +579,16 @@ def _telling(t):
     return "volledig" if t == "volledig" else ("ondergrens" if t.startswith(("ondergrens", "minstens", "laatst")) else "onbekend")
 
 
-def zoomstand(inhoud):
+def zoomstand(inhoud, dag=None, vandaag=None):
     """(gesprekken, chat) uit de Zoom-dagregel van De Zoomwacht (dagvaststelling v1.7, Codex G3 en J2). De dagregel is het
     bewijs: De Zoomwacht schrijft ze alleen voor een afgelopen dag, met de bronstanden van de ronde die ze schreef
     (zoom_wacht.dag_inhoud), en verlaagt een opgepakte regel nooit tijdens een ronde met uitval (ZOO-01). Gesprekken zijn
     dus volledig als de telling volledig is, de stand definitief en elke bron 'ok': dan schreef een volledige ronde na
-    het einde van de dag ze. Anders een ondergrens of onbekend. De chat heeft haar eigen telling (meestal ondergrens)."""
+    het einde van de dag ze. Anders een ondergrens of onbekend. De chat heeft haar eigen telling (meestal ondergrens).
+    K1: 'ok' zegt dat een bron antwoordde, niet dat elke opname er al was; een later gevonden gesprek kan een dag nog tot
+    ondergrens herzien, tot ZOOM_TERUGBLIK dagen na de dag (zoom_wacht.TERUGBLIK). Tot dan is een volledige regel
+    'voorlopig' (een ondergrens); daarna herziet De Zoomwacht hem nooit meer. De nachtronde herberekent veertien dagen, dus
+    de dag krijgt dan een nieuwe versie met het exacte getal."""
     try:
         d = json.loads(inhoud or "{}") or {}
     except ValueError:
@@ -562,6 +598,8 @@ def zoomstand(inhoud):
     if stand == "volledig" and not (isinstance(bronnen, dict) and bronnen and all(v == "ok" for v in bronnen.values())
                                     and d.get("stand") == "definitief"):
         stand = "ondergrens"
+    if stand == "volledig" and dag and vandaag and (date.fromisoformat(vandaag) - date.fromisoformat(dag)).days <= ZOOM_TERUGBLIK:
+        stand = "voorlopig"
     chat = d.get("chat")
     return stand, (_telling(chat.get("telling")) if isinstance(chat, dict) else "onbekend")
 
@@ -583,7 +621,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
               if str(x["uniek"]).startswith("dekking:") and str(x["uniek"]).count(":") >= 2}
     dagregels = {x["uniek"][9:]: x["inhoud"] or "" for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
-    zoom = {d: zoomstand(i) for d, i in dagregels.items()}
+    vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
+    zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
     gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
                                        "AND COALESCE(message_id, '') != ''", (eerste, laatste))
     soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
