@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import math
+import os
 import re
 import time
 from collections import Counter
@@ -627,6 +628,75 @@ def _waarde(d, k, reden="veld ontbreekt"):
     return v if v is not None else "onbekend: " + reden
 
 
+ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
+ARCHIEF_GELDIG = timedelta(hours=3)    # De Zoomarchivaris draait elk uur en slaat hoogstens een ronde over voor de
+                                       # keten; een ouder bestand zegt niets meer (Codex, Zoomarchief controle 4)
+NOOD_WISREGEL_WACHT = "Wacht met de wisregel: niet elke Zoom-opname staat bewezen in je Dropbox"
+
+
+def _archief(sleutel, pad=None, nu=None):
+    """'ja', 'nee' of 'onbekend' voor een veld uit het bestand van De Zoomarchivaris (zoom_archief.py): onbekend
+    zonder bestand, onleesbaar of ouder dan ARCHIEF_GELDIG."""
+    try:
+        with open(os.path.expanduser(pad or ARCHIEF_DEKKING), encoding="utf-8") as f:
+            d = json.load(f)
+        ts = datetime.fromisoformat(d["ts"])
+        oud = (nu or datetime.now(timezone.utc)) - ts > ARCHIEF_GELDIG
+    except (OSError, ValueError, KeyError, TypeError):
+        return "onbekend"
+    if oud or not isinstance(d.get(sleutel), bool):
+        return "onbekend"
+    if d[sleutel] and not archief_ronde_geslaagd(d["ts"]):
+        return "onbekend"  # Codex controle 5, punt 27: een ja telt alleen als de ronde die haar schreef geslaagd is
+    return "ja" if d[sleutel] else "nee"
+
+
+def archief_ronde_geslaagd(ts):
+    """Staat De Zoomarchivaris op het bord op klaar of waakt, met een hartslag van na het moment ts? Zo telt een ja
+    niet als de ronde erna begon en niet afliep (een volle schijf kan zelfs het intrekken beletten), of brak. Onbekend
+    bord: nee."""
+    try:
+        rij = bord.db_lees("SELECT status, taak, ts FROM status WHERE naam='zoom-archief'")
+        sinds = datetime.fromisoformat(str(ts))
+        hart = datetime.fromisoformat(str(rij[0]["ts"]).replace("Z", "+00:00")) if rij else None
+    except (bord.BordOnbekend, ValueError, KeyError, TypeError):
+        return False
+    if hart is None or rij[0].get("status") not in ("klaar", "waakt"):
+        return False
+    if rij[0].get("taak") != "opnames naar Dropbox":
+        return False  # Codex controle 7, punt 38: alleen een echte ronde, geen droge of proefronde, bevestigt een ja
+    hart = hart if hart.tzinfo else hart.replace(tzinfo=timezone.utc)
+    return hart >= sinds
+
+
+def archief_dekking(pad=None, nu=None):
+    """Driehoeksoverleg Zoomarchief K6 (27-10-2026): staat alles wat Zoom nu heeft bewezen in Mehdi's Dropbox? Mehdi:
+    eerst een kopie, dan pas wissen. Hierop opent ZA-01."""
+    return _archief("dekking", pad, nu)
+
+
+def archief_veilig(pad=None, nu=None):
+    """Staat alles wat ouder is dan 30 dagen bewezen in Dropbox, zonder verlies of onvolledige opname? Dat is wat de
+    wisregel van 30 dagen nodig heeft (Codex, Zoomarchief controle 3, punt 12)."""
+    return _archief("wisregel_veilig", pad, nu)
+
+
+def wisregel_wacht(r):
+    """Codex, Zoomarchief controle 3, punt 12: staat er een ZA-01-voorstel open of goedgekeurd terwijl de kopie niet
+    veilig is voor de wisregel, dan een nood voor Mehdi, elke ronde opnieuw tot het weer veilig is. De besluitknop op het
+    bord voert zelf niets uit; dit is de waarschuwing bij het besluit."""
+    try:
+        rijen = voorstellen_lezen()
+    except bord.BordOnbekend:
+        # Codex controle 4, punt 22: zonder de voorstellen weet ik niet of de waarschuwing nog geldt; niets sluiten
+        r.nood("Zoom-advies niet terug te lezen op het bord", "claude-code")
+        r.noden_onbekend = True
+        return
+    if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
+            and archief_veilig() != "ja":
+        r.nood(NOOD_WISREGEL_WACHT, "mehdi")
+
+
 def adviezen(d, gesprekken=0, staat_acc=None):
     """Elke regel is open, goed of onbekend. Ontbrekende invoer opent niets."""
     uit = []
@@ -668,9 +738,18 @@ def adviezen(d, gesprekken=0, staat_acc=None):
     reden01 = f"Opslag {pct}% gebruikt"
     if store and store.get("vol_rond"):
         reden01 += f"; vermoedelijk vol rond {store['vol_rond']}"
-    voeg("ZA-01", "hoog" if hoog01 else "middel", open01, {"wisregel": False, "band": band},
-         reden01 + "." if open01 else "",
+    # Driehoeksoverleg Zoomarchief K6 en Codex-controle 1 (27-10-2026): Mehdi wil eerst een volledige kopie, dan pas
+    # wissen. Zolang De Zoomarchivaris geen dekking ja meldt, is ZA-01 geen open advies maar onbekend, zodat er geen
+    # voorstel "zet de wisregel aan" komt. De stand draagt de kopie: een voorstel van voor de kopie (zonder die sleutel)
+    # houdt het advies na de kopie dus niet tegen als het geweigerd werd.
+    dekking = archief_dekking()
+    reden01 += "; alle opnames staan bewezen in je Dropbox"
+    voeg("ZA-01", "hoog" if hoog01 else "middel", open01 if dekking == "ja" or open01 is not True else None,
+         {"wisregel": False, "band": band, "kopie": "ja"}, reden01 + "." if open01 else "",
          "Zet een wisregel van 30 dagen aan; houd transcript en cloudopname aan.")
+    if dekking != "ja" and open01:
+        uit[-1]["reden"] = ("wacht op de volledige kopie in je Dropbox (De Zoomarchivaris): " +
+                            ("nog niet alle opnames bewezen" if dekking == "nee" else "dekking onbekend"))
 
     uop = gebruiker.get("recording.auto_recording") if gebruiker else None
     utr = gebruiker.get("recording.recording_audio_transcript") if gebruiker else None
@@ -827,6 +906,13 @@ def _zelfde(a, r):
         p.get("stand") == a["stand"] and r.get("status") != "vervallen"
 
 
+def _verouderd(a, r):
+    """Een open ZA-01-voorstel van voor De Zoomarchivaris: zijn stand kent de kopie niet. Het houdt het advies met een
+    bewezen kopie niet tegen (Codex, Zoomarchief controle 2); Mehdi weigert het oude zelf."""
+    stand = _params(r).get("stand")
+    return a["code"] == "ZA-01" and isinstance(stand, dict) and "kopie" not in stand
+
+
 def te_versturen(adviezen_lijst, voorstellen, klok, max_nieuw=3):
     week = week_van(klok)
     deze_week = sum(1 for r in voorstellen if _week_ts(r.get("ts")) == week and _params(r).get("zoom_advies"))
@@ -835,7 +921,8 @@ def te_versturen(adviezen_lijst, voorstellen, klok, max_nieuw=3):
         if a["toestand"] != "open":
             continue
         bij_regel = [r for r in voorstellen if _params(r).get("zoom_advies") == a["code"]]
-        if any(_zelfde(a, r) for r in bij_regel) or any(r.get("status") == "open" for r in bij_regel):
+        if any(_zelfde(a, r) for r in bij_regel) or any(r.get("status") == "open" and not _verouderd(a, r)
+                                                         for r in bij_regel):
             continue
         kandidaten.append(a)
     kandidaten.sort(key=lambda a: (ERNST[a["ernst"]], a["code"]))
@@ -1000,7 +1087,7 @@ def vingerafdruk(obj):
 
 UITVOER_SLEUTELS = frozenset((
     "naam status taak detail voorstel actie doel reden parameters runbook regelversie stand cyclus zoom_advies "
-    "wisregel band cloud geluid transcript video tweestaps wachtkamer vergrendeld codes_vergrendeld_uit "
+    "wisregel kopie band cloud geluid transcript video tweestaps wachtkamer vergrendeld codes_vergrendeld_uit "
     "code voor_host locatie model weinig_gebruik bewaartermijn apps banden lege_eigen_rollen lege_groepen "
     "afmelden api_wijzigingen transcript_band facebook_ongebruikt voor soort sleutel uniek titel inhoud "
     "week gemeten scan delen beveiliging opnames ai licenties gebruik adviezen wachtrij tekst rollen "
@@ -1227,6 +1314,7 @@ def herhaal_bewaarde_scannoden(r, staat):
     """Herhaal de bekende scannoden bij een Zoom-ronde die de accountscan niet kan bereiken."""
     if not scan_aan(r.werkwijze):
         return
+    wisregel_wacht(r)
     account = staat.get("account") if isinstance(staat, dict) else None
     scannoden = account.get("scannoden") if isinstance(account, dict) else None
     if isinstance(scannoden, dict):
@@ -1237,6 +1325,7 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
     """Een accountdeel binnen de bestaande Zoom-ronde; schrijft staat pas na geslaagde bordstappen."""
     if not scan_aan(r.werkwijze):
         return ""
+    wisregel_wacht(r)
     oud = copy.deepcopy(staat.get("account") or {})
     vorige_noden = oud.get("scannoden") if isinstance(oud.get("scannoden"), dict) else {}
     scannoden = copy.deepcopy(vorige_noden)

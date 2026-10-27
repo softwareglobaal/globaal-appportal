@@ -41,6 +41,8 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_weekoverzicht.py",
     "mijnagents-runner/tests/test_whatsapp.py",
     "mijnagents-runner/tests/test_zoom_account.py",
+    "mijnagents-runner/tests/test_zoom_archief.py",
+    "mijnagents-runner/tests/test_zoom_archief_bouwstenen.py",
     "mijnagents-runner/tests/test_zoom_wacht.py",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "mijnagents/test_gesprekken_api.py",

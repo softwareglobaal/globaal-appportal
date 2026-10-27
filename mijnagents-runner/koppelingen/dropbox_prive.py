@@ -9,7 +9,11 @@ DROPBOX_PRIVE_BASIS: de map waaronder alles landt; leeg bij een app met
 Eén taak: een lokale map (archief op de VM) spiegelen naar Dropbox. Alleen
 schrijven, nooit verwijderen; wat lokaal weg is, blijft in Dropbox staan. Welke
 bestanden al geüpload zijn staat in <lokale map>/.dropbox_gespiegeld.json
-(pad -> grootte + mtime), zodat een ronde alleen het nieuwe verstuurt."""
+(pad -> grootte + mtime), zodat een ronde alleen het nieuwe verstuurt.
+
+Daarnaast, voor De Zoomarchivaris: upload_bestand zet een lokaal bestand van elke grootte in Dropbox zonder ooit te
+overschrijven, en inhoud_hash en metadata bewijzen dat wat er staat hetzelfde is als wat we stuurden."""
+import hashlib
 import json
 import os
 import time
@@ -21,6 +25,35 @@ API = "https://api.dropboxapi.com"
 INHOUD = "https://content.dropboxapi.com"
 STAAT = ".dropbox_gespiegeld.json"
 MAX_BESTAND = 140 * 1024 * 1024  # enkele upload-call; groter slaan we over met melding
+BLOK = 4 * 1024 * 1024    # de blokgrootte van de content_hash van Dropbox
+BROK = 32 * 1024 * 1024   # een stuk van een upload-sessie: een veelvoud van BLOK, ruim onder 150 MB per call
+
+
+class Bestaat(RuntimeError):
+    """Op dat pad staat al iets in Dropbox; upload_bestand overschrijft nooit."""
+
+
+class TijdOp(RuntimeError):
+    """De tijdsgrens van de ronde (GRENS) is bereikt: er begint geen nieuwe call meer, en geen herkansing."""
+
+
+# De tijdsgrens van een ronde in time.monotonic(), of None. De Zoomarchivaris zet ze per ronde, zodat ook een call en
+# zijn herkansingen niet voorbij haar grens lopen (Codex, Zoomarchief controle 4, punt 24).
+GRENS = {"tot": None}
+
+
+def _rest():
+    return None if GRENS["tot"] is None else GRENS["tot"] - time.monotonic()
+
+
+def _kort_wachten(normaal):
+    """De time-out van een hulpcall (token, root): normaal, maar nooit voorbij de grens van de ronde."""
+    rest = _rest()
+    if rest is None:
+        return normaal
+    if rest <= 0:
+        raise TijdOp("tijdsgrens van de ronde")
+    return max(1.0, min(float(normaal), rest))
 
 
 def _env(pad):
@@ -49,7 +82,7 @@ def _path_root():
             try:
                 req = urllib.request.Request(f"{API}/2/users/get_current_account", b"null",
                                              {"Authorization": f"Bearer {_toegang()}", "Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=20) as r:
+                with urllib.request.urlopen(req, timeout=_kort_wachten(20)) as r:
                     ri = (json.load(r).get("root_info") or {})
                 if ri.get("root_namespace_id") and ri.get("root_namespace_id") != ri.get("home_namespace_id"):
                     ns = ri.get("root_namespace_id", "")
@@ -78,7 +111,7 @@ def _toegang():
         "client_id": os.environ["DROPBOX_PRIVE_APP_KEY"].strip(),
         "client_secret": os.environ["DROPBOX_PRIVE_APP_SECRET"].strip(),
     }).encode()
-    with urllib.request.urlopen(f"{API}/oauth2/token", data, timeout=20) as r:
+    with urllib.request.urlopen(f"{API}/oauth2/token", data, timeout=_kort_wachten(20)) as r:
         a = json.load(r)
     _token["waarde"], _token["tot"] = a["access_token"], time.time() + int(a.get("expires_in", 14400)) - 300
     return _token["waarde"]
@@ -88,10 +121,17 @@ def _verzoek(url, data, koppen, pogingen=5):
     """POST met herkansing bij 429 (Retry-After) en 5xx."""
     wacht = 5
     for poging in range(pogingen):
+        if (_rest() or 1) <= 0:
+            raise TijdOp("tijdsgrens van de ronde")
         req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **_path_root(), **koppen})
+        rest = _rest()  # Codex controle 5, punt 29: opnieuw na het token en de root, die zelf ook tijd kosten
+        if rest is not None and rest <= 0:
+            raise TijdOp("tijdsgrens van de ronde")
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                return json.load(r)
+            with urllib.request.urlopen(req, timeout=120 if rest is None else max(1.0, min(120.0, rest))) as r:
+                inhoud = r.read()
+            # upload_session/append_v2 geeft bij succes een lege body (Codex, Zoomarchief controle 1)
+            return json.loads(inhoud) if inhoud.strip() else None
         except urllib.error.HTTPError as e:
             if e.code == 429 or e.code >= 500:
                 if poging == pogingen - 1:
@@ -100,6 +140,9 @@ def _verzoek(url, data, koppen, pogingen=5):
                     pauze = max(int(e.headers.get("Retry-After", "0")), wacht)
                 except ValueError:
                     pauze = wacht
+                rest = _rest()
+                if rest is not None and rest <= pauze:
+                    raise TijdOp("tijdsgrens van de ronde") from None
                 time.sleep(min(pauze, 120))
                 wacht *= 2
                 continue
@@ -114,7 +157,8 @@ def account():
     """E-mail en naam van het gekoppelde account (om te zien dat het Mehdi's is)."""
     a = _verzoek(f"{API}/2/users/get_current_account", b"null", {"Content-Type": "application/json"})
     return {"email": a.get("email", ""), "naam": (a.get("name") or {}).get("display_name", ""),
-            "type": (a.get("account_type") or {}).get(".tag", ""), "root": (a.get("root_info") or {}).get(".tag", "")}
+            "type": (a.get("account_type") or {}).get(".tag", ""), "root": (a.get("root_info") or {}).get(".tag", ""),
+            "id": a.get("account_id", "")}
 
 
 def upload(inhoud, extern_pad, overschrijf=True):
@@ -122,6 +166,141 @@ def upload(inhoud, extern_pad, overschrijf=True):
     arg = {"path": basis() + extern_pad, "mode": "overwrite" if overschrijf else "add", "mute": True, "autorename": False}
     return _verzoek(f"{INHOUD}/2/files/upload", inhoud,
                     {"Content-Type": "application/octet-stream", "Dropbox-API-Arg": json.dumps(arg)})
+
+
+def inhoud_hash(pad):
+    """De content_hash van Dropbox voor een lokaal bestand: sha256 over de sha256 van elk blok van 4 MB."""
+    totaal = hashlib.sha256()
+    with open(pad, "rb") as f:
+        while True:
+            blok = f.read(BLOK)
+            if not blok:
+                return totaal.hexdigest()
+            totaal.update(hashlib.sha256(blok).digest())
+
+
+def _foutinhoud(e):
+    """Het antwoord van Dropbox bij een 409, een keer gelezen en onthouden (een HTTPError leest maar een keer)."""
+    if not hasattr(e, "_dropbox"):
+        try:
+            e._dropbox = json.loads(e.read(4096) or b"{}")
+        except (ValueError, OSError, AttributeError):
+            e._dropbox = {}
+    return e._dropbox if isinstance(e._dropbox, dict) else {}
+
+
+def _fouttag(e):
+    """De error_summary van een 409 van Dropbox (bv. 'path/not_found/..'), of leeg."""
+    return str(_foutinhoud(e).get("error_summary", ""))
+
+
+class Verschoven(RuntimeError):
+    """Dropbox heeft een ander deel van de upload-sessie dan wij denken (incorrect_offset), bv. na een herhaalde append
+    waarvan het eerste antwoord verloren ging. correct is de plek waar Dropbox verder wil."""
+
+    def __init__(self, correct):
+        self.correct = correct
+        super().__init__(f"upload-sessie verschoven naar {correct}")
+
+
+def _juiste_plek(fout):
+    """correct_offset uit een incorrect_offset-fout, ook genest onder lookup_failed (finish), of None."""
+    for _ in range(4):
+        if not isinstance(fout, dict):
+            return None
+        if fout.get(".tag") == "incorrect_offset":
+            c = fout.get("correct_offset")
+            return c if type(c) is int else None
+        fout = fout.get(fout.get(".tag") or "")  # genest: {'.tag': 'lookup_failed', 'lookup_failed': {...}}
+    return None
+
+
+def metadata(extern_pad):
+    """Wat er in Dropbox op extern_pad staat ({'grootte', 'content_hash', 'pad'}), of None als er niets staat."""
+    try:
+        m = rpc("files/get_metadata", {"path": basis() + extern_pad})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "not_found" in _fouttag(e):
+            return None
+        raise
+    return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", ""),
+            "soort": m.get(".tag", "")}
+
+
+def _stuur(pad, inhoud, arg):
+    try:
+        return _verzoek(f"{INHOUD}/2/{pad}", inhoud,
+                        {"Content-Type": "application/octet-stream", "Dropbox-API-Arg": json.dumps(arg)})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "conflict" in (tag := _fouttag(e)):
+            raise Bestaat(tag[:120]) from None
+        if e.code == 409 and (plek := _juiste_plek(_foutinhoud(e).get("error"))) is not None:
+            raise Verschoven(plek) from None
+        raise
+
+
+def upload_bestand(lokaal, extern_pad, bewaker=None):
+    """Een lokaal bestand naar Dropbox, ook boven 150 MB (upload-sessie in stukken van BROK). Nooit overschrijven: mode
+    add zonder autorename, dus staat er al iets op dat pad, dan Bestaat. Geeft {'grootte', 'content_hash', 'pad'} zoals
+    Dropbox het na de upload teruggeeft; dat is het bewijs, niet het feit dat de call slaagde. Zegt Dropbox dat het een
+    ander deel heeft (incorrect_offset, na een herhaalde call), dan gaan we verder waar Dropbox wil, uit hetzelfde
+    bestand. bewaker() draait voor elk stuk: een fout daar breekt de sessie af zonder finish, dus zonder bestand."""
+    commit = {"path": basis() + extern_pad, "mode": "add", "autorename": False, "mute": True}
+    grootte = os.path.getsize(lokaal)
+    with open(lokaal, "rb") as f:
+        if grootte <= BROK:
+            m = _stuur("files/upload", f.read(), commit)
+        else:
+            if bewaker:
+                bewaker()
+            sessie = _stuur("files/upload_session/start", f.read(BROK), {"close": False})["session_id"]
+            plek, sprongen = BROK, 0
+            while True:
+                if bewaker:
+                    bewaker()
+                f.seek(plek)
+                laatste = grootte - plek <= BROK
+                try:
+                    if laatste:
+                        m = _stuur("files/upload_session/finish", f.read(),
+                                   {"cursor": {"session_id": sessie, "offset": plek}, "commit": commit})
+                        break
+                    _stuur("files/upload_session/append_v2", f.read(BROK),
+                           {"cursor": {"session_id": sessie, "offset": plek}, "close": False})
+                    plek += BROK
+                except Verschoven as v:
+                    sprongen += 1
+                    if sprongen > 5 or not 0 < v.correct <= grootte:
+                        raise
+                    plek = v.correct
+    if not isinstance(m, dict):
+        raise RuntimeError("Dropbox gaf geen metadata na de upload")
+    return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", "")}
+
+
+def lijst_map(extern_pad, bewaker=None):
+    """Alle bestanden onder een map in Dropbox, recursief: {pad in kleine letters: {'grootte', 'content_hash', 'pad'}}.
+    None als de map er niet is. Dropbox vergelijkt paden zonder hoofdletters; wij dus ook. bewaker() draait voor elke
+    pagina."""
+    uit = {}
+    if bewaker:
+        bewaker()
+    try:
+        d = rpc("files/list_folder", {"path": basis() + extern_pad, "recursive": True, "limit": 2000})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "not_found" in _fouttag(e):
+            return None
+        raise
+    while True:
+        for x in d.get("entries") or []:
+            if x.get(".tag") == "file":
+                uit[(x.get("path_lower") or x.get("path_display", "").lower())] = {
+                    "grootte": x.get("size"), "content_hash": x.get("content_hash", ""), "pad": x.get("path_display", "")}
+        if not d.get("has_more"):
+            return uit
+        if bewaker:
+            bewaker()
+        d = rpc("files/list_folder/continue", {"cursor": d["cursor"]})
 
 
 def _staat_pad(lokaal):
