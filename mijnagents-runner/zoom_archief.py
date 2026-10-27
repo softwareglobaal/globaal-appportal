@@ -118,7 +118,7 @@ def lees_staat():
         with open(staat_pad(), encoding="utf-8") as f:
             s = json.load(f)
     except FileNotFoundError:
-        if os.path.exists(os.path.join(DATA, ".in_gebruik")):
+        if any(os.path.exists(os.path.join(DATA, x)) for x in (".in_gebruik", "dekking.json")):
             # Codex controle 9, punt 40: na eerdere rondes is een ontbrekende staat een fout; anders vergeet ik wat ik zag
             raise ValueError("staat.json ontbreekt na eerdere rondes") from None
         s = {}
@@ -294,22 +294,28 @@ def opname_json(m, bewezen):
 
 
 def schrijf_beschrijving(inhoud, pad, werkmap, bewaker=None):
-    """Een opname.json naar Dropbox; staat er al een, dan blijft die (nooit overschrijven)."""
+    """Een opname.json naar Dropbox, bewezen zoals een mediabestand (Codex controle 10, punt 46): Dropbox moet dezelfde
+    grootte en content_hash geven als wat ik schreef. Staat er al een andere, dan overschrijf ik niets: Afwijking.
+    Geeft de content_hash."""
     os.makedirs(werkmap, exist_ok=True)
     tmp = os.path.join(werkmap, kort(pad, 16) + ".json.deel")
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(inhoud, fh, ensure_ascii=False, indent=1)
     try:
+        h, n = D.inhoud_hash(tmp), os.path.getsize(tmp)
         try:
-            D.upload_bestand(tmp, pad, bewaker=bewaker)
+            m = D.upload_bestand(tmp, pad, bewaker=bewaker)
         except D.Bestaat:
-            pass
+            m = D.metadata(pad)
+        if not m or m.get("grootte") != n or m.get("content_hash") != h:
+            raise Afwijking("andere beschrijving op dat pad in Dropbox")
+        return h
     finally:
         os.remove(tmp)
 
 
 def schrijf_opname_json(m, bewezen, werkmap, bewaker=None):
-    schrijf_beschrijving(opname_json(m, bewezen), f"{mapnaam(m)}/opname.json", werkmap, bewaker)
+    return schrijf_beschrijving(opname_json(m, bewezen), f"{mapnaam(m)}/opname.json", werkmap, bewaker)
 
 
 def bewijzen_nakijken(staat, bewaker=None, aanwezig=()):
@@ -339,8 +345,15 @@ def bewijzen_nakijken(staat, bewaker=None, aanwezig=()):
             if bewaker:
                 bewaker()
             x = D.metadata(pad)
-        if x:
+        if x and isinstance(e, dict) and e.get("hash") and x.get("content_hash") == e["hash"]:
             continue
+        if x and isinstance(e, dict) and e.get("hash"):
+            # er staat een andere beschrijving dan ik schreef: niets overschrijven, een blokkade (punt 46)
+            staat["blokkades"][f"opname:{uuid}"] = OPNAME_AFWIJKING
+            weg += 1
+            continue
+        if x and isinstance(e, str) and uuid not in aanwezig:
+            continue  # een oude vermelding van een meeting die niet meer in Zoom staat: niet opnieuw te maken
         del staat["meetings"][uuid]
         weg += 1
         if isinstance(e, dict) and e.get("inhoud"):
@@ -492,6 +505,7 @@ def intrekken(reden, nu_utc=nu, staat=None):
 
 SCHIJF_VOL = "Te weinig vrije schijf op de VM voor de kopie van de Zoom-opnames"
 OPNAME_JSON = "Beschrijving van een Zoom-opname niet in Dropbox gezet"
+OPNAME_AFWIJKING = "Beschrijving van een Zoom-opname in Dropbox wijkt af van wat ik schreef"
 
 
 def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu):
@@ -693,12 +707,14 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 inhoud, pad = opname_json(m, staat["bestanden"]), f"{mapnaam(m)}/opname.json"
                 try:
                     bewaker()
-                    schrijf_beschrijving(inhoud, pad, werkmap, bewaker=bewaker)
-                    staat["meetings"][m["uuid"]] = {"map": pad.rsplit("/", 1)[0], "inhoud": inhoud}
+                    h = schrijf_beschrijving(inhoud, pad, werkmap, bewaker=bewaker)
+                    staat["meetings"][m["uuid"]] = {"map": pad.rsplit("/", 1)[0], "inhoud": inhoud, "hash": h}
                     staat["blokkades"].pop(f"opname:{m['uuid']}", None)
                     staat["beschrijvingen"].pop(m["uuid"], None)
                 except (Stop, D.TijdOp) as e:
                     gestopt = str(e)
+                except Afwijking:  # een andere beschrijving staat er al: niets overschrijven (Codex controle 10, punt 46)
+                    staat["blokkades"][f"opname:{m['uuid']}"] = OPNAME_AFWIJKING
                 except Exception:  # noqa: BLE001  blijft gemeld tot het lukt (Codex controle 4, punt 23)
                     staat["blokkades"][f"opname:{m['uuid']}"] = OPNAME_JSON
                     staat["beschrijvingen"][m["uuid"]] = {"inhoud": inhoud, "pad": pad}
@@ -709,8 +725,8 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 continue  # een meeting die nog in Zoom staat, schrijft de gewone stap hierboven opnieuw
             try:
                 bewaker()
-                schrijf_beschrijving(b["inhoud"], b["pad"], werkmap, bewaker=bewaker)
-                staat["meetings"][uuid] = {"map": b["pad"].rsplit("/", 1)[0], "inhoud": b["inhoud"]}
+                h = schrijf_beschrijving(b["inhoud"], b["pad"], werkmap, bewaker=bewaker)
+                staat["meetings"][uuid] = {"map": b["pad"].rsplit("/", 1)[0], "inhoud": b["inhoud"], "hash": h}
                 staat["blokkades"].pop(f"opname:{uuid}", None)
                 del staat["beschrijvingen"][uuid]
             except (Stop, D.TijdOp) as e:

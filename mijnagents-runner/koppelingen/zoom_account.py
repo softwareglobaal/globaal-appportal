@@ -643,7 +643,7 @@ def _archief(sleutel, pad=None, nu=None):
             d = json.load(f)
         ts = datetime.fromisoformat(d["ts"])
         leeftijd = (nu or datetime.now(timezone.utc)) - ts
-        oud = leeftijd > ARCHIEF_GELDIG or leeftijd < -timedelta(minutes=5)  # Codex controle 9, punt 44: geen toekomst
+        oud = leeftijd > ARCHIEF_GELDIG or leeftijd < timedelta(0)  # Codex controle 9 en 10: geen enkele toekomst
     except (OSError, ValueError, KeyError, TypeError):
         return "onbekend"
     if oud or not isinstance(d.get(sleutel), bool):
@@ -683,10 +683,18 @@ def archief_veilig(pad=None, nu=None):
     return _archief("wisregel_veilig", pad, nu)
 
 
-def wisregel_wacht(r, staat=None):
+def wisregel_wacht(r, staat=None, vers=None):
     """Codex, Zoomarchief controle 3, punt 12: staat er een ZA-01-voorstel open of goedgekeurd terwijl de kopie niet
     veilig is voor de wisregel, dan een nood voor Mehdi, elke ronde opnieuw tot het weer veilig is. De besluitknop op het
     bord voert zelf niets uit; dit is de waarschuwing bij het besluit."""
+    # Codex controle 9 en 10, punten 42, 47 en 48: staat de wisregel aan (volgens de bewaarde accountscan, of de stand
+    # die deze ronde vers las), dan meld ik zelfstandig dat de kopie niet veilig is, ook zonder voorstel en ook als het
+    # bord niet te lezen is; de wisregel wist dan echt
+    account = staat.get("account") if isinstance(staat, dict) else None
+    inst = ((account or {}).get("basis") or {}).get("instellingen") if isinstance(account, dict) else None
+    aan = (isinstance(inst, dict) and inst.get("recording.auto_delete_cmr") is True) or vers is True
+    if aan and archief_veilig() != "ja":
+        r.nood(NOOD_WISREGEL_AAN, "mehdi")
     try:
         rijen = voorstellen_lezen()
     except bord.BordOnbekend:
@@ -697,12 +705,6 @@ def wisregel_wacht(r, staat=None):
     if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
             and (archief_veilig() != "ja" or archief_dekking() != "ja"):  # Codex controle 9, punt 41
         r.nood(NOOD_WISREGEL_WACHT, "mehdi")
-    # Codex controle 9, punt 42: staat de wisregel volgens de laatste accountscan al aan, dan meld ik zelfstandig dat de
-    # kopie niet veilig is, ook zonder voorstel; de wisregel wist dan echt
-    account = staat.get("account") if isinstance(staat, dict) else None
-    inst = ((account or {}).get("basis") or {}).get("instellingen") if isinstance(account, dict) else None
-    if isinstance(inst, dict) and inst.get("recording.auto_delete_cmr") is True and archief_veilig() != "ja":
-        r.nood(NOOD_WISREGEL_AAN, "mehdi")
 
 
 def adviezen(d, gesprekken=0, staat_acc=None):
@@ -1364,6 +1366,7 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
         d["app_rechten"] = apprechten_veranderd(weekbasis, _bekend(d, "apps"),
                                                oud.get("laatst_bewezen_apprechten"))
         adv = adviezen(d, gesprekken, nieuw)
+        wisregel_wacht(r, staat, vers=(_bekend(d, "account") or {}).get("recording.auto_delete_cmr"))
         try:
             voorstellen = voorstellen_lezen()
         except bord.BordOnbekend:
