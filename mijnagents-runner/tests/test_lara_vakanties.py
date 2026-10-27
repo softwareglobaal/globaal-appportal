@@ -172,7 +172,8 @@ try:
     _n = len(_ins)
     W.lara_meldingen([_ids["fout"]], _wk, _er + [_gewist], "tok", _nu)
     check("tweede ronde: geen dubbele vraag", len(_ins) == _n and not _pat, str(_ins[_n:]))
-    _wk_meer = [dict(_wk[0], afspraken=_wk[0]["afspraken"] + [("2026-11-05T17:45", "!! Mehdi: [LA] Lara ophalen bij oma (optioneel)")])]
+    _wk_meer = [dict(_wk[0], afspraken=_wk[0]["afspraken"] + [("2026-11-05T17:45", "!! Mehdi: [LA] Lara ophalen bij oma (optioneel)")],
+                     ids=_wk[0]["ids"] + ["oma-0511"])]
     W.lara_meldingen([_ids["fout"]], _wk_meer, _er + [_gewist], "tok", _nu)
     check("de weekvraag wordt aangevuld als er een ophaalmoment bij komt (inhoudsmerk)",
           len(_ins) == _n and len(_pat) == 1 and "05/11" in _pat[0][1]["description"], str(_pat))
@@ -714,6 +715,31 @@ try:
 finally:
     for k, v in _o9.items():
         setattr(W, k, v)
+# hertest 17: een titelwijziging (bv. '(optioneel)' erbij) is geen nieuw ophaalmoment; een eenmalig feest telt niet;
+# een gewiste getimede ophaling met 'vakantie' in de titel geeft wel een vraag
+_ins12 = []
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen12-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins12.append(body) or {"id": f"z{len(_ins12)}"}
+    W._patch = lambda a, body, tok, **k: None
+    W._prive_item_lezen = lambda eid, tok: None
+    _twee = [lara("2026-11-03", "17:30", "!! Mehdi: Lara ophalen bij oma"), lara("2026-11-06")]
+    W.lara_meldingen([], W.lara_vakantieweken(_twee, namen, date(2026, 10, 27)), [], "tok", _nu9)
+    _twee[0]["titel"] += " (optioneel)"
+    W.lara_meldingen([], W.lara_vakantieweken(_twee, namen, date(2026, 10, 27)), [], "tok", _nu9)
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("alleen een titelwijziging maakt geen tweede weekvraag (stabiele identiteit)", len(_ins12) == 1, str(len(_ins12)))
+check("een eenmalig verjaardagsfeest in Lara's agenda is geen vast ophaalmoment",
+      not W.lara_vakantieweken([lara("2026-11-04", "14:00", "Lara verjaardagsfeest bij Noor")], namen, date(2026, 10, 27)))
+_vakophaal = [json.dumps(["!! Mehdi: Lara ophalen voor vakantie", "confirmed", {"dateTime": "2026-10-30T16:00:00+01:00"}, {}, "",
+                          [], False]), "2026-10-30"]
+check("een gewiste getimede ophaling met 'vakantie' in de titel geeft wel een vraag",
+      (S.lara_wissing_kandidaat(LARA, {"id": "vo1", "status": "cancelled"}, _vakophaal, _nu, dagen, dekking) or {}).get("dag")
+      == "2026-10-30")
+check("de wisregel van laag 1 zegt: een Lara-reeks in een vakantie nooit stopzetten",
+      "Lara-reeks in een vakantie nooit stopzetten" in (HIER / "claude-hooks" / "regels.json").read_text(encoding="utf-8"))
 check("opeenvolgende vakantiedagen: één weekvraag, geen tweede en geen dagelijkse bijwerking als afspraken voorbij gaan",
       len(_ins11) == 1 and not _pat11, str((len(_ins11), len(_pat11))))
 check("een weekvraag begint nooit in het verleden",

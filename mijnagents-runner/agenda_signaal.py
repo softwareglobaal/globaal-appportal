@@ -192,8 +192,6 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
     {sleutel, dag, uur, titel}; de titel blijft privé en komt in geen uitvoer."""
     if ev.get("status") != "cancelled" or not _is_lara(kal) or _is_rit(ev, vorig):
         return None
-    if any(W.LARA_VRIJ_RE.search(t) for t in _titels(ev, vorig)):
-        return None          # een vakantie- of feestdagblok weghalen is geen gewiste afspraak (zo ging FR-210 net weg)
     reeks = _lara_reeks(kal, ev) or ev.get("id") or ""
     if not reeks:
         return None
@@ -203,6 +201,11 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
             oud = json.loads(vorig[0])
         except (ValueError, TypeError):
             pass
+    hele_dag = any("date" in (t or {}) and "dateTime" not in (t or {})
+                   for t in (ev.get("start"), ev.get("originalStartTime"), oud[2] if len(oud) > 2 and isinstance(oud[2], dict) else None)
+                   if t)
+    if hele_dag and any(W.LARA_VRIJ_RE.search(t) for t in _titels(ev, vorig)):
+        return None          # een vakantie- of studiedagblok weghalen is geen gewiste afspraak; een getimede ophaling wel
     if len(oud) > 1 and oud[1] == "cancelled":
         return None                                   # al eerder geschrapt gezien: geen tweede vraag
     # eerst de actuele start die Google meegeeft, dan de laatst bekende uit de vingerafdruk, dan de oorspronkelijke: een

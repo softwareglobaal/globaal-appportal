@@ -2533,19 +2533,23 @@ def lara_vakantieweken(items, namen, vandaag, vooruit=21):
         if a.get("kalender") not in lara or a.get("hele_dag") or "T" not in (a.get("start") or "") \
                 or dag not in namen or lees_titel(a.get("titel") or "")["reistijd"] or lara_vervalt(a):
             continue
+        if not (a.get("_reeks") or a.get("_terugkerend")
+                or re.search(r"ophal|zwemles|naar huis brengen", a.get("titel") or "", re.I)):
+            continue          # een eenmalig feest of uitstap is geen vast ophaalmoment (hertest 17)
         d = date.fromisoformat(dag)
         if not (vandaag <= d <= grens):
             continue
         j, w, _ = d.isocalendar()
-        weken.setdefault(f"{j}-W{w:02d}", {"naam": namen[dag], "dagen": set(), "afspraken": []})
+        weken.setdefault(f"{j}-W{w:02d}", {"naam": namen[dag], "dagen": set(), "afspraken": [], "ids": []})
         weken[f"{j}-W{w:02d}"]["afspraken"].append((a["start"][:16], a.get("titel") or ""))
+        weken[f"{j}-W{w:02d}"]["ids"].append(a.get("id") or a["start"][:16])
     uit = []
     for wk, v in sorted(weken.items()):
         j, w = int(wk[:4]), int(wk[-2:])
         maandag = date.fromisocalendar(j, w, 1)
         vrij = [maandag + timedelta(days=i) for i in range(7) if (maandag + timedelta(days=i)).isoformat() in namen]
         uit.append({"week": wk, "naam": v["naam"], "van": max(min(vrij), vandaag).isoformat(), "tot": max(vrij).isoformat(),
-                    "afspraken": sorted(v["afspraken"])})
+                    "afspraken": sorted(v["afspraken"]), "ids": sorted(v["ids"])})
     return uit
 
 
@@ -2983,7 +2987,7 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
     wissen doet de agent niet. Alleen aanroepen na een volledige lezing. Geeft regels zonder Lara-titels (privé)."""
     nu = nu or nu_lokaal()
     gewenst = dict([lara_afwijking_body(b, nu.date()) for b in afwijkingen] + [lara_week_body(w) for w in weken])
-    weekinhoud = {f"week:{w['week']}": w["afspraken"] for w in weken}
+    weekinhoud = {f"week:{w['week']}": w.get("ids") or [s_ for s_, _ in w["afspraken"]] for w in weken}
     reg = _lara_vragen_lezen()
     er = {(x.get("_merk") or {}).get(LARAMERK): x for x in bestaande
           if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(LARAMERK)
@@ -2996,7 +3000,7 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
             inhoud = body["extendedProperties"]["private"][LARA_INHOUD]
             # een week krijgt alleen opnieuw een vraag (of een bijgewerkte) als er een ophaalmoment bijkomt dat nog niet
             # gevraagd was; een voorbije afspraak die uit de lijst valt, telt niet (hertest 14 tot 16)
-            sleutels = sorted(f"{s_}|{t_}" for s_, t_ in (weekinhoud.get(k) or []))
+            sleutels = sorted(set(weekinhoud.get(k) or []))      # id van de afspraak: een titelwijziging is niets nieuws
             nieuw_bij = bool(set(sleutels) - set((reg.get(k) or {}).get("afspraken") or []))
             heropen = k.startswith("week:") and k in reg and nieuw_bij
             if x is None and (k not in reg or heropen):
