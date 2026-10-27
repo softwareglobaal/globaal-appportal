@@ -295,13 +295,26 @@ def mail_telling(dag, ontvangen, verzonden, soorten=None):
     soorten: {message_id: soort} uit mailbericht, alleen om de soort te tonen. Geeft per postvak het aantal voor precies
     die Brusselse dag (binnen een postvak ontdubbeld), en een totaal ontdubbeld per Message-ID over alle postvakken (D8):
     een mail aan twee adressen van Mehdi telt in elk postvak, maar een keer in het totaal. Een postvak met een reden is
-    onvolledig, en dan ook het totaal."""
+    onvolledig, en dan ook het totaal. 'dekking' {'vanaf', 'gemaakt'} (een kopie in een bestand) toetst deze dag: begint
+    de kopie na de dag ervoor (de kopie zoekt op UTC-datum, de dag is Brussels), of werd ze gemaakt voor het einde van de
+    dag, dan is het postvak voor deze dag onvolledig (overleg 26-10-2026, X2, lenzen 5 en 9)."""
     per, totaal = {}, {"in": set(), "uit": set()}
     soorten = soorten or {}
+    einde = datetime.combine(datetime.fromisoformat(dag).date() + timedelta(days=1), datetime.min.time(), BRUSSEL)
     for richting, bron in (("in", ontvangen), ("uit", verzonden)):
         for postvak, v in sorted((bron or {}).items()):
             p = per.setdefault(postvak, {"binnen": 0, "soorten": {}, "verzonden": 0, "naar": [], "onvolledig": []})
-            p["onvolledig"] += [r for r in v.get("onvolledig") or [] if r not in p["onvolledig"]]
+            redenen = list(v.get("onvolledig") or [])
+            dek = v.get("dekking") or {}
+            if dek.get("vanaf") and dek["vanaf"] > (einde.date() - timedelta(days=2)).isoformat():
+                redenen.append("kopie dekt deze dag niet")
+            try:
+                gemaakt = datetime.fromisoformat(dek["gemaakt"]) if dek.get("gemaakt") else None
+            except ValueError:
+                gemaakt = None
+            if gemaakt is not None and gemaakt.tzinfo is not None and gemaakt < einde:
+                redenen.append("kopie van voor het einde van de dag")
+            p["onvolledig"] += [r for r in redenen if r not in p["onvolledig"]]
             hier = set()
             for k in v.get("berichten") or []:
                 if not k.get("datum") or brusselse_dag(k["datum"]) != dag:

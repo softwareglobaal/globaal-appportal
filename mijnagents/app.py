@@ -2199,8 +2199,10 @@ def agent_status():
         for t, w in nieuw:
             if t not in open_:
                 conn.execute("INSERT INTO nood(naam, tekst, wie, ts) VALUES(?,?,?,?)", (naam, t, w, nu()))
+        # nood_sluiten false: de agent wist niet welke van zijn noden nog gelden (bord.Ronde.noden_onbekend); de nieuwe
+        # komen erbij, niets sluit (De Dagbundelaar, Codex-controle mailnood 5, 27-10-2026)
         for t, nid in open_.items():
-            if t not in {x for x, _ in nieuw}:
+            if p.get("nood_sluiten") is not False and t not in {x for x, _ in nieuw}:
                 conn.execute("UPDATE nood SET open=0, opgelost_ts=? WHERE id=?", (nu(), nid))
     # Optioneel voorstel meegestuurd (mens-in-de-lus).
     v = p.get("voorstel")

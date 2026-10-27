@@ -192,33 +192,62 @@ def postvak(adres):
     return next((m for m in mailboxen if m["adres"].lower() == adres.lower()), None)
 
 
-def uit_bestand(pad, mapnaam, sinds=None):
-    """Koppen uit een bestand van de Mac (mac/hotmail_koppen.py), zelfde vorm als imapbron.lijst, nieuwste eerst."""
-    with open(pad, encoding="utf-8") as f:
-        d = json.load(f)
-    uit = [b for b in d.get("berichten", []) if b.get("map") == mapnaam and (not sinds or (b.get("datum") or "")[:10] >= sinds)]
-    return sorted(uit, key=lambda b: b.get("datum") or "", reverse=True)
-
-
-def bron_uren_oud(mb, nu=None):
-    """Hoe oud de kopie van de Mac is, in uren; None als het geen bestand is of het niet leesbaar is."""
+def momentopname(mb):
+    """De kopie in een lezing, of None als het geen bestand is of het niet leesbaar is. De server vervangt de kopie elk uur;
+    wie ouderdom, begindatum en koppen samen nodig heeft, haalt ze uit dezelfde lezing (overleg 26-10-2026, C2)."""
     if not mb or not mb.get("bron"):
         return None
     try:
         with open(mb["bron"], encoding="utf-8") as f:
-            gemaakt = datetime.fromisoformat(json.load(f)["gemaakt"])
-    except (OSError, ValueError, KeyError):
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def uit_bestand(pad, mapnaam, sinds=None, inhoud=None):
+    """Koppen uit de kopie (sinds 26-10-2026 van de server, hotmail_server.py), zelfde vorm als imapbron.lijst, nieuwste
+    eerst. inhoud: een momentopname van dat bestand; dan wordt het niet opnieuw gelezen."""
+    if inhoud is None:
+        with open(pad, encoding="utf-8") as f:
+            inhoud = json.load(f)
+    uit = [b for b in inhoud.get("berichten", []) if b.get("map") == mapnaam
+           and (not sinds or (b.get("datum") or "")[:10] >= sinds)]
+    return sorted(uit, key=lambda b: b.get("datum") or "", reverse=True)
+
+
+def bron_uren_oud(mb, nu=None, inhoud=None):
+    """Hoe oud de kopie is (sinds 26-10-2026 van de server, daarvoor van de Mac), in uren; None als het geen bestand is of
+    het niet leesbaar is. inhoud: een momentopname (momentopname)."""
+    if not mb or not mb.get("bron"):
+        return None
+    d = inhoud if inhoud is not None else momentopname(mb)
+    try:
+        gemaakt = datetime.fromisoformat(d["gemaakt"])
+    except (TypeError, ValueError, KeyError):
         return None
     return ((nu or datetime.now(BRUSSEL)) - gemaakt).total_seconds() / 3600
 
 
-def koppen(adres, mapnaam="INBOX", sinds=None, maximaal=200, plafond=1000):
-    """Koppen van een postvak via de postbus (of het bestand van de Mac): alleen lezen, nieuwste eerst."""
+def bron_vanaf(mb, inhoud=None):
+    """Vanaf welke dag de kopie elke map dekt, {'INBOX': 'jjjj-mm-dd', 'Sent': ...} (hotmail_server.py zet het). Leeg als
+    het bestand dat niet zegt of niet leesbaar is: dan is onbekend wat ervoor lag (overleg 26-10-2026, X2). inhoud: een
+    momentopname (momentopname)."""
+    if not mb or not mb.get("bron"):
+        return {}
+    d = inhoud if inhoud is not None else momentopname(mb)
+    vanaf = d.get("vanaf") if isinstance(d, dict) else None
+    return {m: v for m, v in vanaf.items() if isinstance(v, str)} if isinstance(vanaf, dict) else {}
+
+
+def koppen(adres, mapnaam="INBOX", sinds=None, maximaal=200, plafond=1000, inhoud=None):
+    """Koppen van een postvak via de postbus (of de kopie in een bestand): alleen lezen, nieuwste eerst. inhoud: een
+    momentopname van die kopie (momentopname)."""
     mb = postvak(adres)
     if not mb:
         raise LookupError(f"{adres} staat niet in de postbus")
     if mb.get("bron"):
-        return uit_bestand(mb["bron"], mapnaam, sinds)[:plafond]
+        return uit_bestand(mb["bron"], mapnaam, sinds, inhoud=inhoud)[:plafond]
     _, imapbron = _postbus()
     uit, vanaf = [], 0
     while True:

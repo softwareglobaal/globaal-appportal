@@ -440,6 +440,11 @@ def t_p3_chats_tellen_niet():
 def t_p9_teruglezen_van_de_mac():
     """Codex P9 (fase 2): wat De WhatsApp-wacht en De Belwacht schrijven, leest bordstand.py exact terug: dezelfde
     vingerafdruk als de Mac over zijn rij rekent, ook na een tweede upsert, en dubbel_van wordt leeg of buiten:."""
+    if os.environ.get("P9_OVERSLAAN_IN_BORDIMAGE") == "1":
+        # De bordimage bevat alleen mijnagents/ (Dockerfile, COPY . .), dus geen bordstand.py; de CI (regie-grendels)
+        # draait P9 in de hele repo. Alleen de Dockerfile zet deze vlag: elders faalt een ontbrekende bordstand luid.
+        print("  --   P9 overgeslagen: mijnagents-runner zit niet in de bordimage")
+        return
     db = verse_db("p9")
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mijnagents-runner",
                                     "koppelingen"))
@@ -476,7 +481,32 @@ def t_p9_teruglezen_van_de_mac():
           == bordstand.vingerafdruk(r) for r in dubbel), terug)
 
 
+def t_o27_nood_erbij_zonder_sluiten():
+    """De Dagbundelaar, Codex-controle mailnood 5 (27-10-2026): een agent die niet weet welke noden nog gelden, stuurt
+    nood_sluiten false. Zijn nieuwe noden komen erbij en het bord sluit niets; zonder die vlag sluit wat ontbreekt."""
+    pad = verse_db("o27")
+
+    def hart(noden, **extra):
+        return C.post("/agent-status", headers=K, json=dict(
+            {"naam": "proefagent", "status": "waakt", "nood": [{"tekst": t, "wie": "claude-code"} for t in noden]}, **extra))
+
+    def open_noden():
+        c = sqlite3.connect(pad)
+        try:
+            return {r[0] for r in c.execute("SELECT tekst FROM nood WHERE naam='proefagent' AND open=1")}
+        finally:
+            c.close()
+
+    hart(["Oud a", "Oud b"])
+    r = hart(["Nieuw c"], nood_sluiten=False)
+    check("O27 nood_sluiten false: nieuwe erbij, niets dicht", r.status_code == 200
+          and open_noden() == {"Oud a", "Oud b", "Nieuw c"}, open_noden())
+    hart(["Nieuw c"])
+    check("O27 zonder vlag sluit wat ontbreekt, zoals voordien", open_noden() == {"Nieuw c"}, open_noden())
+
+
 if __name__ == "__main__":
+    t_o27_nood_erbij_zonder_sluiten()
     t_o26_dagenpagina_zonder_privenamen()
     t_p3_chats_tellen_niet()
     t_p9_teruglezen_van_de_mac()
