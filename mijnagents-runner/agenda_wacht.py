@@ -569,6 +569,9 @@ DAG_MARKERINGEN = (
     (re.compile(r"\bbuitenland\b", re.I), "alles"),
     (re.compile(r"^\W*(?:mehdi\s*:\s*)?geen\s+afspraken\W*$", re.I), "alles"),
 )
+# De markering die er voor Lara's ophaling zelf staat ('Geen buiten afspraken Lara ophalen'). Niet elk woord 'Lara' in
+# een markering: 'Buitenland, Lara bij mama' of 'Geen auto, Lara bij oma' blijven echte beperkingen (overleg D2, K3).
+LARA_MARKERING = re.compile(r"geen\s+buiten\s*-?\s*afspraken\b.*\blara\b", re.I)
 _MARKERS = {}
 
 
@@ -644,11 +647,12 @@ def dagmarkeringen(dag):
     return _MARKERS[dag]
 
 
-def markering_tegen(titel, dag, markers=None, locatie=""):
+def markering_tegen(titel, dag, markers=None, locatie="", lara_vrij=True):
     """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
-    zelf (de reden van de markering) tellen niet."""
+    zelf (de reden van de markering) tellen niet. lara_vrij=False: een [LA]-titel telt wel; de dagcontrole geeft dan
+    zelf alleen de markeringen mee die niet over Lara gaan (driehoeksoverleg D2, 27-10-2026)."""
     t = (titel or "").strip()
-    if not t or not dag or t.startswith("\U0001F697") or bellen.is_lara_titel(t):
+    if not t or not dag or t.startswith("\U0001F697") or (lara_vrij and bellen.is_lara_titel(t)):
         return None
     info = lees_titel(t)
     if info["reistijd"]:
