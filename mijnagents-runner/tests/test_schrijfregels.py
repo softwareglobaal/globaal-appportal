@@ -708,5 +708,12 @@ for alinea in ["Bij het plaatsbezoek werd de achtergevel bekeken. De architect s
     lek = [w for w in range(30, 101) if re.search(r"\d{1,2}:\d{2}", S.toepassen(textwrap.fill(alinea, w))[0])]
     check(f"geen tijdstip na afbreken op 30-100 tekens: {alinea[:35]!r}", not lek, lek)
 
+# Eenenveertigste review 27-10-2026: "at fault currents" of "at fault level" is elektrotechniek; "is at fault" blijft S5
+for tekst in ["The bathroom RCD trips at fault currents above 30 mA.", "The distribution board is rated at fault level 10 kA.",
+              "The cable must withstand the short-circuit current at fault conditions."]:
+    check(f"at fault <naamwoord> blijft: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []) and S.controleer(tekst) == [], S.toepassen(tekst))
+for tekst in ["The contractor is at fault.", "The contractor is at fault for the leak.", "The roofer was at fault in this matter."]:
+    check(f"juridisch at fault blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

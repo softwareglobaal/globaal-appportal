@@ -56,8 +56,9 @@ VERBODEN = [
     # "liable to rot" of "liable to crack" (vatbaar voor) is gewone technische tekst; "liable for", "held liable", "liable to
     # the client" en "liable to pay" zijn een juridisch oordeel (35e review). Zo ook "in default mode" of "in default
     # settings" (standaardinstelling) tegenover "is in default", "in default of payment" of "in default under" (36e review).
+    # En "at fault currents" of "at fault level" (foutstroom, kortsluitvermogen) tegenover "is at fault (for)" (41e review).
     ("S5", re.compile(r"\b(?:liable\b(?!\s+to\s+(?!(?:the|a|an|him|her|them|us|you|it|his|their|our|its|any|each|all|pay|"
-                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b(?!\s+(?!(?:of|under|towards|by|since|with)\b)[a-z])|breach\s+of\s+contract\b|at\s+fault\b|"
+                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b(?!\s+(?!(?:of|under|towards|by|since|with)\b)[a-z])|breach\s+of\s+contract\b|at\s+fault\b(?!\s+(?!(?:for|of|in|under|towards|by|since|with)\b)[a-z])|"
                       r"negligen(?:t|ce)\b|culpable\b)", re.I)),
 ]
 
