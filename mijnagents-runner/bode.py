@@ -50,6 +50,7 @@ import bellen  # noqa: E402
 import bord  # noqa: E402
 import ochtend  # noqa: E402  de gedeelde inkortregel voor een antwoord van De Regisseur (REG-03)
 import whatsapp  # noqa: E402
+import agenda_whatsapp  # noqa: E402  de agendameldingen: eigen wachtrij, alleen WhatsApp (27-10-2026, W6)
 
 NAAM = "bode"
 ag = bord.Agent(NAAM)
@@ -422,7 +423,16 @@ def lees_whatsapp(staat, namen, nood):
     n, zinnen = 0, []
     for m in nieuw:
         tekst = (m.get("tekst") or "").strip()
-        if tekst and tekst.lower() in WA_KORT:
+        try:                            # een antwoord op een agendavraag ('A3 ja'): naar de Agendawacht, niet naar het bord
+            agendaantwoord = agenda_whatsapp.antwoord_herkennen(tekst) if tekst else None
+        except Exception as e:  # noqa: BLE001
+            agendaantwoord = None
+            nood.append({"tekst": f"Agendavraag niet herkend ({type(e).__name__})", "wie": "claude-code"})
+            if agenda_whatsapp.lijkt_antwoord(tekst):
+                break                   # een agendaantwoord nooit kwijt: dit bericht volgende ronde opnieuw (PR 113)
+        if agendaantwoord is not None:
+            ag.log("bericht", "bron", "uit WhatsApp: antwoord op een agendavraag")
+        elif tekst and tekst.lower() in WA_KORT:
             stuur("WhatsApp staat aan: de meldingen van je agents komen voortaan hier. Antwoord gewoon; begin met de "
                   "naam van een agent en een komma om hem rechtstreeks te spreken (Zoomwacht, ...).", nood)
         elif tekst:
@@ -1503,6 +1513,10 @@ def berichten(staat, nood, moment, stand, items, eerste, alarm, bord_items, bel_
     binnen = (veilig(nood, "WhatsApp lezen", lambda: lees_whatsapp(staat, namen, nood))
               + veilig(nood, "Telegram lezen", lambda: lees_telegram(staat, namen)))
     terug = veilig(nood, "Antwoorden terugbrengen", lambda: antwoorden_terug(staat, namen, nood))
+    # de agendameldingen (afspraak uit mail, ontvangst en bevestiging van een antwoord): alleen WhatsApp, nooit in de
+    # stille uren, nooit Telegram (Mehdi 25-09-2026 en 27-10-2026; W6)
+    veilig(nood, "Agendameldingen versturen", lambda: agenda_whatsapp.versturen(
+        whatsapp.stuur, nood, stil, (whatsapp.NietBeschikbaar,)), 0)
     voorstellen = open_voorstellen(nood)
     nieuwe_voorstellen(staat, voorstellen)      # zonder stand: het hoogste id leren, zonder bericht
     vast = veilig(nood, "Vaste momenten", lambda: vaste_momenten(staat, nood, moment, namen, stand, bord_items,

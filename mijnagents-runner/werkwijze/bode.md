@@ -153,6 +153,10 @@ oproep is genoeg. Dit is zijn zwakke punt en hij mist anders online afspraken.
 - Een voorstel goedkeuren of weigeren op een antwoord van Mehdi; een nummer geeft hem de link naar het bord.
 - De tekst van een vraag of een antwoord in mijn werkverslag zetten; daar staat alleen hoe lang ze was.
 
+## Agendameldingen (27-10-2026)
+
+Een uitzondering op keuze 2 en op 'geen agendaberichten' (Mehdi, 27-10-2026; driehoeksoverleg W5, W6): de Agendawacht meldt een afspraak die hij uit mail zette. Ik verstuur die meldingen uit zijn eigen wachtrij (koppelingen/agenda_whatsapp.py), alleen via WhatsApp, nooit in de stille uren, nooit Telegram. Een antwoord met de code ('A3 ja', 'A3 vervalt') gaat naar de Agendawacht, niet naar het bord; een los 'ja' niet.
+
 ## Wat Mehdi beslist
 
 - Welk kanaal. Besloten 30-09-2026: WhatsApp, van het eigen agentennummer UNABO Assistant.

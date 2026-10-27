@@ -353,6 +353,25 @@ niets buiten plannen.
   online boeking.** Calendly boekt alleen online afspraken; die vragen geen auto, dus
   de online boeking blijft open en wordt niet geblokkeerd door de geen-auto-marker.
 
+## WhatsApp-melding bij een afspraak uit mail (Mehdi, 27-10-2026; driehoeksoverleg W1 tot W10)
+
+Mehdi werkt via WhatsApp. Zet ik een afspraak uit mail in de agenda (vandaag alleen de zorgroute) of verschuift die,
+dan krijgt hij eenmaal een korte WhatsApp: wat (soort en praktijk), wanneer, welke agenda en een eventuele botsing.
+Nooit een adres of mailinhoud; op het bord en in het werkverslag geen titels.
+
+- Een botsing telt over alle agenda's, ook met een hele-dag-blok dat Bezet staat (zoals een beurs). Beschikbaar,
+  vervallen en ritten tellen niet. `botsingen()` gebruikt dezelfde regel.
+- Bij een botsing zet ik de afspraak toch (ze is bevestigd), maar op `??` (te valideren), na `!!`, met de botsing
+  bovenaan de omschrijving. Ik verplaats en wis niets, ook de botsende afspraak niet.
+- Mehdi antwoordt met de code uit het bericht: `A3 ja` (beide laten staan: `??` weg) of `A3 vervalt` (`vervalt`
+  vooraan en Beschikbaar; hij belt zelf de praktijk). Een los `ja` telt niet. Ik lees terug en bevestig dan pas.
+- Alleen De Bode verstuurt, alleen via WhatsApp, nooit in de stille uren en nooit via Telegram (de regel van 25-09-2026
+  blijft). De wachtrij (`mijnagents-data/agenda-whatsapp.json`) heeft een verzendspoor: een onderbroken verzending
+  gaat niet blind opnieuw. Het dagplafond van de betaalde sjablonen blijft.
+- De eerste keer krijgt alleen een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een hele-dag-blokkade).
+
+De grendel is `tests/test_agenda_whatsapp.py`.
+
 ## Lara tijdens schoolvakanties (mandaat van Mehdi, 22-09-2026)
 
 Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan:

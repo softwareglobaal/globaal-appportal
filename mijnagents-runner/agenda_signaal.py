@@ -602,7 +602,14 @@ def main():
         print(tijd, "de vorige ronde loopt nog, deze slaat over")
         return 0
     try:
-        return ronde(tijd)
+        uit = ronde(tijd)
+        # Mehdi's WhatsApp-antwoorden op een agendavraag ('A3 ja', 'A3 vervalt'): om de 12 minuten (W5, 27-10-2026)
+        try:
+            for r in W.whatsapp_antwoorden_verwerken():
+                print(tijd, "agendavraag:", r, flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(tijd, f"agendavragen niet verwerkt ({type(e).__name__})", file=sys.stderr, flush=True)
+        return uit
     finally:
         slot.close()
 

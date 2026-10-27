@@ -3,6 +3,7 @@ import copy
 import inspect
 import io
 import os
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(__import__("tempfile").mkdtemp(prefix="aw-test-"), "agenda-whatsapp.json"))  # nooit de echte wachtrij
 import sys
 import tempfile
 import unittest

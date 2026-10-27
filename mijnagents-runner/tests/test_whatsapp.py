@@ -8,6 +8,7 @@ regeleinden bevatten. Geen netwerk, geen database: alles wordt nagebootst.
 Draaien, zonder pytest:   python3 mijnagents-runner/tests/test_whatsapp.py
 """
 import os
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(__import__("tempfile").mkdtemp(prefix="aw-test-"), "agenda-whatsapp.json"))  # nooit de echte wachtrij
 import sys
 
 HIER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
