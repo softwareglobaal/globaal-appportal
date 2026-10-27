@@ -693,6 +693,39 @@ try:
 finally:
     for k, v in _o9.items():
         setattr(W, k, v)
+# hertest 16: opeenvolgende dagen in een vakantieweek, de afspraken van gisteren vallen weg: geen tweede vraag
+_ins11, _pat11 = [], []
+_vier = [lara(f"2026-11-0{d}") for d in (2, 3, 4, 5)]
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen11-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins11.append(body) or {"id": f"y{len(_ins11)}"}
+    W._patch = lambda a, body, tok, **k: _pat11.append(body)
+    W._prive_item_lezen = lambda eid, tok: None
+    _er11 = []
+    for _dag in (2, 3, 4):
+        _v = date(2026, 11, _dag)
+        _nu11 = datetime(2026, 11, _dag, 9, 0, tzinfo=W.TIJDZONE)
+        _w11 = W.lara_vakantieweken(_vier, namen, _v)
+        W.lara_meldingen([], _w11, _er11, "tok", _nu11)
+        if _ins11 and not _er11:
+            _b = _ins11[0]
+            _er11 = [{"kalender": W.PRIVE_AGENDA, "id": "y1", "titel": _b["summary"], "start": _b["start"]["date"],
+                      "_merk": dict(_b["extendedProperties"]["private"]), "hele_dag": True}]
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("opeenvolgende vakantiedagen: één weekvraag, geen tweede en geen dagelijkse bijwerking als afspraken voorbij gaan",
+      len(_ins11) == 1 and not _pat11, str((len(_ins11), len(_pat11))))
+check("een weekvraag begint nooit in het verleden",
+      W.lara_vakantieweken(_vier, namen, date(2026, 11, 4))[0]["van"] == "2026-11-04")
+check("een pedagogische studiedag of vrije dag van de school is ook een vergelijkingsblok",
+      all(W.LARA_VRIJ_RE.search(t) for t in ("Lara: pedagogische studiedag", "Lara vrije dag school", "geen school"))
+      and not W.LARA_VRIJ_RE.search("!! Mehdi: [LA] Lara ophalen en thuis afzetten"))
+_stud = {"id": "st1", "status": "cancelled"}
+_studvorig = [json.dumps(["Lara: pedagogische studiedag", "confirmed", {"date": "2026-11-18"}, {"date": "2026-11-19"}, "", [],
+                          False]), "2026-11-18"]
+check("een studiedagblok weghalen geeft geen vraag 'gewiste Lara-afspraak'",
+      S.lara_wissing_kandidaat(LARA, _stud, _studvorig, _nu, dagen, dekking) is None)
 check("een weggehaalde weekvraag komt terug bij een nieuw ophaalmoment, niet bij dezelfde inhoud",
       _n10 == 1 and _n10b == 2 and len(_ins10) == 2, str((_n10, _n10b, len(_ins10))))
 

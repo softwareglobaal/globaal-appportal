@@ -192,7 +192,7 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
     {sleutel, dag, uur, titel}; de titel blijft privé en komt in geen uitvoer."""
     if ev.get("status") != "cancelled" or not _is_lara(kal) or _is_rit(ev, vorig):
         return None
-    if any(re.search(r"vakanti|feestdag", t, re.I) for t in _titels(ev, vorig)):
+    if any(W.LARA_VRIJ_RE.search(t) for t in _titels(ev, vorig)):
         return None          # een vakantie- of feestdagblok weghalen is geen gewiste afspraak (zo ging FR-210 net weg)
     reeks = _lara_reeks(kal, ev) or ev.get("id") or ""
     if not reeks:

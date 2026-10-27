@@ -2456,6 +2456,11 @@ def lara_zonder_rit(a, vrij):
                                and vrij is not None and (a.get("start") or "")[:10] in vrij)
 
 
+# Hele-dag-blokken in de Lara-agenda die een vrije dag aankondigen: alleen om te vergelijken met de officiële bron. Ook
+# een pedagogische studiedag of vrije dag van de school wordt zo een vraag; ritten schakelt alleen de bron uit (hertest 16)
+LARA_VRIJ_RE = re.compile(r"vakanti|feestdag|studiedag|vrije\s+dag|geen\s+school|schoolvrij|facultatie|brugdag", re.I)
+
+
 def lara_vakantieblokken():
     """De hele-dag-blokken in de Lara-agenda met 'vakanti' of 'feestdag' in de titel, van vandaag tot 400 dagen
     vooruit: [{id, titel, van, tot}] met tot exclusief (zoals Google), of None als de agenda niet te lezen is. Alleen
@@ -2479,9 +2484,8 @@ def lara_vakantieblokken():
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {agenda._toegang()}"})
             d = json.load(urllib.request.urlopen(req, timeout=25))
             for e in d.get("items", []):
-                t = (e.get("summary") or "").lower()
                 if e.get("status") == "cancelled" or "date" not in (e.get("start") or {}) \
-                        or not ("vakanti" in t or "feestdag" in t):
+                        or not LARA_VRIJ_RE.search(e.get("summary") or ""):
                     continue
                 blokken.append({"id": e.get("id", ""), "titel": e.get("summary") or "",
                                 "van": e["start"]["date"], "tot": e["end"]["date"]})
@@ -2540,7 +2544,7 @@ def lara_vakantieweken(items, namen, vandaag, vooruit=21):
         j, w = int(wk[:4]), int(wk[-2:])
         maandag = date.fromisocalendar(j, w, 1)
         vrij = [maandag + timedelta(days=i) for i in range(7) if (maandag + timedelta(days=i)).isoformat() in namen]
-        uit.append({"week": wk, "naam": v["naam"], "van": min(vrij).isoformat(), "tot": max(vrij).isoformat(),
+        uit.append({"week": wk, "naam": v["naam"], "van": max(min(vrij), vandaag).isoformat(), "tot": max(vrij).isoformat(),
                     "afspraken": sorted(v["afspraken"])})
     return uit
 
@@ -2979,6 +2983,7 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
     wissen doet de agent niet. Alleen aanroepen na een volledige lezing. Geeft regels zonder Lara-titels (privé)."""
     nu = nu or nu_lokaal()
     gewenst = dict([lara_afwijking_body(b, nu.date()) for b in afwijkingen] + [lara_week_body(w) for w in weken])
+    weekinhoud = {f"week:{w['week']}": w["afspraken"] for w in weken}
     reg = _lara_vragen_lezen()
     er = {(x.get("_merk") or {}).get(LARAMERK): x for x in bestaande
           if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(LARAMERK)
@@ -2989,21 +2994,24 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
         soort = k.split(":", 1)[0]
         try:
             inhoud = body["extendedProperties"]["private"][LARA_INHOUD]
-            # een week waarvan de vraag weg of afgerond is, krijgt een nieuwe vraag zodra haar inhoud verandert (een nieuw
-            # ophaalmoment); dezelfde inhoud vraagt niet opnieuw (hertest 14 en 15)
-            heropen = k.startswith("week:") and k in reg and reg[k].get("inhoud") != inhoud
+            # een week krijgt alleen opnieuw een vraag (of een bijgewerkte) als er een ophaalmoment bijkomt dat nog niet
+            # gevraagd was; een voorbije afspraak die uit de lijst valt, telt niet (hertest 14 tot 16)
+            sleutels = sorted(f"{s_}|{t_}" for s_, t_ in (weekinhoud.get(k) or []))
+            nieuw_bij = bool(set(sleutels) - set((reg.get(k) or {}).get("afspraken") or []))
+            heropen = k.startswith("week:") and k in reg and nieuw_bij
             if x is None and (k not in reg or heropen):
                 n = _insert(PRIVE_AGENDA, body, tok) or {}
-                reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud}
+                reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud,
+                          "afspraken": sorted(set(sleutels) | set((reg.get(k) or {}).get("afspraken") or []))}
                 gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
-            elif x is not None and ((x.get("start") or "")[:10] != body["start"]["date"]
-                                    or (x.get("titel") or "") != body["summary"]
-                                    or (x.get("_merk") or {}).get(LARA_INHOUD)
-                                    != body["extendedProperties"]["private"][LARA_INHOUD]):
+            elif x is not None and ((x.get("titel") or "") != body["summary"]
+                                    or (k.startswith("week:") and nieuw_bij)
+                                    or (k.startswith("afwijking:") and (x.get("start") or "")[:10] != body["start"]["date"])):
                 _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description", "extendedProperties")}, tok)
                 if k in reg:
-                    reg[k] = {**reg[k], "inhoud": inhoud}
+                    reg[k] = {**reg[k], "inhoud": inhoud,
+                              "afspraken": sorted(set(sleutels) | set(reg[k].get("afspraken") or []))}
                     gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
         except Exception as e:  # noqa: BLE001
