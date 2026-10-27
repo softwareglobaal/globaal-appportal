@@ -1001,7 +1001,8 @@ check("lukt de dagroute niet (slot bezet), dan wacht de dag op de volgende ronde
       _over1 == [_morgen] and _over2 == [] and _gestart == [_morgen, _morgen], str((_over1, _over2, _gestart)))
 _src26 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("na de volledige ronde worden de wachtende dagen ook afgewerkt (niet in de dagroute zelf)",
-      "if not DAG_ARG and not ALLEEN_VANDAAG:\n        try:" in _src26 and "firma_dagen_afwerken()" in _src26.split('if __name__ == "__main__":')[1])
+      "atexit.register(_firma_dagen_na_ronde)" in _src26.split('if __name__ == "__main__":')[1]
+      and "sys.exit(main() or 0)" in _src26)
 check("bij een verschuiving naar een andere dag komen de oude en de nieuwe dag in de lijst",
       "oude en nieuwe dag" in _src26.split("def firma_vangnet(")[1][:9000])
 check("een Bezet blok van een firma-afspraak houdt zijn ritten vast bij de opruimcontrole",

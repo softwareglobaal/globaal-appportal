@@ -3183,6 +3183,13 @@ FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette, ver
 FIRMA_DAGEN_WACHT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-dagen.json")
 
 
+def _firma_dagen_na_ronde():
+    try:
+        firma_dagen_afwerken()
+    except Exception as e:  # noqa: BLE001
+        print(f"firma-dagen niet afgewerkt ({type(e).__name__})", file=sys.stderr, flush=True)
+
+
 def firma_dagen_afwerken():
     """De dagroute voor elke dag met een gewijzigd Bezet blok, uit deze ronde en eerdere die niet lukten. Een dag blijft
     bewaard tot zijn dagroute lukt (Codex-hertest 26); een voorbije dag valt weg. Draait na het rondeslot: in de
@@ -5702,9 +5709,13 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
         # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
         # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
-        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN
-                                            or _firma_buitenblok(x, _bruikbare_locatie(x.get("locatie") or ""))) \
-                and not lara_zonder_rit(x, vrij):         # ook een Bezet blok van een firma-afspraak (Codex-hertest 26)
+        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
+                and not lara_zonder_rit(x, vrij):
+            grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
+            grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+        elif _lx and not _lx["reistijd"] and (x.get("_merk") or {}).get(FIRMAMERK) \
+                and _firma_buitenblok(x, _bruikbare_locatie(x.get("locatie") or "")):
+            # ook een Bezet blok van een verborgen firma-afspraak houdt zijn ritten vast (Codex-hertest 26)
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
         if "T" in x.get("start", "") and not _lx["reistijd"]:
@@ -7433,10 +7444,7 @@ if __name__ == "__main__":
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
     # zodat niet na te gaan was wanneer iets gebeurde.
     print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · " + (f"dag {DAG_ARG}" if DAG_ARG else "volledige ronde"), flush=True)
-    _rc = main() or 0
     if not DAG_ARG and not ALLEEN_VANDAAG:
-        try:                            # het rondeslot is nu vrij: de dagroute voor een nieuw of verzet firmablok (hertest 26)
-            firma_dagen_afwerken()
-        except Exception as _e:  # noqa: BLE001
-            print(f"firma-dagen niet afgewerkt ({type(_e).__name__})", file=sys.stderr, flush=True)
-    sys.exit(_rc)
+        import atexit  # noqa: PLC0415
+        atexit.register(_firma_dagen_na_ronde)   # na de ronde, als het rondeslot vrij is (Codex-hertest 26)
+    sys.exit(main() or 0)
