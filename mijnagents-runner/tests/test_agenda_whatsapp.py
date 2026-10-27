@@ -176,8 +176,8 @@ try:
     rv3 = W.whatsapp_antwoorden_verwerken("tok")
 finally:
     W._patch, W._lees_event, W._prive_item_lezen = _o2
-check("'ja': ?? weg, de afspraak blijft staan, teruggelezen en bevestigd",
-      _pat2[0] == {"summary": "!! [PR] Huisarts - Praktijk Verpleegkundigen"} and "vastgelegd" in rv[0]
+check("'ja': ?? weg, de afspraak blijft staan (Bezet), teruggelezen en bevestigd",
+      _pat2[0] == {"summary": "!! [PR] Huisarts - Praktijk Verpleegkundigen", "transparency": "opaque"} and "vastgelegd" in rv[0]
       and any("blijft staan" in v.get("tekst", "") for v in AW._lees()["meldingen"].values()), str((_pat2[:1], rv)))
 check("'vervalt': 'vervalt' vooraan en Beschikbaar, nooit gewist, en Mehdi belt zelf de praktijk",
       _pat2[1]["summary"].startswith("vervalt !! [PR] Huisarts") and _pat2[1]["transparency"] == "transparent"
@@ -797,6 +797,24 @@ check("verschuift de afspraak nadat Mehdi antwoordde maar voor de verwerking, da
       "en vervalt de oude ontvangstmelding (hertest 17)",
       any("je antwoord kwam binnen" in v.get("tekst", "") and v["status"] == "klaar" for v in _m33.values())
       and all(v["status"] == "vervangen" for k, v in _m33.items() if k.startswith(f"ontvangst:{_c33}:")), str(_m33))
+
+# --- Codex-hertest 18 (PR 113): 'ja' na een 'vervalt' dat toch was opgeslagen -----------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw34-")) / "agenda-whatsapp.json")
+AW.versie_melden("ecg", ecg["start"], ecg["einde"], "x {code}", {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]})
+_c34 = next(v["code"] for v in AW._lees()["meldingen"].values() if v.get("vraag"))
+AW.antwoord_herkennen(f"{_c34} ja")
+_st34 = {"summary": "vervalt !! ?? [PR] Huisarts - Praktijk Verpleegkundigen", "transparency": "transparent"}
+_o34 = (W._patch, W._lees_event, W._prive_item_lezen)
+W._prive_item_lezen = lambda eid, tok: dict(ecg, titel=_st34["summary"])
+W._patch = lambda a, body, tok, **kw: _st34.update(body)
+W._lees_event = lambda kal, eid, tok: dict(_st34)
+try:
+    _r34 = W.whatsapp_antwoorden_verwerken("tok")
+finally:
+    W._patch, W._lees_event, W._prive_item_lezen = _o34
+check("'ja' op een afspraak die al op 'vervalt' stond: vervalt en ?? weg, weer Bezet, en pas dan bevestigd (hertest 18)",
+      _st34["summary"] == "!! [PR] Huisarts - Praktijk Verpleegkundigen" and _st34["transparency"] == "opaque"
+      and any("vastgelegd en teruggelezen" in r for r in _r34), str((_st34, _r34)))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

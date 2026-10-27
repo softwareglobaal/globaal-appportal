@@ -6395,14 +6395,20 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
             regels.append(f"{code}: afspraak intussen verschoven, niets veranderd")
             continue
         kern = re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip()
-        body = {"summary": kern} if keuze == "ja" else {
-            "summary": kern if lara_vervalt({"titel": kern}) else f"vervalt {kern}", "transparency": "transparent"}
+        if keuze == "ja":
+            # 'ja' zet de afspraak gewoon terug: ?? weg, en stond ze intussen op 'vervalt' (een eerdere poging die toch
+            # lukte), dan ook dat weg en weer Bezet (Codex-hertest 18, PR 113)
+            body = {"summary": (_niet_meer_vervallen({"titel": kern}).get("summary") or kern), "transparency": "opaque"}
+        else:
+            body = {"summary": kern if lara_vervalt({"titel": kern}) else f"vervalt {kern}", "transparency": "transparent"}
         blijvend = fout_gemeld = False
         try:
             _patch(x, body, tok)
             terug = _lees_event(PRIVE_AGENDA, x["id"], tok)
-            ok = terug is not None and "??" not in (terug.get("summary") or "??") and (
-                keuze == "ja" or (lara_vervalt({"titel": terug.get("summary")}) and terug.get("transparency") == "transparent"))
+            t_ = (terug or {}).get("summary") or "??"
+            ok = terug is not None and "??" not in t_ and (
+                (keuze == "ja" and not lara_vervalt({"titel": t_}) and terug.get("transparency", "opaque") != "transparent")
+                or (keuze != "ja" and lara_vervalt({"titel": t_}) and terug.get("transparency") == "transparent"))
         except (TitelVoorstel, GeenSchrijfrecht, SchaduwItem) as e:
             ok, blijvend, fout_gemeld = False, True, True
             regels.append(f"{code}: niet vastgelegd ({type(e).__name__})")
