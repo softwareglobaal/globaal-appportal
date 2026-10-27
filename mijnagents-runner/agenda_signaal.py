@@ -393,6 +393,9 @@ def ronde(tijd):
     lara_open = dict(st.get("lara_open") or {})
     lara_gemeld = dict(st.get("lara_gemeld") or {})
     lara_vraag = dict(st.get("lara_vraag") or {})      # reeks -> de vraag die er al staat (id, sleutel, dagen)
+    # wissingen op de Lara-agenda die nog niet beoordeeld konden worden omdat de officiële bron niet te lezen was: ze
+    # blijven staan tot de bron er weer is, anders zag de agent ze na herstel niet meer als nieuw (Codex-hertest 5)
+    lara_wacht = dict(st.get("lara_wacht") or {})
     officieel = W.lara_vakantiedagen()
     dekking = W.schoolvakantie_dekking() if officieel is not None else None
     if officieel is None:
@@ -412,14 +415,30 @@ def ronde(tijd):
             kandidaat = annulering_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu)
             if kandidaat:
                 annuleringen[kandidaat["sleutel"]] = {**kandidaat, "start": kandidaat["start"].isoformat()}
-            lk = officieel is not None and lara_wissing_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu,
-                                                                  officieel, dekking)
+            if officieel is None:
+                if _is_lara(kal) and ev.get("status") == "cancelled":
+                    lara_wacht[f"{kal}|{ev.get('id', '')}"] = {"kal": kal, "ev": ev,
+                                                               "vorig": oud.get(f"{kal}|{ev.get('id', '')}")}
+                continue
+            lk = lara_wissing_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu, officieel, dekking)
             if lk and lk["sleutel"] not in lara_gemeld:
                 lara_open[lk["sleutel"]] = lk
         dagen |= per_kal[kal]
         wat += w_
 
     melding_mislukt = officieel is None
+    if officieel is not None:
+        for sk, w in lara_wacht.items():
+            try:
+                nog_weg = json.loads((vinger.get(sk) or ['[null, "cancelled"]'])[0])[1] == "cancelled"
+            except (ValueError, TypeError, IndexError):
+                nog_weg = True
+            if not nog_weg:
+                continue                       # intussen teruggezet: geen vraag meer
+            lk = lara_wissing_kandidaat(w["kal"], w["ev"], w.get("vorig"), nu, officieel, dekking)
+            if lk and lk["sleutel"] not in lara_gemeld:
+                lara_open[lk["sleutel"]] = lk
+        lara_wacht = {}
     per_reeks = {}
     for sleutel, k in lara_open.items():
         per_reeks.setdefault(sleutel.rsplit(":", 1)[0], []).append((sleutel, k))
@@ -550,7 +569,7 @@ def ronde(tijd):
                   if max(v.get("dagen") or [""]) >= (nu - timedelta(days=60)).date().isoformat()}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
             "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen,
-            "lara_open": lara_open, "lara_gemeld": lara_gemeld, "lara_vraag": lara_vraag})
+            "lara_open": lara_open, "lara_gemeld": lara_gemeld, "lara_vraag": lara_vraag, "lara_wacht": lara_wacht})
     return 1 if niet_gelezen or gefaald or alarm or melding_mislukt else 0
 
 

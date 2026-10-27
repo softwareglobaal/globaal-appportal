@@ -480,6 +480,38 @@ check("een reeks die over twee rondes gewist wordt, geeft één vraag die aangev
       len(_gemeld4) == 1 and _bijgewerkt4 and _bijgewerkt4[-1][0] == "vraag-1"
       and _bijgewerkt4[-1][2] == ["2026-11-10", "2026-11-13", "2026-11-16"], str((_gemeld4, _bijgewerkt4)))
 
+# de officiële bron is even onleesbaar terwijl een Lara-afspraak gewist wordt: de wissing blijft wachten en geeft na
+# herstel toch een vraag (Codex-hertest 5)
+_gemeld7 = []
+S.STAND = Path(tempfile.mkdtemp(prefix="lara7-")) / "agenda-signaal.json"
+_bron = W.SCHOOLVAKANTIES
+try:
+    S.urllib.request.urlopen = _google4
+    S.subprocess.run = lambda args, *a, **k: subprocess.CompletedProcess(args, 0, "", "")
+    S.A._toegang = lambda: "nep-token"
+    S.W.kalenders = lambda: [LARA]
+    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok, dagen=None: _gemeld7.append(dagen) or "v7"
+    S.W.ag.klaarzet = lambda items: {}
+    S.meld_annulering = lambda kandidaat, nu: True
+    S.datetime = _Nu
+    _golf[0] = _reeks3[:1]
+    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00"})
+    W.SCHOOLVAKANTIES = _bron.with_name("bestaat-niet.json")
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        _rc7a = S.main()
+    _wacht7 = dict(json.loads(S.STAND.read_text()).get("lara_wacht") or {})
+    W.SCHOOLVAKANTIES = _bron
+    _golf[0] = []
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        S.main()
+finally:
+    W.SCHOOLVAKANTIES = _bron
+    (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+     S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o5
+check("bron even onleesbaar: geen vraag en exitcode niet 0, de wissing blijft wachten",
+      _rc7a != 0 and len(_wacht7) == 1, str((_rc7a, _wacht7)))
+check("na herstel van de bron komt de vraag er toch", _gemeld7 == [["2026-11-10"]], str(_gemeld7))
+
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []
 try:
