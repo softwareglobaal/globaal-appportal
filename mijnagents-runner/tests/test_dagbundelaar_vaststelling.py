@@ -594,6 +594,9 @@ def test_f9_nachtketen_noden():
     D.KETENBESTAND = "/bestaat/niet/keten.json"
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    # Een leeg bord: zonder dit las de test op de VM de echte open noden (behoud in main) en faalde hij daar, terwijl hij
+    # op de Mac en in CI slaagde omdat het bord er niet bereikbaar is (gezien 27-10-2026, sinds PR 103).
+    D.ag.open_noden = lambda: []
     try:
         for nacht, nachtbestand, nood_deel, ok in (
                 (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}, None, True),
@@ -616,6 +619,7 @@ def test_f9_nachtketen_noden():
     finally:
         D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND = oud
         D.ag.__dict__.pop("ronde", None)
+        D.ag.__dict__.pop("open_noden", None)
     assert ochtend.NACHTTAAK == "dagvaststelling"
 
 
