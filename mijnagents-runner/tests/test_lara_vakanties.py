@@ -305,6 +305,12 @@ _zonder = {"id": "41t2prmi75bpa224h1g8s1bfhj_20261027", "status": "cancelled",
            "originalStartTime": {"date": "2026-10-27"}}
 check("ook zonder recurringEventId herkent hij de reeks aan het id (hele dag)",
       (S.lara_wissing_kandidaat(LARA, _zonder, None, _nu, dagen, dekking) or {}).get("dag") == "2026-10-27")
+_verplaatst = [json.dumps(["!! Mehdi: [LA] Lara ophalen", "confirmed", {"dateTime": "2026-11-10T16:00:00+01:00"}, {}, "",
+                           [], False]), "2026-11-10"]
+_vk = S.lara_wissing_kandidaat(LARA, dict(_inst, originalStartTime={"dateTime": "2026-10-20T16:00:00+02:00"}), _verplaatst,
+                               _nu, dagen, dekking)
+check("een verplaatste instantie die daarna gewist wordt, telt op haar echte (komende) dag, niet de oorspronkelijke",
+      (_vk or {}).get("dag") == "2026-11-10", str(_vk))
 _vak = dict(_inst, id="x_20261104T150000Z", originalStartTime={"dateTime": "2026-11-04T16:00:00+01:00"})
 check("op een officiële vakantiedag gebeurt niets", S.lara_wissing_kandidaat(LARA, _vak, None, _nu, dagen, dekking) is None)
 _za = dict(_inst, id="x_20261031T090000Z", originalStartTime={"dateTime": "2026-10-31T10:00:00+01:00"})
