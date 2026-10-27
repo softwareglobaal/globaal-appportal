@@ -29,6 +29,7 @@ from zoneinfo import ZoneInfo
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
+import agenda_whatsapp as AW  # noqa: E402
 import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
@@ -5966,19 +5967,204 @@ def bel_als_vastgelopen(items, nu=None):
     return None
 
 
+def _bezet_item(y):
+    """Telt dit item als bezet bij een botsing? Niet: Beschikbaar, vervallen, ritten, feestdagen of een leesfout."""
+    return not (y.get("_vrij") or y.get("fout") or y.get("kalender", "").startswith("en.be#") or lara_vervalt(y)
+                or lees_titel(y.get("titel") or "")["reistijd"])
+
+
+def _hele_dagen(y):
+    """De dagen (ISO) die een hele-dag-item dekt; het einde is exclusief, zoals bij Google."""
+    from datetime import date as _d  # noqa: PLC0415
+    try:
+        s = _d.fromisoformat(y["start"][:10])
+        e = _d.fromisoformat((y.get("einde") or y["start"])[:10])
+    except (KeyError, ValueError):
+        return []
+    return [(s + timedelta(days=i)).isoformat() for i in range(max(1, (e - s).days))]
+
+
+def botst_met(x, items):
+    """Wat Bezet staat op de tijd van x, over alle agenda's: afspraken met een uur die overlappen, en hele-dag-blokken op
+    die dag (zoals 'ANTWERK vakbeurs'; tot 27-10-2026 telden hele dagen nergens mee, driehoeksoverleg W3). Niet x zelf,
+    niet Beschikbaar, vervallen, ritten of feestdagen. Geeft de botsende items."""
+    if "T" not in x.get("start", "") or "T" not in x.get("einde", ""):
+        return []
+    try:
+        s1, e1 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
+    except ValueError:
+        return []
+    dag = s1.astimezone(TIJDZONE).date().isoformat()
+    uit = []
+    for y in items:
+        if y is x or (x.get("id") and y.get("id") == x.get("id")) or not _bezet_item(y):
+            continue
+        if y.get("hele_dag"):
+            if dag in _hele_dagen(y):
+                uit.append(y)
+        elif "T" in y.get("start", "") and "T" in y.get("einde", ""):
+            try:
+                s2, e2 = datetime.fromisoformat(y["start"]), datetime.fromisoformat(y["einde"])
+            except ValueError:
+                continue
+            if s2 < e1 and s1 < e2:
+                uit.append(y)
+    return uit
+
+
 def botsingen(items):
-    """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
+    """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting), en een hele-dag-blok dat
+    Bezet staat op een dag met afspraken (bv. 'ANTWERK vakbeurs'), dat telt eenmaal per dag (driehoeksoverleg W3,
+    27-10-2026). Beschikbaar, vervallen en ritten tellen niet. Een privétitel staat er als '(privé)': dit gaat naar het
+    bord."""
     uit = []
     tijd = [(datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"]), x) for x in items
-            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")
-            and not lara_vervalt(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
+            if "T" in x["start"] and _bezet_item(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
     tijd.sort(key=lambda t: t[0])
     for i, (s1, e1, a) in enumerate(tijd):
         for s2, e2, b in tijd[i + 1:]:
             if s2 >= e1:
                 break
-            uit.append(f"{a['start'][:16]} {a['titel'][:45]}  ×  {b['start'][11:16]} {b['titel'][:45]}")
+            uit.append(f"{a['start'][:16]} {_toon(a, 45)}  ×  {b['start'][11:16]} {_toon(b, 45)}")
+    for h in [x for x in items if x.get("hele_dag") and _bezet_item(x)]:
+        for dag in _hele_dagen(h):
+            op_dag = [a for s1, _, a in tijd if s1.astimezone(TIJDZONE).date().isoformat() == dag and a is not h]
+            if op_dag:
+                uit.append(f"{dag} {_toon(h, 45)} (hele dag)  ×  " + ", ".join(
+                    f"{a['start'][11:16]} {_toon(a, 30)}" for a in op_dag[:3]) + (" ..." if len(op_dag) > 3 else ""))
     return uit
+
+
+# WhatsApp-melding als ik een afspraak uit mail zet (Mehdi, 27-10-2026; driehoeksoverleg W1 tot W10). Vandaag zet alleen
+# de zorgroute een afspraak uit mail (ZORGMERK, privé-agenda). Elke nieuwe of verschoven versie van zo'n blok krijgt een
+# korte WhatsApp: wat, wanneer, welke agenda en een eventuele botsing. Bij een botsing staat het blok op '??' (te
+# valideren) tot Mehdi antwoordt met de code uit het bericht. De wachtrij en het versturen: koppelingen/agenda_whatsapp.py
+# en De Bode. Op het bord en in het werkverslag geen titels: medisch is privé.
+WEEKDAG = ("ma", "di", "wo", "do", "vr", "za", "zo")
+
+
+def _kale_titel(t):
+    t = re.sub(r"^\s*((VR|ZL|!+|\?\?|vervalt)\s+)+", "", t or "", flags=re.I)
+    t = CODE_RE.sub("", t).replace("??", "")
+    t = re.sub(r"^\s*Mehdi\b[^:\n]{0,60}:\s*", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" -:")[:70]
+
+
+def _wanneer(x):
+    if x.get("hele_dag"):
+        dagen = _hele_dagen(x)
+        f = lambda d: f"{int(d[8:10])}/{int(d[5:7])}"  # noqa: E731
+        return f"hele dag {f(dagen[0])}" + (f"-{f(dagen[-1])}" if len(dagen) > 1 else "") if dagen else "hele dag"
+    s = datetime.fromisoformat(x["start"]).astimezone(TIJDZONE)
+    e = datetime.fromisoformat(x["einde"]).astimezone(TIJDZONE)
+    return f"{WEEKDAG[s.weekday()]} {s.day}/{s.month} {s:%H:%M}-{e:%H:%M}"
+
+
+def _agendanaam(kal):
+    return {PRIVE_AGENDA: "privé", WERKAGENDA: "werk"}.get(kal, (KALENDERS.get(kal) or kal).split("(")[0].strip())
+
+
+def _zorg_bericht(x, botsing, verschoven):
+    """De vaste vorm (W2): soort en praktijk, geen adres, geen mailinhoud."""
+    regels = [f"Agendawacht: afspraak uit mail {'verschoven' if verschoven else 'gezet'} ({{code}})",
+              f"Wat: {_kale_titel(x['titel'])}", f"Wanneer: {_wanneer(x)}", f"Agenda: {_agendanaam(x['kalender'])}"]
+    if botsing:
+        regels.append("Botsing: " + "; ".join(f"{_kale_titel(y['titel'])} ({_wanneer(y)})" for y in botsing[:2])
+                      + (f" en nog {len(botsing) - 2}" if len(botsing) > 2 else ""))
+        regels.append("Staat op ?? (te valideren). Antwoord '{code} ja' = beide laten staan, of '{code} vervalt' = deze "
+                      "afspraak vervalt (bel dan zelf de praktijk).")
+    else:
+        regels.append("Botsing: geen")
+    return "\n".join(regels)
+
+
+def _te_valideren(x, botsing, tok, nu):
+    """W4: '??' in de titel (na '!!', zodat de volgorde van tekens_vooraan blijft) en de botsing bovenaan de
+    omschrijving. Verplaatst en wist niets. Teruggelezen."""
+    t = tekens_vooraan(x["titel"])
+    m = re.match(r"^(\s*(?:VR\s+)?!!\s*)", t)
+    titel = (m.group(1) + "?? " + t[m.end():]) if m else "?? " + t
+    e = _lees_event(x["kalender"], x["id"], tok) or {}
+    regel = (f"Te valideren ({nu:%d-%m-%Y}): botst met " + "; ".join(_kale_titel(y["titel"]) for y in botsing[:3])
+             + ". Antwoord op WhatsApp met de code uit het bericht.")
+    _patch(x, {"summary": titel, "description": regel + "\n\n" + (e.get("description") or "")}, tok)
+    terug = _lees_event(x["kalender"], x["id"], tok) or {}
+    if "??" not in (terug.get("summary") or ""):
+        raise RuntimeError("?? niet teruggelezen")
+    x["titel"] = terug.get("summary") or titel
+
+
+def zorg_whatsapp(items, tok, nu=None):
+    """W1 tot W4 en W8: een WhatsApp-melding per nieuwe of verschoven versie van een zorgblok uit mail, nooit twee keer.
+    De eerste keer (basislijn) krijgt alleen een toekomstig blok dat nu botst een melding (zoals het ECG op 5/11 tegen
+    ANTWERK); de rest wordt stil bekend. Geeft regels zonder titels."""
+    nu = nu or nu_lokaal()
+    zorg = [x for x in items if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(ZORGMERK)
+            and "T" in x.get("start", "") and not _voorbij(x["start"], nu) and not lara_vervalt(x)]
+    eerste = not AW.basislijn_gezet()
+    stil, regels = [], []
+    for x in zorg:
+        versie = f"zorg:{x['id']}:{x['start']}:{x['einde']}"
+        if AW.bekend(versie):
+            continue
+        botsing = botst_met(x, items)
+        if eerste and not botsing:
+            stil.append(versie)
+            continue
+        if botsing and "??" not in (x.get("titel") or ""):
+            try:
+                _te_valideren(x, botsing, tok, nu)
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{x['start'][:16]} (zorg): niet op te valideren gezet ({type(e).__name__}); volgende ronde opnieuw")
+                continue
+        verschoven = any(k.startswith(f"zorg:{x['id']}:") for k in AW._lees()["meldingen"])
+        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven), {"id": x["id"]} if botsing else None)
+        regels.append(f"{x['start'][:16]} (zorg): WhatsApp-melding {code} klaargezet"
+                      + (", botst: te valideren" if botsing else ""))
+    if eerste:
+        AW.basislijn(stil)
+    return regels
+
+
+def whatsapp_antwoorden_verwerken(tok=None, nu=None):
+    """W5: Mehdi's antwoord met code ('A3 ja', 'A3 vervalt'), door De Bode in de wachtrij gezet. ja: '??' weg; vervalt:
+    'vervalt' vooraan en Beschikbaar, nooit wissen. Teruggelezen, dan pas bevestigd op WhatsApp. Geeft regels."""
+    nu = nu or nu_lokaal()
+    regels = []
+    for sleutel, m in AW.open_antwoorden():
+        code, keuze = m.get("code"), m.get("antwoord")
+        tok = tok or agenda._toegang()
+        x = _prive_item_lezen((m.get("vraag") or {}).get("id") or "", tok)
+        if x is None or not (x.get("_merk") or {}).get(ZORGMERK):
+            AW.verwerkt(sleutel, "weg")
+            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
+                                                     "ik heb niets veranderd.")
+            regels.append(f"{code}: afspraak niet meer gevonden, niets veranderd")
+            continue
+        kern = re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip()
+        body = {"summary": kern} if keuze == "ja" else {
+            "summary": kern if lara_vervalt({"titel": kern}) else f"vervalt {kern}", "transparency": "transparent"}
+        try:
+            _patch(x, body, tok)
+            terug = _lees_event(PRIVE_AGENDA, x["id"], tok) or {}
+            ok = "??" not in (terug.get("summary") or "?") and (
+                keuze == "ja" or (lara_vervalt({"titel": terug.get("summary")}) and terug.get("transparency") == "transparent"))
+        except Exception as e:  # noqa: BLE001
+            ok, terug = False, {}
+            regels.append(f"{code}: niet vastgelegd ({type(e).__name__})")
+        if not ok:
+            AW.verwerkt(sleutel, "mislukt")
+            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
+                                                     "Ik kijk het na; de afspraak staat nog op ??.")
+            continue
+        wat = f"{_kale_titel(x['titel'])} op {_wanneer(x)}"
+        tekst = (f"Agendawacht: {code} vastgelegd. {wat} blijft staan; ?? is weg." if keuze == "ja" else
+                 f"Agendawacht: {code} vastgelegd. {wat} staat nu als vervallen en Beschikbaar (niet gewist). "
+                 "Bel zelf de praktijk om af te zeggen.")
+        AW.verwerkt(sleutel, keuze)
+        AW.klaarzetten(f"{sleutel}:bevestiging", tekst)
+        regels.append(f"{code}: {keuze} vastgelegd en teruggelezen")
+    return regels
 
 
 def _voorouders(pid=None, diepte=10):
@@ -6291,6 +6477,20 @@ def main():
                 mail_noden.extend(n for n in zst["noden"] if n["tekst"] not in {m["tekst"] for m in mail_noden})
                 MA.statussen_bewaren(mres)
                 ag.log(f"dag {vandaag}", "schrijf", zst["bord"][0])          # alleen tellingen: niets medisch op het bord
+                # een WhatsApp-melding per nieuw of verschoven zorgblok uit mail (Mehdi, 27-10-2026; W1 tot W8). Alleen
+                # op een volledige lezing: een onleesbare agenda kan een botsing verbergen.
+                try:
+                    _zi = afspraken(0, 120)
+                    if any(x.get("fout") for x in _zi):
+                        mail_noden.append({"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, "
+                                                    "volgende ronde opnieuw", "wie": "claude"})
+                    else:
+                        _zw = zorg_whatsapp(_zi, agenda._toegang())
+                        if _zw:
+                            ag.log(f"dag {vandaag}", "schrijf", "WhatsApp-meldingen: afspraken uit mail", "\n".join(_zw))
+                except Exception as e:  # noqa: BLE001
+                    mail_noden.append({"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})",
+                                       "wie": "claude"})
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
                 _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
