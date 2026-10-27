@@ -137,15 +137,19 @@ def _is_rit(ev, vorig):
     return W.lees_titel(ev.get("summary") or _oude_titel(vorig) or "")["reistijd"]
 
 
+def _is_lara(kal):
+    return W.KALENDERS.get(kal) == "Lara"
+
+
 def annulering_kandidaat(kal, ev, vorig, nu):
     """Een nieuwe, expliciete afzegging met een herleidbaar tijdstip; geen herhaalde eigen wijziging.
-    Een vaste Lara-afspraak (een instantie van een reeks) of een ritblok is nooit een afzegging om 'niet vertrekken' voor
-    te bellen. Gezien 22-10-2026: een assistent wiste de Lara-afspraken van een week die ten onrechte als vakantie
+    Een afspraak in de Lara-agenda (een instantie van een reeks of een losse kopie) of een ritblok is nooit een afzegging
+    om 'niet vertrekken' voor te bellen. Gezien 22-10-2026: een assistent wiste de Lara-afspraken van een week die ten onrechte als vakantie
     stond, en om 06:00 belde de agent zes keer 'afgezegd, niet vertrekken' voor ophaalmomenten die gewoon doorgingen
     (FR-210). Een gewiste Lara-afspraak op een schooldag wordt een vraag (lara_wissing_kandidaat)."""
     if not (ev.get("status") == "cancelled" or W.bellen.afzegging_tekst(ev)):
         return None
-    if _lara_reeks(kal, ev) or _is_rit(ev, vorig):
+    if _is_lara(kal) or _is_rit(ev, vorig):
         return None
     oud = []
     if vorig:
@@ -171,14 +175,15 @@ def annulering_kandidaat(kal, ev, vorig, nu):
 
 
 def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
-    """Een instantie van een vaste Lara-reeks die nu geschrapt is, op een komende schooldag volgens de officiële bron
-    (maandag tot vrijdag, geen vakantie of feestdag, binnen de dekking). Dan is het waarschijnlijk een fout: een vraag
-    in de privé-agenda, de agent zet niets terug (driehoeksoverleg 27-10-2026, L3; FR-210). Geeft None of
+    """Een afspraak in de Lara-agenda (een instantie van een vaste reeks of een losse kopie, zoals de afspraken die
+    Claude 1 op 26-10 terugzette) die nu geschrapt is, op een komende schooldag volgens de officiële bron (maandag tot
+    vrijdag, geen vakantie of feestdag, binnen de dekking). Dan is het waarschijnlijk een fout: een vraag in de
+    privé-agenda, de agent zet niets terug (driehoeksoverleg 27-10-2026, L3; FR-210). Geeft None of
     {sleutel, dag, uur, titel}; de titel blijft privé en komt in geen uitvoer."""
-    if ev.get("status") != "cancelled":
+    if ev.get("status") != "cancelled" or not _is_lara(kal) or _is_rit(ev, vorig):
         return None
-    reeks = _lara_reeks(kal, ev)
-    if not reeks or _is_rit(ev, vorig):
+    reeks = _lara_reeks(kal, ev) or ev.get("id") or ""
+    if not reeks:
         return None
     oud = []
     if vorig:
@@ -201,8 +206,10 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
 
 def meld_lara_wissing(kandidaat, tok):
     """De vraag in de privé-agenda, daarna een signaal op het bord (zonder titel: privé). Het signaal is bijzaak: lukt het
-    niet, dan staat de vraag er toch."""
-    W.lara_gewist_melden(kandidaat["dag"], kandidaat["uur"], kandidaat["titel"], kandidaat["sleutel"], tok)
+    niet, dan staat de vraag er toch. kandidaat['dagen'] zijn alle geschrapte schooldagen van dezelfde reeks in deze
+    ronde: een hele reeks wissen geeft zo één vraag, geen tientallen (reviewronde 27-10-2026)."""
+    W.lara_gewist_melden(kandidaat["dag"], kandidaat["uur"], kandidaat["titel"], kandidaat["sleutel"], tok,
+                         dagen=kandidaat.get("dagen"))
     try:
         W.ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": kandidaat["dag"],
                         "uniek": f"agenda-lara-gewist:{kandidaat['sleutel']}",
@@ -408,17 +415,28 @@ def ronde(tijd):
         wat += w_
 
     melding_mislukt = officieel is None
-    for sleutel, k in list(lara_open.items()):
+    per_reeks = {}
+    for sleutel, k in lara_open.items():
+        per_reeks.setdefault(sleutel.rsplit(":", 1)[0], []).append((sleutel, k))
+    for reeks, lijst in sorted(per_reeks.items()):
+        lijst.sort(key=lambda sk: sk[1]["dag"])
+        eerste = lijst[0][1]
         try:
-            meld_lara_wissing(k, A._toegang())
-            lara_gemeld[sleutel] = k["dag"]
-            lara_open.pop(sleutel, None)
-            print(f"{tijd} vaste Lara-afspraak gewist op schooldag {k['dag']}: vraag in de privé-agenda gezet")
+            meld_lara_wissing({**eerste, "sleutel": f"{reeks}:{eerste['dag']}", "dagen": [k["dag"] for _, k in lijst]},
+                              A._toegang())
+            for sleutel, k in lijst:
+                lara_gemeld[sleutel] = k["dag"]
+                lara_open.pop(sleutel, None)
+            print(f"{tijd} vaste Lara-afspraak gewist op schooldag {eerste['dag']}"
+                  + (f" en {len(lijst) - 1} latere dag(en)" if len(lijst) > 1 else "") + ": vraag in de privé-agenda gezet")
         except Exception as e:  # noqa: BLE001
             melding_mislukt = True
-            print(f"{tijd} gewiste Lara-afspraak op {k.get('dag')}: vraag niet gezet ({type(e).__name__}), blijft open",
+            print(f"{tijd} gewiste Lara-afspraak op {eerste.get('dag')}: vraag niet gezet ({type(e).__name__}), blijft open",
                   file=sys.stderr)
     for sleutel, kandidaat in list(annuleringen.items()):
+        if any(sleutel.startswith(k + ":") for k, n in W.KALENDERS.items() if n == "Lara"):
+            annuleringen.pop(sleutel, None)        # een opgeslagen Lara-afzegging van voor FR-210: nooit meer bellen
+            continue
         try:
             kandidaat["start"] = datetime.fromisoformat(kandidaat["start"])
             gemeld = meld_annulering(kandidaat, nu)

@@ -1143,7 +1143,9 @@ _src79 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een live rijtijd wordt alleen hergebruikt voor dezelfde rit, en een afspraak die geen rit meer vraagt houdt er geen vast",
       'f"rit {van_plaats} → {plaats})" in _oms' in _src79 and 'f"rit {plaats} → thuis)" in _toms' in _src79
       and 'vast = (x["kalender"], e0) in grenzen or e0 in begins_alle' in _src79
-      and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):' in _src79)
+      and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \\' in _src79
+      # sinds FR-210 houdt ook een Lara-afspraak op een officiële vakantiedag of met 'vervalt' geen rit vast
+      and 'and not lara_zonder_rit(x, vrij):' in _src79)
 
 # Elke klant waar Mehdi naartoe gaat draagt het projectnummer, van welke firma ook (FR-80)
 _o80 = (W._tkn_mappen, W.projectadressen.index, W._patch, W.agenda._toegang)

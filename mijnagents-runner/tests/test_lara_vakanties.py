@@ -132,11 +132,14 @@ check("'vervalt' vooraan herkent de agent, gewone titels niet",
       W.lara_vervalt({"titel": "Vervalt (vakantie) Lara ophalen"}) and not W.lara_vervalt({"titel": "Lara ophalen"}))
 
 # --- de vragen in de privé-agenda -------------------------------------------------------------------------------
-_ins, _pat, _opg = [], [], []
-_o = {k: getattr(W, k) for k in ("_insert", "_patch", "_eigen_melding_opgelost")}
+_ins, _pat, _opg, _gelezen = [], [], [], []
+_o = {k: getattr(W, k) for k in ("_insert", "_patch", "_eigen_melding_opgelost", "_prive_item_lezen", "LARA_VRAGEN")}
+W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen-")) / "agenda-lara-vragen.json")
 W._insert = lambda kal, body, tok, toch=False: _ins.append((kal, body)) or {"id": f"n{len(_ins)}"}
 W._patch = lambda a, body, tok, **k: _pat.append((a, body))
 W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="": _opg.append((x, k, reden)) or True
+_buiten_venster = {}
+W._prive_item_lezen = lambda eid, tok: _gelezen.append(eid) or _buiten_venster.get(eid)
 try:
     _nu = datetime(2026, 10, 27, 9, 0, tzinfo=W.TIJDZONE)
     _r1 = W.lara_meldingen([_ids["fout"]], _wk, [], "tok", _nu)
@@ -167,11 +170,26 @@ try:
     W.lara_meldingen([_ids["fout"]], _wk, _er + [_gewist], "tok", _nu)
     check("tweede ronde: geen dubbele vraag", len(_ins) == _n and not _pat, str(_ins[_n:]))
     # het foute blok is weg (Mehdi of Claude haalde het weg): de vraag wordt opgelost, de weekvraag blijft
+    # Mehdi haalt de afwijkingsvraag weg (of beantwoordt ze) terwijl het blok blijft: een echte reis, niet opnieuw vragen
+    W.lara_meldingen([_ids["fout"]], _wk, _er[1:], "tok", _nu)
+    check("een weggehaalde of beantwoorde vraag komt niet terug zolang het blok blijft (eenmaal vragen)",
+          len(_ins) == _n, str(_ins[_n:]))
     W.lara_meldingen([], _wk, _er + [_gewist], "tok", _nu)
     check("een afwijking die verdwijnt, krijgt 'Opgelost' (niet gewist); de weekvraag blijft",
           [k for _, k, _ in _opg] == [_er[0]["_merk"][W.MAILMERK]] and len(_ins) == _n, str(_opg))
     check("een vraag over een gewiste afspraak rondt de agent nooit zelf af",
           all(x["id"] != "g1" for x, _, _ in _opg))
+    # de vakantieweek is voorbij en de vraag valt buiten het leesvenster: de agent leest ze op id terug en rondt af
+    _wid = json.loads(Path(W.LARA_VRAGEN).read_text())["week:2026-W45"]["id"]
+    _buiten_venster[_wid] = dict(_er[1], id=_wid)
+    _opg.clear()
+    W.lara_meldingen([], [], [], "tok", _nu + timedelta(days=14))
+    _reg = json.loads(Path(W.LARA_VRAGEN).read_text())
+    check("een weekvraag buiten het leesvenster wordt op id teruggelezen en krijgt 'Opgelost'",
+          _wid in _gelezen and len(_opg) == 1 and _reg["week:2026-W45"]["open"] is False, str((_gelezen, _opg, _reg)))
+    _opg.clear()
+    W.lara_meldingen([], [], [], "tok", _nu + timedelta(days=15))
+    check("een afgeronde vraag wordt niet nog eens afgerond", not _opg, str(_opg))
 finally:
     for k, v in _o.items():
         setattr(W, k, v)
@@ -203,6 +221,72 @@ finally:
     for k, v in _o2.items():
         setattr(W, k, v)
 
+# --- ritten: 'vervalt' blijft vooraan, en een vervallen of vakantie-afspraak houdt geen rit meer vast (reviewronde) ---
+check("'!!' gaat nooit voor 'vervalt' (anders herkent de agent de markering niet meer)",
+      W.tekens_vooraan("vervalt (vakantie) !! Mehdi: [LA] Lara ophalen") == "vervalt (vakantie) !! Mehdi: [LA] Lara ophalen")
+check("'vervalt' wordt ook na VR of !! herkend",
+      all(W.lara_vervalt({"titel": t}) for t in ("!! vervalt (vakantie) Mehdi: Lara", "VR !! vervalt x", "VR vervalt x")))
+_or = {k: getattr(W, k) for k in ("geen_auto_dagen", "coord", "rijtijd_min", "_cache_laden", "_cache_bewaren", "_patch",
+                                  "_insert", "_eigen_rit_weg", "_verplaats", "plek_zoeken", "lara_vakantiedagen")}
+_ok = (W.agenda._toegang, W.agenda.kalendernamen, W.projectadressen.index)
+_RI, _RW = [], []
+try:
+    W.agenda._toegang = lambda: "tok"
+    W.agenda.kalendernamen = lambda: dict(W.KALENDERS)
+    W.projectadressen.index = lambda: {}
+    W.geen_auto_dagen = lambda: frozenset()
+    W.coord = lambda adres, cache: (50.88, 4.72) if adres == W.THUIS else (50.89, 4.73)
+    W.rijtijd_min = lambda van, naar, vertrek: (15, 1.0)
+    W._cache_laden = lambda: {}
+    W._cache_bewaren = lambda c: None
+    W.plek_zoeken = lambda t: (None, None)
+    W._patch = lambda a, body, tok, **k: None
+    W._insert = lambda kal, body, tok, toch=False: _RI.append((kal, body)) or {"id": body.get("id")}
+    W._eigen_rit_weg = lambda x, tok: (W.is_eigen_rit(x) and _RW.append(x["titel"])) or W.is_eigen_rit(x)
+    W._verplaats = lambda x, doel, tok: None
+    _NU = datetime(2026, 10, 27, 9, 0, tzinfo=W.TIJDZONE)
+
+    def _afspr(dag, titel="!! Mehdi: [LA] Lara ophalen en thuis afzetten"):
+        return {"kalender": LARA, "id": "a" + dag.replace("-", ""), "titel": titel, "start": f"{dag}T16:00:00+01:00",
+                "einde": f"{dag}T17:00:00+01:00", "locatie": "De Speelkriebel, Diestsesteenweg 1, 3010 Kessel-Lo",
+                "hele_dag": False, "omschrijving": "", "deelnemers": []}
+
+    def _ritten():
+        return [{"kalender": k, "id": b["id"], "titel": b["summary"], "start": b["start"]["dateTime"],
+                 "einde": b["end"]["dateTime"], "omschrijving": b["description"], "hele_dag": False,
+                 "_merk": dict(b["extendedProperties"]["private"]), "_kleur": b.get("colorId", ""),
+                 "_reminders": b.get("reminders"), "deelnemers": []}
+                for k, b in _RI if b.get("summary", "").startswith("\U0001F697")]
+
+    W.reistijd_zetten([_afspr("2026-11-10")], nu=_NU)
+    _r = _ritten()
+    check("tegenproef: een gewone Lara-afspraak op een schooldag krijgt een heen- en terugrit", len(_r) == 2, str(len(_r)))
+    _RI.clear()
+    _vt = W.tekens_vooraan("vervalt (vakantie) !! Mehdi: [LA] Lara ophalen en thuis afzetten")   # zoals uitroep_vooraan
+    W.reistijd_zetten([_afspr("2026-11-10", _vt)] + [dict(x) for x in _r], nu=_NU)
+    check("na 'vervalt' (ook na de stap die !! vooraan zet): geen nieuwe rit en de eigen ritten gaan weg",
+          not _ritten() and len(_RW) == 2, str((_ritten(), _RW)))
+    # een rit van voor de officiële bron, op een dag die nu officieel vakantie is (4/11)
+    _RI.clear(); _RW.clear()
+    W.lara_vakantiedagen = lambda: frozenset()
+    W.reistijd_zetten([_afspr("2026-11-04")], nu=_NU)
+    _r = _ritten()
+    W.lara_vakantiedagen = _or["lara_vakantiedagen"]
+    _RI.clear()
+    W.reistijd_zetten([_afspr("2026-11-04")] + [dict(x) for x in _r], nu=_NU)
+    check("een eigen rit op een dag die nu officieel vakantie is, gaat weg", len(_r) == 2 and len(_RW) == 2, str((len(_r), _RW)))
+finally:
+    for k, v in _or.items():
+        setattr(W, k, v)
+    W.agenda._toegang, W.agenda.kalendernamen, W.projectadressen.index = _ok
+
+# een eigen Lara-vraag of een opgeloste vraag sluit nooit een dag af, ook niet met een bloktitel die op een markering lijkt
+_lv = {"kalender": W.PRIVE_AGENDA, "titel": "VR Agendawacht: Lara geen afspraken", "start": "2026-11-28", "einde": "2026-12-07",
+       "hele_dag": True, "_merk": {W.LARAMERK: "afwijking:x"}}
+check("een eigen Lara-vraag sluit geen dag af", not W.markeringen_uit([_lv], "2026-11-30"))
+check("de titel van een afwijkingsvraag neemt de bloktitel niet over (alleen in de omschrijving)",
+      "Lara op vakantie" not in W.lara_afwijking_body(_ids["reis"], date(2026, 10, 27))[1]["summary"])
+
 # --- L3: een gewiste vaste Lara-afspraak (agenda_signaal) --------------------------------------------------------
 _nu = datetime(2026, 10, 21, 23, 15, tzinfo=timezone.utc)
 _inst = {"id": "41t2prmi75bpa224h1g8s1bfhj_20261026T150000Z", "status": "cancelled",
@@ -226,6 +310,12 @@ _al = [json.dumps(["x", "cancelled", {"dateTime": "2026-10-26T16:00:00+01:00"}, 
 check("een instantie die al geschrapt was, geeft geen tweede vraag", S.lara_wissing_kandidaat(LARA, _inst, _al, _nu, dagen, dekking) is None)
 check("een gewone afspraak op een andere agenda valt niet onder deze regel",
       S.lara_wissing_kandidaat(WERK, dict(_inst), _vorig, _nu, dagen, dekking) is None)
+_kopie = {"id": "1m7vfkp25otiu8oo005mgag41o", "status": "cancelled"}
+_kopievorig = [json.dumps(["!! Mehdi: [LA] Lara ophalen en thuis afzetten", "confirmed",
+                           {"dateTime": "2026-10-30T16:00:00+01:00"}, {}, "", [], False]), "2026-10-30"]
+check("een gewiste losse Lara-kopie (zoals de teruggezette van 26-10) op een schooldag is ook een vraag",
+      (S.lara_wissing_kandidaat(LARA, _kopie, _kopievorig, _nu, dagen, dekking) or {}).get("dag") == "2026-10-30")
+check("en ook daarvoor nooit een oproep 'niet vertrekken'", S.annulering_kandidaat(LARA, _kopie, _kopievorig, _nu) is None)
 _rit = {"id": "rit0123", "status": "cancelled"}
 _ritvorig = [json.dumps(["🚗 Reistijd: thuis → Wilselsesteenweg 57", "confirmed",
                          {"dateTime": "2026-10-27T17:10:00+01:00"}, {}, "", [], False]), "2026-10-27"]
@@ -267,11 +357,13 @@ try:
     S.subprocess.run = lambda args, *a, **k: subprocess.CompletedProcess(args, 0, "", "")
     S.A._toegang = lambda: "nep-token"
     S.W.kalenders = lambda: [LARA]
-    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok: _gemeld.append((dag, uur, titel, sleutel)) or True
+    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok, **k: _gemeld.append((dag, uur, titel, sleutel)) or True
     S.W.ag.klaarzet = lambda items: _signalen.extend(items) or {}
     S.meld_annulering = lambda kandidaat, nu: _gebeld.append(kandidaat) or True
     S.datetime = _Nu
-    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00", "vinger": {f"{LARA}|{_inst['id']}": _vorig}})
+    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00", "vinger": {f"{LARA}|{_inst['id']}": _vorig},
+              "annulering_open": {f"{LARA}:oud_20261027T160000Z:2026-10-27T17:00:00+01:00":
+                                  {"sleutel": "x", "titel": "(privé)", "start": "2026-10-27T17:00:00+01:00"}}})
     _uit = io.StringIO()
     with contextlib.redirect_stdout(_uit), contextlib.redirect_stderr(io.StringIO()):
         _rc1 = S.main()
@@ -281,12 +373,39 @@ finally:
      S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o3
 check("in een echte ronde: eenmaal een vraag in de privé-agenda, ook na een tweede ronde",
       len(_gemeld) == 1 and _gemeld[0][0] == "2026-10-26" and _rc1 == 0, str((_gemeld, _rc1, _rc2)))
-check("in een echte ronde: geen oproep 'niet vertrekken'", not _gebeld, str(_gebeld))
+check("in een echte ronde: geen oproep 'niet vertrekken', ook niet voor een opgeslagen Lara-afzegging van voor FR-210",
+      not _gebeld and not json.loads(S.STAND.read_text()).get("annulering_open"), str(_gebeld))
 check("het signaal op het bord draagt geen Lara-titel en geen 'stil' (dat belt)",
       len(_signalen) == 1 and "Lara ophalen" not in json.dumps(_signalen) and "stil" not in _signalen[0]["titel"].lower(),
       str(_signalen))
 check("de uitvoer van de ronde draagt geen Lara-titel", "Lara ophalen" not in _uit.getvalue(), _uit.getvalue()[:200])
 check("de stand onthoudt dat de vraag gezet is", list(json.loads(S.STAND.read_text()).get("lara_gemeld", {}).values()) == ["2026-10-26"])
+
+# een hele reeks gewist (drie schooldagen in dezelfde ronde): één vraag met de drie dagen, niet drie vragen
+_reeks3 = [dict(_inst, id=f"41t2prmi75bpa224h1g8s1bfhj_202611{d}T150000Z",
+                originalStartTime={"dateTime": f"2026-11-{d}T16:00:00+01:00"}) for d in ("10", "13", "16")]
+_gemeld3 = []
+S.STAND = Path(tempfile.mkdtemp(prefix="lara3-")) / "agenda-signaal.json"
+_o4 = (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+       S.W.ag.klaarzet, S.meld_annulering, S.datetime)
+try:
+    S.urllib.request.urlopen = lambda req, timeout=None, *a, **k: io.BytesIO(json.dumps({"items": [
+        dict(e, updated=datetime.now(timezone.utc).isoformat()) for e in _reeks3]}).encode())
+    S.subprocess.run = lambda args, *a, **k: subprocess.CompletedProcess(args, 0, "", "")
+    S.A._toegang = lambda: "nep-token"
+    S.W.kalenders = lambda: [LARA]
+    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok, dagen=None: _gemeld3.append((dag, dagen)) or True
+    S.W.ag.klaarzet = lambda items: {}
+    S.meld_annulering = lambda kandidaat, nu: True
+    S.datetime = _Nu
+    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00"})
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        S.main()
+finally:
+    (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+     S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o4
+check("een hele reeks gewist geeft één vraag met alle geschrapte schooldagen",
+      len(_gemeld3) == 1 and _gemeld3[0][1] == ["2026-11-10", "2026-11-13", "2026-11-16"], str(_gemeld3))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
