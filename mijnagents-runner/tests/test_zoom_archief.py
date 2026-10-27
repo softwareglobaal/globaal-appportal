@@ -1464,6 +1464,23 @@ def test_a7_tijdelijke_fouten_om_beurten_tellen_samen():
         r, _ = ronde(nu=NU + timedelta(hours=i))
     D._verzoek = echt
     assert any("niet naar Dropbox gekopieerd" in x for x in teksten(r)), "na drie tijdelijke fouten, van welke soort ook"
+def test_codex_verwerking_44_een_vervanger_die_verschijnt_terwijl_het_voorlopige_id_nog_zichtbaar_is_telt():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    voorlopig = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z", "einde": "",
+                 "grootte": 0, "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    definitief = {**voorlopig, "id": "B", "status": "completed", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    m["bestanden"] = [dict(voorlopig)]
+    ronde()                                                    # eerst alleen het voorlopige A
+    m["bestanden"] = [dict(voorlopig), dict(definitief)]
+    ronde(nu=NU + timedelta(hours=1))                          # dan A en het definitieve B samen
+    m["bestanden"] = [dict(definitief)]
+    ronde(nu=NU + timedelta(hours=2))                          # dan alleen B
+    r, _ = ronde(nu=NU + timedelta(hours=27))
+    s = ZA.lees_staat()
+    assert "A" not in s["verdwenen"] and "A" not in s["vervanging"] and "B" in s["bestanden"], s["verdwenen"]
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
 
 if __name__ == "__main__":
     goed = fout = 0
