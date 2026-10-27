@@ -480,7 +480,10 @@ def test_de_signaaltitel_belt_mehdi_niet_op():
                   {"stand": "onbekend", "reden": "x"}):
             s = B.signaal(dict(m, dienst=dienst), 101)
             assert "stil" not in s["titel"].lower() and "stil" not in s["uniek"].lower(), s
-            assert s["uniek"] == f"bouwwacht-achter-{dienst}-101" and s["titel"] == f"Bouw van {dienst} loopt achter op de code"
+            # De Bode stuurt alleen de titel: na herstel zegt die "liep" (Codex-resultaattoets 9.2)
+            werkwoord = "liep" if m["stand"] in ("gelijk", "bezig") else "loopt"
+            assert s["uniek"] == f"bouwwacht-achter-{dienst}-101"
+            assert s["titel"] == f"Bouw van {dienst} {werkwoord} achter op de code", s["titel"]
 
 
 @proef
@@ -495,6 +498,7 @@ def test_een_storing_die_herstelt_voor_haar_signaal_krijgt_het_toch(repo):
     ronde(T0 + 12 * MIN, b)
     [s] = signalen(b)
     assert s["uniek"] == f"bouwwacht-achter-mijnagents-{nummer}" and "intussen weer gelijk" in s["inhoud"]
+    assert s["titel"] == "Bouw van mijnagents liep achter op de code"
     assert ACHTER not in b.noden, "na het signaal sluit de nood"
     # ook als de klok door een nieuwe pull onder de drempel zakt: dan een terugblik met de nieuwe bouw
     repo.zet("d", T0 + 13 * MIN)
@@ -506,6 +510,24 @@ def test_een_storing_die_herstelt_voor_haar_signaal_krijgt_het_toch(repo):
     ronde(T0 + 28 * MIN, b)
     assert [x["uniek"] for x in signalen(b)] == [f"bouwwacht-achter-mijnagents-{nummer2}"]
     assert "opnieuw aan het bouwen" in signalen(b)[0]["inhoud"] and ACHTER not in b.noden
+
+
+@proef
+def test_een_signaal_dat_bij_herstel_niet_lukt_houdt_zijn_nood_open(repo):
+    """Codex-resultaattoets 9.1: herstelde de bouw en faalde klaarzetten juist dan, dan sloot de nood, was haar nummer
+    weg en kon geen ronde het signaal nog sturen."""
+    repo.zet("b", T0)
+    b = Bord()
+    ronde(T0 + 10 * MIN, b)
+    nummer = b.noden[ACHTER]
+    repo.bouw("mijnagents")
+    b.klaarzet_weg = True
+    ronde(T0 + 12 * MIN, b)
+    assert b.noden.get(ACHTER) == nummer and B.SIGNAALNOOD in b.noden and b.items == {}
+    b.klaarzet_weg = False
+    ronde(T0 + 14 * MIN, b)
+    assert list(b.items) == [f"bouwwacht-achter-mijnagents-{nummer}"]
+    assert ACHTER not in b.noden and B.SIGNAALNOOD not in b.noden
 
 
 @proef

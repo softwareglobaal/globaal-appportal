@@ -45,7 +45,9 @@ na een git pull staat. Ik besta omdat het bord van 26-10 rond 19:00 tot 27-10
 
 Wie mijn nood leest: de nood staat op het bord, voor claude-code. Daar is geen
 vaste lezer voor, daarom gaat er per storing ook een signaal naar Mehdi
-(zijn ja van 27-10-2026).
+(zijn ja van 27-10-2026). De Bode brengt het op het eerstvolgende vaste moment,
+het ochtendbericht of de avondbundel, zoals Mehdi zijn berichten instelde. Een
+storing na de avondbundel komt dus de volgende ochtend aan.
 
 ## Wat ik nooit doe
 

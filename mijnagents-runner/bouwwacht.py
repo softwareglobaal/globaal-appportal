@@ -82,7 +82,8 @@ def signaal(m, nood_id):
     nummer is geen teller maar de nood van deze storing, vast zolang ze duurt (N10). De inhoud draagt geen minuten; de
     titel draagt nooit het woord dat De Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
     dienst = m["dienst"]
-    if m["stand"] in ("gelijk", "bezig"):
+    hersteld = m["stand"] in ("gelijk", "bezig")
+    if hersteld:
         # tweede overleg X2: de storing herstelde voor dit signaal kon vertrekken; ze krijgt het toch, als terugblik
         stand = ("de bouw liep " + str(DREMPEL_MIN) + " minuten of langer achter en is intussen " +
                  ("weer gelijk met de code" if m["stand"] == "gelijk" else "opnieuw aan het bouwen na een nieuwe pull"))
@@ -93,8 +94,9 @@ def signaal(m, nood_id):
     else:
         stand = ("de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt, staat niet meer in de reflog, "
                  f"of de reflog is niet te lezen (laatste geslaagde bouw {m['gebouwd']})")
+    # De Bode stuurt de titel: die zegt dus zelf of de storing nog loopt (Codex-resultaattoets 9.2)
     return {"voor": "mehdi", "soort": "signaal", "sleutel": dienst,
-            "titel": f"Bouw van {dienst} loopt achter op de code",
+            "titel": f"Bouw van {dienst} {'liep' if hersteld else 'loopt'} achter op de code",
             "uniek": f"bouwwacht-achter-{dienst}-{nood_id}",
             "inhoud": f"De VM draait voor {dienst} niet de code die er na de laatste git pull staat: {stand}. De nood "
                       f"staat op het bord voor claude-code; wat de bouw zegt, staat in ~/deploy-{dienst}.log op de VM."}
@@ -286,6 +288,11 @@ def werk(r, nu=None):
         except Exception as e:  # noqa: BLE001  een signaal dat niet lukt, houdt de bouwnood niet tegen
             r.nood(SIGNAALNOOD, wie="claude-code")
             r.detail += f"; signaal niet klaargezet ({type(e).__name__})"
+            # De bouwnoden van die signalen blijven open, ook na herstel: anders sluit het bord ze, is hun nummer weg en
+            # kan de volgende ronde het signaal niet meer opnieuw proberen (Codex-resultaattoets 9.1).
+            for d in DIENSTEN:
+                if noodtekst(d) in open_:
+                    r.nood(noodtekst(d), wie="claude-code")
     return uitslag
 
 
