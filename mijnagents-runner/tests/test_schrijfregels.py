@@ -674,5 +674,18 @@ for tekst, behoud in [('De bouwheer meldt: "Het water komt binnen langs de dorpe
     check(f"leesteken blijft bij zijn zin: {behoud[-25:]!r}", t37.startswith(behoud + " ") and ing37 and S.toepassen(t37)[0] == t37, t37)
 check("aanhalingsteken zonder schrapping verandert niets", S.toepassen('Hij zei: "Klaar." Daarna vertrok hij.') == ('Hij zei: "Klaar." Daarna vertrok hij.', []))
 
+# Achtendertigste review 27-10-2026: een sluitteken van een citaat of haakje dat in een eerdere zin opende, blijft staan
+# als de laatste zin van dat citaat geschrapt wordt (spiegel van de 37e review), ook bij S4 zonder markering
+for tekst, verwacht in [
+        ('De buurman verklaart: "De barst was er al voor de werken. De aannemer van de buren is aansprakelijk." De barst is 1,5 mm breed.',
+         'De buurman verklaart: "De barst was er al voor de werken. (geschrapt: schrijfregel S5, zie de schrijfregels van het kantoor)" De barst is 1,5 mm breed.'),
+        ("De buurman verklaart: \u201cDe barst was er al. De aannemer is aansprakelijk.\u201d De barst is 1,5 mm breed.",
+         "De buurman verklaart: \u201cDe barst was er al. (geschrapt: schrijfregel S5, zie de schrijfregels van het kantoor)\u201d De barst is 1,5 mm breed."),
+        ("(Opmerking van de bouwheer. De architect sprak zijn vaststellingen in.) De goot lekt.", "(Opmerking van de bouwheer.) De goot lekt."),
+        ("(Volgens de huurder. Zie opname 00:12:05.) De goot lekt.", "(Volgens de huurder.) De goot lekt."),
+        ('De aannemer zegt: "Wij zijn aansprakelijk." De goot lekt.', "(geschrapt: schrijfregel S5, zie de schrijfregels van het kantoor) De goot lekt.")]:
+    t38, ing38 = S.toepassen(tekst)
+    check(f"sluitteken correct: {tekst[:40]!r}", t38 == verwacht and ing38 and S.toepassen(t38)[0] == t38, t38)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

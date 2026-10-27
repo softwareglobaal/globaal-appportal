@@ -108,8 +108,9 @@ _VERWIJZING_HAAKJE = r"(?:" + _HAAKJE_MET_TIJD + r"|\(\s*" + _ZIE + _OPNAMEWOORD
 # begin van een regel na een zinseinde of een lege regel; 'raam, zie\nopname 00:12.' is het einde van een zin (24e review).
 # Een regel die alleen uit een verwijzing bestaat, valt al eerder helemaal weg (_verwijzingsregels_weg, 32e review).
 _ZINSBEGIN_REGEL = r"(?:\A|(?<=[.!?]\n)|(?<=[.!?][ \t]\n)|(?<=\n\n)|(?<=\n[ \t]\n))[ \t]*"
-OPNAME_LOS = re.compile(r"(?:(?<=[.!?])[ \t]*" + _VERWIJZING + r"\s*[.!?](?=\s|$)|" + _ZINSBEGIN_REGEL + _VERWIJZING
-                        + r"\s*[.!?](?:[ \t]+|(?=\n)|\Z))", re.I)
+# een sluitteken mag volgen: "(Volgens de huurder. Zie opname 00:12:05.)" wordt "(Volgens de huurder.)" (38e review)
+OPNAME_LOS = re.compile(r"(?:(?<=[.!?])[ \t]*" + _VERWIJZING + r"\s*[.!?](?=[\s\"'\u201d\u2019\u00bb)\]]|$)|" + _ZINSBEGIN_REGEL
+                        + _VERWIJZING + r"\s*[.!?](?:[ \t]+|(?=\n)|\Z))", re.I)
 OPNAME_LOS_HAAKJES = re.compile(r"(?:(?<=[.!?])[ \t]*" + _VERWIJZING_HAAKJE + r"\s*[.!?]?(?=\s|$)|" + _ZINSBEGIN_REGEL
                                 + _VERWIJZING_HAAKJE + r"\s*[.!?]?(?:[ \t]+|(?=\n)|\Z))", re.I)
 OPNAME = [
@@ -173,6 +174,24 @@ _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
 # een sluitend aanhalingsteken of haakje direct na de punt hoort bij die zin, niet bij de volgende (37e review)
 _SLUIT = r"(?:(?<=[.!?])[\"'\u201d\u2019\u00bb)\]]+)?"
 _ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*" + _SLUIT + r"\s*|[.!?]+" + _SLUIT + r"\s*")
+_OPENER = {'"': '"', "'": "'", "\u201d": "\u201c", "\u2019": "\u2018", "\u00bb": "\u00ab", ")": "(", "]": "["}
+
+
+def _los_sluitteken(kern):
+    """Het sluitteken achter de punt dat een citaat of haakje van een eerdere zin sluit: het openingsteken staat niet in
+    deze zin. Wordt de zin geschrapt of gemarkeerd, dan blijft dat teken staan (38e review); een citaat dat in de zin
+    zelf opent, gaat mee weg (37e review)."""
+    m = re.search(r"[.!?]([\"'\u201d\u2019\u00bb)\]]+)$", kern)
+    if not m:
+        return ""
+    romp, blijft = kern[:m.start(1)], ""
+    for t in m.group(1):
+        o = _OPENER[t]
+        if (romp.count(t) % 2 == 1) if o == t else (romp.count(o) > romp.count(t)):
+            romp += t          # sluit iets dat in deze zin opende
+        else:
+            blijft += t
+    return blijft
 # Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
 # opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
 _KAAL_TIJDSTIP = re.compile(r"\s*\(\s*" + _OPNAMETIJDEN + r"\s*\)")   # een schaal (1:50) is geen tijdstip (29e review)
@@ -248,9 +267,15 @@ def _opname_weg(tekst):
     delen = []
     markering = MARKERING.format(regel="S4")
 
-    def weg(staart):
+    def weg(staart, blijft=""):
         # de zin valt weg; tussen wat ervoor en erna staat blijft de grootste regelafstand van de twee (lijstpunten en
-        # alinea's plakken niet aan elkaar, en er komt geen lege regel bij)
+        # alinea's plakken niet aan elkaar, en er komt geen lege regel bij); een sluitteken van een eerdere zin blijft
+        if blijft:
+            if delen:
+                romp = delen[-1].rstrip(" \t")
+                delen[-1] = romp + blijft + delen[-1][len(romp):]
+            else:
+                delen.append(blijft + " ")
         na = staart.count("\n")
         if not na:
             return
@@ -285,13 +310,13 @@ def _opname_weg(tekst):
             ingrepen.append(("S4", kern))
             legende = legende or is_legende
             if _alleen_meta(kern) and not OPNAME_VOLGENS.search(kern):
-                weg(staart)
+                weg(staart, _los_sluitteken(kern))
             else:
-                delen.append(kop + markering + staart)
+                delen.append(kop + markering + _los_sluitteken(kern) + staart)
             continue
         if OPNAME_VOLGENS.search(kern):
             ingrepen.append(("S4", kern))
-            delen.append(kop + markering + staart)
+            delen.append(kop + markering + _los_sluitteken(kern) + staart)
             continue
         delen.append(zin)
     tekst, k = _verwijzingsregels_weg("".join(delen), legende)
@@ -352,7 +377,8 @@ def toepassen(tekst, profiel=None, vast=frozenset()):
             if p.search(zin):
                 ingrepen.append((regel, zin.strip()))
                 staart = zin[len(zin.rstrip()):]
-                delen.append(zin[:len(zin) - len(zin.lstrip())] + MARKERING.format(regel=regel) + (staart if "\n" in staart else " "))
+                delen.append(zin[:len(zin) - len(zin.lstrip())] + MARKERING.format(regel=regel) + _los_sluitteken(zin.strip())
+                             + (staart if "\n" in staart else " "))
                 break
         else:
             delen.append(zin)
