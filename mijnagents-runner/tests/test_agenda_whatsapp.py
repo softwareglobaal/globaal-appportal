@@ -542,6 +542,31 @@ finally:
 check("een verre dag blijft bewaard zolang het nieuwe blok niet gevonden en gemeld is (hertest 6)",
       AW.verre_dagen() == {"2028-03-07": ["nieuw18"]}, str(AW.verre_dagen()))
 
+# --- Codex-hertest 7 (PR 113) ---------------------------------------------------------------------------------
+_o19 = (W._zorg_blok_met_merk, W._prive_item_lezen, _MA._zorg_json, _MA.zorgprofielen, list(W.ZORG_GEZET), W._insert)
+W._zorg_blok_met_merk = lambda sleutel, tok: "al19"
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "start": _ver_start.isoformat(),
+                                        "einde": (_ver_start + timedelta(minutes=30)).isoformat()}
+W._insert = lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen nieuw blok"))
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+W.ZORG_GEZET[:] = []
+try:
+    W.zorg_afspraken_zetten(_mail16(), [], "tok")
+    _gez19 = list(W.ZORG_GEZET)
+finally:
+    W._zorg_blok_met_merk, W._prive_item_lezen, _MA._zorg_json, _MA.zorgprofielen = _o19[:4]
+    W.ZORG_GEZET[:] = _o19[4]
+    W._insert = _o19[5]
+check("een blok dat na een herstart via zijn merk gekoppeld wordt, meldt zich voor de meldstap (hertest 7, punt 1)",
+      _gez19 == [(_ver_start.date().isoformat(), "al19")], str(_gez19))
+check("een vervallen zorgblok dat de praktijk verzet, wordt weer een gewone afspraak (vervalt weg, Bezet; punt 2)",
+      W._niet_meer_vervallen({"titel": "vervalt !! [PR] Tandarts - Proef"}) == {"summary": "!! [PR] Tandarts - Proef",
+                                                                                "transparency": "opaque"}
+      and W._niet_meer_vervallen({"titel": "!! [PR] Tandarts - Proef"}) == {})
+_h7 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("en beide verschuifroutes van de zorgstap gebruiken dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 2)
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

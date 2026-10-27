@@ -3536,6 +3536,14 @@ def _toekomst(start, nu):
         return False
 
 
+def _niet_meer_vervallen(x):
+    """Een zorgblok dat Mehdi liet vervallen ('A3 vervalt') en dat de praktijk nu naar een nieuw uur verzet, is weer een
+    gewone afspraak: 'vervalt' weg en Bezet, zodat de meldstap het als nieuwe versie meldt (Codex-hertest 7, PR 113)."""
+    if not lara_vervalt(x):
+        return {}
+    return {"summary": re.sub(r"^\s*vervalt\s+", "", x.get("titel") or "", flags=re.I), "transparency": "opaque"}
+
+
 def _zorg_blok_met_merk(sleutel, tok):
     """Het id van een blok in de privé-agenda met dit zorgmerk, op welke datum ook, of ''. Over alle pagina's."""
     import urllib.parse  # noqa: PLC0415
@@ -3612,6 +3620,8 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 if _zelfde_tijd(x.get("start"), a["start"]) and _zelfde_tijd(x.get("einde"), a["einde"]):
                     a["status"] = "gekoppeld"
                     st["gekoppeld"] += 1
+                    # ook na een herstart tussen zetten en melden kijkt de meldstap dit blok na (Codex-hertest 7, PR 113)
+                    ZORG_GEZET.append((a["start"][:10], bestaand))
                     st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
                     continue
                 try:
@@ -3619,7 +3629,8 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                                "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
                                "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van "
                                                f"{(x.get('start') or '')[:16].replace('T', ' ')} naar "
-                                               f"{a['start'][:16].replace('T', ' ')} volgens mail.").strip()}, tok)
+                                               f"{a['start'][:16].replace('T', ' ')} volgens mail.").strip(),
+                               **_niet_meer_vervallen(x)}, tok)
                     probleem = _zorg_nalezen(PRIVE_AGENDA, bestaand, tok, start=a["start"], einde=a["einde"])
                 except Exception as ex:  # noqa: BLE001
                     probleem = type(ex).__name__
@@ -3756,7 +3767,8 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
                                "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
-                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip()}, tok)
+                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip(),
+                               **_niet_meer_vervallen(x)}, tok)
                     probleem = _zorg_nalezen(kal, eid, tok, start=a["start"], einde=einde)
                     if probleem:
                         st["fout"] += 1
