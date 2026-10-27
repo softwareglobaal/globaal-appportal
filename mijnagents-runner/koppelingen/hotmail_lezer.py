@@ -139,7 +139,8 @@ def main():
                 fouten.append(f"{mapnaam}: {gevonden} gevonden, {len(deel)} gelezen")
             mappen[mapnaam] = {"soort": mapsoort, "berichten": len(deel)}
             berichten += deel
-    return {"berichten": berichten, "fouten": fouten, "mappen": mappen}
+    # vanaf: de eerste dag die elke soort dekt (SINCE); De Dagbundelaar meldt een oudere dag als onvolledig (overleg X2)
+    return {"berichten": berichten, "fouten": fouten, "mappen": mappen, "vanaf": sinds}
 
 
 if __name__ == "__main__":

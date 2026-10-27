@@ -165,6 +165,8 @@ def test_postvak_leest_het_bestand_en_ziet_het_antwoord():
     assert d["verzonden_dagen"] == 730 and d["adres"] == ADRES and d["bron"] == "server"
     mb = {"adres": ADRES, "bron": doel}
     assert 0 <= postvak.bron_uren_oud(mb, NU) < 0.01
+    # Overleg 26-10-2026 (De Dagbundelaar, X2): het bestand zegt vanaf welke dag het elke soort dekt, zoals SINCE vroeg
+    assert d["vanaf"] == postvak.bron_vanaf(mb) == {"INBOX": "2026-09-26", "Sent": "2024-10-26"}, d.get("vanaf")
     binnen, verzonden = postvak.uit_bestand(doel, "INBOX"), postvak.uit_bestand(doel, "Sent")
     assert [b["onderwerp"] for b in binnen] == ["Deze week", "Planning", "Offerte"], "nieuwste eerst"
     assert postvak.wie_is(binnen[-1]) & postvak.antwoordt_op(verzonden[0]), "het antwoord sluit de offerte via de draad"
