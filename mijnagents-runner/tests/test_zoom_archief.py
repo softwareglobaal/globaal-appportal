@@ -36,6 +36,11 @@ from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
 ECHT_RONDE_GESLAAGD = ZA_ACC.archief_ronde_geslaagd
 
+
+def wachtend():
+    """De plaatshouders in een groep in verwerking die nog niet opgelost is."""
+    return {p for g in ZA.lees_staat()["voorlopig"].values() if not g.get("opgelost") for p in g["plaatshouders"]}
+
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
 os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
                   DROPBOX_PRIVE_ACCOUNT_ID="dbid:proef-eigen")
@@ -1213,8 +1218,8 @@ def test_codex_verwerking_39_een_voorlopig_id_zonder_vervanger_wordt_na_een_dag_
     ronde()
     m["bestanden"].pop()  # de MP4 verdwijnt zonder vervanger; de meeting blijft met alleen het geluid
     r, uit = ronde(nu=NU + timedelta(hours=1))
-    assert "voorlopig" in ZA.lees_staat()["vervanging"] and not ZA.lees_staat()["verdwenen"] and not r.noden
-    assert not uit["dekking"] and not uit["veilig"], "wachten op een vervanger houdt groen tegen"
+    assert "voorlopig" in wachtend() and not ZA.lees_staat()["verdwenen"] and not r.noden
+    assert not uit["dekking"], "wachten op een vervanger houdt de dekking tegen (een recente groep raakt de wisregel niet)"
     assert ZA.mapnaam(m) + "/opname.json" not in d.bestanden, "zolang een vervanger kan komen, nog geen beschrijving"
     r, uit = ronde(nu=NU + timedelta(hours=26))
     assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
@@ -1229,7 +1234,7 @@ def test_codex_verwerking_39_een_vervanger_van_een_andere_soort_telt_niet():
     m["bestanden"] = [{"id": "tl", "soort": "TIMELINE", "status": "completed", "start": m["start"], "einde": "",
                        "grootte": 2, "opnametype": "timeline", "extensie": "JSON", "link": True}]
     ronde(nu=NU + timedelta(hours=1))
-    assert "voorlopig" in ZA.lees_staat()["vervanging"], "een tijdlijn vervangt geen video"
+    assert "voorlopig" in wachtend(), "een tijdlijn vervangt geen video als de plaatshouder al een soort heeft"
 
 
 def test_codex_verwerking_41_een_bestand_dat_er_al_was_is_geen_vervanger():
@@ -1242,7 +1247,7 @@ def test_codex_verwerking_41_een_bestand_dat_er_al_was_is_geen_vervanger():
     ronde()
     m["bestanden"].pop()  # de voorlopige MP4 verdwijnt; de MP4 die er al was, met hetzelfde type en begin, blijft
     ronde(nu=NU + timedelta(hours=1))
-    assert "voorlopig" in ZA.lees_staat()["vervanging"], "een bestand dat er al was, vervangt het voorlopige niet"
+    assert "voorlopig" in wachtend(), "een bestand dat er al was, vervangt het voorlopige niet"
     r, _ = ronde(nu=NU + timedelta(hours=26))
     assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
 
@@ -1258,7 +1263,11 @@ def test_codex_verwerking_41_een_nieuw_bestand_vervangt_hoogstens_een_voorlopig_
     m["bestanden"] = [{"id": "definitief", "soort": "MP4", "status": "completed", "start": "2026-10-27T12:01:51Z",
                        "einde": "", "grootte": 5, "opnametype": "speaker_view", "extensie": "MP4", "link": True}]
     ronde(nu=NU + timedelta(hours=1))
-    assert len(ZA.lees_staat()["vervanging"]) == 1, "een definitief bestand heft hoogstens een voorlopig id op"
+    g = next(iter(ZA.lees_staat()["voorlopig"].values()))
+    assert not g["opgelost"] and len(g["plaatshouders"]) == 2 and len(g["kandidaten"]) == 1, \
+        "een definitief bestand heft hoogstens een voorlopig id op"
+    ronde(nu=NU + timedelta(hours=27))
+    assert len(ZA.lees_staat()["verdwenen"]) == 1, "na een dag is het tweede voorlopige id een verlies"
 
 
 def test_codex_verwerking_42_een_teruggekeerd_id_wacht_niet_langer():
@@ -1271,13 +1280,15 @@ def test_codex_verwerking_42_een_teruggekeerd_id_wacht_niet_langer():
         ronde()
         m["bestanden"].pop()
         ronde(nu=NU + timedelta(hours=1))
-        assert "voorlopig" in ZA.lees_staat()["vervanging"]
+        assert "voorlopig" in wachtend()
         z.inhoud["voorlopig"] = b"video"
         m["bestanden"].append({**voorlopig, "status": terug, "grootte": 5 if terug == "completed" else 0,
                                "link": terug == "completed"})
         ronde(nu=NU + timedelta(hours=2))
         s = ZA.lees_staat()
-        assert "voorlopig" not in s["vervanging"] and "voorlopig" not in s["verdwenen"], terug
+        assert "voorlopig" not in s["verdwenen"], terug
+        if terug == "completed":
+            assert "voorlopig" not in wachtend() and "voorlopig" in s["bestanden"], "afgerond: een gewoon bestand"
         ronde(nu=NU + timedelta(hours=30))
         assert "voorlopig" not in ZA.lees_staat()["verdwenen"], terug
 
@@ -1307,7 +1318,7 @@ def test_codex_verwerking_44_een_vervanger_die_verschijnt_terwijl_het_voorlopige
     ronde(nu=NU + timedelta(hours=2))                          # dan alleen B
     r, _ = ronde(nu=NU + timedelta(hours=27))
     s = ZA.lees_staat()
-    assert "A" not in s["verdwenen"] and "A" not in s["vervanging"] and "B" in s["bestanden"], s["verdwenen"]
+    assert "A" not in s["verdwenen"] and "A" not in wachtend() and "B" in s["bestanden"], s["verdwenen"]
     assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
 
 
@@ -1347,7 +1358,7 @@ def test_codex_verwerking_46_een_bewezen_vervanger_die_eerst_uit_zoom_verdwijnt_
     r, _ = ronde(nu=NU + timedelta(hours=3))
     r, _ = ronde(nu=NU + timedelta(hours=30))
     s = ZA.lees_staat()
-    assert "B" in s["bestanden"] and "A" not in s["verdwenen"] and "A" not in s["vervanging"], (s["verdwenen"], s["vervanging"])
+    assert "B" in s["bestanden"] and "A" not in s["verdwenen"] and "A" not in wachtend(), s["verdwenen"]
 
 
 def test_gemeten_een_plaatshouder_zonder_soort_wordt_vervangen_door_de_bestanden_met_hetzelfde_begin():
@@ -1369,8 +1380,61 @@ def test_gemeten_een_plaatshouder_zonder_soort_wordt_vervangen_door_de_bestanden
     r, uit = ronde(nu=NU + timedelta(hours=1))
     r, uit = ronde(nu=NU + timedelta(hours=30))
     s = ZA.lees_staat()
-    assert not s["verdwenen"] and not s["vervanging"] and len(s["bestanden"]) == 3, (s["verdwenen"], s["vervanging"])
+    assert not s["verdwenen"] and not wachtend() and len(s["bestanden"]) == 3, s["verdwenen"]
     assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r) and not VOORSTELLEN
+
+
+# -------------------------------------------- Codex-controle verwerking 5: het groepsmodel (27-10-2026) ---
+def _plaatshouder(i, start="2026-10-27T12:01:51Z"):
+    return {"id": i, "soort": "", "status": "processing", "start": start, "einde": "", "grootte": 0, "opnametype": "",
+            "extensie": "", "link": True}
+
+
+def _definitief(z, i, soort="MP4", start="2026-10-27T12:01:51Z"):
+    z.inhoud[i] = i.encode()
+    return {"id": i, "soort": soort, "status": "completed", "start": start, "einde": "", "grootte": len(i),
+            "opnametype": "speaker_view", "extensie": soort, "link": True}
+
+
+def test_codex_verwerking_47_twee_plaatshouders_twee_vervangers_ook_als_een_vervanger_verdwijnt():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2")]
+    ronde()
+    B, C = _definitief(z, "B"), _definitief(z, "C", soort="TIMELINE")
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2"), B, C]
+    ronde(nu=NU + timedelta(hours=1))                       # B en C gekopieerd en bewezen
+    m["bestanden"] = [_plaatshouder("A2"), B]               # A1 weg, C verdwijnt uit Zoom
+    ronde(nu=NU + timedelta(hours=2))
+    m["bestanden"] = [B]                                    # A2 weg
+    r, _ = ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert not s["verdwenen"] and not wachtend() and {"B", "C"} <= set(s["bestanden"]), s["verdwenen"]
+
+
+def test_codex_verwerking_48_een_plaatshouder_die_terugkomt_na_de_koppeling_houdt_haar_vervanger():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A")]
+    ronde()
+    B = _definitief(z, "B")
+    m["bestanden"] = [B]
+    ronde(nu=NU + timedelta(hours=1))                       # A weg, B bewezen: opgelost
+    m["bestanden"] = [_plaatshouder("A"), B]                # A komt even terug
+    ronde(nu=NU + timedelta(hours=2))
+    m["bestanden"] = [B]                                    # en verdwijnt opnieuw
+    ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    assert "A" not in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+
+
+def test_een_oude_groep_in_verwerking_telt_als_niet_veilig():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("oud", start="2026-08-01T09:00:01Z")]
+    _, uit = ronde()
+    assert not uit["veilig"] and not uit["dekking"], "een opname van drie maanden die Zoom nog verwerkt, is niet veilig"
 
 if __name__ == "__main__":
     goed = fout = 0
