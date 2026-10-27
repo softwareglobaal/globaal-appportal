@@ -4,11 +4,11 @@
 <p class="adminbar"><a href="{{ url_for('access_overview') }}">Access overview →</a></p>
 {% endif %}
 <h1>Your applications</h1>
-{% set actief = tiles | rejectattr('status', 'equalto', 'archived') | list %}
-{% set archief = tiles | selectattr('status', 'equalto', 'archived') | list %}
+{# status archived (apps.yaml) verbergt de tegel; overleg 27-10-2026 X4/G2 #}
+{% set tiles = tiles | rejectattr('status', 'equalto', 'archived') | list %}
 {% if tiles %}
 <div class="grid">
-    {% for tile in actief %}
+    {% for tile in tiles %}
     <a class="tile" href="{{ url_for('go', app_id=tile.id) }}">
         <h2>{{ tile.name }}
             {% if tile.status == 'in_development' %}
@@ -19,17 +19,6 @@
     </a>
     {% endfor %}
 </div>
-{% if archief %}
-<h2 class="archief-kop">Archive</h2>
-<div class="grid">
-    {% for tile in archief %}
-    <a class="tile archived" href="{{ url_for('go', app_id=tile.id) }}">
-        <h2>{{ tile.name }} <span class="badge">archived</span></h2>
-        <p>{{ tile.description }}</p>
-    </a>
-    {% endfor %}
-</div>
-{% endif %}
 {% else %}
 <p>No applications are assigned to your role. Contact your administrator.</p>
 {% endif %}

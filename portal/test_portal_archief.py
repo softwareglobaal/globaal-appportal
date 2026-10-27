@@ -1,4 +1,4 @@
-"""Grendel: een app met status archived staat in het portaal apart onder Archive, niet tussen de gewone tegels.
+"""Grendel: een app met status archived is niet zichtbaar in het portaal (overleg 27-10-2026, X4 en G2).
 
 Draait zonder Flask of Authentik: het sjabloon wordt rechtstreeks met Jinja2 gerenderd, url_for is een stub.
 """
@@ -40,12 +40,10 @@ check("de catalogus leest elke app nog", all(appcatalogus.App(a) for a in apps))
 
 html = render([{"id": "nieuw", "name": "Nieuw", "description": "a", "status": "active"},
                {"id": "oud", "name": "Oud", "description": "b", "status": "archived"}])
-kop = html.find("Archive")
-check("er is een kop Archive", kop > 0, html)
-check("de actieve tegel staat boven de kop", 0 < html.find("/go/nieuw") < kop, html)
-check("de gearchiveerde tegel staat onder de kop, grijs", html.find('class="tile archived" href="/go/oud"') > kop, html)
-html = render([{"id": "nieuw", "name": "Nieuw", "description": "a", "status": "active"}])
-check("zonder gearchiveerde app geen kop Archive", "Archive" not in html, html)
+check("de actieve tegel staat er", "/go/nieuw" in html, html)
+check("de gearchiveerde tegel staat er niet", "/go/oud" not in html and "Oud" not in html, html)
+html = render([{"id": "oud", "name": "Oud", "description": "b", "status": "archived"}])
+check("alleen gearchiveerde apps: de gewone melding zonder tegels", "No applications are assigned" in html, html)
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

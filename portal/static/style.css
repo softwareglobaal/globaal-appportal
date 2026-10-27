@@ -117,7 +117,3 @@ h1 { font-size: 1.4rem; }
 .access-table tr:last-child td { border-bottom: none; }
 .access-table tr.inactive td { color: #9aa7b4; }
 .empty { color: #5b6b7d; font-size: 0.9rem; margin-top: 0.6rem; }
-
-/* Gearchiveerde apps (status: archived in apps.yaml): apart onderaan, grijs, nog wel te openen. */
-.archief-kop { margin: 2rem 0 0.8rem; font-size: 1rem; color: #5b6b7d; }
-.tile.archived { opacity: 0.55; }
