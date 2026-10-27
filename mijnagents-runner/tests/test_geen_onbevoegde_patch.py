@@ -534,6 +534,9 @@ dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen"
          "geplande_start": lambda: True, "HANDKLEUREN": [], "open_na": [], "ROUTES_GESTOPT": False,
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
          "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": []}
+# fase 1 (overleg 27-10-2026): de weeknood en de noodlijst van een dagronde staan nu ook aan het einde van de ronde
+dummy.update({"weekconsolidatie_noden": lambda: [], "weekconsolidatie_fout": lambda: "",
+              "noden_voor_hartslag": lambda noden, _dag: noden})
 resultaat = veilig(lambda: exec(compile(staart, str(BRON), "exec"), dummy))
 namen = [x[0] if x[0] == "verstuur" else x[1] for x in volgorde]
 check("rondeverslag gaat na vragen en vastgelopen-oproep weg",

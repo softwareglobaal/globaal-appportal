@@ -279,19 +279,54 @@ def markdown(week, uit, meta):
     return "\n".join(r) + "\n"
 
 
+def _vervang(bron, doel):
+    os.replace(bron, doel)
+
+
 def schrijf(week, uit, meta, ronde, proef=False, nu_utc=None):
+    """Een week is pas geslaagd als het weekbestand en de weekregels er samen staan (Codex-controle fase 1, rondes 1
+    tot 3). Eerst alles als tijdelijk bestand; dan worden de weekregels actief; dan <week>.json, dat 'geslaagd' zegt
+    (de weeknood van de Agendawacht en al_gedaan lezen het). Faalt die laatste stap, dan komen de weekregels van
+    vorige week terug. Zo is er nooit een geslaagde week zonder haar regels, en nooit nieuwe regels zonder week."""
     nu_utc = nu_utc or datetime.now(timezone.utc)
     WEEKMAP.mkdir(parents=True, exist_ok=True)
     naam = f"{week}-proef" if proef else week
-    (WEEKMAP / f"{naam}.json").write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"),
-                                                      "ronde": ronde, "model": meta, **uit},
-                                                     ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (WEEKMAP / f"{naam}.md").write_text(markdown(week, uit, meta), encoding="utf-8")
+    regels_tmp = REGELS_WEEK.with_name(REGELS_WEEK.name + ".tmp")
     if not proef:
-        REGELS_WEEK.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"),
-                                           "bron": f"weekconsolidatie/{week}.json",
-                                           "categorieen": uit["regels_vooraf"]}, ensure_ascii=False, indent=1) + "\n",
-                               encoding="utf-8")
+        regels_tmp.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"),
+                                          "bron": f"weekconsolidatie/{week}.json",
+                                          "categorieen": uit["regels_vooraf"]}, ensure_ascii=False, indent=1) + "\n",
+                              encoding="utf-8")
+    tmp = WEEKMAP / f"{naam}.json.tmp"
+    tmp.write_text(json.dumps({"week": week, "gemaakt": nu_utc.isoformat(timespec="seconds"), "ronde": ronde,
+                               "model": meta, **uit}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    if proef:
+        _vervang(tmp, WEEKMAP / f"{naam}.json")
+        return
+    vorige = REGELS_WEEK.read_bytes() if REGELS_WEEK.exists() else None
+    _vervang(regels_tmp, REGELS_WEEK)
+    try:
+        _vervang(tmp, WEEKMAP / f"{naam}.json")
+    except Exception:
+        if vorige is None:
+            REGELS_WEEK.unlink(missing_ok=True)
+        else:
+            REGELS_WEEK.write_bytes(vorige)
+        raise
+
+
+def stand_schrijven(week, ok, fout="", ronde=False, nu_utc=None):
+    """laatste.json: hoe de laatste echte run afliep. De Agendawacht zet de fout in het detail van haar weeknood; of de
+    nood open staat, beslist alleen een geslaagd <week>.json (agenda_wacht.weekconsolidatie_noden, overleg 27-10-2026).
+    Eerst een tijdelijk bestand, dan vervangen: de Agendawacht leest nooit een half bestand."""
+    nu_utc = nu_utc or datetime.now(timezone.utc)
+    WEEKMAP.mkdir(parents=True, exist_ok=True)
+    tmp = WEEKMAP / "laatste.json.tmp"
+    tmp.write_text(json.dumps({"week": week, "ok": bool(ok), "fout": str(fout)[:300], "ronde": ronde,
+                               "tijd": nu_utc.isoformat(timespec="seconds")}, ensure_ascii=False, indent=1) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, WEEKMAP / "laatste.json")
 
 
 def mislukt_overzicht(week, fout):
@@ -360,12 +395,18 @@ def main():
         return 0
     if not sleutel_laden():
         print("geen ANTHROPIC_API_KEY in ~/appportal/.env of ~/agents/.env", file=sys.stderr)
+        if not droog:
+            stand_schrijven(week, False, "geen ANTHROPIC_API_KEY", ronde)
         return 1
     try:
         ruw, meta = model_oordeel(inv)
     except Exception as e:  # noqa: BLE001
         print(f"weekconsolidatie mislukt: {type(e).__name__}: {e}", file=sys.stderr)
         if not droog:
+            try:
+                stand_schrijven(week, False, f"{type(e).__name__}: {e}", ronde)
+            except Exception as e3:  # noqa: BLE001
+                print(f"  stand niet geschreven: {type(e3).__name__}: {e3}", file=sys.stderr)
             W.ag.log(f"week {week}", "fout", f"weekconsolidatie {week} mislukt: {type(e).__name__}", str(e)[:500])
             W.ag.log_verstuur()
             try:
@@ -375,10 +416,17 @@ def main():
                 print(f"  agenda mislukt: {type(e2).__name__}: {e2}", file=sys.stderr)
         return 1
     uit = schoon(ruw)
-    schrijf(week, uit, meta, ronde, proef=droog)
+    try:
+        schrijf(week, uit, meta, ronde, proef=droog)
+    except Exception as e:  # noqa: BLE001
+        print(f"weekconsolidatie niet weggeschreven: {type(e).__name__}: {e}", file=sys.stderr)
+        if not droog:
+            stand_schrijven(week, False, f"niet weggeschreven: {type(e).__name__}: {e}", ronde)
+        return 1
     print(markdown(week, uit, meta))
     if droog:
         return 0
+    stand_schrijven(week, True, ronde=ronde)
     try:
         hoe = in_agenda(week, maandag_na(nu), uit, items)
         print(f"  agenda: {hoe} op maandag {maandag_na(nu).isoformat()} (privé, hele dag, vrij)")

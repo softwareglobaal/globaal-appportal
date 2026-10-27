@@ -801,6 +801,12 @@ voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem zie
    overzicht: wat terugkwam, principes, wat op te ruimen is, weekregels voor laag 1 en wat alleen Mehdi kan
    beslissen. Dat staat maandag als hele-dag-item in de privé-agenda (vrij, zonder melding) en volledig in
    Data uit Mehdi/Agendawacht/weekconsolidatie. Het model stelt voor; een sessie legt vast, met een test.
+   Ontbreekt er sinds zondag 20:00 een geslaagd weekoverzicht, dan staat er op het bord een nood tot de volgende
+   geslaagde run, ook een met de hand (weekconsolidatie_noden; de fout staat in laatste.json en in het detail).
+
+Noden (overleg 27-10-2026): alleen de volledige ronde stuurt de hele lijst, zodat het bord opgeloste noden sluit. Een
+dagronde (--dag) ziet maar een dag: ze mag noden openen, nooit sluiten (noden_voor_hartslag). 'Mijn rit zonder
+afspraak weggehaald' is een geslaagde opruiming, geen nood.
 
 Laag 1 en 3 zet Mehdi een keer aan in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen):
 UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en twee opdrachten:

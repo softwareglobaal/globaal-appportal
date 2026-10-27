@@ -5669,6 +5669,88 @@ def te_krap_noden(regels):
     return []
 
 
+def zonder_rit_indelen(rregels):
+    """De regels van reistijd_zetten per reden waarom een buitenafspraak geen reistijd kreeg. 'Mijn rit zonder afspraak
+    weggehaald' is een geslaagde opruiming, geen nood (F8, overleg 27-10-2026)."""
+    zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": [],
+                  "rit zonder afspraak": [], "buiten op een dag zonder auto": [],
+                  "grendelbron niet te lezen (geen auto of vakantie)": []}
+    for regel in rregels or []:
+        if "geen adres, geen reistijd" in regel:
+            # rsplit: in het uur staat zelf een dubbelpunt, dus split(":") hield alleen
+            # "2026-09-21T16" over, zonder de afspraak. Gezien 21-09-2026.
+            zonder_rit["geen adres in de agenda"].append(regel.rsplit(": geen adres", 1)[0][:80])
+        elif "rit zonder afspraak" in regel and not regel.endswith(": mijn rit zonder afspraak weggehaald"):
+            zonder_rit["rit zonder afspraak"].append(regel[:110])
+        elif "grendelbron niet te lezen" in regel:
+            zonder_rit["grendelbron niet te lezen (geen auto of vakantie)"].append(regel[:110])
+        elif "BUITEN op een dag zonder auto" in regel:
+            zonder_rit["buiten op een dag zonder auto"].append(regel[:110])
+        elif "adres niet gevonden" in regel:
+            zonder_rit["adres niet gevonden"].append(regel[:110])
+        elif "rijtijd niet berekend" in regel:
+            zonder_rit["rijtijd niet berekend"].append(regel[:110])
+    return zonder_rit
+
+
+def noden_voor_hartslag(noden, dag_arg):
+    """F8 (overleg 27-10-2026): het bord sluit elke open nood die niet in de lijst staat. Een dagronde (--dag) ziet maar
+    een dag en bouwt de mailnoden niet, dus ze mag noden openen maar nooit sluiten: open noden plus de nieuwe. Is het
+    bord niet te lezen, dan geen lijst (None), zodat het bord niets sluit. Alleen de volledige ronde stuurt de
+    gezaghebbende lijst."""
+    return ag.noden_bij_breuk(noden) if dag_arg else noden
+
+
+WEEKCONSOLIDATIE_MAP = os.path.expanduser("~/appportal/mijnagents-data/export/Agendawacht/weekconsolidatie")
+WEEKNOOD = {"tekst": "Weekoverzicht van de Agendawacht ontbreekt: de weekconsolidatie liep niet goed. Start een "
+                     "Claude-sessie om ze te herstellen en opnieuw te draaien.", "wie": "mehdi"}
+
+
+def weekconsolidatie_anker(nu):
+    """Zondag 20:00 Brussel voor de laatste maandag 06:00 Brussel: vanaf dan hoort er een weekoverzicht te zijn."""
+    t = nu.astimezone(TIJDZONE)
+    maandag = t.date() - timedelta(days=t.weekday())
+    if t < datetime(maandag.year, maandag.month, maandag.day, 6, 0, tzinfo=TIJDZONE):
+        maandag -= timedelta(days=7)
+    zondag = maandag - timedelta(days=1)
+    return datetime(zondag.year, zondag.month, zondag.day, 20, 0, tzinfo=TIJDZONE)
+
+
+def weekconsolidatie_noden(weekmap=None, nu=None):
+    """De weeknood (laag 4, overleg 27-10-2026): open zolang er sinds het anker geen geslaagd weekoverzicht is. Een
+    geslaagde run schrijft altijd <week>.json met 'gemaakt'; een mislukte nooit. Alleen het tijdstip telt, niet het
+    weeklabel, zodat ook een geslaagde herhaling met de hand de nood sluit. Een onleesbare map, een tijd zonder zone of
+    een tijd in de toekomst telt nooit als geslaagd."""
+    nu = nu or nu_lokaal()
+    anker = weekconsolidatie_anker(nu)
+    map_ = weekmap or WEEKCONSOLIDATIE_MAP
+    try:
+        namen = os.listdir(map_)
+    except OSError:
+        return [dict(WEEKNOOD)]
+    for naam in namen:
+        if not re.fullmatch(r"\d{4}-W\d{2}\.json", naam):
+            continue
+        try:
+            with open(os.path.join(map_, naam), encoding="utf-8") as f:
+                gemaakt = datetime.fromisoformat(str(json.load(f).get("gemaakt") or ""))
+        except (OSError, ValueError, AttributeError, TypeError):
+            continue
+        if gemaakt.tzinfo is not None and anker <= gemaakt <= nu:
+            return []
+    return [dict(WEEKNOOD)]
+
+
+def weekconsolidatie_fout(weekmap=None):
+    """De laatste fout van de weekconsolidatie (laatste.json), alleen voor het detail van de hartslag."""
+    try:
+        with open(os.path.join(weekmap or WEEKCONSOLIDATIE_MAP, "laatste.json"), encoding="utf-8") as f:
+            stand = json.load(f)
+        return "" if stand.get("ok") else str(stand.get("fout") or "")[:120]
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def _vastgelopen(items, nu=None, uren=48):
     """Zoals vastgelopen, met per vraag de volledige ID's van de betrokken afspraken. Een sleutel als 'dubbel:..',
     'zoompwd:<dag>' of 'wachtkamer:<meeting>' begint niet met een afspraak-ID, dus vragen_in_agenda kan de afspraak
@@ -6284,25 +6366,8 @@ def main():
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
-        zonder_rit = {"geen adres in de agenda": [], "adres niet gevonden": [], "rijtijd niet berekend": [],
-                      "rit zonder afspraak": [], "buiten op een dag zonder auto": [],
-                      "grendelbron niet te lezen (geen auto of vakantie)": []}
+        zonder_rit = zonder_rit_indelen(rregels)
         te_krap = [r[:140] for r in rregels if "TE KRAP" in r]
-        for regel in rregels:
-            if "geen adres, geen reistijd" in regel:
-                # rsplit: in het uur staat zelf een dubbelpunt, dus split(":") hield alleen
-                # "2026-09-21T16" over, zonder de afspraak. Gezien 21-09-2026.
-                zonder_rit["geen adres in de agenda"].append(regel.rsplit(": geen adres", 1)[0][:80])
-            elif "rit zonder afspraak" in regel:
-                zonder_rit["rit zonder afspraak"].append(regel[:110])
-            elif "grendelbron niet te lezen" in regel:
-                zonder_rit["grendelbron niet te lezen (geen auto of vakantie)"].append(regel[:110])
-            elif "BUITEN op een dag zonder auto" in regel:
-                zonder_rit["buiten op een dag zonder auto"].append(regel[:110])
-            elif "adres niet gevonden" in regel:
-                zonder_rit["adres niet gevonden"].append(regel[:110])
-            elif "rijtijd niet berekend" in regel:
-                zonder_rit["rijtijd niet berekend"].append(regel[:110])
 
         rooster = rooster_maken(items, archief, vandaag, mail_noden)
         bellen.rooster_schrijven(rooster)
@@ -6435,12 +6500,18 @@ def main():
         if fouten:
             noden.append({"tekst": "Agenda's die ik niet kan lezen: " + ", ".join(f["kalender"][:30] for f in fouten),
                           "wie": "mehdi"})
+        # Laag 4 (overleg 27-10-2026): een ontbrekend weekoverzicht is een nood tot de volgende geslaagde run; ook in een
+        # dagronde, want die mag hem openen (noden_voor_hartslag). De fout zelf staat in het detail, nooit in de tekst.
+        weeknood = weekconsolidatie_noden()
+        noden.extend(weeknood)
+        weekfout = weekconsolidatie_fout() if weeknood else ""
         onderweg = locatiebeweging.kort(locatiebeweging.lees())
         ag.hartslag("waakt", taak="agenda in het oog",
                     detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
                            f"{len(niet_conform)} zonder code; "
-                           f"{len(onvolledig)} zonder adres; {onderweg}",
-                    nood=noden)
+                           f"{len(onvolledig)} zonder adres; {onderweg}"
+                           + (f"; weekoverzicht: {weekfout or 'geen geslaagde run sinds zondag 20:00'}" if weeknood else ""),
+                    nood=noden_voor_hartslag(noden, DAG_ARG))
         # H1-1, driehoeksoverleg C2, 17-10-2026: ook vragen en de vastgelopen-oproep horen bij dit rondeverslag.
         ag.log_verstuur()
     except Exception as e:  # noqa: BLE001
