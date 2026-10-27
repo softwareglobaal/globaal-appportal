@@ -1328,6 +1328,30 @@ def test_fase2_tijdslimiet_gaat_door_een_gewone_foutafhandeling():
         assert "weekoverzicht:2026-W43" not in gevangen, "een week die op haar grens stopte, staat niet op het bord"
 
 
+def test_fase2_alarm_tijdens_het_uitzetten():
+    """Codex-controle fase 2, ronde 5: gaat het alarm af net tijdens het uitzetten, dan komt de vorige
+    alarmafhandeling toch terug."""
+    import signal
+    vorige = signal.getsignal(signal.SIGALRM)
+    echt = signal.setitimer
+
+    def setitimer(soort, seconden, *a):
+        if seconden == 0:
+            echt(soort, 0)
+            raise D.WeekTijdOp("alarm tijdens het uitzetten")
+        return echt(soort, seconden, *a)
+
+    signal.setitimer = setitimer
+    try:
+        D.met_tijdslimiet(lambda: "klaar", 5)
+        raise AssertionError("het nagebootste alarm moest doorkomen")
+    except D.WeekTijdOp:
+        pass
+    finally:
+        signal.setitimer = echt
+    assert signal.getsignal(signal.SIGALRM) == vorige, "de vorige alarmafhandeling kwam niet terug"
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0

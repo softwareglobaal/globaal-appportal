@@ -669,8 +669,11 @@ def met_tijdslimiet(f, seconden, *args):
         signal.setitimer(signal.ITIMER_REAL, seconden)
         return f(*args)
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, oud)
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        finally:
+            # ook als het alarm net tijdens het uitzetten afgaat (Codex-controle fase 2, ronde 5)
+            signal.signal(signal.SIGALRM, oud)
 
 
 def weken_voor_de_nacht(nu):
