@@ -47,6 +47,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -195,13 +196,13 @@ def opnamelijst(van, tot, bewaker=None, pauze=0.2):
         if bewaker:
             bewaker()
         begin = max(van, eind - timedelta(days=VENSTER))
-        _samenvoegen(meetings, Z.opnames(begin.isoformat(), eind.isoformat(), streng=True), False)
+        _samenvoegen(meetings, Z.opnames(begin.isoformat(), eind.isoformat(), streng=True, bewaker=bewaker), False)
         time.sleep(pauze)
         eind = begin
     for soort in Z.PRULLENBAK:
         if bewaker:
             bewaker()
-        _samenvoegen(meetings, Z.opnames(None, None, prullenbak=soort, streng=True), True)
+        _samenvoegen(meetings, Z.opnames(None, None, prullenbak=soort, streng=True, bewaker=bewaker), True)
     return list(meetings.values())
 
 
@@ -387,11 +388,13 @@ def gemist_voorstellen(staat):
 
 # ----------------------------------------------------------------- ronde ---
 def keten_draait():
-    """Draait de gesprekkenketen nu? Alleen kijken, nooit het slot van de keten nemen (dan zou de keten overslaan)."""
+    """Draait de gesprekkenketen nu? True, False, of None als ik het niet kan nagaan (Codex controle 6, punt 30: dat
+    is geen "nee"). Alleen kijken, nooit het slot van de keten nemen (dan zou de keten overslaan)."""
     try:
-        return subprocess.run(["pgrep", "-f", "mijnagents-runner/keten.py"], capture_output=True, timeout=10).returncode == 0
+        code = subprocess.run(["pgrep", "-f", "mijnagents-runner/keten.py"], capture_output=True, timeout=10).returncode
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
+    return True if code == 0 else False if code == 1 else None
 
 
 def tot_keten(klok_utc):
@@ -416,6 +419,15 @@ def soort_fout(e):
     if isinstance(e, Z.ZoomFout):
         return "Zoom-opname niet naar Dropbox gekopieerd: Zoom gaf het bestand niet", True
     return f"Zoom-opname niet naar Dropbox gekopieerd: Dropbox of de VM weigerde ({type(e).__name__})", True
+
+
+def _utc(iso):
+    """Een tijdstip van Zoom als datetime in UTC, of None (Codex controle 6, punt 35: tekst vergelijkt +02:00 verkeerd)."""
+    try:
+        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d.astimezone(timezone.utc) if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
 def gb(bestanden):
@@ -478,12 +490,13 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         for n in D.nood(wat="de kopie van de Zoom-opnames"):
             r.nood(n["tekst"], wie=n["wie"])
         return stop("", "", "geen privé-Dropbox-token, niets gekopieerd")
-    if keten_draait():
-        # Een gewone pauze. De dekking blijft zoals de vorige ronde (hoogstens een uur oud) haar schreef; De Zoomwacht
-        # leest ze in de keten en vertrouwt ze maar ARCHIEF_GELDIG (drie uur). Intrekken zou ZA-01 nooit laten openen.
-        r.noden_onbekend = True
-        r.detail = "de gesprekkenketen draait, deze ronde overgeslagen"
-        return None
+    keten = keten_draait()
+    if keten is None:
+        return stop("Kan niet nagaan of de gesprekkenketen draait", "claude-code",
+                    "niets gedaan: de stand van de gesprekkenketen is onbekend")
+    # Codex controle 6, punt 33: draait de keten, dan kopieer ik niets (de keten mag niet wachten), maar lees en kijk ik
+    # alles na, zodat de dekking die De Zoomwacht in de keten leest, van deze ronde is en nooit van een oude.
+    alleen_tellen = bool(keten)
     begin = klok()
     hard = min(begin + budget + NA_BUDGET, begin + tot_keten(nu_utc()) - KETEN_HARD)
 
@@ -500,14 +513,22 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
     staat = lees_staat()
     r.bron("zoom-archief staat", {"bewezen": len(staat["bestanden"]), "inventaris": staat["inventaris"],
                                   "dekking": staat["dekking"]})
-    D.GRENS["tot"] = time.monotonic() + max(0.0, hard - klok())
+    D.GRENS["tot"] = Z.GRENS["tot"] = time.monotonic() + max(0.0, hard - klok())
     try:
-        return _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop)
+        return _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen)
+    except (Stop, D.TijdOp, Z.TijdOp, SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as e:  # noqa: BLE001
+        # Codex controle 6, punt 32: een onverwachte fout gaat met een vaste tekst naar het bord, nooit met haar inhoud
+        # (die kan een link dragen). Op de VM alleen waar ze gebeurde.
+        plek = traceback.extract_tb(e.__traceback__)[-1]
+        print(f"onverwachte fout {type(e).__name__} in {os.path.basename(plek.filename)}:{plek.lineno}", file=sys.stderr)
+        raise RuntimeError(f"onverwachte fout ({type(e).__name__})") from None
     finally:
-        D.GRENS["tot"] = None
+        D.GRENS["tot"] = Z.GRENS["tot"] = None
 
 
-def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop):
+def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen=False):
     vroeg = None
     try:
         reden = dropbox_controle(staat)
@@ -525,7 +546,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     vandaag = nu_utc().astimezone(BRUSSEL).date()
     try:
         meetings = opnamelijst(EERSTE_DAG, vandaag + timedelta(days=1), bewaker=bewaker)
-    except (Stop, D.TijdOp) as e:
+    except (Stop, D.TijdOp, Z.TijdOp) as e:
         return stop("", "", f"inventaris niet af: {e}", staat)
     except Z.GeenRecht as e:
         recht = e.scope if RECHT.fullmatch(e.scope or "") else "onbekend recht"
@@ -567,7 +588,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     if not droog:  # elke ronde: een dekking ja steunt nooit op een bewijs dat niet nagekeken is
         try:
             nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker)
-        except (Stop, D.TijdOp) as e:
+        except (Stop, D.TijdOp, Z.TijdOp) as e:
             return stop("", "", f"nakijken niet af: {e}", staat)
         except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja, en de nood blijft tot het lukt
             nagekeken_weg = -1
@@ -576,12 +597,13 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             staat["blokkades"].pop("nakijken", None)
     for f in klaar:
         b = staat["bestanden"].get(f["id"])
-        if b and f.get("grootte") and b["grootte"] != f["grootte"]:
+        if b and (not f.get("grootte") or b["grootte"] != f["grootte"]):
             # Codex controle 5, punt 26: Zoom geeft voor dit bestand nu een andere grootte dan de bewezen kopie. Het
             # bewijs vervalt; herkopiëren botst op het bestaande bestand (nooit overschrijven) en blijft een nood.
             del staat["bestanden"][f["id"]]
-            staat["fouten"][f["id"]] = {"tekst": "Zoom-opname niet naar Dropbox gekopieerd: Zoom geeft een andere "
-                                                 "grootte dan de kopie in Dropbox", "tijdelijk": False, "pogingen": 1}
+            staat["fouten"][f["id"]] = {"tekst": "Zoom-opname niet naar Dropbox gekopieerd: Zoom geeft geen of een "
+                                                 "andere grootte dan de kopie in Dropbox", "tijdelijk": False,
+                                        "pogingen": 1}
     te_doen = [f for f in klaar if f["id"] not in staat["bestanden"]]
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
     for fid, oud in list(staat["gezien"].items()):
@@ -591,20 +613,21 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             staat["fouten"].pop(fid, None)
     for f in te_doen + bezig:  # Codex controle 4, punt 20: elk onbewezen bestand, ook in verwerking, wordt bijgehouden
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
-    volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), f.get("start") or ""))
+    volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
+        tzinfo=timezone.utc)))
     if proef:
         volgorde = sorted(te_doen, key=lambda f: int(f.get("grootte") or 0))[:proef]
 
-    gedaan, gestopt = [], ""
+    gedaan, gestopt = [], "de gesprekkenketen draait: alleen geteld en nagekeken" if alleen_tellen else ""
     werkmap = os.path.join(DATA, "werk")
-    if not droog:
+    if not droog and not alleen_tellen:
         if not te_doen:
             staat["blokkades"].pop("schijf", None)  # niets meer te kopiëren: de schijf houdt niets tegen
         for f in volgorde:
             if klok() - begin > budget:
                 gestopt = "tijdsbudget op"
                 break
-            if tot_keten(nu_utc()) < KETEN_MARGE or keten_draait():
+            if tot_keten(nu_utc()) < KETEN_MARGE or keten_draait() is not False:
                 gestopt = "de gesprekkenketen begint"
                 break
             m, _ = per_id[f["id"]]
@@ -615,7 +638,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 staat["blokkades"].pop("schijf", None)
                 gedaan.append(f)
                 schrijf_staat(staat)
-            except (Stop, D.TijdOp) as e:
+            except (Stop, D.TijdOp, Z.TijdOp) as e:
                 gestopt = str(e)
                 if "schijf" in gestopt:
                     staat["blokkades"]["schijf"] = SCHIJF_VOL
@@ -682,8 +705,9 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         if fid in staat["bestanden"] or fid not in per_id:
             del staat["fouten"][fid]
     _meld_blijvend(r, staat)
-    grens = (nu_utc() - timedelta(days=WISREGEL_DAGEN)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    oud_open = [f for f in onbewezen if (f.get("start") or "") < grens]
+    grens = nu_utc() - timedelta(days=WISREGEL_DAGEN)
+    # een onbekend tijdstip telt als oud: dan weet ik niet dat de wisregel het spaart
+    oud_open = [f for f in onbewezen if (_utc(f.get("start")) or grens) <= grens]
     binnen = klok() <= hard
     gaaf = (not droog and nagekeken_weg == 0 and not staat["verdwenen"] and not staat["onvolledig"]
             and not staat["blokkades"] and binnen)

@@ -74,6 +74,25 @@ class ZoomFout(RuntimeError):
     """Zoom gaf geen bruikbaar antwoord. De tekst draagt nooit een url of sleutel."""
 
 
+class TijdOp(ZoomFout):
+    """De tijdsgrens van de ronde (GRENS) is bereikt: er begint geen nieuwe vraag aan Zoom meer."""
+
+
+# De tijdsgrens van een ronde in time.monotonic(), of None (zoals vroeger). Alleen De Zoomarchivaris zet ze, zodat ook
+# een vraag aan Zoom en een download niet voorbij haar grens lopen (Codex, Zoomarchief controle 6, punt 31).
+GRENS = {"tot": None}
+
+
+def _wachttijd(normaal):
+    """De time-out van een vraag: normaal, maar nooit voorbij GRENS. Voorbij de grens: TijdOp."""
+    if GRENS["tot"] is None:
+        return normaal
+    rest = GRENS["tot"] - time.monotonic()
+    if rest <= 0:
+        raise TijdOp("tijdsgrens van de ronde")
+    return max(1.0, min(float(normaal), rest))
+
+
 class GeenRecht(ZoomFout):
     """De app mist een recht (Zoom 400 met code 4711, of 'does not contain scopes'). `scope` is de naam van het recht,
     of 'download' als een opname niet gedownload mag worden en Zoom geen recht noemde. `http` en `zoomcode` zijn de
@@ -261,8 +280,9 @@ _OPENER = urllib.request.build_opener(_GeenOmleiding)
 def _vraag(url, koppen, max_bytes=2_000_000):
     """Eén GET zonder automatische omleiding: (HTTP-code, Location, inhoud). Een netwerkfout wordt ZoomFout, zonder url."""
     req = urllib.request.Request(url, headers=koppen)
+    wacht = _wachttijd(60)
     try:
-        with _OPENER.open(req, timeout=60) as r:
+        with _OPENER.open(req, timeout=wacht) as r:
             return r.status, "", r.read(max_bytes + 1)
     except urllib.error.HTTPError as e:
         try:
@@ -355,12 +375,15 @@ def lees(pad, params=None, profiel="lees"):
     raise ZoomFout(f"HTTP {code}" + (f" (Zoom-code {zoomcode})" if isinstance(zoomcode, int) else ""))
 
 
-def lees_alles(pad, params, sleutel, profiel="lees", streng=False):
+def lees_alles(pad, params, sleutel, profiel="lees", streng=False, bewaker=None):
     """Alle pagina's (next_page_token) van een lijst. None als Zoom de lijst niet kent (404): onbekend is niet leeg.
     streng: een pagina zonder de lijst (sleutel ontbreekt of is geen lijst) is ZoomFout, geen lege pagina; De
-    Zoomarchivaris telt anders een onvolledige inventaris als volledig (Codex, Zoomarchief controle 1)."""
+    Zoomarchivaris telt anders een onvolledige inventaris als volledig (Codex, Zoomarchief controle 1). bewaker() draait
+    voor elke pagina (Codex controle 6, punt 31)."""
     uit, p = [], dict(params or {})
     while True:
+        if bewaker:
+            bewaker()
         d = lees(pad, p, profiel)
         if d is None:
             if p.get("next_page_token"):
@@ -504,7 +527,21 @@ def uuid_pad(uuid):
 PRULLENBAK = ("meeting_recordings", "recording_file")
 
 
-def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False):
+def _grootte(waarde, streng):
+    """file_size als geheel getal. Iets anders is in de strenge vorm een fout met een vaste tekst, nooit de waarde zelf
+    (Codex controle 6, punt 32: een link als file_size kwam zo via de fouttekst op het bord)."""
+    if waarde in (None, ""):
+        return 0
+    if type(waarde) is int and waarde >= 0:
+        return waarde
+    if isinstance(waarde, str) and waarde.isdigit():
+        return int(waarde)
+    if streng:
+        raise ZoomFout("onvolledig antwoord van Zoom (grootte)")
+    return 0
+
+
+def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False, bewaker=None):
     """De cloudopnames van de vaste gebruiker tussen twee datums (JJJJ-MM-DD), zonder een enkele link: per meeting
     uuid, nummer, onderwerp, start, duur en de bestanden (id, soort, status, start, einde, grootte, opnametype,
     extensie, en of er een downloadlink was). De downloadlink gaat alleen in de tabel van deze module, per bestandsid;
@@ -520,7 +557,7 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False):
         params = {"page_size": 300, "trash": "true", "trash_type": prullenbak}
     else:
         params = {"from": van_dag, "to": tot_dag, "page_size": 300}
-    lijst = lees_alles(f"/users/{_VAST['id']}/recordings", params, "meetings", profiel, streng=streng)
+    lijst = lees_alles(f"/users/{_VAST['id']}/recordings", params, "meetings", profiel, streng=streng, bewaker=bewaker)
     if lijst is None:
         raise ZoomFout("opnamelijst niet gevonden")
     uit = []
@@ -534,7 +571,7 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False):
                 _DOWNLOADS[bid] = f["download_url"]
             bestanden.append({"id": bid, "soort": f.get("file_type") or "", "status": f.get("status") or "",
                               "start": f.get("recording_start") or "", "einde": f.get("recording_end") or "",
-                              "grootte": int(f.get("file_size") or 0), "opnametype": f.get("recording_type") or "",
+                              "grootte": _grootte(f.get("file_size"), streng), "opnametype": f.get("recording_type") or "",
                               "extensie": f.get("file_extension") or "", "link": bool(f.get("download_url"))})
         uit.append({"uuid": m.get("uuid") or "", "nummer": str(m.get("id") or ""), "onderwerp": m.get("topic") or "",
                     "start": m.get("start_time") or "", "duur": int(m.get("duration") or 0), "bestanden": bestanden})
@@ -595,7 +632,7 @@ def download_naar(bestandsid, doel, profiel="lees", brok=1 << 20, bewaker=None):
             raise Geweigerd("download: omleiding naar een host buiten zoom.us geweigerd")
         req = urllib.request.Request(url, headers=koppen if sprong == 0 else {})
         try:
-            antwoord = _OPENER.open(req, timeout=120)
+            antwoord = _OPENER.open(req, timeout=_wachttijd(120))
         except urllib.error.HTTPError as e:
             if e.code in (301, 302, 303, 307, 308):
                 waarheen = e.headers.get("Location", "") if e.headers else ""

@@ -343,7 +343,7 @@ def test_opnames_streng_weigert_een_onvolledig_antwoord():
                 pass
             assert Z.opnames("2026-10-01", "2026-10-30")[0]["bestanden"] == [], "zonder streng zoals vroeger"
         gevraagd = []
-        Z.lees_alles = lambda pad, params, sleutel, profiel="lees", streng=False: gevraagd.append(params) or []
+        Z.lees_alles = lambda pad, params, sleutel, profiel="lees", streng=False, bewaker=None: gevraagd.append(params) or []
         Z.opnames(None, None, prullenbak="recording_file", streng=True)
         assert gevraagd[-1] == {"page_size": 300, "trash": "true", "trash_type": "recording_file"}, gevraagd
     finally:
@@ -407,6 +407,45 @@ def test_dropbox_tijdsgrens_telt_het_token_mee():
     finally:
         D.GRENS["tot"] = None
     assert D._kort_wachten(20) == 20
+
+
+def test_zoom_tijdsgrens_per_pagina_en_per_vraag():
+    Z._VAST["id"] = "mehdi-id"
+    paginas = iter([{"meetings": [], "next_page_token": "p2"}, {"meetings": []}])
+    echt_lees = Z.lees
+    Z.lees = lambda pad, params=None, profiel="lees": next(paginas)
+    tel = []
+
+    def bewaker():
+        tel.append(1)
+        if len(tel) > 1:
+            raise RuntimeError("tijd op")
+    try:
+        Z.lees_alles("/users/mehdi-id/recordings", {}, "meetings", streng=True, bewaker=bewaker)
+        raise AssertionError("de bewaker hoort voor de tweede pagina af te breken")
+    except RuntimeError:
+        pass
+    finally:
+        Z.lees = echt_lees
+    Z.GRENS["tot"] = Z.time.monotonic() - 1
+    try:
+        Z._wachttijd(60)
+        raise AssertionError("voorbij de grens begint geen vraag aan Zoom")
+    except Z.TijdOp:
+        pass
+    finally:
+        Z.GRENS["tot"] = None
+    assert Z._wachttijd(60) == 60
+
+
+def test_zoom_grootte_als_tekst_is_een_vaste_fout():
+    assert Z._grootte("123", True) == 123 and Z._grootte(None, True) == 0 and Z._grootte(5, True) == 5
+    try:
+        Z._grootte("https://proef.zoom.us/rec/x", True)
+        raise AssertionError("ZoomFout verwacht")
+    except Z.ZoomFout as e:
+        assert "zoom.us" not in str(e)
+    assert Z._grootte("https://proef.zoom.us/rec/x", False) == 0
 
 if __name__ == "__main__":
     goed = fout = 0

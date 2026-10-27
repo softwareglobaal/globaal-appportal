@@ -12,9 +12,10 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 
 ## Wat ik doe
 
-1. Elk uur, onder een eigen slot, nooit terwijl de gesprekkenketen draait en niet in de tien minuten ervoor (07:00,
-   13:00 en 23:30 UTC). Een ronde begint na 45 minuten geen nieuw bestand meer; tien minuten later, of twee minuten voor
-   de keten, breekt ze ook een lopend bestand af. Dat krijgt dan geen bewijs en komt de volgende ronde opnieuw.
+1. Elk uur, onder een eigen slot. Ik kopieer nooit terwijl de gesprekkenketen draait of in de tien minuten ervoor
+   (07:00, 13:00 en 23:30 UTC); draait de keten, dan lees en kijk ik alleen na, zodat De Zoomwacht in de keten een
+   verse dekking leest. Weet ik niet of de keten draait, dan doe ik niets. Een ronde begint na 45 minuten geen nieuw
+   bestand meer; tien minuten later, of vijf minuten voor de keten, breekt ze ook een lopend bestand af. Dat krijgt dan geen bewijs en komt de volgende ronde opnieuw.
 2. Ik schrijf alleen in het Dropbox-account dat bij de uitrol is vastgelegd, na een controle van naam en e-mail, en
    waar het Fathom-archief staat, het teken dat het Mehdi's eigen privé-Dropbox is. Wijst de koppeling naar een ander
    account, of is er niets vastgelegd, dan kopieer ik niets.
@@ -63,7 +64,7 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 - Een afspeel-, download- of deellink, een toegangscode of een token bewaren.
 - Een onderwerp, een naam, een pad of inhoud van een gesprek op het bord of in mijn werkverslag zetten.
 - Een opname aan een taalmodel geven of buiten Mehdi's eigen Dropbox brengen.
-- Draaien terwijl de gesprekkenketen draait, of een tweede ronde naast een lopende.
+- Kopiëren terwijl de gesprekkenketen draait, of een tweede ronde naast een lopende.
 - Een bestand bewezen noemen zonder dat Dropbox dezelfde grootte en vingerafdruk teruggeeft.
 
 ## Wat Mehdi beslist

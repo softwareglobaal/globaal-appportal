@@ -75,7 +75,9 @@ class Zoom:
         (self.prullenbak[prullenbak] if prullenbak else self.meetings)[uuid] = m
         return m
 
-    def opnames(self, van, tot, profiel="lees", prullenbak="", streng=False):
+    def opnames(self, van, tot, profiel="lees", prullenbak="", streng=False, bewaker=None):
+        if bewaker:
+            bewaker()
         self.gevraagd.append((van, tot, prullenbak))
         if self.lijstfout:
             raise self.lijstfout
@@ -306,9 +308,15 @@ def test_k4_tijdsbudget_keten_en_slot():
     assert uit["gedaan"] == 0 and uit["gestopt"] == "de gesprekkenketen begint", uit
     assert ZA.tot_keten(datetime(2026, 10, 27, 23, 25, tzinfo=timezone.utc)) == 300
     assert ZA.tot_keten(datetime(2026, 10, 27, 23, 31, tzinfo=timezone.utc)) == 7 * 3600 + 29 * 60, "na 23:30 de keten van 07:00"
-    opzet(keten=True)
+    z, d, _ = opzet(keten=True)
+    z.meeting("k1", "2026-10-20T09:00:00Z", bestanden=[("M4A", "audio_only", b"k")])
     r, uit = ronde()
-    assert uit is None and r.noden_onbekend and "overgeslagen" in r.detail, "tijdens de keten niets, en geen noden sluiten"
+    assert uit["gedaan"] == 0 and not z.downloads and not d.bestanden, "tijdens de keten niets kopiëren"
+    assert uit["gestopt"].startswith("de gesprekkenketen draait") and uit["rest"] == 1, uit
+    opzet(keten=None)
+    r, uit = ronde()
+    assert uit is None and r.noden_onbekend and "Kan niet nagaan of de gesprekkenketen draait" in teksten(r), \
+        "Codex controle 6, punt 30: een onbekende keten is geen nee"
 
 
 def test_k4_slot_weigert_een_tweede_ronde():
@@ -889,16 +897,19 @@ def test_codex20_een_bestand_in_verwerking_dat_verdwijnt_en_een_volle_schijf_bli
     assert uit["gedaan"] == 1 and ZA.SCHIJF_VOL not in teksten(r)
 
 
-def test_codex21_een_overgeslagen_ronde_laat_de_dekking_hoogstens_drie_uur_gelden():
-    z, _, _ = opzet()
-    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+def test_codex21_33_tijdens_de_keten_telt_het_archief_opnieuw_en_een_ja_geldt_drie_uur():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
     _tot_ja(z)
     ZA.keten_draait = lambda: True
-    r, uit = ronde(nu=NU + timedelta(hours=1))
-    assert uit is None and r.noden_onbekend
+    _, uit = ronde(nu=NU + timedelta(hours=1))
     pad = os.path.join(ZA.DATA, "dekking.json")
-    assert ZA_ACC.archief_dekking(pad, nu=NU + timedelta(hours=1)) == "ja", "De Zoomwacht in de keten ziet de ja van net"
-    assert ZA_ACC.archief_dekking(pad, nu=NU + timedelta(hours=4)) == "onbekend", "na drie uur zonder ronde: onbekend"
+    assert uit["dekking"] and _dekking()["ts"] == (NU + timedelta(hours=1)).isoformat(timespec="seconds"), \
+        "De Zoomwacht in de keten leest een dekking van deze ronde, niet een oude"
+    assert ZA_ACC.archief_dekking(pad, nu=NU + timedelta(hours=4, minutes=1)) == "onbekend", "na drie uur: onbekend"
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    _, uit = ronde(nu=NU + timedelta(hours=2))
+    assert not uit["dekking"] and not z.downloads[1:], "tijdens de keten ziet ze het verlies en kopieert ze niets"
 
 
 def test_codex22_een_onleesbaar_bord_bij_de_wisregelwaarschuwing_sluit_niets():
@@ -1094,6 +1105,38 @@ def test_codex28_een_mislukte_beschrijving_wordt_opnieuw_geprobeerd_ook_als_de_m
     D._verzoek = d
     r, _ = ronde(nu=NU + timedelta(hours=2))
     assert ZA.OPNAME_JSON not in teksten(r) and ZA.mapnaam(m) + "/opname.json" in d.bestanden
+
+
+# ---------------------------------------------------------------------- Codex-controle 6 (27-10-2026) ---
+def test_codex32_een_onverwachte_fout_draagt_geen_link_naar_het_bord():
+    z, _, _ = opzet()
+    z.lijstfout = ValueError("invalid literal for int(): 'https://proef.zoom.us/rec/download/x?access_token=geheim'")
+    try:
+        ronde()
+        raise AssertionError("een onverwachte fout hoort de ronde te breken")
+    except RuntimeError as e:
+        assert str(e) == "onverwachte fout (ValueError)", str(e)
+        assert e.__cause__ is None and e.__suppress_context__, "de oorspronkelijke tekst gaat niet mee"
+
+
+def test_codex34_een_bewezen_bestand_waarvoor_zoom_geen_grootte_geeft_is_niet_meer_bewezen():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    m["bestanden"][0]["grootte"] = 0
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["dekking"] and not uit["veilig"] and any("grootte" in x for x in teksten(r)), teksten(r)
+
+
+def test_codex35_een_tijdstip_met_een_andere_tijdzone_telt_juist():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-09-20T23:30:00+02:00", bestanden=[("M4A", "audio_only", b"a")])
+    z.fout[m["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    m2 = z.meeting("u2", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"b")])
+    _, uit = ronde()
+    assert uit["oud_open"] == 1 and not uit["veilig"], "ouder dan 30 dagen, ook met +02:00"
+    assert ZA._utc("2026-09-20T23:30:00+02:00") == datetime(2026, 9, 20, 21, 30, tzinfo=timezone.utc)
+    assert ZA._utc("geen tijd") is None
 
 if __name__ == "__main__":
     goed = fout = 0
