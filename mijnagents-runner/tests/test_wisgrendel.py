@@ -9,6 +9,7 @@ Een test schrijft nooit in een echte agenda en gaat niet op het net.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -253,6 +254,7 @@ with tempfile.TemporaryDirectory() as _d:
                               "method='DELETE'))\n", encoding="utf-8")
     (d / "annuleer.json").write_text('{"status": "cancelled"}', encoding="utf-8")
     (d / "lees.sh").write_text(f"curl -s '{API}/{LARA_URL}/events'\n", encoding="utf-8")
+    (d / "via.sh").write_text(". ./wis.sh\n", encoding="utf-8")
     (d / "gemaskeerd.sh").write_text(f'curl -X DELETE "$1"\necho {API}/primary/events/abc\n', encoding="utf-8")
     (d / "batch.txt").write_text(f"--b\nDELETE /calendar/v3/calendars/{LARA_URL}/events/abc123\n--b--\n", encoding="utf-8")
     rc, uit = hook(bash(f"python3 {d}/wis.py"))
@@ -267,6 +269,30 @@ with tempfile.TemporaryDirectory() as _d:
     for _opdracht in ("bash < wis.sh", f"sh < {d}/wis.sh", "bash -s < wis.sh", "source ./wis.sh", ". ./wis.sh",
                       "cat wis.sh | bash", "cat wis.sh | sh -s", 'bash -c "$(cat wis.sh)"'):
         check(f"script: {_opdracht} wordt nagekeken (Codex-hertest punt 3)", geweigerd(*hook({**bash(_opdracht), "cwd": str(d)})))
+    # geneste opdrachten: bash/sh -c en eval worden opnieuw helemaal nagekeken (Codex-hertest 2, punt 6)
+    for _opdracht in ("bash -c 'source ./wis.sh'", "bash -c 'bash < wis.sh'", 'sh -c ". ./wis.sh"', 'eval "$(cat wis.sh)"',
+                      "eval $(cat wis.sh)", "bash -lc 'source ./wis.sh'", "zsh -c 'cat wis.sh | sh'", "eval 'bash wis.sh'",
+                      "bash via.sh", "source <(cat wis.sh)"):
+        check(f"genest: {_opdracht} wordt nagekeken", geweigerd(*hook({**bash(_opdracht), "cwd": str(d)})))
+    rc, uit = hook({**bash("bash -c 'echo hoi'"), "cwd": str(d)})
+    check("genest: bash -c 'echo hoi' mag", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook({**bash("eval 'echo hoi' && sh -c 'ls -la'"), "cwd": str(d)})
+    check("genest: eval 'echo hoi' && sh -c 'ls -la' mag", rc == 0 and uit is None, str(uit)[:200])
+
+    def _nest(c, n):
+        for _ in range(n):
+            c = "bash -c " + shlex.quote(c)
+        return c
+    check("genest: drie lagen bash -c rond source ./wis.sh worden nog echt nagekeken",
+          geweigerd(*hook({**bash(_nest("source ./wis.sh", 3)), "cwd": str(d)})))
+    rc, uit = hook({**bash(_nest("source ./wis.sh", 5)), "cwd": str(d)})
+    check("genest: dieper dan drie lagen met iets dat draait wordt geweigerd",
+          geweigerd(rc, uit) and "te diep genest" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+    rc, uit = hook({**bash(_nest("echo hoi", 4)), "cwd": str(d)})
+    check("genest: vier lagen bash -c rond echo hoi mag (de laatste laag draait niets meer)", rc == 0 and uit is None,
+          str(uit)[:200])
+    check("genest: vijf lagen bash -c worden geweigerd, ook rond echo hoi (voorbij de grens draait er nog iets)",
+          geweigerd(*hook({**bash(_nest("echo hoi", 5)), "cwd": str(d)})))
     rc, uit = hook({**bash("bash < lees.sh"), "cwd": str(d)})
     check("script: bash < lees.sh dat alleen leest mag", rc == 0 and uit is None, str(uit)[:200])
     rc, uit = hook({**bash("cat wis.sh"), "cwd": str(d)})

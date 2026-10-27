@@ -810,7 +810,9 @@ bash < wis.sh, cat wis.sh | sh, source of . en ./script.sh) of stuurt ze een bes
 dat bestand mee na als het bestaat en kleiner is dan 200 kB; een script dat ongewijzigd in deze repo staat
 (agenda_wacht.py, de tests) is nagekeken code en telt niet. Een wisopdracht met een ondoorzichtig doel ("$URL",
 $(cat url.txt), in code een variabele als URL) weigert hij als de opdracht ergens een agenda of Google noemt. Elk
-wisdoel telt apart: een veilige letterlijke URL elders in de opdracht (een echo na de ;) dekt niets af.
+wisdoel telt apart: een veilige letterlijke URL elders in de opdracht (een echo na de ;) dekt niets af. Een geneste
+opdracht (na bash, sh of zsh -c, na eval, of een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie
+lagen diep; dieper weigert hij zodra er nog iets in staat dat wist, een agenda noemt of iets draait.
 Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
 Waarom het omhulsel: met een kaal python3-pad naar een script dat ontbreekt (een andere branch, een verplaatst
 bestand) stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code elke opdracht onder de matcher (elke

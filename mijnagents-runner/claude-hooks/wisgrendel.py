@@ -17,6 +17,9 @@ Geweigerd wordt:
 - een wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt), backticks, of in code een variabele als URL)
   als de opdracht ergens een agenda of Google noemt. Elk wisdoel telt apart: een veilige letterlijke URL elders in de
   opdracht (een echo na de ;) dekt een ondoorzichtig doel niet af (Codex-hertest 27-10-2026, punt 4).
+Een geneste opdracht (de tekst na bash, sh of zsh -c, na eval, of
+een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie lagen diep; dieper weigert de grendel zodra er
+iets in staat dat wist, een agenda noemt of verder iets draait (Codex-hertest 2, 27-10-2026, punt 6).
 Wissen is: DELETE (ook "method": "DELETE"), .delete( op een agenda-object, status cancelled (ook status='cancelled'),
 /batch/calendar en events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand,
 ook via bash < wis.sh, cat wis.sh | sh, source of . en ./script.sh) of stuurt ze een bestand mee (-d @body.json), dan kijkt de grendel dat bestand mee na als het bestaat en
@@ -57,6 +60,13 @@ BASH_WIS = re.compile(r"""-X\s*["']?DELETE|--request[ =]["']?DELETE|method\\?["'
                       r"""|status\\?["']?\]?\s*[:=]\s*\\?["']cancel|/batch/calendar|\bevents/[^\s/?'"]+/move\b""", re.I)
 GOOGLE = re.compile(r"googleapis\.com|google\.com", re.I)
 TOLK = re.compile(r"(?:.*/)?(?:python[\d.]*|node|bash|sh|zsh)")
+SHELL = re.compile(r"(?:.*/)?(?:bash|sh|zsh|dash)")
+C_OPTIE = re.compile(r"-[A-Za-z]*[cm][A-Za-z]*")         # -c, -lc, -ec (en -m bij python): geen scriptbestand erna
+CAT_UITVOER = re.compile(r"""(?:\beval|\b(?:source|bash|sh|zsh|dash|python[\d.]*|node)(?:\s+-\w+)*|(?:^|[\s;&|(])\.)"""
+                         r"""\s+["']?(?:\$\(|`|<\()\s*cat\s+([^\s)`"';&|]+)""")
+HEEL_CAT = re.compile(r"""\s*["']?(?:\$\(|`)\s*cat\s+([^\s)`"';&|]+)\s*(?:\)|`)["']?\s*""")
+GENEST_MAX = 3
+DRAAIT = re.compile(r"\b(?:source|eval|bash|sh|zsh|dash|python[\d.]*|node)\b|(?:^|[\s;&|(])\.\s")
 SCRIPT = (".py", ".sh", ".js", ".mjs", ".cjs", ".bash", ".zsh")
 VOORWOORD = {"sudo", "env", "exec", "time", "nohup", "command"}
 OPERATOR = set(";&|()<>")
@@ -183,7 +193,7 @@ def _lees(p):
     return None
 
 
-def _bestanden(woorden, cwd):
+def _bestanden(cmd, woorden, cwd):
     """De scripts die de opdracht draait en de bestanden die ze meestuurt (-d @body.json), als paden. Een script draait
     ook via een omleiding (bash < wis.sh), een pijp (cat wis.sh | sh), source of . (Codex-hertest 27-10-2026, punt 3)."""
     basis = Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd()
@@ -202,15 +212,10 @@ def _bestanden(woorden, cwd):
         tolk = next((i for i, w in enumerate(stuk) if TOLK.fullmatch(w)), None)
         if tolk is not None:
             j = tolk + 1
-            while j < len(stuk) and stuk[j].startswith("-") and stuk[j] not in ("-c", "-m", "-"):
+            while j < len(stuk) and stuk[j].startswith("-") and stuk[j] != "-" and not C_OPTIE.fullmatch(stuk[j]):
                 j += 1
-            if j < len(stuk) and not set(stuk[j]) <= OPERATOR and (not stuk[j].startswith("-") or stuk[j] == "-c"):
-                if stuk[j] == "-c":
-                    m = re.fullmatch(r"(?:\$\(|`)\s*cat\s+(\S+?)\s*(?:\)|`)", stuk[j + 1] if j + 1 < len(stuk) else "")
-                    if m:
-                        scripts.append(_pad(m.group(1), basis))
-                else:
-                    scripts.append(_pad(stuk[j], basis))
+            if j < len(stuk) and not set(stuk[j]) <= OPERATOR and not stuk[j].startswith("-"):
+                scripts.append(_pad(stuk[j], basis))
             scripts += [_pad(stuk[i + 1], basis) for i in range(tolk, len(stuk) - 1) if stuk[i] == "<"]
             if vorige_scheiding == "|" and vorige_cat:
                 scripts.append(vorige_cat)
@@ -223,7 +228,37 @@ def _bestanden(woorden, cwd):
                 data.append(_pad(m.group(1), basis))
         vorige_cat = _pad(arg, basis) if kop == "cat" and len(stuk) == k + 2 else None
         vorige_scheiding = scheiding
+    # eval "$(cat wis.sh)", bash -c "$(cat wis.sh)", source <(cat wis.sh), of een geneste opdracht die alleen $(cat x) is
+    scripts += [_pad(m.group(1), basis) for m in CAT_UITVOER.finditer(cmd)]
+    m = HEEL_CAT.fullmatch(cmd)
+    if m:
+        scripts.append(_pad(m.group(1), basis))
     return [p for p in scripts if p], [p for p in data if p]
+
+
+def _genest(woorden):
+    """De geneste opdrachten: de tekst na bash, sh of zsh -c (ook -lc, -ec) en alles na eval."""
+    uit = []
+    for stuk, _ in _segmenten(woorden):
+        for i, w in enumerate(stuk):
+            if w == "eval" and i + 1 < len(stuk):
+                uit.append(" ".join(stuk[i + 1:]))
+                break
+            if SHELL.fullmatch(w):
+                for j in range(i + 1, len(stuk) - 1):
+                    if not stuk[j].startswith("-"):
+                        break
+                    if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", stuk[j]):
+                        uit.append(stuk[j + 1])
+                        break
+    return uit
+
+
+def _shellscript(p, inhoud):
+    """Draait dit bestand als shell (geen .py of .js, en geen python- of node-shebang)?"""
+    eerste = inhoud.split("\n", 1)[0]
+    return p.suffix.lower() not in (".py", ".js", ".mjs", ".cjs", ".ts") and not (
+        eerste.startswith("#!") and re.search(r"python|node", eerste))
 
 
 def _git(d, *args):
@@ -298,12 +333,23 @@ def _toets(tekst, lara):
     return None
 
 
-def _bash(ti, pad, cwd=None):
+def _dieper(cmd, pad, cwd, diepte):
+    """Dezelfde controle op een geneste opdracht; voorbij GENEST_MAX lagen weigert de grendel als er iets in staat dat
+    wist, een agenda noemt of verder iets draait."""
+    if diepte >= GENEST_MAX:
+        if BASH_WIS.search(cmd) or AGENDA_WOORD.search(cmd) or DRAAIT.search(cmd):
+            return ("de opdracht is te diep genest om na te kijken (bash -c, eval of source in elkaar): schrijf de "
+                    "wisopdracht rechtstreeks")
+        return None
+    return _bash({"command": cmd}, pad, cwd, diepte + 1)
+
+
+def _bash(ti, pad, cwd=None, diepte=0):
     cmd = ti.get("command") if isinstance(ti, dict) else None
     if not isinstance(cmd, str):
         return None
     woorden = _woorden(cmd)
-    scripts, data = _bestanden(woorden, cwd)
+    scripts, data = _bestanden(cmd, woorden, cwd)
     tekst = cmd + "".join("\n" + inhoud for inhoud in map(_lees, data) if inhoud)
     lara = lara_id(pad) if BASH_WIS.search(tekst) or scripts else None   # alleen nodig als _toets verder kijkt
     oorzaak = _toets(tekst, lara)
@@ -311,9 +357,17 @@ def _bash(ti, pad, cwd=None):
         return oorzaak
     for p in scripts:
         inhoud = _lees(p)
-        oorzaak = _toets(tekst + "\n" + inhoud, lara) if inhoud else None
+        if not inhoud:
+            continue
+        oorzaak = _toets(tekst + "\n" + inhoud, lara)
+        if not oorzaak and _shellscript(p, inhoud):
+            oorzaak = _dieper(inhoud, pad, cwd, diepte)
         if oorzaak and not _vastgelegd(p):
             return f"in het script {p}: {oorzaak}"
+    for genest in _genest(woorden):
+        oorzaak = _dieper(genest, pad, cwd, diepte)
+        if oorzaak:
+            return f"in de geneste opdracht '{genest[:60]}': {oorzaak}"
     return None
 
 
