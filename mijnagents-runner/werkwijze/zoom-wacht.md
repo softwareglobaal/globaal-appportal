@@ -1,6 +1,6 @@
 # Werkwijze van De Zoomwacht (Privé · Communicatie)
 
-Versie 2.4 (26-10-2026, driehoeksoverleg: een groepskanaal zonder afdeling is privé, waar Fathom miste per soort ruimte, onleesbare chats per ouderdom; eerder 2.3, 22-10-2026, accountscan: wekelijkse scan met advies en wijzigingscontrole; eerder 2.2, RZ6-01: ik schrijf alleen met een bewezen Zoom-gebruiker; eerder 2.1, RZ4-02 en RZ4-04: met een Zoom-gebruiker die niet de eigenaar van de vaste vergaderruimte is, schrijf ik niets, alleen een nood; zoom_leesapp.py bewaart sleutels pas na de controle van de eigenaar; De Dagbundelaar is de laatste stap van dezelfde keten; eerder Versie 2 van 21-10-2026: telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
+Versie 2.5 (27-10-2026, driehoeksoverleg Zoomarchief, K6: Mehdi's Zoom-opnames, ook de tekst, gaan als kopie naar zijn eigen Dropbox via De Zoomarchivaris, en ZA-01 noemt de dekking van die kopie; eerder 2.4, 26-10-2026, driehoeksoverleg: een groepskanaal zonder afdeling is privé, waar Fathom miste per soort ruimte, onleesbare chats per ouderdom; eerder 2.3, 22-10-2026, accountscan: wekelijkse scan met advies en wijzigingscontrole; eerder 2.2, RZ6-01: ik schrijf alleen met een bewezen Zoom-gebruiker; eerder 2.1, RZ4-02 en RZ4-04: met een Zoom-gebruiker die niet de eigenaar van de vaste vergaderruimte is, schrijf ik niets, alleen een nood; zoom_leesapp.py bewaart sleutels pas na de controle van de eigenaar; De Dagbundelaar is de laatste stap van dezelfde keten; eerder Versie 2 van 21-10-2026: telt elk Zoom-gesprek, koppelt aan Fathom, vangnet en dagregel per afgelopen dag; eerder Versie 1 van 10-09-2026)
 
 ## Mandaat
 
@@ -69,6 +69,12 @@ van de vaste vergaderruimte en de opnames; mijn telling is dan een ondergrens ("
 11. Een deel dat ik niet kon lezen, is onbekend met de reden. Een advies dat daarop steunt, geef ik niet.
 12. Het vangnet blijft cloudopname met transcript. Een advies over ruimtegebruik gaat alleen over een wisregel of
     over geluid met transcript. Ik raad niet aan om de cloudopname of het transcript uit te zetten.
+13. Bij ZA-01 lees ik de dekking van De Zoomarchivaris (mijnagents-data/zoom-archief/dekking.json). Zolang die geen
+    "ja" zegt, of ouder is dan drie uur, is ZA-01 geen open advies maar onbekend, met de reden dat de wisregel wacht
+    op de volledige kopie in Mehdi's eigen Dropbox; er komt dan geen voorstel om ze aan te zetten. De stand van
+    ZA-01 noemt de kopie, zodat een voorstel van voor de kopie het latere advies niet tegenhoudt. Staat er een
+    ZA-01-voorstel open of goedgekeurd terwijl niet alles ouder dan 30 dagen bewezen in Dropbox staat, dan meld ik
+    Mehdi elke ronde dat hij met de wisregel moet wachten. Mehdi, 27-10-2026: eerst een kopie, dan pas wissen.
 
 Bij ZA-02 controleer ik de video-opties op account- en gebruikersniveau; of geluid zonder video met transcript werkt,
 moet eerst met een korte proefopname worden bevestigd. Bij ZA-04 werkt de Zoom-schakelaar alleen voor Owner en Admin die
@@ -102,8 +108,9 @@ gaat over opnieuw aanmelden na inactiviteit, niet over periodiek afmelden.
   (API en archief), of waarvoor Fathom 24 uur na het einde nog onbekend is.
 - De Zoom-tekst gaat naar mijnagents-data/zoom-data op de VM, in een map met datum, uur en de eerste acht tekens van
   een vingerafdruk van de sessie: transcript.vtt, transcript.json in de vorm van Fathom en als laatste zoom.json.
-- Vangnettekst is altijd privé. Ze blijft op de VM en gaat niet naar Dropbox, niet naar een taalmodel en niet in een
-  antwoord.
+- Vangnettekst is altijd privé. Ik zet ze zelf niet in Dropbox, niet bij een taalmodel en niet in een antwoord. De
+  Zoom-opnames zelf, ook hun tekst, kopieert De Zoomarchivaris naar Mehdi's eigen Dropbox (zijn besluit van
+  27-10-2026).
 - De Regisseur krijgt een klaarzet-item zoom-tekst, met datum, uur en duur, zonder namen.
 - Een opname zonder tekst wacht 24 uur; daarna meld ik "opname zonder tekst". Uitschrijven doe ik nooit.
 - Levert Fathom het gesprek later toch, dan wordt mijn rij een dubbel en zet ik het item op "vervallen: Fathom heeft
@@ -155,7 +162,7 @@ account niet en controleer ik geen wijzigingen. Mehdi zet de scan uit door de re
 - Of oude dubbele rijen ooit verwijderd worden.
 - Welke rechten de Zoom-leesapp krijgt.
 - Of opnames van een ander Fathom-account (zoals Shaniel Work) bij zijn gesprekken horen als hij volgens Zoom niet in die sessie zat; tot hij anders beslist, tellen ze niet.
-- Of Zoom-tekst ooit buiten de VM mag, of als werk vrijgegeven mag worden.
+- Of Zoom-tekst als werk vrijgegeven mag worden, of ergens anders heen mag dan zijn eigen Dropbox (daarheen mag ze sinds 27-10-2026, via De Zoomarchivaris).
 - Deze werkwijze: een nieuwe versie komt als voorstel op het bord en geldt pas na zijn klik.
 - Elk accountadvies. Goedkeuren betekent dat hij het zelf in Zoom uitvoert, of voor ZA-08 zelf over een ticket bij Zoom Support beslist; ik controleer de stand later en verstuur niets.
 - Of de accountscan aanstaat via de regel ACCOUNTSCAN in deze werkwijze.

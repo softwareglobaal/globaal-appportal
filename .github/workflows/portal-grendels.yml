@@ -1,0 +1,27 @@
+# Grendels op het portaal (portal.globaal.be): een app met status archived staat apart onder Archive.
+name: portal-grendels
+
+on:
+  push:
+    paths:
+      - "apps.yaml"
+      - "portal/**"
+      - "scripts/appcatalogus.py"
+      - ".github/workflows/portal-grendels.yml"
+  pull_request:
+    paths:
+      - "apps.yaml"
+      - "portal/**"
+      - "scripts/appcatalogus.py"
+      - ".github/workflows/portal-grendels.yml"
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install PyYAML==6.0.2 Jinja2==3.1.4
+      - run: python3 portal/test_portal_archief.py
