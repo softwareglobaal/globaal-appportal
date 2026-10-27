@@ -10,7 +10,7 @@ Velden per app in apps.yaml:
   description    verplicht, de tekst onder de tegel
   subdomain      verplicht, <subdomain>.globaal.be tenzij host is gezet
   roles          verplicht, de groepen die de app MOGEN openen (policy bindings)
-  status         verplicht, active of inactive
+  status         verplicht, active, inactive of archived (archived: apart onderaan in het portaal)
   extra_groepen  optioneel, groepen die wel worden aangemaakt maar NIET binden.
                  Bedoeld voor rechten die de app zelf aftoetst, zoals
                  vermogen-editors via EDITOR_GROUPS.
