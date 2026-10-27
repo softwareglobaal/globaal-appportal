@@ -311,6 +311,13 @@ _vk = S.lara_wissing_kandidaat(LARA, dict(_inst, originalStartTime={"dateTime": 
                                _nu, dagen, dekking)
 check("een verplaatste instantie die daarna gewist wordt, telt op haar echte (komende) dag, niet de oorspronkelijke",
       (_vk or {}).get("dag") == "2026-11-10", str(_vk))
+_oud20 = [json.dumps(["!! Mehdi: [LA] Lara ophalen", "confirmed", {"dateTime": "2026-10-20T16:00:00+02:00"}, {}, "",
+                       [], False]), "2026-10-20"]
+_vk2 = S.lara_wissing_kandidaat(LARA, dict(_inst, start={"dateTime": "2026-11-10T16:00:00+01:00"},
+                                           originalStartTime={"dateTime": "2026-10-20T16:00:00+02:00"}), _oud20,
+                                _nu, dagen, dekking)
+check("verplaatst en gewist tussen twee controles: de actuele start van Google gaat voor de opgeslagen",
+      (_vk2 or {}).get("dag") == "2026-11-10", str(_vk2))
 _vak = dict(_inst, id="x_20261104T150000Z", originalStartTime={"dateTime": "2026-11-04T16:00:00+01:00"})
 check("op een officiële vakantiedag gebeurt niets", S.lara_wissing_kandidaat(LARA, _vak, None, _nu, dagen, dekking) is None)
 _za = dict(_inst, id="x_20261031T090000Z", originalStartTime={"dateTime": "2026-10-31T10:00:00+01:00"})

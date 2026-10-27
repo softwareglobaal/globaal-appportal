@@ -193,10 +193,11 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
             pass
     if len(oud) > 1 and oud[1] == "cancelled":
         return None                                   # al eerder geschrapt gezien: geen tweede vraag
-    # eerst de laatst bekende echte start (de vingerafdruk): een verplaatste instantie heeft een andere oorspronkelijke
-    # dag, en die kan al voorbij zijn terwijl de afspraak nog komt (Codex-hertest 3, punt 7)
-    o = (oud[2] if len(oud) > 2 and isinstance(oud[2], dict) and _dag(oud[2]) else None) \
-        or ev.get("start") or ev.get("originalStartTime") or {}
+    # eerst de actuele start die Google meegeeft, dan de laatst bekende uit de vingerafdruk, dan de oorspronkelijke: een
+    # verplaatste instantie kan een voorbije oorspronkelijke dag hebben terwijl de afspraak nog komt (Codex-hertest 3 en 4)
+    o = (ev.get("start") if _dag(ev.get("start")) else None) \
+        or (oud[2] if len(oud) > 2 and isinstance(oud[2], dict) and _dag(oud[2]) else None) \
+        or ev.get("originalStartTime") or {}
     dag, uur = _dag(o), (o.get("dateTime") or "")[11:16]
     try:
         d = date.fromisoformat(dag)
