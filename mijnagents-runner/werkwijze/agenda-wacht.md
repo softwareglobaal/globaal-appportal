@@ -792,7 +792,10 @@ voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem zie
 
 Laag 1 en 3 zet Mehdi een keer aan in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen):
 UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en twee opdrachten:
-regels_vooraf.py en de wisgrendel, python3 ~/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py.
+regels_vooraf.py en de wisgrendel. De opdracht voor de wisgrendel is precies deze (met omhulsel, zie hieronder):
+
+`sh -c '[ -f "$HOME/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py" ] && exec python3 "$HOME/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py"; exit 0'`
+
 De grendels zijn tests/test_leren_in_lagen.py en tests/test_wisgrendel.py.
 
 De wisgrendel (27-10-2026, L5 en M6) weigert echt; regels_vooraf.py zet alleen tekst. Hij houdt tegen: wissen op de
@@ -801,11 +804,17 @@ _JJJJMMDD of _JJJJMMDDTUUMMSSZ) op elke agenda, en een Bash-opdracht die zo wist
 moeten agenda en ID letterlijk in de opdracht staan: een variabele, $(...) of een onbekende agenda weigert hij, ook
 op de werkagenda (Codex-controle 27-10-2026, punt 5). Wissen op de werkagenda met een letterlijk gewoon ID laat hij
 door; daar blijft de ja van Mehdi de regel. Mijn eigen ritopruiming draait in Python op de VM en valt er niet onder.
+Wissen telt ook als "method": "DELETE", .delete( op een agenda-object, status 'cancelled', /batch/calendar of
+events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand, of ./script.sh) of
+stuurt ze een bestand mee (-d @body.json), dan kijkt hij dat bestand mee na als het bestaat en kleiner is dan 200 kB;
+een script dat ongewijzigd in deze repo staat (agenda_wacht.py, de tests) is nagekeken code en telt niet. Een
+wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt)) weigert hij als de opdracht een agenda of Google noemt.
 Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
-Let op: staat wisgrendel.py niet op dat pad, dan stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code
-elke opdracht die onder de matcher valt (elke Bash- en MCP-opdracht). Het pad wijst dus naar de hoofdcheckout
-~/dev/globaal-appportal, nooit naar een werkboom die later verdwijnt, en de hook gaat pas aan als die checkout de main
-met wisgrendel.py heeft (git pull --ff-only).
+Waarom het omhulsel: met een kaal python3-pad naar een script dat ontbreekt (een andere branch, een verplaatst
+bestand) stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code elke opdracht onder de matcher (elke
+Bash- en MCP-opdracht). Het omhulsel eindigt dan met exitcode 0 en laat de weigering van de hook gewoon door als het
+script er wel is. Ontbreekt het script, dan staat de grendel stil uit: zet hem pas aan als ~/dev/globaal-appportal de
+main met wisgrendel.py heeft (git pull --ff-only), en kijk het na met ls op dat pad.
 
 ## Wat ik nooit doe
 

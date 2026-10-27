@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 os.environ["BELLEN_UIT"] = "1"      # een test belt nooit echt (FR-55)
@@ -184,6 +185,94 @@ check("Bash: de primaire agenda met een letterlijk gewoon ID mag", rc == 0 and u
 rc, uit = hook(bash("gh api -X DELETE repos/softwareglobaal/globaal-appportal/git/refs/heads/oud"))
 check("Bash: een wisopdracht buiten de agenda (gh api) laat de grendel door", rc == 0 and uit is None, str(uit)[:200])
 
+# ---------- Bash: nieuwe wisvormen (review 27-10-2026, punt 2b) ----------
+check('Bash: "method": "DELETE" (ook JSON of JavaScript) op Lara wordt geweigerd',
+      geweigerd(*hook(bash(f"node -e 'fetch(\"{API}/{LARA_URL}/events/abc123\", {{\"method\": \"DELETE\"}})'"))))
+check("Bash: method: 'DELETE' zonder aanhalingstekens rond de sleutel op Lara wordt geweigerd",
+      geweigerd(*hook(bash(f"node -e \"fetch('{API}/{LARA_URL}/events/abc123', {{method: 'DELETE'}})\""))))
+check("Bash: .delete( op een agenda-object (cal.delete) op Lara wordt geweigerd",
+      geweigerd(*hook(bash(f"python3 -c \"cal.delete(calendar_id='{LARA}', event_id='abc123')\""))))
+check("Bash: calendarList().delete( zonder ID wordt geweigerd",
+      geweigerd(*hook(bash(f"python3 -c \"s.calendarList().delete(calendarId='{LARA}').execute()\""))))
+rc, uit = hook(bash("python3 -c \"cache.delete('x')\""))
+check("Bash: .delete( op iets anders dan een agenda mag", rc == 0 and uit is None, str(uit)[:200])
+check("Bash: status='cancelled' in Python op Lara wordt geweigerd",
+      geweigerd(*hook(bash(f"python3 -c \"ev['status'] = 'cancelled'; s.events().update(calendarId='{LARA}', "
+                           f"eventId='abc123', body=ev).execute()\""))))
+check("Bash: /batch/calendar zonder leesbare inhoud wordt geweigerd",
+      geweigerd(*hook(bash("curl -X POST https://www.googleapis.com/batch/calendar/v3 --data-binary @/bestaat/niet.txt"))))
+check("Bash: events/<id>/move van Lara naar de werkagenda wordt geweigerd",
+      geweigerd(*hook(bash(f"curl -X POST '{API}/{LARA_URL}/events/abc123/move?destination={WERK}'"))))
+
+# ---------- Bash: een ondoorzichtig doel (review 27-10-2026, punt 2c) ----------
+rc, uit = hook(bash('curl -X DELETE "$URL"'))
+check('Bash: DELETE op "$URL" zonder agenda of Google mag', rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash('curl -X DELETE "$(cat url.txt)" -H "Authorization: Bearer $TOK"'))
+check("Bash: DELETE op $(cat url.txt) zonder agenda of Google mag", rc == 0 and uit is None, str(uit)[:200])
+check('Bash: DELETE op "$URL" met een agendawoord ergens in de opdracht wordt geweigerd',
+      geweigerd(*hook(bash('curl -X DELETE "$URL"  # de dubbele afspraak uit de calendar halen'))))
+rc, uit = hook(bash('TOK=$(curl -s https://oauth2.googleapis.com/token -d x); curl -X DELETE "$URL" -H "Authorization: Bearer $TOK"'))
+check('Bash: DELETE op "$URL" met een Google-host in de opdracht wordt geweigerd',
+      geweigerd(rc, uit) and "niet te lezen" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+check("Bash: DELETE op `cat url.txt` met een Google-host wordt geweigerd",
+      geweigerd(*hook(bash("curl -X DELETE `cat url.txt` -H 'x-host: www.googleapis.com'"))))
+rc, uit = hook(bash('curl -X DELETE https://gmail.googleapis.com/gmail/v1/users/me/labels/Label_1 -H "Authorization: Bearer $TOK"'))
+check("Bash: een letterlijke Google-URL buiten de agenda laat de wisgrendel door", rc == 0 and uit is None, str(uit)[:200])
+
+# ---------- Bash: een eigen script of een meegestuurd bestand wordt mee nagekeken (review 27-10-2026, punt 2a) ----------
+with tempfile.TemporaryDirectory() as _d:
+    d = Path(_d)
+    (d / "wis.py").write_text(f"import urllib.request as u\nu.urlopen(u.Request('{API}/{LARA_URL}/events/abc123', "
+                              "method='DELETE'))\n", encoding="utf-8")
+    (d / "wis.sh").write_text(f"#!/bin/sh\ncurl -X DELETE '{API}/{LARA_URL}/events/abc123'\n", encoding="utf-8")
+    (d / "wis.sh").chmod(0o755)
+    (d / "wis.js").write_text(f"fetch('{API}/{LARA_URL}/events/abc123', {{method: 'DELETE'}})\n", encoding="utf-8")
+    (d / "lees.py").write_text(f"import urllib.request as u\nu.urlopen('{API}/{LARA_URL}/events')\n", encoding="utf-8")
+    (d / "groot.py").write_text((d / "wis.py").read_text() + "#" * (WG.MAX_BESTAND + 1) + "\n", encoding="utf-8")
+    (d / "rit.py").write_text(f"import urllib.request as u\nu.urlopen(u.Request('{API}/{LARA_URL}/events/{RIT}', "
+                              "method='DELETE'))\n", encoding="utf-8")
+    (d / "annuleer.json").write_text('{"status": "cancelled"}', encoding="utf-8")
+    (d / "batch.txt").write_text(f"--b\nDELETE /calendar/v3/calendars/{LARA_URL}/events/abc123\n--b--\n", encoding="utf-8")
+    rc, uit = hook(bash(f"python3 {d}/wis.py"))
+    check("script: python3 met een Lara-wisopdracht in het bestand wordt geweigerd en de reden noemt het script",
+          geweigerd(rc, uit) and "in het script" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+    check("script: een relatief pad tegenover cwd wordt nagekeken",
+          geweigerd(*hook({**bash("python3 -u wis.py --dag 2026-10-28"), "cwd": str(d)})))
+    check("script: cd <map> && python3 wis.py wordt nagekeken", geweigerd(*hook(bash(f"cd {d} && python3 wis.py"))))
+    check("script: bash wis.sh wordt nagekeken", geweigerd(*hook(bash(f"bash {d}/wis.sh"))))
+    check("script: ./wis.sh wordt nagekeken", geweigerd(*hook({**bash("./wis.sh"), "cwd": str(d)})))
+    check("script: node wis.js wordt nagekeken", geweigerd(*hook(bash(f"node {d}/wis.js"))))
+    rc, uit = hook(bash(f"python3 {d}/lees.py"))
+    check("script: een script dat alleen leest mag", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook(bash(f"python3 {d}/rit.py"))
+    check("script: een script dat een letterlijke eigen rit op Lara wist mag", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook(bash(f"python3 {d}/groot.py"))
+    check("script: een bestand boven 200 kB wordt niet gelezen en niet geblokkeerd", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook(bash(f"python3 {d}/bestaat-niet.py"))
+    check("script: een bestand dat niet bestaat blokkeert niet", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook(bash(f"git add {d}/wis.py && cat {d}/wis.py"))
+    check("script: een bestand dat alleen genoemd wordt (git add, cat) wordt niet nagekeken", rc == 0 and uit is None, str(uit)[:200])
+    check("bestand: -X PATCH met -d @body.json die status cancelled zet op Lara wordt geweigerd",
+          geweigerd(*hook(bash(f"curl -X PATCH {API}/{LARA_URL}/events/abc123 -d @{d}/annuleer.json"))))
+    check("bestand: --data @body.json werkt ook", geweigerd(*hook(bash(f"curl -X PUT {API}/{LARA_URL}/events/abc123 --data @{d}/annuleer.json"))))
+    rc, uit = hook(bash(f"curl -X PATCH {API}/{LARA_URL}/events/abc123 -d @{d}/ontbreekt.json"))
+    check("bestand: een meegestuurd bestand dat niet bestaat blokkeert niet", rc == 0 and uit is None, str(uit)[:200])
+    check("bestand: /batch/calendar met een DELETE op Lara in de inhoud wordt geweigerd",
+          geweigerd(*hook(bash(f"curl -X POST https://www.googleapis.com/batch/calendar/v3 --data-binary @{d}/batch.txt"))))
+    _g = ["git", "-C", str(d), "-c", "user.name=proef", "-c", "user.email=proef@voorbeeld.be"]
+    if subprocess.run(_g[:3] + ["init", "-q"], capture_output=True).returncode == 0:
+        subprocess.run(_g + ["add", "wis.py"], capture_output=True)
+        subprocess.run(_g + ["commit", "-q", "-m", "proef"], capture_output=True)
+        check("script: vastgelegd in een andere repo telt niet als nagekeken", geweigerd(*hook(bash(f"python3 {d}/wis.py"))))
+
+# vastgelegd in deze repo en ongewijzigd: nagekeken code met eigen grendels (de tests zelf noemen Lara en DELETE)
+_eigen = HIER / "tests" / "test_wisgrendel.py"
+_schoon = (subprocess.run(["git", "-C", str(_eigen.parent), "ls-files", "--error-unmatch", _eigen.name], capture_output=True).returncode == 0
+           and subprocess.run(["git", "-C", str(_eigen.parent), "diff", "--quiet", "HEAD", "--", _eigen.name]).returncode == 0)
+rc, uit = hook({**bash("python3 tests/test_wisgrendel.py"), "cwd": str(HIER)})
+check("script: een test die ongewijzigd in deze repo staat mag draaien (gewijzigd: geweigerd tot hij vastgelegd is)",
+      (rc == 0 and uit is None) if _schoon else geweigerd(rc, uit), f"schoon={_schoon} {str(uit)[:200]}")
+
 # ---------- kapotte invoer, ander moment ----------
 rc, uit = hook(None, ruw="geen json")
 check("kapotte invoer: geen uitvoer en exitcode 0", rc == 0 and uit is None, str(uit)[:200])
@@ -211,13 +300,35 @@ check("zonder bron: een DELETE op een agenda in Bash wordt geweigerd",
 # ---------- laag 1 blijft een herinnering, de wisgrendel staat in de werkwijze en in de CI ----------
 check("regels_vooraf.py blokkeert nooit", "permissionDecision" not in (HIER / "claude-hooks" / "regels_vooraf.py").read_text(encoding="utf-8"))
 aanzetten = taken["leren_in_lagen"]["aanzetten"]
-check("werkwijze: agenda-taken.json zegt hoe Mehdi de wisgrendel aanzet, met de waarschuwing over exitcode 2",
-      "~/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py" in aanzetten and "exitcode 2" in aanzetten, aanzetten[:200])
+check("werkwijze: agenda-taken.json geeft precies de aanzetopdracht met omhulsel, en zegt waarom (exitcode 2)",
+      WG.AANZETTEN in aanzetten and "exitcode 2" in aanzetten, aanzetten[-400:])
 check("werkwijze: de grendel staat in de lijst met grendels",
       any(g.get("test") == "tests/test_wisgrendel.py" for g in taken["grendels"]))
 _wk = (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
-check("werkwijze: agenda-wacht.md noemt het pad en de waarschuwing over exitcode 2",
-      "python3 ~/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py" in _wk and "exitcode 2" in _wk)
+check("werkwijze: agenda-wacht.md geeft precies de aanzetopdracht met omhulsel, en zegt waarom (exitcode 2)",
+      WG.AANZETTEN in _wk and "exitcode 2" in _wk)
+
+# ---------- aanzetten: het omhulsel geeft nooit exitcode 2 (review 27-10-2026, punt 1) ----------
+_lara_wis = json.dumps(mcp("delete_event", calendarId=LARA, eventId="abc123"))
+with tempfile.TemporaryDirectory() as leeg:
+    r = subprocess.run(WG.AANZETTEN, shell=True, input=_lara_wis, capture_output=True, text=True,
+                       env={**os.environ, "HOME": leeg}, timeout=30)
+    check("aanzetten: ontbreekt het script, dan exitcode 0 en geen uitvoer", r.returncode == 0 and not r.stdout.strip(),
+          f"{r.returncode} {r.stdout[:100]} {r.stderr[:100]}")
+    r = subprocess.run(f'python3 "{leeg}/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py"', shell=True,
+                       input=_lara_wis, capture_output=True, text=True, timeout=30)
+    check("aanzetten: een kaal python3-pad naar een ontbrekend script geeft exitcode 2 (daarom het omhulsel)", r.returncode == 2)
+with tempfile.TemporaryDirectory() as thuis:
+    (Path(thuis) / "dev").mkdir()
+    (Path(thuis) / "dev" / "globaal-appportal").symlink_to(HIER.parent, target_is_directory=True)
+    r = subprocess.run(WG.AANZETTEN, shell=True, input=_lara_wis, capture_output=True, text=True,
+                       env={**os.environ, "HOME": thuis}, timeout=30)
+    try:
+        _uit = json.loads(r.stdout)["hookSpecificOutput"]
+    except (ValueError, KeyError):
+        _uit = None
+    check("aanzetten: met het echte pad komt de weigering van de hook door het omhulsel", geweigerd(r.returncode, _uit),
+          f"{r.returncode} {r.stdout[:200]} {r.stderr[:200]}")
 _ci = (HIER.parent / ".github" / "workflows" / "agenda-grendels.yml").read_text(encoding="utf-8")
 check("CI: agenda-grendels draait deze test", "python3 mijnagents-runner/tests/test_wisgrendel.py" in _ci)
 
