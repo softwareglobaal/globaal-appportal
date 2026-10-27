@@ -440,6 +440,29 @@ try:
 finally:
     (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
      S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o5
+# de eerste wisdag is al voorbij: de aangevulde vraag verhuist naar de eerste komende gewiste dag (hertest 2)
+_bijgewerkt5 = []
+S.STAND = Path(tempfile.mkdtemp(prefix="lara5-")) / "agenda-signaal.json"
+try:
+    S.urllib.request.urlopen = _google4
+    S.subprocess.run = lambda args, *a, **k: subprocess.CompletedProcess(args, 0, "", "")
+    S.A._toegang = lambda: "nep-token"
+    S.W.kalenders = lambda: [LARA]
+    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok, dagen=None: "nieuwe-vraag"
+    S.W.lara_gewist_bijwerken = lambda eid, uur, titel, sleutel, tok, dagen: _bijgewerkt5.append((eid, dagen)) or True
+    S.W.ag.klaarzet = lambda items: {}
+    S.meld_annulering = lambda kandidaat, nu: True
+    S.datetime = _Nu
+    _golf[0] = _reeks3[:1]
+    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00", "lara_vraag": {"41t2prmi75bpa224h1g8s1bfhj": {
+        "id": "vraag-0", "sleutel": "41t2prmi75bpa224h1g8s1bfhj:2026-10-21", "dagen": ["2026-10-21"]}}})
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        S.main()
+finally:
+    (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+     S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o5
+check("een aangevulde vraag verhuist naar de eerste komende gewiste dag (de oude dag is voorbij)",
+      _bijgewerkt5 == [("vraag-0", ["2026-11-10"])], str(_bijgewerkt5))
 check("een reeks die over twee rondes gewist wordt, geeft één vraag die aangevuld wordt",
       len(_gemeld4) == 1 and _bijgewerkt4 and _bijgewerkt4[-1][0] == "vraag-1"
       and _bijgewerkt4[-1][2] == ["2026-11-10", "2026-11-13", "2026-11-16"], str((_gemeld4, _bijgewerkt4)))

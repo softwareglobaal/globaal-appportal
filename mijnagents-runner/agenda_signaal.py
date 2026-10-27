@@ -425,10 +425,12 @@ def ronde(tijd):
         nieuw = [k["dag"] for _, k in lijst]
         try:
             v = lara_vraag.get(reeks) or {}
-            alle = sorted(set(v.get("dagen") or []) | set(nieuw))
-            # een reeks die over meer rondes gewist wordt, krijgt een vraag die aangevuld wordt, geen tweede (Codex-hertest)
-            if not (v.get("id") and W.lara_gewist_bijwerken(v["id"], v.get("uur", ""), v.get("titel", ""), v["sleutel"],
-                                                          A._toegang(), alle)):
+            # een reeks die over meer rondes gewist wordt, krijgt een vraag die aangevuld wordt, geen tweede (Codex-hertest);
+            # alleen de komende dagen tellen, zodat de vraag naar de eerste komende gewiste dag verhuist (hertest 2)
+            vandaag = nu.astimezone(W.TIJDZONE).date().isoformat()
+            alle = sorted(d for d in set(v.get("dagen") or []) | set(nieuw) if d >= vandaag)
+            if not (v.get("id") and alle and W.lara_gewist_bijwerken(v["id"], v.get("uur", ""), v.get("titel", ""),
+                                                                   v["sleutel"], A._toegang(), alle)):
                 v = {"sleutel": f"{reeks}:{eerste['dag']}", "uur": eerste["uur"], "titel": eerste["titel"]}
                 v["id"] = meld_lara_wissing({**eerste, "sleutel": v["sleutel"], "dagen": nieuw}, A._toegang())
                 alle = nieuw
@@ -539,7 +541,9 @@ def ronde(tijd):
     grens = (nu - timedelta(days=2)).date().isoformat()
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
     lara_gemeld = {k: d for k, d in lara_gemeld.items() if d >= grens}
-    lara_vraag = {r: v for r, v in lara_vraag.items() if max(v.get("dagen") or [""]) >= grens}
+    # een reeks blijft 60 dagen na haar laatste gewiste dag gekend: een latere wissing vult dezelfde vraag aan (hertest 2)
+    lara_vraag = {r: v for r, v in lara_vraag.items()
+                  if max(v.get("dagen") or [""]) >= (nu - timedelta(days=60)).date().isoformat()}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
             "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen,
             "lara_open": lara_open, "lara_gemeld": lara_gemeld, "lara_vraag": lara_vraag})
