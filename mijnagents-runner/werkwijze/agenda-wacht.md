@@ -805,10 +805,12 @@ moeten agenda en ID letterlijk in de opdracht staan: een variabele, $(...) of ee
 op de werkagenda (Codex-controle 27-10-2026, punt 5). Wissen op de werkagenda met een letterlijk gewoon ID laat hij
 door; daar blijft de ja van Mehdi de regel. Mijn eigen ritopruiming draait in Python op de VM en valt er niet onder.
 Wissen telt ook als "method": "DELETE", .delete( op een agenda-object, status 'cancelled', /batch/calendar of
-events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand, of ./script.sh) of
-stuurt ze een bestand mee (-d @body.json), dan kijkt hij dat bestand mee na als het bestaat en kleiner is dan 200 kB;
-een script dat ongewijzigd in deze repo staat (agenda_wacht.py, de tests) is nagekeken code en telt niet. Een
-wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt)) weigert hij als de opdracht een agenda of Google noemt.
+events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand, ook via
+bash < wis.sh, cat wis.sh | sh, source of . en ./script.sh) of stuurt ze een bestand mee (-d @body.json), dan kijkt hij
+dat bestand mee na als het bestaat en kleiner is dan 200 kB; een script dat ongewijzigd in deze repo staat
+(agenda_wacht.py, de tests) is nagekeken code en telt niet. Een wisopdracht met een ondoorzichtig doel ("$URL",
+$(cat url.txt), in code een variabele als URL) weigert hij als de opdracht ergens een agenda of Google noemt. Elk
+wisdoel telt apart: een veilige letterlijke URL elders in de opdracht (een echo na de ;) dekt niets af.
 Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
 Waarom het omhulsel: met een kaal python3-pad naar een script dat ontbreekt (een andere branch, een verplaatst
 bestand) stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code elke opdracht onder de matcher (elke

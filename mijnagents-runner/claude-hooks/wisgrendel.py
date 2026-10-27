@@ -14,10 +14,12 @@ Geweigerd wordt:
   een afspraak uit een reeks, of de agenda van Lara met een ID dat geen eigen rit is;
 - een Bash-opdracht die in een agenda wist zonder dat agenda en ID letterlijk in de opdracht staan: een variabele,
   $(...) of een onbekende agenda faalt dicht, ook op de werkagenda (Codex-controle 27-10-2026, punt 5);
-- een wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt), backticks) als de opdracht Google noemt.
+- een wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt), backticks, of in code een variabele als URL)
+  als de opdracht ergens een agenda of Google noemt. Elk wisdoel telt apart: een veilige letterlijke URL elders in de
+  opdracht (een echo na de ;) dekt een ondoorzichtig doel niet af (Codex-hertest 27-10-2026, punt 4).
 Wissen is: DELETE (ook "method": "DELETE"), .delete( op een agenda-object, status cancelled (ook status='cancelled'),
 /batch/calendar en events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand,
-of ./script.sh) of stuurt ze een bestand mee (-d @body.json), dan kijkt de grendel dat bestand mee na als het bestaat en
+ook via bash < wis.sh, cat wis.sh | sh, source of . en ./script.sh) of stuurt ze een bestand mee (-d @body.json), dan kijkt de grendel dat bestand mee na als het bestaat en
 kleiner is dan 200 kB; niet te lezen is niet blokkeren. Een script dat ongewijzigd in git staat (agenda_wacht.py, de
 tests) is nagekeken code met eigen grendels en telt niet. Zonder agenda (calendarId) werkt de MCP op de primaire agenda,
 en die is niet van Lara. Een wisopdracht zonder agenda en zonder Google (bv. gh api -X DELETE) laat de grendel door. De
@@ -58,6 +60,16 @@ TOLK = re.compile(r"(?:.*/)?(?:python[\d.]*|node|bash|sh|zsh)")
 SCRIPT = (".py", ".sh", ".js", ".mjs", ".cjs", ".bash", ".zsh")
 VOORWOORD = {"sudo", "env", "exec", "time", "nohup", "command"}
 OPERATOR = set(";&|()<>")
+SCHEIDING = set(";&|()")                              # tussen twee opdrachten; < en > zijn omleidingen
+WAARDE_OPTIES = {"-H", "--header", "-u", "--user", "-o", "--output", "-A", "--user-agent", "-b", "--cookie", "-c",
+                 "--cookie-jar", "-e", "--referer", "-w", "--write-out", "-m", "--max-time", "--connect-timeout",
+                 "--retry", "--oauth2-bearer", "-d", "--data", "--data-binary", "--data-raw", "--data-urlencode",
+                 "--json", "-F", "--form", "-X", "--request"}
+CODE_DOEL = re.compile(r"""\b(?:requests|httpx|session|client|s)\.delete\(\s*([^,)]*)"""
+                       r"""|Request\(\s*([^,)]*),[^)]*method\s*=\s*\\?["']DELETE"""
+                       r"""|\.request\(\s*\\?["']DELETE\\?["']\s*,\s*([^,)]*)"""
+                       r"""|\bfetch\(\s*([^,)]*),[^)]*DELETE""", re.I)
+LETTERLIJKE_URL = re.compile(r"""[rbu]?["'`]https?://[^"'`{}$]*["'`]""")
 PAD_DEEL = r"""([^\s/?'"\\#&;|<>()]*)"""         # tot de volgende / ? of spatie; een $ of { blijft erin staan
 AGENDA_IN_PAD = re.compile(r"\bcalendars/" + PAD_DEEL)
 ID_IN_PAD = re.compile(r"\bevents/" + PAD_DEEL)
@@ -138,7 +150,21 @@ def _woorden(cmd):
         lex.whitespace_split, lex.commenters = True, ""
         return list(lex)
     except ValueError:
-        return re.findall(r"[^\s;&|()<>]+|[;&|()<>]+", cmd)
+        return [w.strip("\"'") for w in re.findall(r"[^\s;&|()<>]+|[;&|()<>]+", cmd)]
+
+
+def _segmenten(woorden):
+    """De losse opdrachten (gescheiden door ; && || | & of haakjes), elk met de scheiding die erna komt."""
+    stuk = []
+    for w in woorden:
+        if w and set(w) <= SCHEIDING:
+            if stuk:
+                yield stuk, w
+            stuk = []
+        else:
+            stuk.append(w)
+    if stuk:
+        yield stuk, ""
 
 
 def _pad(woord, basis):
@@ -158,30 +184,45 @@ def _lees(p):
 
 
 def _bestanden(woorden, cwd):
-    """De scripts die de opdracht draait en de bestanden die ze meestuurt (-d @body.json), als paden."""
+    """De scripts die de opdracht draait en de bestanden die ze meestuurt (-d @body.json), als paden. Een script draait
+    ook via een omleiding (bash < wis.sh), een pijp (cat wis.sh | sh), source of . (Codex-hertest 27-10-2026, punt 3)."""
     basis = Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd()
-    scripts, data, begin = [], [], True
-    for i, w in enumerate(woorden):
-        volgend = woorden[i + 1] if i + 1 < len(woorden) else ""
-        if set(w) <= OPERATOR:
-            begin = True
-            continue
-        if begin and w == "cd" and volgend:
-            basis = _pad(volgend, basis) or basis
-        if TOLK.fullmatch(w):
-            j = i + 1
-            while j < len(woorden) and woorden[j].startswith("-") and woorden[j] not in ("-c", "-m", "-"):
+    scripts, data, vorige_cat, vorige_scheiding = [], [], None, ""
+    for stuk, scheiding in _segmenten(woorden):
+        k = 0
+        while k < len(stuk) and (stuk[k] in VOORWOORD or re.fullmatch(r"\w+=\S*", stuk[k])):
+            k += 1
+        kop, arg = (stuk[k] if k < len(stuk) else ""), (stuk[k + 1] if k + 1 < len(stuk) else "")
+        if kop == "cd" and arg:
+            basis = _pad(arg, basis) or basis
+        if kop in ("source", ".") and arg:
+            scripts.append(_pad(arg, basis))
+        elif kop.startswith(("./", "../", "/", "~/")) and kop.endswith(SCRIPT):
+            scripts.append(_pad(kop, basis))
+        tolk = next((i for i, w in enumerate(stuk) if TOLK.fullmatch(w)), None)
+        if tolk is not None:
+            j = tolk + 1
+            while j < len(stuk) and stuk[j].startswith("-") and stuk[j] not in ("-c", "-m", "-"):
                 j += 1
-            if j < len(woorden) and not woorden[j].startswith("-") and not set(woorden[j]) <= OPERATOR:
-                scripts.append(_pad(woorden[j], basis))
-        elif begin and (w.startswith(("./", "../", "/", "~/")) and w.endswith(SCRIPT)):
-            scripts.append(_pad(w, basis))
-        if w in ("-d", "--data", "--data-binary", "--json") and volgend.startswith("@"):
-            data.append(_pad(volgend[1:], basis))
-        m = re.match(r"(?:-d|--data=|--data-binary=|--json=)@(.+)", w)
-        if m:
-            data.append(_pad(m.group(1), basis))
-        begin = begin and (w in VOORWOORD or bool(re.fullmatch(r"\w+=\S*", w)))
+            if j < len(stuk) and not set(stuk[j]) <= OPERATOR and (not stuk[j].startswith("-") or stuk[j] == "-c"):
+                if stuk[j] == "-c":
+                    m = re.fullmatch(r"(?:\$\(|`)\s*cat\s+(\S+?)\s*(?:\)|`)", stuk[j + 1] if j + 1 < len(stuk) else "")
+                    if m:
+                        scripts.append(_pad(m.group(1), basis))
+                else:
+                    scripts.append(_pad(stuk[j], basis))
+            scripts += [_pad(stuk[i + 1], basis) for i in range(tolk, len(stuk) - 1) if stuk[i] == "<"]
+            if vorige_scheiding == "|" and vorige_cat:
+                scripts.append(vorige_cat)
+        for i, w in enumerate(stuk):
+            volgend = stuk[i + 1] if i + 1 < len(stuk) else ""
+            if w in ("-d", "--data", "--data-binary", "--json") and volgend.startswith("@"):
+                data.append(_pad(volgend[1:], basis))
+            m = re.match(r"(?:-d|--data=|--data-binary=|--json=)@(.+)", w)
+            if m:
+                data.append(_pad(m.group(1), basis))
+        vorige_cat = _pad(arg, basis) if kop == "cat" and len(stuk) == k + 2 else None
+        vorige_scheiding = scheiding
     return [p for p in scripts if p], [p for p in data if p]
 
 
@@ -207,17 +248,36 @@ def _vastgelegd(p):
         return False
 
 
-def _toets(tekst, woorden, lara):
+def _ondoorzichtig(tekst):
+    """Een wisdoel dat niet te lezen is: per losse opdracht een woord dat met $ of een backtick begint (geen waarde van
+    -H, -d en dergelijke, en zonder calendars/ erin), of in code een delete-aanroep met een variabele als URL."""
+    for stuk, _ in _segmenten(_woorden(tekst)):
+        if not BASH_WIS.search(" ".join(stuk)):
+            continue
+        for i, w in enumerate(stuk):
+            if not (i and stuk[i - 1] in WAARDE_OPTIES) and w.startswith(("$", "`")) and "calendars/" not in w:
+                return w
+    for m in CODE_DOEL.finditer(tekst):
+        doel = next(g for g in m.groups() if g is not None).strip()
+        if "calendars/" not in doel and not LETTERLIJKE_URL.fullmatch(doel):
+            return doel or "?"
+    return None
+
+
+def _toets(tekst, lara):
     """De reden om deze tekst (opdracht, eventueel met script of meegestuurd bestand) te weigeren, of None."""
     if not BASH_WIS.search(tekst):
         return None
     laag = tekst.lower()
     if "recurringeventid" in laag:
         return "de opdracht noemt recurringEventId, dus een reeks"
-    if not AGENDA_WOORD.search(tekst) and not (lara and lara in laag):
-        if GOOGLE.search(tekst) and any(w.startswith(("$", "`")) for w in woorden):
-            return ("het doel van de wisopdracht is niet te lezen (\"$URL\", $(...) of backticks) en de opdracht noemt "
-                    "Google: schrijf de URL met agenda en ID letterlijk in de opdracht")
+    agenda = bool(AGENDA_WOORD.search(tekst) or (lara and lara in laag))
+    if agenda or GOOGLE.search(tekst):
+        doel = _ondoorzichtig(tekst)
+        if doel:
+            return (f"het doel van een wisopdracht is niet te lezen ({doel[:60]}) en de opdracht noemt een agenda of "
+                    "Google: schrijf de URL met agenda en ID letterlijk in die wisopdracht zelf")
+    if not agenda:
         return None                                  # wist niets in een agenda (bv. gh api -X DELETE op een branch)
     agendas = _waarden(AGENDA_IN_PAD, AGENDA_IN_VELD, tekst)
     ids = _waarden(ID_IN_PAD, ID_IN_VELD, tekst)
@@ -246,12 +306,12 @@ def _bash(ti, pad, cwd=None):
     scripts, data = _bestanden(woorden, cwd)
     tekst = cmd + "".join("\n" + inhoud for inhoud in map(_lees, data) if inhoud)
     lara = lara_id(pad) if BASH_WIS.search(tekst) or scripts else None   # alleen nodig als _toets verder kijkt
-    oorzaak = _toets(tekst, woorden, lara)
+    oorzaak = _toets(tekst, lara)
     if oorzaak:
         return oorzaak
     for p in scripts:
         inhoud = _lees(p)
-        oorzaak = _toets(tekst + "\n" + inhoud, woorden, lara) if inhoud else None
+        oorzaak = _toets(tekst + "\n" + inhoud, lara) if inhoud else None
         if oorzaak and not _vastgelegd(p):
             return f"in het script {p}: {oorzaak}"
     return None

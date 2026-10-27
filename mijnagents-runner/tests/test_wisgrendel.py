@@ -219,6 +219,26 @@ check("Bash: DELETE op `cat url.txt` met een Google-host wordt geweigerd",
 rc, uit = hook(bash('curl -X DELETE https://gmail.googleapis.com/gmail/v1/users/me/labels/Label_1 -H "Authorization: Bearer $TOK"'))
 check("Bash: een letterlijke Google-URL buiten de agenda laat de wisgrendel door", rc == 0 and uit is None, str(uit)[:200])
 
+# ---------- Bash: elk wisdoel apart, een veilige URL elders dekt niets af (Codex-hertest 27-10-2026, punt 4) ----------
+_PRIM = "https://www.googleapis.com/calendar/v3/calendars/primary/events/abc"
+rc, uit = hook(bash(f'curl -X DELETE "$URL"; echo {_PRIM}'))
+check('Bash: curl -X DELETE "$URL"; echo <veilige agenda-URL> wordt geweigerd',
+      geweigerd(rc, uit) and "niet te lezen" in uit.get("permissionDecisionReason", ""), str(uit)[:300])
+check('Bash: echo <veilige agenda-URL> && curl -X DELETE "$URL" wordt geweigerd',
+      geweigerd(*hook(bash(f'echo {_PRIM} && curl -X DELETE "$URL"'))))
+check('Bash: een letterlijke wisopdracht ; een tweede op "$URL" wordt geweigerd',
+      geweigerd(*hook(bash(f'curl -X DELETE {_PRIM} ; curl -X DELETE "$URL"'))))
+check("Bash: een letterlijke wisopdracht && een tweede op Lara wordt geweigerd",
+      geweigerd(*hook(bash(f"curl -X DELETE {_PRIM} && curl -X DELETE {API}/{LARA_URL}/events/abc123"))))
+check("Bash: in Python een variabele als wis-URL naast een veilige URL wordt geweigerd",
+      geweigerd(*hook(bash(f"python3 -c \"import os, requests; requests.delete(os.environ['URL']); print('{_PRIM}')\""))))
+rc, uit = hook(bash(f"curl -X DELETE {_PRIM} && echo klaar"))
+check("Bash: een letterlijke wisopdracht && echo klaar mag", rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash(f'curl -X DELETE {_PRIM} -H "$AUTH"'))
+check("Bash: een variabele als waarde van -H is geen wisdoel", rc == 0 and uit is None, str(uit)[:200])
+rc, uit = hook(bash('curl -X DELETE "$BASE/calendars/primary/events/abc"'))
+check("Bash: een variabele host met letterlijke agenda en ID mag", rc == 0 and uit is None, str(uit)[:200])
+
 # ---------- Bash: een eigen script of een meegestuurd bestand wordt mee nagekeken (review 27-10-2026, punt 2a) ----------
 with tempfile.TemporaryDirectory() as _d:
     d = Path(_d)
@@ -232,6 +252,8 @@ with tempfile.TemporaryDirectory() as _d:
     (d / "rit.py").write_text(f"import urllib.request as u\nu.urlopen(u.Request('{API}/{LARA_URL}/events/{RIT}', "
                               "method='DELETE'))\n", encoding="utf-8")
     (d / "annuleer.json").write_text('{"status": "cancelled"}', encoding="utf-8")
+    (d / "lees.sh").write_text(f"curl -s '{API}/{LARA_URL}/events'\n", encoding="utf-8")
+    (d / "gemaskeerd.sh").write_text(f'curl -X DELETE "$1"\necho {API}/primary/events/abc\n', encoding="utf-8")
     (d / "batch.txt").write_text(f"--b\nDELETE /calendar/v3/calendars/{LARA_URL}/events/abc123\n--b--\n", encoding="utf-8")
     rc, uit = hook(bash(f"python3 {d}/wis.py"))
     check("script: python3 met een Lara-wisopdracht in het bestand wordt geweigerd en de reden noemt het script",
@@ -242,6 +264,15 @@ with tempfile.TemporaryDirectory() as _d:
     check("script: bash wis.sh wordt nagekeken", geweigerd(*hook(bash(f"bash {d}/wis.sh"))))
     check("script: ./wis.sh wordt nagekeken", geweigerd(*hook({**bash("./wis.sh"), "cwd": str(d)})))
     check("script: node wis.js wordt nagekeken", geweigerd(*hook(bash(f"node {d}/wis.js"))))
+    for _opdracht in ("bash < wis.sh", f"sh < {d}/wis.sh", "bash -s < wis.sh", "source ./wis.sh", ". ./wis.sh",
+                      "cat wis.sh | bash", "cat wis.sh | sh -s", 'bash -c "$(cat wis.sh)"'):
+        check(f"script: {_opdracht} wordt nagekeken (Codex-hertest punt 3)", geweigerd(*hook({**bash(_opdracht), "cwd": str(d)})))
+    rc, uit = hook({**bash("bash < lees.sh"), "cwd": str(d)})
+    check("script: bash < lees.sh dat alleen leest mag", rc == 0 and uit is None, str(uit)[:200])
+    rc, uit = hook({**bash("cat wis.sh"), "cwd": str(d)})
+    check("script: cat wis.sh (alleen tonen) mag", rc == 0 and uit is None, str(uit)[:200])
+    check("script: een shellscript met DELETE op $1 en een veilige URL erna wordt geweigerd",
+          geweigerd(*hook(bash(f"sh {d}/gemaskeerd.sh https://x"))))
     rc, uit = hook(bash(f"python3 {d}/lees.py"))
     check("script: een script dat alleen leest mag", rc == 0 and uit is None, str(uit)[:200])
     rc, uit = hook(bash(f"python3 {d}/rit.py"))
