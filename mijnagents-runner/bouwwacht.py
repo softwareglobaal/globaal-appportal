@@ -8,7 +8,8 @@ probeerde het elke 2 minuten opnieuw, en niemand zag het.
 Per dienst schrijft deploy.sh de boom van zijn map (`git rev-parse HEAD:<map>`) pas in `<map>-data/.built` na een
 geslaagde bouw. De VM haalt main niet zelf binnen, dus een verschil ontstaat alleen na een `git pull` die nog niet
 gebouwd is. Duurt dat verschil DREMPEL_MIN minuten of langer, dan zet ik een nood met een vaste tekst (N10); zijn ze
-weer gelijk, dan staat de nood niet meer in mijn lijst en sluit het bord hem.
+weer gelijk, dan staat de nood niet meer in mijn lijst en sluit het bord hem. Per storing gaat er ook een keer een
+signaal naar Mehdi, via De Bode (zijn ja van 27-10-2026), want een nood voor claude-code heeft geen vaste lezer.
 
 Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2; Codex-resultaattoets 3.1):
 - toont de reflog van HEAD de laatste stap waarop de boom gelijk was aan de markering, dan begon het verschil bij de stap
@@ -61,6 +62,7 @@ OUD = 0     # ouder dan de drempel, hoe oud precies is onbekend
 
 
 STANDNOOD = "Bouwwacht kan zijn stand niet bewaren"
+SIGNAALNOOD = "Bouwwacht kan het signaal voor Mehdi niet klaarzetten"
 
 
 def noodtekst(dienst):
@@ -69,6 +71,20 @@ def noodtekst(dienst):
 
 def onbekendtekst(dienst):
     return f"Bouwwacht kan {dienst} niet nakijken"
+
+
+def signaal(m):
+    """Een keer per storing een signaal voor Mehdi, via De Bode (zijn ja van 27-10-2026: een nood voor claude-code had
+    geen vaste lezer). Een storing is een dienst met zijn laatste geslaagde bouw: dezelfde `uniek` maakt het bord nooit
+    een tweede keer, ook niet bij een tweede pull tijdens de storing; na een geslaagde bouw is de volgende storing nieuw.
+    Titel en inhoud blijven gelijk zolang de storing duurt, zonder minuten, en de titel draagt nooit het woord dat De
+    Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
+    return {"voor": "mehdi", "soort": "signaal", "sleutel": m["dienst"],
+            "titel": f"Bouw van {m['dienst']} loopt achter op de code",
+            "uniek": f"bouwwacht-achter-{m['dienst']}-{m['gebouwd']}",
+            "inhoud": f"De VM draait voor {m['dienst']} niet de code die er na de laatste git pull staat: de bouw loopt "
+                      f"{DREMPEL_MIN} minuten of langer achter (laatste geslaagde bouw {m['gebouwd']}). De nood staat op "
+                      f"het bord voor claude-code; wat de bouw zegt, staat in ~/deploy-{m['dienst']}.log op de VM."}
 
 
 class Onleesbaar(RuntimeError):
@@ -266,6 +282,15 @@ def werk(r, nu=None):
         if open_ is not None and tekst not in {n["tekst"] for n in open_}:
             ag.log(m["dienst"], "fout", regel(m))
     r.detail = "; ".join(regel(m) for m in uitslag)
+    signalen = [signaal(m) for m in uitslag if m["stand"] == "achter"]
+    if signalen:
+        # elke ronde zolang de storing duurt: het bord maakt het maar een keer (zelfde uniek), en lukte het een keer
+        # niet, dan probeert de volgende ronde het vanzelf opnieuw
+        try:
+            ag.klaarzet(signalen)
+        except Exception as e:  # noqa: BLE001  een signaal dat niet lukt, houdt de bouwnood niet tegen
+            r.nood(SIGNAALNOOD, wie="claude-code")
+            r.detail += f"; signaal niet klaargezet ({type(e).__name__})"
     if niet_bewaard:
         r.nood(STANDNOOD, wie="claude-code")
         r.detail += f"; stand niet bewaard ({niet_bewaard})"

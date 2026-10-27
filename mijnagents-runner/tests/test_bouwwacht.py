@@ -106,16 +106,17 @@ class Bord:
     """Vangt op wat de ronde naar het bord stuurt, zonder netwerk. open_noden: wat /api/nood teruggeeft voor bouwwacht
     (None: het bord weet het niet). weg: elke aanroep faalt, zoals een bord dat niet antwoordt."""
 
-    def __init__(self, open_noden=(), werkwijze=WERKWIJZE, weg=False, status_weg=False):
+    def __init__(self, open_noden=(), werkwijze=WERKWIJZE, weg=False, status_weg=False, klaarzet_weg=False):
         self.open_noden = None if open_noden is None else [dict(n, naam="bouwwacht") for n in open_noden]
         self.werkwijze = werkwijze
         self.weg = weg
         self.status_weg = status_weg
+        self.klaarzet_weg = klaarzet_weg
         self.gestuurd = []
 
     def call(self, pad, payload=None, method=None):
         self.gestuurd.append((pad, payload))
-        if self.weg or (self.status_weg and pad == "/agent-status"):
+        if self.weg or (self.status_weg and pad == "/agent-status") or (self.klaarzet_weg and pad == "/api/klaarzet"):
             raise OSError("bord onbereikbaar")
         if "werkwijze" in pad:
             return {"werkwijze": self.werkwijze}
@@ -129,6 +130,9 @@ class Bord:
 
     def eind(self):
         return [p for pad, p in self.gestuurd if pad == "/agent-status"][-1]
+
+    def signalen(self):
+        return [i for pad, p in self.gestuurd if pad == "/api/klaarzet" for i in p["items"]]
 
     def logregels(self):
         return [r for pad, p in self.gestuurd if pad == "/api/logboek" for r in p["regels"]]
@@ -260,6 +264,59 @@ def test_een_markering_die_niet_in_de_reflog_staat_is_ouder_dan_de_drempel(repo)
     uit, b = ronde(T0 + MIN)
     assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None
     assert "Bouw loopt achter op de code: mijnagents" in noden(b)
+
+
+@proef
+def test_een_storing_geeft_een_signaal_voor_mehdi(repo):
+    """Mehdi, 27-10-2026: "stuurt bij een bouw die achterloopt een keer per storing een signaal via De Bode"."""
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 9 * MIN)
+    assert b.signalen() == [], "een bouw die bezig is, geeft geen signaal"
+    _, b = ronde(T0 + 10 * MIN)
+    [s] = b.signalen()
+    gebouwd = repo.boom("a", "mijnagents")[:7]
+    assert s["voor"] == "mehdi" and s["soort"] == "signaal" and s["van"] == "bouwwacht"
+    assert s["titel"] == "Bouw van mijnagents loopt achter op de code"
+    assert s["uniek"] == f"bouwwacht-achter-mijnagents-{gebouwd}"
+    assert "~/deploy-mijnagents.log" in s["inhoud"] and gebouwd in s["inhoud"]
+    # dezelfde storing, ook na een tweede pull en later: zelfde uniek en zelfde tekst, dus het bord maakt geen tweede
+    repo.zet("d", T0 + 12 * MIN)
+    _, b2 = ronde(T0 + 30 * MIN)
+    assert b2.signalen() == [s]
+    # na een geslaagde bouw is de volgende storing nieuw
+    repo.bouw("mijnagents")
+    _, b3 = ronde(T0 + 31 * MIN)
+    assert b3.signalen() == []
+    repo.zet("b", T0 + 40 * MIN)
+    _, b4 = ronde(T0 + 55 * MIN)
+    assert [x["uniek"] for x in b4.signalen()] == [f"bouwwacht-achter-mijnagents-{repo.boom('d', 'mijnagents')[:7]}"]
+
+
+def test_de_signaaltitel_belt_mehdi_niet_op():
+    """Het woord stil in een signaaltitel laat De Bode bellen (AGENTNORM.md 6); een bouw die achterloopt is geen oproep."""
+    for dienst in B.DIENSTEN:
+        s = B.signaal({"dienst": dienst, "gebouwd": "abc1234"})
+        assert "stil" not in s["titel"].lower() and "stil" not in s["uniek"].lower(), s
+
+
+@proef
+def test_geen_signaal_als_de_dienst_niet_na_te_kijken_is(repo):
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
+    os.remove(pad)
+    os.makedirs(pad)
+    _, b = ronde(T0 + MIN)
+    assert b.signalen() == []
+
+
+@proef
+def test_een_signaal_dat_niet_lukt_houdt_de_bouwnood_niet_tegen(repo):
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 12 * MIN, Bord(klaarzet_weg=True))
+    assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
+                        "Bouwwacht kan het signaal voor Mehdi niet klaarzetten": "claude-code"}
+    assert "signaal niet klaargezet" in b.eind()["detail"]
+    _, b = ronde(T0 + 14 * MIN)
+    assert len(b.signalen()) == 1 and "Bouwwacht kan het signaal voor Mehdi niet klaarzetten" not in noden(b)
 
 
 @proef
@@ -590,7 +647,7 @@ def test_werkwijze_haalt_de_norm():
              "grenzen": ["nooit bouwen"]}
     assert nieuwe_agent.controleer(agent, WERKWIJZE) == []
     nooit, mehdi = bord.grenzen(WERKWIJZE)
-    assert len(nooit) == 5 and len(mehdi) == 4, (nooit, mehdi)
+    assert len(nooit) == 6 and len(mehdi) == 4, (nooit, mehdi)
 
 
 if __name__ == "__main__":
