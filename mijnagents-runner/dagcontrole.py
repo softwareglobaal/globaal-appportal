@@ -155,7 +155,8 @@ def dagcontrole(items, dag):
     for a in afspraken:
         if (a.get("_merk") or {}).get(W.JA_MERK) == dag:
             continue          # Mehdi zei ja voor precies deze dag; verplaatst naar een andere dag telt die ja niet (FR-92, V10)
-        if a.get("kalender") in lara or W.bellen.is_lara_titel(a.get("titel")):
+        is_lara = a.get("kalender") in lara or W.bellen.is_lara_titel(a.get("titel"))
+        if is_lara:
             # 'Geen buiten afspraken Lara ophalen' staat er voor de ophaling zelf: een Lara-afspraak botst er nooit mee.
             # Tot 27-10-2026 belde De Bode elke week over de eigen ophaling en de zwemles ('Zeg wat ik doe'). Elke andere
             # markering die dag ('geen auto', Buitenland, geen afspraken) blijft wel gelden, ook voor een [LA]-titel en
@@ -167,7 +168,9 @@ def dagcontrole(items, dag):
         if not m:
             continue
         alles = any(t == m and wat == "alles" for t, wat in markers)
-        if alles and W._van_mehdi(a):
+        if alles and W._van_mehdi(a) and not is_lara:
+            # een Lara-ophaling op een dag in het buitenland of zonder afspraken is wel een vraag: wie haalt Lara dan op?
+            # (Codex-hertest PR 114). Een andere eigen afspraak van Mehdi blijft zichtbaar zonder vraag.
             meld("eigen_op_vrije_dag", a, f"{a['start'][11:16]} {a['titel'][:45]}: jouw eigen afspraak op een dag met '{m}'; "
                                           f"ik laat ze staan en boek er niets bij")
         else:

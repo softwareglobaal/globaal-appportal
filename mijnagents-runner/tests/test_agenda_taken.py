@@ -1327,6 +1327,13 @@ check("een [LA]-afspraak op een dag 'geen auto' is ook een vraag", _bla == {("la
 _bla2 = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_lara, _la], "2026-11-03")
          if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
 check("en tegen alleen de Lara-markering niet", not _bla2, str(_bla2))
+for _mt in ("Buitenland (Suriname)", "Mehdi: geen afspraken"):
+    _mk_x = dict(_mk_lara, titel=_mt, kalender=W.WERKAGENDA)
+    for _li in (dict(_lara_items[0], maker=W.WERKAGENDA, _organisator_zelf=True), dict(_la, maker=W.WERKAGENDA, _organisator_zelf=True)):
+        _bx = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_lara, _mk_x, _li], "2026-11-03")
+               if x["soort"] in _D83.VRAGEN}
+        check(f"een Lara-afspraak ({_li['id']}) op een dag '{_mt}' is een vraag (wie haalt Lara op?)",
+              _bx == {(_li["id"], "op_vrije_dag")}, str(_bx))
 check("alleen 'Geen buiten afspraken ... Lara' is de Lara-markering, niet elk woord Lara",
       W.LARA_MARKERING.search("!! Mehdi: Geen buiten afspraken Lara ophalen")
       and not W.LARA_MARKERING.search("Buitenland, Lara bij mama") and not W.LARA_MARKERING.search("Geen auto, Lara bij oma"))
