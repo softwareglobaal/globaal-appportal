@@ -499,6 +499,7 @@ try:
     W.SCHOOLVAKANTIES = _bron.with_name("bestaat-niet.json")
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         _rc7a = S.main()
+        S.main()                 # een tweede ronde met de bron nog weg: dezelfde wissing komt opnieuw binnen
     _wacht7 = dict(json.loads(S.STAND.read_text()).get("lara_wacht") or {})
     W.SCHOOLVAKANTIES = _bron
     _golf[0] = []
@@ -508,7 +509,7 @@ finally:
     W.SCHOOLVAKANTIES = _bron
     (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
      S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o5
-check("bron even onleesbaar: geen vraag en exitcode niet 0, de wissing blijft wachten",
+check("bron twee rondes onleesbaar: geen vraag en exitcode niet 0, de eerste waarneming blijft wachten",
       _rc7a != 0 and len(_wacht7) == 1, str((_rc7a, _wacht7)))
 check("na herstel van de bron komt de vraag er toch", _gemeld7 == [["2026-11-10"]], str(_gemeld7))
 

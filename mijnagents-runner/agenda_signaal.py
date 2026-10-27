@@ -417,8 +417,9 @@ def ronde(tijd):
                 annuleringen[kandidaat["sleutel"]] = {**kandidaat, "start": kandidaat["start"].isoformat()}
             if officieel is None:
                 if _is_lara(kal) and ev.get("status") == "cancelled":
-                    lara_wacht[f"{kal}|{ev.get('id', '')}"] = {"kal": kal, "ev": ev,
-                                                               "vorig": oud.get(f"{kal}|{ev.get('id', '')}")}
+                    # de eerste waarneming blijft: in een volgende ronde is de vingerafdruk al 'cancelled' (hertest 6)
+                    lara_wacht.setdefault(f"{kal}|{ev.get('id', '')}", {"kal": kal, "ev": ev,
+                                                                       "vorig": oud.get(f"{kal}|{ev.get('id', '')}")})
                 continue
             lk = lara_wissing_kandidaat(kal, ev, oud.get(f"{kal}|{ev.get('id', '')}"), nu, officieel, dekking)
             if lk and lk["sleutel"] not in lara_gemeld:
