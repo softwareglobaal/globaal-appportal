@@ -631,8 +631,8 @@ def _waarde(d, k, reden="veld ontbreekt"):
 ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
 ARCHIEF_GELDIG = timedelta(hours=3)    # De Zoomarchivaris draait elk uur en slaat hoogstens een ronde over voor de
                                        # keten; een ouder bestand zegt niets meer (Codex, Zoomarchief controle 4)
-NOOD_WISREGEL_WACHT = "Wacht met de wisregel: niet elke Zoom-opname staat bewezen in je Dropbox"
-NOOD_WISREGEL_AAN = "De wisregel staat aan terwijl niet elke oude Zoom-opname bewezen in je Dropbox staat"
+# Driehoeksoverleg sein (O2, 27-10-2026): de waarschuwingen over de wisregel geeft De Zoomarchivaris zelf, met een verse
+# lezing van account en gebruiker; De Zoomwacht leest het archief alleen nog voor ZA-01.
 
 
 def _archief(sleutel, pad=None, nu=None):
@@ -681,30 +681,6 @@ def archief_veilig(pad=None, nu=None):
     """Staat alles wat ouder is dan 30 dagen bewezen in Dropbox, zonder verlies of onvolledige opname? Dat is wat de
     wisregel van 30 dagen nodig heeft (Codex, Zoomarchief controle 3, punt 12)."""
     return _archief("wisregel_veilig", pad, nu)
-
-
-def wisregel_wacht(r, staat=None, vers=None):
-    """Codex, Zoomarchief controle 3, punt 12: staat er een ZA-01-voorstel open of goedgekeurd terwijl de kopie niet
-    veilig is voor de wisregel, dan een nood voor Mehdi, elke ronde opnieuw tot het weer veilig is. De besluitknop op het
-    bord voert zelf niets uit; dit is de waarschuwing bij het besluit."""
-    # Codex controle 9 en 10, punten 42, 47 en 48: staat de wisregel aan (volgens de bewaarde accountscan, of de stand
-    # die deze ronde vers las), dan meld ik zelfstandig dat de kopie niet veilig is, ook zonder voorstel en ook als het
-    # bord niet te lezen is; de wisregel wist dan echt
-    account = staat.get("account") if isinstance(staat, dict) else None
-    inst = ((account or {}).get("basis") or {}).get("instellingen") if isinstance(account, dict) else None
-    aan = (isinstance(inst, dict) and inst.get("recording.auto_delete_cmr") is True) or vers is True
-    if aan and archief_veilig() != "ja":
-        r.nood(NOOD_WISREGEL_AAN, "mehdi")
-    try:
-        rijen = voorstellen_lezen()
-    except bord.BordOnbekend:
-        # Codex controle 4, punt 22: zonder de voorstellen weet ik niet of de waarschuwing nog geldt; niets sluiten
-        r.nood("Zoom-advies niet terug te lezen op het bord", "claude-code")
-        r.noden_onbekend = True
-        return
-    if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
-            and (archief_veilig() != "ja" or archief_dekking() != "ja"):  # Codex controle 9, punt 41
-        r.nood(NOOD_WISREGEL_WACHT, "mehdi")
 
 
 def adviezen(d, gesprekken=0, staat_acc=None):
@@ -1328,7 +1304,6 @@ def herhaal_bewaarde_scannoden(r, staat):
     """Herhaal de bekende scannoden bij een Zoom-ronde die de accountscan niet kan bereiken."""
     if not scan_aan(r.werkwijze):
         return
-    wisregel_wacht(r, staat)
     account = staat.get("account") if isinstance(staat, dict) else None
     scannoden = account.get("scannoden") if isinstance(account, dict) else None
     if isinstance(scannoden, dict):
@@ -1339,7 +1314,6 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
     """Een accountdeel binnen de bestaande Zoom-ronde; schrijft staat pas na geslaagde bordstappen."""
     if not scan_aan(r.werkwijze):
         return ""
-    wisregel_wacht(r, staat)
     oud = copy.deepcopy(staat.get("account") or {})
     vorige_noden = oud.get("scannoden") if isinstance(oud.get("scannoden"), dict) else {}
     scannoden = copy.deepcopy(vorige_noden)
@@ -1366,7 +1340,6 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
         d["app_rechten"] = apprechten_veranderd(weekbasis, _bekend(d, "apps"),
                                                oud.get("laatst_bewezen_apprechten"))
         adv = adviezen(d, gesprekken, nieuw)
-        wisregel_wacht(r, staat, vers=(_bekend(d, "account") or {}).get("recording.auto_delete_cmr"))
         try:
             voorstellen = voorstellen_lezen()
         except bord.BordOnbekend:

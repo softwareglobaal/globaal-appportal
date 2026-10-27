@@ -230,6 +230,33 @@ def mehdi_vastzetten():
     return vast
 
 
+def wisregel_stand():
+    """Driehoeksoverleg sein (O2, K2 en X3, 27-10-2026): de wisregel van Zoom, elke ronde vers gelezen met de leesapp,
+    voor het account en voor Mehdi's gebruiker (Settings > Recording > Delete cloud recordings after a specified number
+    of days). {'aan': bool, 'dagen': de kortste ingeschakelde termijn of None}. None als een van beide onleesbaar is, het
+    veld ontbreekt, of de wisregel aan staat zonder bekende termijn: dan is niets veilig."""
+    termijnen = []
+    for pad in ("/accounts/me/settings", f"/users/{Z._VAST['id']}/settings"):
+        try:
+            d = Z.lees_account(pad)
+        except Z.ZoomFout:
+            return None
+        rec = d.get("recording") if isinstance(d, dict) else None
+        aan = rec.get("auto_delete_cmr") if isinstance(rec, dict) else None
+        if type(aan) is not bool:
+            return None
+        if aan:
+            dagen = rec.get("auto_delete_cmr_days")
+            if type(dagen) is not int or dagen <= 0:
+                return None
+            termijnen.append(dagen)
+    return {"aan": bool(termijnen), "dagen": min(termijnen) if termijnen else None}
+
+
+NOOD_WISREGEL_AAN = "De wisregel staat aan terwijl niet elke oude Zoom-opname bewezen in je Dropbox staat"
+NOOD_WISREGEL_ONBEKEND = "Wisregel van Zoom niet leesbaar"
+
+
 def dropbox_controle(staat):
     """'' als de koppeling naar het vastgelegde Dropbox-account wijst, anders de reden (Codex 6 en controle 2, 16). Het
     account-id staat in ~/appportal/.env als DROPBOX_PRIVE_ACCOUNT_ID, vastgelegd bij de uitrol na een controle van
@@ -505,11 +532,10 @@ def intrekken(reden, nu_utc=nu, staat=None):
         schrijf_staat(staat)
     except (OSError, ValueError):
         pass
-    try:
-        _schrijf_json(os.path.join(DATA, "dekking.json"), {"ts": nu_utc().isoformat(timespec="seconds"),
-                                                           "dekking": False, "wisregel_veilig": False, "reden": reden})
-    except OSError:
-        pass
+    # Aanval A2 (27-10-2026): lukt het intrekken niet (volle schijf), dan breekt de ronde: de hartslag wordt fout en De
+    # Zoomwacht leest geen oude ja meer als geldig
+    _schrijf_json(os.path.join(DATA, "dekking.json"), {"ts": nu_utc().isoformat(timespec="seconds"),
+                                                       "dekking": False, "wisregel_veilig": False, "reden": reden})
 
 
 SCHIJF_VOL = "Te weinig vrije schijf op de VM voor de kopie van de Zoom-opnames"
@@ -593,6 +619,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         vroeg = (f"Dropbox niet bereikbaar ({type(e).__name__})", "claude-code")
     if vroeg:
         return stop(vroeg[0], vroeg[1], "niets gelezen of gekopieerd: " + vroeg[0], staat)
+    stand = wisregel_stand()  # O2: elke ronde vers, voor account en gebruiker, met de termijn
 
     vandaag = nu_utc().astimezone(BRUSSEL).date()
     try:
@@ -733,12 +760,23 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 if oud and not oud.get("tijdelijk") and tijdelijk:
                     oud["pogingen"] = oud.get("pogingen", 0) + 1  # de blijvende fout blijft staan en gemeld
                 else:
-                    zelfde = oud.get("tekst") == tekst
+                    # aanval A7: de pogingen tellen per bestand, los van de tekst; alleen een geslaagde kopie of het
+                    # verdwijnen uit Zoom zet ze terug
                     staat["fouten"][f["id"]] = {"tekst": tekst, "tijdelijk": tijdelijk,
-                                                "pogingen": (oud.get("pogingen", 0) if zelfde else 0) + 1}
+                                                "pogingen": oud.get("pogingen", 0) + 1}
                 if "HTTP 429" in str(e):
                     gestopt = "Zoom vraagt rust"
                     break
+        # Aanval A3: een meeting waarvan alle bestanden bewezen zijn, krijgt haar beschrijving in de wachtrij, ook als de
+        # ronde hierna stopt; zo kan ze later nog, ook als de meeting intussen uit Zoom verdwijnt
+        wacht_op = {v.get("uuid") for v in staat["vervanging"].values()}
+        for m in meetings:
+            ids = [f.get("id") for f in m["bestanden"]]
+            if (ids and all(ids) and m["uuid"] not in staat["meetings"] and m["uuid"] not in staat["beschrijvingen"]
+                    and m["uuid"] not in wacht_op and all(f.get("status") == "completed" for f in m["bestanden"])
+                    and all(i in staat["bestanden"] for i in ids)):
+                staat["beschrijvingen"][m["uuid"]] = {"inhoud": opname_json(m, staat["bestanden"]),
+                                                      "pad": f"{mapnaam(m)}/opname.json"}
         for m in meetings:
             if gestopt:
                 break
@@ -792,18 +830,26 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         if fid in staat["bestanden"] or fid not in per_id:
             del staat["fouten"][fid]
     _meld_blijvend(r, staat)
-    grens = nu_utc() - timedelta(days=WISREGEL_DAGEN)
+    # De termijn van de wisregel: de kortste die aan staat, of 30 dagen (de wisregel die ZA-01 aanraadt) als ze uit staat
+    termijn = stand["dagen"] if stand and stand["aan"] else WISREGEL_DAGEN
+    grens = nu_utc() - timedelta(days=termijn)
     # een onbekend tijdstip telt als oud: dan weet ik niet dat de wisregel het spaart
     oud_open = [f for f in onbewezen if (_utc(f.get("start")) or grens) <= grens]
     binnen = klok() <= hard
     gaaf = (not droog and nagekeken_weg == 0 and not staat["verdwenen"] and not staat["onvolledig"]
-            and not staat["blokkades"] and not staat["vervanging"] and binnen)
+            and not staat["blokkades"] and not staat["vervanging"] and not staat["beschrijvingen"] and binnen)
     # Dekking ja (K6, Codex controle 3 en 4): uit wat deze ronde zelf zag en nakeek. Alles wat Zoom nu heeft, was al
     # bewezen voor de ronde begon (dus een tweede inventaris), niets wordt nog verwerkt, elk bewijs klopte, niets is
     # verdwenen, onvolledig of geblokkeerd, en de ronde bleef binnen haar tijd.
     dekking = gaaf and not te_doen and not bezig
-    # Veilig voor de wisregel: niets ouder dan WISREGEL_DAGEN zonder bewijs, ook niet in verwerking.
-    veilig = gaaf and not oud_open
+    # Veilig voor de wisregel: niets ouder dan de termijn zonder bewijs, ook niet in verwerking, en de wisregel leesbaar.
+    veilig = gaaf and stand is not None and not oud_open
+    if not droog:
+        # O2: het archief is de eigenaar van de waarschuwing, ook met het sein uit; De Zoomwacht waarschuwt niet meer
+        if stand is None:
+            r.nood(NOOD_WISREGEL_ONBEKEND, wie="claude-code")
+        elif stand["aan"] and not veilig:
+            r.nood(NOOD_WISREGEL_AAN, wie="mehdi")
     if not SEIN_AAN:
         dekking = veilig = False
     if (dekking or veilig) and not droog:
@@ -834,6 +880,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         schrijf_staat(staat)
         _schrijf_json(os.path.join(DATA, "dekking.json"), {
             "ts": moment, "dekking": dekking, "wisregel_veilig": veilig, "bestanden": len(klaar),
+            "wisregel": stand if stand is not None else "onbekend", "termijn_dagen": termijn,
             "bewezen": len(klaar) - len(rest), "open": len(rest), "in_verwerking": len(bezig),
             "open_ouder_dan_30_dagen": len(oud_open), "verdwenen": len(staat["verdwenen"]),
             "gemist_aanvaard": len(staat["gemist"]), "onvolledig": len(staat["onvolledig"]),
