@@ -235,7 +235,7 @@ check("eerste ronde: een zorgblok dat deze ronde gemaakt werd, krijgt toch zijn 
 # punt 4: de archiefagenda's tellen mee, en een onleesbaar archief stopt de melding
 _hoofd = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _aanroep = _hoofd[_hoofd.index("een WhatsApp-melding per nieuw of verschoven zorgblok uit mail"):][:900]
-_stap = _hoofd[_hoofd.index("def zorg_whatsapp_stap():"):][:1200]
+_stap = _hoofd[_hoofd.index("def zorg_whatsapp_stap():"):][:4000]
 check("de WhatsApp-controle leest ook de archiefagenda's en wacht als die niet te lezen zijn (punt 4)",
       "archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)" in _stap and "ARCHIEF_FOUT" in _stap
       and "zorg_whatsapp_stap()" in _aanroep)
@@ -565,7 +565,7 @@ finally:
     W.ZORG_GEZET[:] = _o19[4]
     W._insert = _o19[5]
 check("een blok dat na een herstart via zijn merk gekoppeld wordt, meldt zich voor de meldstap (hertest 7, punt 1)",
-      _gez19 == [(_ver_start.date().isoformat(), "al19")], str(_gez19))
+      _gez19 == [(_ver_start.date().isoformat(), "al19", False)], str(_gez19))
 check("een vervallen zorgblok dat de praktijk verzet, wordt weer een gewone afspraak (vervalt weg, Bezet; punt 2)",
       W._niet_meer_vervallen({"titel": "vervalt !! [PR] Tandarts - Proef"}) == {"summary": "!! [PR] Tandarts - Proef",
                                                                                 "transparency": "opaque"}
@@ -660,6 +660,32 @@ _nb25 = dict(item("nb25", "!! [PR] Kine - Praktijk N", f"{d2}T18:00:00+01:00", f
 W.zorg_whatsapp([_nb25], "tok")
 check("een nieuw blok, vooraf vastgelegd op zijn zorgsleutel, krijgt in de eerste ronde zijn melding",
       any(k.startswith("zorg:nb25:") for k in AW._lees()["meldingen"]), str(AW._lees()))
+
+# --- Codex-hertest 14 (PR 113) --------------------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw26-")) / "agenda-whatsapp.json")
+_o26 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET), W.markeer_zorgschaduwen)
+_ver26 = item("v26", "!! [PR] Kine - Praktijk V", "2028-04-04T09:00:00+02:00", "2028-04-04T09:30:00+02:00",
+              merk={W.ZORGMERK: "zorg|v26-sleutel"})
+_ver26["_gemaakt"] = "2026-01-01T00:00:00.000Z"
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: [_ver26] if van > 400 else []
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+W.agenda._toegang = lambda: "tok"
+W.markeer_zorgschaduwen = lambda items, *a, **k: None
+try:
+    W.ZORG_GEZET[:] = []
+    W._zorg_gezet("2028-04-04", "zorg|v26-sleutel")                   # een nieuw blok, vooraf op zijn zorgsleutel
+    W.zorg_whatsapp_stap()
+    _na1 = AW.verre_dagen()
+    W.ZORG_GEZET[:] = []
+    W._zorg_gezet("2028-04-04", "gekoppeld26", nieuw=False)          # alleen gekoppeld
+    W.zorg_whatsapp_stap()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o26[:3]
+    W.ZORG_GEZET[:] = _o26[3]
+    W.markeer_zorgschaduwen = _o26[4]
+check("een nieuw blok voorbij dag 400 wordt gemeld en daarna gaat zijn dag uit de wachtrij (hertest 14, punt 2)",
+      any(k.startswith("zorg:v26:") for k in AW._lees()["meldingen"]) and "2028-04-04" not in _na1, str((_na1, list(AW._lees()["meldingen"]))))
+check("een gekoppeld blok wordt ook in de meldstap niet als nieuw vastgelegd (punt 1)", "gekoppeld26" not in AW.eerste_ids())
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

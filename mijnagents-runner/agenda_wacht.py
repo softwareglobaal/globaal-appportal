@@ -3581,7 +3581,7 @@ def _zorg_gezet(dag, ident, nieuw=True):
         AW.gezet_onthouden(dag, ident)
     if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
         AW.verre_dagen([(dag, ident)])          # dag en id samen, meteen (Codex-hertest 11, PR 113)
-    ZORG_GEZET.append((dag, ident))
+    ZORG_GEZET.append((dag, ident, nieuw))
 WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
 
 
@@ -6313,9 +6313,10 @@ def zorg_whatsapp_stap():
                 return (datetime.fromisoformat(dag).date() - vandaag).days >= ZORG_WHATSAPP_DAGEN - 1
             except (TypeError, ValueError):
                 return False
-        for d_, i_ in ZORG_GEZET:
-            AW.gezet_onthouden(d_, i_)
-        verre = AW.verre_dagen([(d, i) for d, i in ZORG_GEZET if d and i and _ver(d)])   # {dag: [id, ...]}
+        for d_, i_, *rest in ZORG_GEZET:
+            if not rest or rest[0]:         # alleen wat echt gezet of verzet werd, niet een gekoppeld blok (hertest 14)
+                AW.gezet_onthouden(d_, i_)
+        verre = AW.verre_dagen([(t[0], t[1]) for t in ZORG_GEZET if t[0] and t[1] and _ver(t[0])])   # {dag: [id, ...]}
         items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
         fout = bool(ARCHIEF_FOUT)
         for dag in sorted(verre):
@@ -6341,8 +6342,9 @@ def zorg_whatsapp_stap():
         klaar = []
         for dag, ids in verre.items():
             # pas weg als elk blok dat op die dag gezet werd, gevonden en gemeld is (Codex-hertest 6, PR 113)
-            if dag < vandaag.isoformat() or all(i in gevonden and AW.laatste(i) == [gevonden[i]["start"], gevonden[i]["einde"]]
-                                                 for i in ids):
+            if dag < vandaag.isoformat() or all(i in gevonden and AW.laatste(gevonden[i]["id"]) == [gevonden[i]["start"],
+                                                                                                    gevonden[i]["einde"]]
+                                                 for i in ids):         # laatste staat op het Google-id (hertest 14)
                 klaar.append(dag)
         AW.verre_dagen_klaar(klaar)
         return regels, []
