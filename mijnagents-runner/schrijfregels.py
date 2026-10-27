@@ -139,9 +139,12 @@ OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _
 _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
 # losse leestekens ("...", "??", een punt vooraan) zijn een eigen stuk: zo gaan ze bij het heropbouwen niet verloren
 _ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*\s*|[.!?]+\s*")
+# Een opnametijdstip: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
+_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
+_OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
 # Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
 # opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
-_KAAL_TIJDSTIP = re.compile(r"\s*\(\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|–|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?\s*\)")
+_KAAL_TIJDSTIP = re.compile(r"\s*\(\s*" + _OPNAMETIJDEN + r"\s*\)")   # een schaal (1:50) is geen tijdstip (29e review)
 
 
 def _is_s4(kern):
@@ -246,11 +249,6 @@ def _opname_weg(tekst):
     tekst = re.sub(r"[ \t]+([,.;:)])", r"\1", tekst)
     tekst = re.sub(r"\(\s*\)", "", tekst)
     return re.sub(r"[ \t]{2,}", " ", tekst).strip(), ingrepen
-
-
-# Een opnametijdstip in een bron: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
-_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
-_OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
 
 
 def bron_zichtbaar(bron):

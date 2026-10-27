@@ -539,5 +539,10 @@ for b, verwacht in [("transcript.txt (00:12:00)", "transcript.txt"), ("transcrip
                     ("transcript.txt (00:12:00)\n00 fotos.md", "transcript.txt / 00 fotos.md")]:
     check(f"opnametijdstip weg uit de bron: '{b[:30]}'", S.bron_zichtbaar(b) == verwacht and sj.herkomst(b) == verwacht, S.bron_zichtbaar(b))
 
+# Negenentwintigste review 26-10-2026: na een legende blijft een schaal tussen haakjes staan, een opnametijdstip niet
+t29, _ = S.toepassen("Nagekeken werden het gevelplan (1:50) en de doorsnede (1:20). Een tijdstip tussen haakjes verwijst naar de opname. "
+                     "De dorpel ligt te laag (00:12:30).")
+check("schaal blijft na een legende, opnametijdstip niet", "(1:50)" in t29 and "(1:20)" in t29 and "00:12" not in t29, t29)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
