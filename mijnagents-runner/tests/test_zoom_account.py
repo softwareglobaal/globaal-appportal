@@ -19,6 +19,7 @@ KLOK = datetime(2026, 10, 26, 7, tzinfo=timezone.utc)
 # De Zoomarchivaris (27-10-2026): ZA-01 is pas open als alle opnames bewezen in Dropbox staan. De bestaande proeven gaan
 # uit van een volledige kopie; test_zoom_archief.py toetst de wachtstand. Nooit het echte bestand op de VM.
 ZA.ARCHIEF_DEKKING = os.path.join(tempfile.mkdtemp(prefix="zoom-account-"), "dekking.json")
+ZA.archief_ronde_geslaagd = lambda ts: True  # het bord van De Zoomarchivaris: test_zoom_archief.py toetst dat apart
 with open(ZA.ARCHIEF_DEKKING, "w", encoding="utf-8") as _f:
     json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": True}, _f)
 

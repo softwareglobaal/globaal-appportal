@@ -42,7 +42,9 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
    bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde, en er geen blokkade openstaat. Een ronde die niet
    alles kon nakijken, trekt een eerdere ja meteen in; een ja geldt voor De Zoomwacht hoogstens drie uur.
    Daarnaast schrijf ik of de kopie veilig is voor de wisregel: alles ouder dan 30 dagen bewezen, geen verlies en
-   niets onvolledig. De Zoomwacht leest beide voor ZA-01.
+   niets onvolledig. De Zoomwacht leest beide voor ZA-01, en vertrouwt een ja alleen als mijn laatste ronde op het
+   bord geslaagd is. Tot Codex de dekkingsregel goedkeurt, staat dat groene sein uit: dan zeg ik altijd nee, en komt
+   er geen advies om te wissen. Het kopiëren loopt intussen gewoon.
 9. Verdween een opname voor ze in Dropbox stond, of een meeting die Zoom zonder bruikbare bestanden gaf, dan zet ik
    per verlies een voorstel op het bord, met alleen de datum, het uur en de grootte, en alleen als ik het bord kan
    lezen. Keurt Mehdi het goed, dan telt dat ene verlies niet meer tegen de dekking. Komt de opname terug en

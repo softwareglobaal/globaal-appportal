@@ -74,6 +74,9 @@ POGINGEN = 3                      # een tijdelijke fout wordt pas een nood na zo
 WISREGEL_DAGEN = 30               # de wisregel van ZA-01: wat ouder is, moet bewezen in Dropbox staan
 RECHT = re.compile(r"[a-z_][a-z0-9_]*(?::[a-z0-9_]+){1,3}")
 GEMIST_ACTIE = "Zoom-opname zonder kopie als gemist aanvaarden"
+# Het groene sein (dekking ja, wisregel_veilig) staat uit tot Codex de dekkingsregel goedkeurt (Codex controle 5): het
+# kopiëren mag dan al live, want dat wist en overschrijft nooit iets; zonder sein komt er geen advies om te wissen.
+SEIN_AAN = False
 AANVAARD = {"goedgekeurd", "uitgevoerd", "overgeslagen"}   # wat de uitvoerder van een goedgekeurd signaal maakt
 EXT = {"MP4": "mp4", "M4A": "m4a", "TRANSCRIPT": "vtt", "CC": "vtt", "CHAT": "txt", "TIMELINE": "json", "CSV": "csv",
        "SUMMARY": "json"}
@@ -98,7 +101,8 @@ class Stop(RuntimeError):
 
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
-              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "inventaris": "", "dekking": False, "dropbox": ""}
+              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "inventaris": "",
+              "dekking": False, "dropbox": ""}
 
 
 def staat_pad():
@@ -281,18 +285,23 @@ def opname_json(m, bewezen):
                            "naam": bewezen[f["id"]]["pad"].rsplit("/", 1)[-1]} for f in m["bestanden"]]}
 
 
-def schrijf_opname_json(m, bewezen, werkmap, bewaker=None):
+def schrijf_beschrijving(inhoud, pad, werkmap, bewaker=None):
+    """Een opname.json naar Dropbox; staat er al een, dan blijft die (nooit overschrijven)."""
     os.makedirs(werkmap, exist_ok=True)
-    tmp = os.path.join(werkmap, kort(m["uuid"], 16) + ".json.deel")
+    tmp = os.path.join(werkmap, kort(pad, 16) + ".json.deel")
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(opname_json(m, bewezen), fh, ensure_ascii=False, indent=1)
+        json.dump(inhoud, fh, ensure_ascii=False, indent=1)
     try:
         try:
-            D.upload_bestand(tmp, f"{mapnaam(m)}/opname.json", bewaker=bewaker)
+            D.upload_bestand(tmp, pad, bewaker=bewaker)
         except D.Bestaat:
-            pass  # er staat er al een: een opname.json overschrijven we nooit
+            pass
     finally:
         os.remove(tmp)
+
+
+def schrijf_opname_json(m, bewezen, werkmap, bewaker=None):
+    schrijf_beschrijving(opname_json(m, bewezen), f"{mapnaam(m)}/opname.json", werkmap, bewaker)
 
 
 def bewijzen_nakijken(staat, bewaker=None):
@@ -321,13 +330,15 @@ def problemen(m):
     Een bestand dat Zoom nog verwerkt, is geen probleem; het houdt alleen de dekking tegen tot het gekopieerd is."""
     if not m["bestanden"]:
         return {f"meeting:{m['uuid']}": ("meeting zonder opnamebestanden", "")}
-    uit = {}
+    uit, tel = {}, {}
     for f in m["bestanden"]:
         if not f.get("id") or f.get("status") not in ("completed", "processing") or \
                 (f.get("status") == "completed" and not f.get("link")):
             kenmerk = json.dumps([f.get("id", ""), f.get("soort", ""), f.get("opnametype", ""), f.get("start", "")])
-            uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}"] = ("bestand zonder id, downloadlink of bekende status",
-                                                              f.get("id", ""))
+            # Codex controle 5, punt 25: twee gelijke bestanden zonder id zijn twee gevallen, elk met een eigen besluit
+            tel[kenmerk] = tel.get(kenmerk, 0) + 1
+            uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}:{tel[kenmerk]}"] = (
+                "bestand zonder id, downloadlink of bekende status", f.get("id", ""))
     return uit
 
 
@@ -563,6 +574,14 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             staat["blokkades"]["nakijken"] = f"Dropbox niet nagekeken ({type(e).__name__})"
         else:
             staat["blokkades"].pop("nakijken", None)
+    for f in klaar:
+        b = staat["bestanden"].get(f["id"])
+        if b and f.get("grootte") and b["grootte"] != f["grootte"]:
+            # Codex controle 5, punt 26: Zoom geeft voor dit bestand nu een andere grootte dan de bewezen kopie. Het
+            # bewijs vervalt; herkopiëren botst op het bestaande bestand (nooit overschrijven) en blijft een nood.
+            del staat["bestanden"][f["id"]]
+            staat["fouten"][f["id"]] = {"tekst": "Zoom-opname niet naar Dropbox gekopieerd: Zoom geeft een andere "
+                                                 "grootte dan de kopie in Dropbox", "tijdelijk": False, "pogingen": 1}
     te_doen = [f for f in klaar if f["id"] not in staat["bestanden"]]
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
     for fid, oud in list(staat["gezien"].items()):
@@ -620,18 +639,33 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             if (ids and all(ids) and m["uuid"] not in staat["meetings"]
                     and all(f.get("status") == "completed" for f in m["bestanden"])
                     and all(i in staat["bestanden"] for i in ids)):
+                inhoud, pad = opname_json(m, staat["bestanden"]), f"{mapnaam(m)}/opname.json"
                 try:
                     bewaker()
-                    schrijf_opname_json(m, staat["bestanden"], werkmap, bewaker=bewaker)
+                    schrijf_beschrijving(inhoud, pad, werkmap, bewaker=bewaker)
                     staat["meetings"][m["uuid"]] = staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
                     staat["blokkades"].pop(f"opname:{m['uuid']}", None)
+                    staat["beschrijvingen"].pop(m["uuid"], None)
                 except (Stop, D.TijdOp) as e:
                     gestopt = str(e)
                 except Exception:  # noqa: BLE001  blijft gemeld tot het lukt (Codex controle 4, punt 23)
                     staat["blokkades"][f"opname:{m['uuid']}"] = OPNAME_JSON
-        for uuid in [k[7:] for k in staat["blokkades"] if k.startswith("opname:")]:
-            if uuid not in uuids:  # de meeting is niet meer in Zoom: haar beschrijving kan niet meer, dat zegt verdwenen
+                    staat["beschrijvingen"][m["uuid"]] = {"inhoud": inhoud, "pad": pad}
+        # Codex controle 5, punt 28: een beschrijving die niet lukte, probeer ik opnieuw met de bewaarde gegevens, ook als
+        # de meeting intussen uit Zoom weg is; de nood blijft tot het lukt
+        for uuid, b in list(staat["beschrijvingen"].items()):
+            if gestopt or uuid in uuids:
+                continue
+            try:
+                bewaker()
+                schrijf_beschrijving(b["inhoud"], b["pad"], werkmap, bewaker=bewaker)
+                staat["meetings"][uuid] = b["pad"].rsplit("/", 1)[0]
                 staat["blokkades"].pop(f"opname:{uuid}", None)
+                del staat["beschrijvingen"][uuid]
+            except (Stop, D.TijdOp) as e:
+                gestopt = str(e)
+            except Exception:  # noqa: BLE001
+                pass
         for sleutel, fid, v in gemist_voorstellen(staat):
             # Codex controle 2, punt 13: hartslag slikt een bordfout in; pas als het bord het voorstel teruggeeft,
             # geldt het als verstuurd, anders probeert de volgende ronde het opnieuw
@@ -659,6 +693,8 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     dekking = gaaf and not te_doen and not bezig
     # Veilig voor de wisregel: niets ouder dan WISREGEL_DAGEN zonder bewijs, ook niet in verwerking.
     veilig = gaaf and not oud_open
+    if not SEIN_AAN:
+        dekking = veilig = False
     if not droog:
         staat["dekking"] = dekking
         staat["inventaris"] = moment

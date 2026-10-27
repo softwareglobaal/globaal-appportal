@@ -34,6 +34,8 @@ import zoom_account as ZA_ACC  # noqa: E402
 import zoom_archief as ZA  # noqa: E402
 from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
+ECHT_RONDE_GESLAAGD = ZA_ACC.archief_ronde_geslaagd
+
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
 os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
                   DROPBOX_PRIVE_ACCOUNT_ID="dbid:proef-eigen")
@@ -106,6 +108,8 @@ def opzet(**kw):
     logs = []
     ZA.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append(tekst)
     VOORSTELLEN.clear()
+    ZA_ACC.archief_ronde_geslaagd = lambda ts: True  # het bord van De Zoomarchivaris; test_codex27 toetst het echte
+    ZA.SEIN_AAN = kw.get("sein", True)  # de proeven toetsen de dekkingsregel zelf; test_sein_uit toetst de schakelaar
     ZA.ag.hartslag = lambda status, taak="", detail="", voorstel=None, **k: VOORSTELLEN.append(
         {"actie": voorstel["actie"], "status": "open", "reden": voorstel["reden"]}) if voorstel else None
     ZA.bord.db_lees = lambda sql, args=(): [dict(v) for v in VOORSTELLEN]
@@ -1005,6 +1009,91 @@ def test_aanval_een_bestand_dat_alsnog_een_link_krijgt_is_geen_verlies():
     assert not ZA.lees_staat()["verdwenen"] and uit["gedaan"] == 1, (ZA.lees_staat()["verdwenen"], uit)
     _, uit = ronde(nu=NU + timedelta(hours=2))
     assert uit["dekking"]
+
+
+# ---------------------------------------------------------------------- Codex-controle 5 (27-10-2026) ---
+def test_sein_uit_geeft_nooit_dekking_of_veilig():
+    z, _, _ = opzet(sein=False)
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    _, uit = ronde()
+    assert uit["gedaan"] == 0 and uit["rest"] == 0, "alles is gekopieerd en bewezen"
+    assert not uit["dekking"] and not uit["veilig"] and not _dekking()["dekking"] and not _dekking()["wisregel_veilig"]
+
+
+def test_sein_staat_uit_in_de_code():
+    bron = open(os.path.join(RUNNER, "zoom_archief.py"), encoding="utf-8").read()
+    assert re.search(r"^SEIN_AAN = False$", bron, re.M), "het groene sein gaat pas aan na het akkoord van Codex"
+
+
+def test_codex25_twee_gelijke_bestanden_zonder_id_zijn_twee_gevallen():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    for _ in range(2):
+        m["bestanden"].append({"id": "", "soort": "MP4", "status": "completed", "start": "2026-08-01T09:00:00Z",
+                               "einde": "", "grootte": 9, "opnametype": "speaker_view", "extensie": "MP4", "link": True})
+    ronde()
+    del m["bestanden"][1:]
+    ronde(nu=NU + timedelta(hours=1))
+    assert len(ZA.lees_staat()["verdwenen"]) == 2 and len(VOORSTELLEN) == 2, (ZA.lees_staat()["verdwenen"], VOORSTELLEN)
+    VOORSTELLEN[0]["status"] = "goedgekeurd"
+    ronde(nu=NU + timedelta(hours=2))
+    r, uit = ronde(nu=NU + timedelta(hours=3))
+    assert not uit["dekking"] and not uit["veilig"] and len(ZA.lees_staat()["verdwenen"]) == 1, "een besluit per geval"
+
+
+def test_codex26_een_andere_grootte_in_zoom_laat_het_bewijs_vervallen():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    m["bestanden"][0]["grootte"] = 2
+    z.inhoud[m["bestanden"][0]["id"]] = b"aa"
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["dekking"] and not uit["veilig"]
+    assert any("andere grootte" in x or "ander bestand op dat pad" in x for x in teksten(r)), teksten(r)
+    assert d.bestanden[ZA.pad_van(m, m["bestanden"][0])] == b"a", "de bestaande kopie wordt niet overschreven"
+
+
+def test_codex27_een_ja_telt_alleen_na_een_geslaagde_archiefronde():
+    pad = os.path.join(tempfile.mkdtemp(prefix="ronde-", dir=MAP), "dekking.json")
+    ts = datetime.now(timezone.utc).replace(microsecond=0)
+    json.dump({"ts": ts.isoformat(), "dekking": True, "wisregel_veilig": True}, open(pad, "w"))
+    oud_lees, oud_geslaagd = ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd
+    ZA_ACC.archief_ronde_geslaagd = ECHT_RONDE_GESLAAGD
+    try:
+        for status, delta, verwacht in (("klaar", 5, "ja"), ("waakt", 5, "ja"), ("actief", 60, "onbekend"),
+                                        ("fout", 60, "onbekend"), ("klaar", -60, "onbekend")):
+            ZA_ACC.bord.db_lees = lambda sql, args=(), s=status, dt=delta: [
+                {"status": s, "ts": (ts + timedelta(seconds=dt)).isoformat()}]
+            assert ZA_ACC.archief_dekking(pad) == verwacht, (status, delta)
+            assert ZA_ACC.archief_veilig(pad) == verwacht, (status, delta)
+
+        def kapot(sql, args=()):
+            raise ZA_ACC.bord.BordOnbekend("proef")
+        ZA_ACC.bord.db_lees = kapot
+        assert ZA_ACC.archief_dekking(pad) == "onbekend"
+    finally:
+        ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
+
+
+def test_codex28_een_mislukte_beschrijving_wordt_opnieuw_geprobeerd_ook_als_de_meeting_weg_is():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    echt = d.__call__
+
+    def geen_json(url, data, koppen, pogingen=5):
+        if "opname.json" in (koppen.get("Dropbox-API-Arg") or ""):
+            raise OSError("weg")
+        return echt(url, data, koppen, pogingen)
+    D._verzoek = geen_json
+    r, _ = ronde()
+    assert ZA.OPNAME_JSON in teksten(r)
+    del z.meetings["u1"]
+    r, _ = ronde(nu=NU + timedelta(hours=1))
+    assert ZA.OPNAME_JSON in teksten(r), "de meeting is weg, de nood blijft"
+    D._verzoek = d
+    r, _ = ronde(nu=NU + timedelta(hours=2))
+    assert ZA.OPNAME_JSON not in teksten(r) and ZA.mapnaam(m) + "/opname.json" in d.bestanden
 
 if __name__ == "__main__":
     goed = fout = 0

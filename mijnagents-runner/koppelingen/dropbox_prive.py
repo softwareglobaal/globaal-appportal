@@ -46,6 +46,16 @@ def _rest():
     return None if GRENS["tot"] is None else GRENS["tot"] - time.monotonic()
 
 
+def _kort_wachten(normaal):
+    """De time-out van een hulpcall (token, root): normaal, maar nooit voorbij de grens van de ronde."""
+    rest = _rest()
+    if rest is None:
+        return normaal
+    if rest <= 0:
+        raise TijdOp("tijdsgrens van de ronde")
+    return max(1.0, min(float(normaal), rest))
+
+
 def _env(pad):
     try:
         for regel in open(os.path.expanduser(pad)):
@@ -72,7 +82,7 @@ def _path_root():
             try:
                 req = urllib.request.Request(f"{API}/2/users/get_current_account", b"null",
                                              {"Authorization": f"Bearer {_toegang()}", "Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=20) as r:
+                with urllib.request.urlopen(req, timeout=_kort_wachten(20)) as r:
                     ri = (json.load(r).get("root_info") or {})
                 if ri.get("root_namespace_id") and ri.get("root_namespace_id") != ri.get("home_namespace_id"):
                     ns = ri.get("root_namespace_id", "")
@@ -101,7 +111,7 @@ def _toegang():
         "client_id": os.environ["DROPBOX_PRIVE_APP_KEY"].strip(),
         "client_secret": os.environ["DROPBOX_PRIVE_APP_SECRET"].strip(),
     }).encode()
-    with urllib.request.urlopen(f"{API}/oauth2/token", data, timeout=20) as r:
+    with urllib.request.urlopen(f"{API}/oauth2/token", data, timeout=_kort_wachten(20)) as r:
         a = json.load(r)
     _token["waarde"], _token["tot"] = a["access_token"], time.time() + int(a.get("expires_in", 14400)) - 300
     return _token["waarde"]
@@ -111,10 +121,12 @@ def _verzoek(url, data, koppen, pogingen=5):
     """POST met herkansing bij 429 (Retry-After) en 5xx."""
     wacht = 5
     for poging in range(pogingen):
-        rest = _rest()
-        if rest is not None and rest <= 0:
+        if (_rest() or 1) <= 0:
             raise TijdOp("tijdsgrens van de ronde")
         req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **_path_root(), **koppen})
+        rest = _rest()  # Codex controle 5, punt 29: opnieuw na het token en de root, die zelf ook tijd kosten
+        if rest is not None and rest <= 0:
+            raise TijdOp("tijdsgrens van de ronde")
         try:
             with urllib.request.urlopen(req, timeout=120 if rest is None else max(1.0, min(120.0, rest))) as r:
                 inhoud = r.read()

@@ -646,7 +646,25 @@ def _archief(sleutel, pad=None, nu=None):
         return "onbekend"
     if oud or not isinstance(d.get(sleutel), bool):
         return "onbekend"
+    if d[sleutel] and not archief_ronde_geslaagd(d["ts"]):
+        return "onbekend"  # Codex controle 5, punt 27: een ja telt alleen als de ronde die haar schreef geslaagd is
     return "ja" if d[sleutel] else "nee"
+
+
+def archief_ronde_geslaagd(ts):
+    """Staat De Zoomarchivaris op het bord op klaar of waakt, met een hartslag van na het moment ts? Zo telt een ja
+    niet als de ronde erna begon en niet afliep (een volle schijf kan zelfs het intrekken beletten), of brak. Onbekend
+    bord: nee."""
+    try:
+        rij = bord.db_lees("SELECT status, ts FROM status WHERE naam='zoom-archief'")
+        sinds = datetime.fromisoformat(str(ts))
+        hart = datetime.fromisoformat(str(rij[0]["ts"]).replace("Z", "+00:00")) if rij else None
+    except (bord.BordOnbekend, ValueError, KeyError, TypeError):
+        return False
+    if hart is None or rij[0].get("status") not in ("klaar", "waakt"):
+        return False
+    hart = hart if hart.tzinfo else hart.replace(tzinfo=timezone.utc)
+    return hart >= sinds
 
 
 def archief_dekking(pad=None, nu=None):

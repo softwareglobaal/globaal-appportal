@@ -378,6 +378,36 @@ def test_dropbox_tijdsgrens_begrenst_elke_call_en_elke_herkansing():
     finally:
         D.GRENS["tot"] = None
 
+
+def test_dropbox_tijdsgrens_telt_het_token_mee():
+    _http()
+    klok = {"nu": 100.0}
+
+    def traag_token():
+        klok["nu"] = 200.0  # het vernieuwen van het token kost tijd
+        return "tok"
+    D._toegang = traag_token
+    echt_monotonic = D.time.monotonic
+    D.time.monotonic = lambda: klok["nu"]
+    D.GRENS["tot"] = 150.0  # voor het token nog tijd, erna niet meer
+    try:
+        D.rpc("files/get_metadata", {"path": "/x"})
+        raise AssertionError("na het token is de grens voorbij: geen call meer")
+    except D.TijdOp:
+        pass
+    finally:
+        D.time.monotonic = echt_monotonic
+        D.GRENS["tot"] = None
+    D.GRENS["tot"] = echt_monotonic() - 1
+    try:
+        D._kort_wachten(20)
+        raise AssertionError("een hulpcall voorbij de grens begint niet")
+    except D.TijdOp:
+        pass
+    finally:
+        D.GRENS["tot"] = None
+    assert D._kort_wachten(20) == 20
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
