@@ -274,6 +274,18 @@ with tempfile.TemporaryDirectory() as _d:
                       "eval $(cat wis.sh)", "bash -lc 'source ./wis.sh'", "zsh -c 'cat wis.sh | sh'", "eval 'bash wis.sh'",
                       "bash via.sh", "source <(cat wis.sh)"):
         check(f"genest: {_opdracht} wordt nagekeken", geweigerd(*hook({**bash(_opdracht), "cwd": str(d)})))
+    # alles wat code in een shell of tolk voert: elk bestaand bestand in de opdracht telt mee (Codex-hertest 3, punt 8)
+    (d / "deel1.sh").write_text("curl -X DELETE \\\n", encoding="utf-8")          # het wissen in het ene bestand,
+    (d / "deel2.txt").write_text(f"'{API}/{LARA_URL}/events/abc123'\n", encoding="utf-8")   # Lara in het andere
+    for _opdracht in ("cat < wis.sh | sh", "bash -c 'cat < wis.sh | sh'", "tee x < wis.sh | bash", "sh < /dev/stdin < wis.sh",
+                      "cat < wis.sh | bash -e", "cat < wis.js | node", "cat < wis.py | python3 -", "bash <(cat < wis.sh)",
+                      "cat deel1.sh deel2.txt | sh"):
+        check(f"zinkt in een shell: {_opdracht} wordt nagekeken", geweigerd(*hook({**bash(_opdracht), "cwd": str(d)})))
+    for _opdracht in ("cat < lees.sh | sh", "cat wis.sh", "cat < wis.sh",
+                      "cat wis.sh | python3 -c 'import sys; print(len(sys.stdin.read()))'", "diff wis.sh lees.sh | sh -c 'wc -l'",
+                      "python3 -c 'import sys; sys.stdin.read()' < wis.sh"):
+        rc, uit = hook({**bash(_opdracht), "cwd": str(d)})
+        check(f"zonder shell die de code draait: {_opdracht} mag", rc == 0 and uit is None, str(uit)[:200])
     rc, uit = hook({**bash("bash -c 'echo hoi'"), "cwd": str(d)})
     check("genest: bash -c 'echo hoi' mag", rc == 0 and uit is None, str(uit)[:200])
     rc, uit = hook({**bash("eval 'echo hoi' && sh -c 'ls -la'"), "cwd": str(d)})

@@ -813,6 +813,9 @@ $(cat url.txt), in code een variabele als URL) weigert hij als de opdracht ergen
 wisdoel telt apart: een veilige letterlijke URL elders in de opdracht (een echo na de ;) dekt niets af. Een geneste
 opdracht (na bash, sh of zsh -c, na eval, of een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie
 lagen diep; dieper weigert hij zodra er nog iets in staat dat wist, een agenda noemt of iets draait.
+Voert de opdracht iets als code in een shell of tolk (een pijp of omleiding naar sh, bash, zsh, dash, python of node
+zonder eigen script of -c, source, ., eval, of <(...) daarin), dan leest hij elk bestaand bestand in die opdracht en
+kijkt alles samen na (cat < wis.sh | sh, tee x < wis.sh | bash). cat wis.sh zonder shell erachter blijft vrij.
 Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
 Waarom het omhulsel: met een kaal python3-pad naar een script dat ontbreekt (een andere branch, een verplaatst
 bestand) stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code elke opdracht onder de matcher (elke

@@ -17,8 +17,10 @@ Geweigerd wordt:
 - een wisopdracht met een ondoorzichtig doel ("$URL", $(cat url.txt), backticks, of in code een variabele als URL)
   als de opdracht ergens een agenda of Google noemt. Elk wisdoel telt apart: een veilige letterlijke URL elders in de
   opdracht (een echo na de ;) dekt een ondoorzichtig doel niet af (Codex-hertest 27-10-2026, punt 4).
-Een geneste opdracht (de tekst na bash, sh of zsh -c, na eval, of
-een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie lagen diep; dieper weigert de grendel zodra er
+Voert de opdracht iets als code in een shell of tolk (een pijp of
+een omleiding naar sh, bash, zsh, dash, python of node zonder eigen script of -c, source, ., eval, of <(...) daarin),
+dan leest de grendel elk bestaand bestand in die opdracht (Codex-hertest 3, punt 8). Een geneste opdracht (de tekst
+na bash, sh of zsh -c, na eval, of een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie lagen diep; dieper weigert de grendel zodra er
 iets in staat dat wist, een agenda noemt of verder iets draait (Codex-hertest 2, 27-10-2026, punt 6).
 Wissen is: DELETE (ook "method": "DELETE"), .delete( op een agenda-object, status cancelled (ook status='cancelled'),
 /batch/calendar en events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand,
@@ -66,6 +68,7 @@ CAT_UITVOER = re.compile(r"""(?:\beval|\b(?:source|bash|sh|zsh|dash|python[\d.]*
                          r"""\s+["']?(?:\$\(|`|<\()\s*cat\s+([^\s)`"';&|]+)""")
 HEEL_CAT = re.compile(r"""\s*["']?(?:\$\(|`)\s*cat\s+([^\s)`"';&|]+)\s*(?:\)|`)["']?\s*""")
 GENEST_MAX = 3
+MAX_KANDIDATEN = 50
 DRAAIT = re.compile(r"\b(?:source|eval|bash|sh|zsh|dash|python[\d.]*|node)\b|(?:^|[\s;&|(])\.\s")
 SCRIPT = (".py", ".sh", ".js", ".mjs", ".cjs", ".bash", ".zsh")
 VOORWOORD = {"sudo", "env", "exec", "time", "nohup", "command"}
@@ -198,13 +201,17 @@ def _bestanden(cmd, woorden, cwd):
     ook via een omleiding (bash < wis.sh), een pijp (cat wis.sh | sh), source of . (Codex-hertest 27-10-2026, punt 3)."""
     basis = Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd()
     scripts, data, vorige_cat, vorige_scheiding = [], [], None, ""
+    kandidaten, zinkt, draait = [], False, False
     for stuk, scheiding in _segmenten(woorden):
+        kandidaten += [_pad(w, basis) for w in stuk if not set(w) <= OPERATOR]
         k = 0
         while k < len(stuk) and (stuk[k] in VOORWOORD or re.fullmatch(r"\w+=\S*", stuk[k])):
             k += 1
         kop, arg = (stuk[k] if k < len(stuk) else ""), (stuk[k + 1] if k + 1 < len(stuk) else "")
         if kop == "cd" and arg:
             basis = _pad(arg, basis) or basis
+        if kop in ("source", ".", "eval"):
+            zinkt = draait = True
         if kop in ("source", ".") and arg:
             scripts.append(_pad(arg, basis))
         elif kop.startswith(("./", "../", "/", "~/")) and kop.endswith(SCRIPT):
@@ -216,9 +223,13 @@ def _bestanden(cmd, woorden, cwd):
                 j += 1
             if j < len(stuk) and not set(stuk[j]) <= OPERATOR and not stuk[j].startswith("-"):
                 scripts.append(_pad(stuk[j], basis))
-            scripts += [_pad(stuk[i + 1], basis) for i in range(tolk, len(stuk) - 1) if stuk[i] == "<"]
-            if vorige_scheiding == "|" and vorige_cat:
-                scripts.append(vorige_cat)
+            draait = True
+            if _code_van_stdin(stuk, tolk):          # stdin is hier code: wat erin loopt, draait
+                scripts += [_pad(stuk[i + 1], basis) for i in range(tolk, len(stuk) - 1) if stuk[i] == "<"]
+                if vorige_scheiding in ("|", "|&") and vorige_cat:
+                    scripts.append(vorige_cat)
+                if vorige_scheiding in ("|", "|&") or any(w in ("<", "<<<") for w in stuk[tolk + 1:]):
+                    zinkt = True
         for i, w in enumerate(stuk):
             volgend = stuk[i + 1] if i + 1 < len(stuk) else ""
             if w in ("-d", "--data", "--data-binary", "--json") and volgend.startswith("@"):
@@ -228,12 +239,32 @@ def _bestanden(cmd, woorden, cwd):
                 data.append(_pad(m.group(1), basis))
         vorige_cat = _pad(arg, basis) if kop == "cat" and len(stuk) == k + 2 else None
         vorige_scheiding = scheiding
+    if draait and any(w.startswith("<(") for w in woorden):
+        zinkt = True                                 # bash <(...), source <(...): procesvervanging in een shell
+    if zinkt:                                        # code in een shell of tolk: elk bestaand bestand telt mee
+        scripts += kandidaten[:MAX_KANDIDATEN]
     # eval "$(cat wis.sh)", bash -c "$(cat wis.sh)", source <(cat wis.sh), of een geneste opdracht die alleen $(cat x) is
     scripts += [_pad(m.group(1), basis) for m in CAT_UITVOER.finditer(cmd)]
     m = HEEL_CAT.fullmatch(cmd)
     if m:
         scripts.append(_pad(m.group(1), basis))
-    return [p for p in scripts if p], [p for p in data if p]
+    uniek = list(dict.fromkeys(p for p in scripts if p))
+    return uniek, [p for p in data if p], zinkt
+
+
+def _code_van_stdin(stuk, tolk):
+    """Leest deze shell of tolk zijn code van stdin? Ja zonder eigen script en zonder -c (python ook -m, node -e of
+    -p); een shell ook met -s, elke tolk met -."""
+    shell, node = bool(SHELL.fullmatch(stuk[tolk])), stuk[tolk].endswith("node")
+    for w in stuk[tolk + 1:]:
+        if set(w) <= OPERATOR or w == "-" or (shell and re.fullmatch(r"-[A-Za-z]*s[A-Za-z]*", w)):
+            return True
+        if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", w) or (not shell and not node and re.fullmatch(r"-[A-Za-z]*m", w)) \
+                or (node and w in ("-e", "--eval", "-p", "--print")):
+            return False
+        if not w.startswith("-"):
+            return False                             # een eigen script: dat wordt apart gelezen
+    return True
 
 
 def _genest(woorden):
@@ -349,21 +380,28 @@ def _bash(ti, pad, cwd=None, diepte=0):
     if not isinstance(cmd, str):
         return None
     woorden = _woorden(cmd)
-    scripts, data = _bestanden(cmd, woorden, cwd)
+    scripts, data, zinkt = _bestanden(cmd, woorden, cwd)
     tekst = cmd + "".join("\n" + inhoud for inhoud in map(_lees, data) if inhoud)
     lara = lara_id(pad) if BASH_WIS.search(tekst) or scripts else None   # alleen nodig als _toets verder kijkt
     oorzaak = _toets(tekst, lara)
     if oorzaak:
         return oorzaak
+    gelezen = []
     for p in scripts:
         inhoud = _lees(p)
         if not inhoud:
             continue
+        gelezen.append((p, inhoud))
         oorzaak = _toets(tekst + "\n" + inhoud, lara)
         if not oorzaak and _shellscript(p, inhoud):
             oorzaak = _dieper(inhoud, pad, cwd, diepte)
         if oorzaak and not _vastgelegd(p):
             return f"in het script {p}: {oorzaak}"
+    if zinkt and len(gelezen) > 1 and _toets(tekst + "".join("\n" + i for _, i in gelezen), lara):
+        rest = "".join("\n" + i for p, i in gelezen if not _vastgelegd(p))
+        oorzaak = _toets(tekst + rest, lara) if rest else None
+        if oorzaak:
+            return f"in de bestanden die de opdracht in een shell of tolk voert: {oorzaak}"
     for genest in _genest(woorden):
         oorzaak = _dieper(genest, pad, cwd, diepte)
         if oorzaak:
