@@ -595,6 +595,20 @@ try:
 finally:
     W._FIRMA_UIDS = _o27
 
+# --- Codex-hertest 8: de UID-lezing dekt het hele rittenvenster, ook het grensuur --------------------------------
+_venster = []
+_o28 = (W.firma_afspraken, W._FIRMA_UIDS, W.agenda._toegang)
+W.firma_afspraken = lambda tok, nu=None, dagen=W.FIRMA_VOORUIT_DAGEN: _venster.append((nu, dagen)) or ([], [])
+W._FIRMA_UIDS = None
+W.agenda._toegang = lambda: "tok"
+try:
+    W._firma_uids()
+finally:
+    W.firma_afspraken, W._FIRMA_UIDS, W.agenda._toegang = _o28
+_eind = _venster[0][0] + timedelta(days=_venster[0][1]) if _venster else None
+check("de iCalUID-lezing loopt tot voorbij het rittenvenster (365 dagen vanaf nu), ook het laatste uur",
+      _eind is not None and _eind >= W.nu_lokaal() + timedelta(days=366), str(_venster))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

@@ -3387,7 +3387,9 @@ def _firma_uids():
     if _FIRMA_UIDS is None:
         try:
             tok = agenda._toegang()
-            evs, onleesbaar = firma_afspraken(tok, nu_lokaal() - timedelta(days=1))
+            # een dag terug tot twee dagen voorbij het rittenvenster (verre_afspraken): Google laat weg wat op of na
+            # timeMax begint, en het grensuur mag niet ontbreken (Codex-hertest 8)
+            evs, onleesbaar = firma_afspraken(tok, nu_lokaal() - timedelta(days=1), FIRMA_VOORUIT_DAGEN + 3)
             _FIRMA_UIDS = False if onleesbaar else {e.get("iCalUID") for e in evs if e.get("iCalUID")}
         except Exception:  # noqa: BLE001
             _FIRMA_UIDS = False
