@@ -346,6 +346,15 @@ _lapvorig = [json.dumps(["Mehdi: [LA] Halloween met Lara", "confirmed", {"dateTi
                          False]), "2026-10-31"]
 check("een Lara-afspraak ([LA]) op een andere agenda geeft ook nooit 'niet vertrekken'",
       S.annulering_kandidaat(W.PRIVE_AGENDA, _lap, _lapvorig, _nu) is None)
+# een geschrapt item met een nieuwe, algemene titel: de oude titel telt ook (Codex-hertest 12)
+_nieuw = {"id": "p2", "status": "cancelled", "summary": "Afspraak"}
+check("een geschrapte [LA]-afspraak met een nieuwe algemene titel geeft geen 'niet vertrekken'",
+      S.annulering_kandidaat(W.PRIVE_AGENDA, _nieuw, _lapvorig, _nu) is None)
+check("een geschrapt vakantieblok met een nieuwe algemene titel geeft geen vraag 'gewiste Lara-afspraak'",
+      S.lara_wissing_kandidaat(LARA, dict(_blokweg, summary="Afspraak"), _blokvorig, _nu, dagen, dekking) is None)
+check("een geschrapt ritblok met een nieuwe algemene titel geeft geen vraag",
+      S.lara_wissing_kandidaat(LARA, dict(_rit, summary="Afspraak", originalStartTime={"dateTime": "2026-10-27T17:10:00+01:00"}),
+                               _ritvorig, _nu, dagen, dekking) is None)
 _werk = {"id": "w1", "status": "cancelled"}
 _werkvorig = [json.dumps(["Mehdi: [HARC-KB] 2505 - klant", "confirmed",
                           {"dateTime": "2026-10-26T10:00:00+01:00"}, {}, "", [], False]), "2026-10-26"]
@@ -556,6 +565,8 @@ check("tegenproef: een gewone Lara-afspraak die samenvalt met een klant is een b
       any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lg], "2026-11-10")))
 check("een vervallen Lara-afspraak die samenvalt met een klant is geen botsing meer",
       not any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lv2], "2026-11-10")))
+check("een vervallen Lara-afspraak geeft geen botsingssignaal op het bord meer (hertest 12)",
+      not W.botsingen([_kl, _lv2]) and W.botsingen([_kl, _lg]), str((W.botsingen([_kl, _lv2]), W.botsingen([_kl, _lg]))))
 check("de belregel in werkwijze en agenda-taken zegt: nooit 'niet vertrekken' voor Lara of een rit",
       all("nooit voor een afspraak van lara" in _teksten[n].lower()
           for n in ("werkwijze/agenda-taken.json", "werkwijze/agenda-wacht.md")))

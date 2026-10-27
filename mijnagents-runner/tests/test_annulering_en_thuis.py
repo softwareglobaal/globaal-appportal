@@ -106,6 +106,22 @@ class Incident(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIn("Niet vertrekken", calls[0][0])
 
+    def test_cancelled_lara_call_is_never_niet_vertrekken(self):
+        # FR-210: een afgezegde Lara-afspraak ([LA], ook op een andere agenda) of rit geeft nooit 'niet vertrekken'
+        now = datetime.now().astimezone()
+        for titel in ("!! Mehdi: [LA] Lara bij mij", "\U0001F697 Reistijd: thuis \u2192 school"):
+            regel = {"sleutel": f"{W.PRIVE_AGENDA}:fake:{(now + timedelta(minutes=5)).isoformat()}",
+                     "tijd": (now - timedelta(seconds=1)).isoformat(), "tekst": "vertrek", "titel": titel}
+            calls, staat = [], {"gebeld": {}, "belpogingen": {}}
+            with patch.object(bellen, "afspraak_bellen_beschikbaar", return_value=True), \
+                    patch.object(bellen, "_rooster_regels", return_value=[regel]), \
+                    patch.object(bellen, "belafspraak_actueel", return_value=(False, "afgezegd")), \
+                    patch.object(bellen, "bel_afspraak", side_effect=AssertionError("vertrekoproep")), \
+                    patch.object(bellen, "bel_vast", side_effect=lambda *a, **k: calls.append(a) or [("twilio-vast", "CAproef")]):
+                bellen.afspraken_bellen(staat, spoor=None)
+                bellen.afspraken_bellen(staat, spoor=None)
+            self.assertEqual(calls, [], titel)
+
     def test_google_item_is_checked_at_call_time(self):
         begin = "2026-10-20T09:00:00+02:00"
         regel = {"sleutel": f"werk@example.com:abc:{begin}"}

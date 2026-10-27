@@ -5832,7 +5832,8 @@ def botsingen(items):
     """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
     uit = []
     tijd = [(datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"]), x) for x in items
-            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")]
+            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")
+            and not lara_vervalt(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
     tijd.sort(key=lambda t: t[0])
     for i, (s1, e1, a) in enumerate(tijd):
         for s2, e2, b in tijd[i + 1:]:

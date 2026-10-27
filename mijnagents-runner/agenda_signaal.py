@@ -133,8 +133,18 @@ def _lara_reeks(kal, ev):
     return m.group(1) if m else ""
 
 
+def _titels(ev, vorig):
+    """De titel die Google nu meegeeft en de bewaarde oude titel: een geschrapt item kan een nieuwe, algemene titel
+    meekrijgen, dus beide tellen (Codex-hertest 12)."""
+    return [t for t in (ev.get("summary") or "", _oude_titel(vorig) or "") if t]
+
+
 def _is_rit(ev, vorig):
-    return W.lees_titel(ev.get("summary") or _oude_titel(vorig) or "")["reistijd"]
+    return any(W.lees_titel(t)["reistijd"] for t in _titels(ev, vorig))
+
+
+def _is_lara_titel(ev, vorig):
+    return any("[LA]" in t for t in _titels(ev, vorig))
 
 
 def _is_lara(kal):
@@ -149,8 +159,8 @@ def annulering_kandidaat(kal, ev, vorig, nu):
     (FR-210). Een gewiste Lara-afspraak op een schooldag wordt een vraag (lara_wissing_kandidaat)."""
     if not (ev.get("status") == "cancelled" or W.bellen.afzegging_tekst(ev)):
         return None
-    if _is_lara(kal) or _is_rit(ev, vorig) or re.search(r"\[LA\]", ev.get("summary") or _oude_titel(vorig) or ""):
-        return None          # ook een Lara-afspraak ([LA]) op een andere agenda (Codex-hertest 11)
+    if _is_lara(kal) or _is_rit(ev, vorig) or _is_lara_titel(ev, vorig):
+        return None          # ook een Lara-afspraak ([LA]) op een andere agenda (Codex-hertest 11 en 12)
     oud = []
     if vorig:
         try:
@@ -171,7 +181,7 @@ def annulering_kandidaat(kal, ev, vorig, nu):
     if not (nu <= begint <= nu + timedelta(days=30)):
         return None
     titel = _toonbare_titel(kal, ev.get("summary") or _oude_titel(vorig) or "afspraak")
-    return {"sleutel": f"{kal}:{ev.get('id', '')}:{start}", "titel": titel[:80], "start": begint}
+    return {"sleutel": f"{kal}:{ev.get('id', '')}:{start}", "titel": titel[:80], "start": begint, "soort": "afspraak"}
 
 
 def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
@@ -182,7 +192,7 @@ def lara_wissing_kandidaat(kal, ev, vorig, nu, officieel, dekking):
     {sleutel, dag, uur, titel}; de titel blijft privé en komt in geen uitvoer."""
     if ev.get("status") != "cancelled" or not _is_lara(kal) or _is_rit(ev, vorig):
         return None
-    if re.search(r"vakanti|feestdag", ev.get("summary") or _oude_titel(vorig) or "", re.I):
+    if any(re.search(r"vakanti|feestdag", t, re.I) for t in _titels(ev, vorig)):
         return None          # een vakantie- of feestdagblok weghalen is geen gewiste afspraak (zo ging FR-210 net weg)
     reeks = _lara_reeks(kal, ev) or ev.get("id") or ""
     if not reeks:
@@ -472,7 +482,10 @@ def ronde(tijd):
                   file=sys.stderr)
     for sleutel, kandidaat in list(annuleringen.items()):
         if any(sleutel.startswith(k + ":") for k, n in W.KALENDERS.items() if n == "Lara") \
-                or W.lees_titel(kandidaat.get("titel") or "")["reistijd"] or "[LA]" in (kandidaat.get("titel") or ""):
+                or W.lees_titel(kandidaat.get("titel") or "")["reistijd"] or "[LA]" in (kandidaat.get("titel") or "") \
+                or (not kandidaat.get("soort") and kandidaat.get("titel") == "(privé)"):
+            # een oud record zonder soort met een gemaskeerde titel kan een Lara-afspraak of rit zijn: niet bellen
+            # (Codex-hertest 12); nieuwe records dragen hun soort en zijn al zonder Lara en ritten
             annuleringen.pop(sleutel, None)        # een opgeslagen Lara-afzegging van voor FR-210: nooit meer bellen
             continue
         try:

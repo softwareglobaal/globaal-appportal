@@ -631,6 +631,15 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
         titel = r.get("titel", "")
         actueel, reden = belafspraak_actueel(r)
         if not actueel:
+            if reden == "afgezegd" and ("[LA]" in titel or "Reistijd" in titel or titel.lstrip().startswith("\U0001F697")):
+                # Nooit 'niet vertrekken' voor een afspraak van Lara of een rit: een gewiste Lara-afspraak was op
+                # 22-10-2026 een fout, en wie dan niet vertrekt, laat Lara staan (FR-210). Afgerond zonder oproep.
+                gebeld[r["sleutel"]] = nu.isoformat()
+                if log:
+                    log("bellen", "afspraak", "niet gebeld: Lara-afspraak of rit afgezegd, geen niet-vertrekken-oproep (FR-210)")
+                if bewaar:
+                    _bewaar(bewaar, staat, log)
+                continue
             if reden == "afgezegd":
                 # Het afsprakenummer betekent voor Mehdi altijd "over vijf minuten vertrekken".
                 # Een afzegging wordt daarom met het andere nummer en met de reden uitgesproken.
