@@ -214,11 +214,19 @@ def planning_uren(afspraken_per_dag, dagen, ongelezen, is_prive, firma_van, firm
 
 # -------------------------------------------------------------------------------------------------- geheel ---
 def samenvatten(week, vaststellingen, planning, gemaakt):
-    """vaststellingen: {dag: (dict van vaststellen, versie)} voor de dagen die vastgesteld zijn; planning: van
-    planning_uren. Geeft het weekoverzicht als gewone gegevens, zonder datum of start bovenaan (anders ziet de
-    dagenpagina het als een dag)."""
+    """vaststellingen: per vastgestelde dag ofwel (dict van vaststellen, versie), ofwel de telling die
+    dag_samenvatting al maakte (zoals De Dagbundelaar ze naast het dagbestand bewaart); planning: van planning_uren.
+    Geeft het weekoverzicht als gewone gegevens, zonder datum of start bovenaan (anders ziet de dagenpagina het als
+    een dag)."""
     dagen = dagen_van(week)
-    rijen = [dag_samenvatting(d, *(vaststellingen.get(d) or (None, None))) for d in dagen]
+
+    def rij(d):
+        x = vaststellingen.get(d)
+        if isinstance(x, dict) and x.get("vastgesteld") is True and x.get("dag") == d:
+            return x
+        return dag_samenvatting(d, *(x if isinstance(x, tuple) else (None, None)))
+
+    rijen = [rij(d) for d in dagen]
     return {"soort": "weekoverzicht", "versie": VERSIE, "week": week, "van": dagen[0], "tot": dagen[-1],
             "gemaakt": gemaakt, "dagen": rijen, "totaal": totaal(rijen), "planning": planning}
 
