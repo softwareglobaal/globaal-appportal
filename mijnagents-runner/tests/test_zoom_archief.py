@@ -1203,6 +1203,34 @@ def test_een_bestand_in_verwerking_waarvan_de_meeting_verdwijnt_is_wel_een_verli
     r, uit = ronde(nu=NU + timedelta(hours=1))
     assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
 
+
+def test_codex_verwerking_39_een_voorlopig_id_zonder_vervanger_wordt_na_een_dag_een_verlies():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("M4A", "audio_only", b"geluid")])
+    m["bestanden"].append({"id": "voorlopig", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z",
+                           "einde": "", "grootte": 0, "opnametype": "shared_screen_with_speaker_view", "extensie": "MP4",
+                           "link": False})
+    ronde()
+    m["bestanden"].pop()  # de MP4 verdwijnt zonder vervanger; de meeting blijft met alleen het geluid
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in ZA.lees_staat()["vervanging"] and not ZA.lees_staat()["verdwenen"] and not r.noden
+    assert not uit["dekking"] and not uit["veilig"], "wachten op een vervanger houdt groen tegen"
+    assert ZA.mapnaam(m) + "/opname.json" not in d.bestanden, "zolang een vervanger kan komen, nog geen beschrijving"
+    r, uit = ronde(nu=NU + timedelta(hours=26))
+    assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
+
+
+def test_codex_verwerking_39_een_vervanger_van_een_andere_soort_telt_niet():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "shared_screen_with_speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    ronde()
+    z.inhoud["tl"] = b"{}"
+    m["bestanden"] = [{"id": "tl", "soort": "TIMELINE", "status": "completed", "start": m["start"], "einde": "",
+                       "grootte": 2, "opnametype": "timeline", "extensie": "JSON", "link": True}]
+    ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in ZA.lees_staat()["vervanging"], "een tijdlijn vervangt geen video"
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
