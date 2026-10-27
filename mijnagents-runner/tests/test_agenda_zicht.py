@@ -86,11 +86,11 @@ class NepGoogle:
     iCalUID (zichtbaar of niet), de privé-agenda op firmamerk, en firma-agenda's over twee pagina's."""
 
     def __init__(self, items, zichtbaar=True, botsing=(), bestaande_vraag=False, vers=None, ander_uur=False,
-                 botsing_keer=None, onleesbaar=()):
+                 botsing_keer=None, onleesbaar=(), weg=()):
         self.items = {e["id"]: e for e in items}
         self.patches, self.zichtbaar, self.botsing, self.bestaande_vraag = [], zichtbaar, set(botsing), bestaande_vraag
         self.vers, self.ander_uur = vers or {}, ander_uur
-        self.botsing_keer, self.onleesbaar = dict(botsing_keer or {}), set(onleesbaar)
+        self.botsing_keer, self.onleesbaar, self.weg = dict(botsing_keer or {}), set(onleesbaar), set(weg)
 
     def __call__(self, req, timeout=None, *a, **k):
         url = getattr(req, "full_url", req)
@@ -122,6 +122,8 @@ class NepGoogle:
             return io.BytesIO(json.dumps({"items": [{"id": "v"}] if self.bestaande_vraag else []}).encode())
         if "/events/" in u.path:
             eid = urllib.parse.unquote(u.path.rsplit("/", 1)[1])
+            if eid in self.weg:
+                raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
             return io.BytesIO(json.dumps({**self.items[eid], **self.vers.get(eid, {})}).encode())
         if u.path.endswith("/events"):
             kal = urllib.parse.unquote(u.path.split("/calendars/")[1].split("/events")[0])
@@ -153,7 +155,7 @@ evs = [ev("a1", "Mehdi: [EL-IN] overleg Elevait"),
        ev("a3", "Mehdi: [EL-PO] klant", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}]),
        ev("a4", "Mehdi: [EL-IN] met gast", gasten=[_siyan])]
 g = NepGoogle(evs)
-regels, niet = met(g, W.firma_gasten, evs, "tok")
+regels, niet, _, _ = met(g, W.firma_gasten, evs, "tok")
 check("alleen de twee 'Mehdi: ...'-afspraken zonder Mehdi als gast krijgen een patch", len(g.patches) == 2, str(g.patches))
 check("de patch draagt alleen 'attendees', gaat zonder mail en met If-Match op de etag",
       all(set(b) == {"attendees"} and "sendUpdates=none" in u and m and m.startswith('"e-') for u, b, m in g.patches),
@@ -164,27 +166,27 @@ check("bestaande gasten blijven staan met al hun velden (opmerking, extra gasten
 check("staat de afspraak daarna zichtbaar op de werkagenda, dan geen vangnet", not niet, str(niet))
 
 g2 = NepGoogle([ev("b1", "Mehdi: [EL-IN] overleg")], zichtbaar=False)
-_, niet2 = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
+_, niet2, _, _ = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
 check("komt de afspraak niet zichtbaar op de werkagenda (verborgen uitnodiging), dan gaat ze naar het vangnet",
       len(niet2) == 1)
 
 g3 = NepGoogle([ev("c9", "Mehdi: [EL-IN] overleg")], botsing={"c9"},
               vers={"c9": {"start": {"dateTime": f"{_morgen}T14:00:00+01:00"}, "end": {"dateTime": f"{_morgen}T15:00:00+01:00"}}})
-r3, niet3 = met(g3, W.firma_gasten, list(g3.items.values()), "tok")
+r3, niet3, _, _ = met(g3, W.firma_gasten, list(g3.items.values()), "tok")
 check("blijft een collega de afspraak veranderen (412), dan wordt niets overschreven",
       not g3.patches and any("bleef veranderen" in r for r in r3), str(r3))
 check("en gaat de afspraak zoals ze nu is (nieuw uur) naar het vangnet (Codex-hertest 3, punt 16)",
       len(niet3) == 1 and niet3[0]["start"]["dateTime"].endswith("14:00:00+01:00"), str(niet3))
 g3b = NepGoogle([ev("c8", "Mehdi: [EL-IN] overleg")], botsing_keer={"c8": 1})
-r3b, niet3b = met(g3b, W.firma_gasten, list(g3b.items.values()), "tok")
+r3b, niet3b, _, _ = met(g3b, W.firma_gasten, list(g3b.items.values()), "tok")
 check("na een enkele 412 leest de agent opnieuw en zet hij de gast alsnog", len(g3b.patches) == 1 and not niet3b, str(r3b))
 
 g7 = NepGoogle([ev("d1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA}])], ander_uur=True)
-_, niet7 = met(g7, W.firma_gasten, list(g7.items.values()), "tok")
+_, niet7, _, _ = met(g7, W.firma_gasten, list(g7.items.values()), "tok")
 check("staat alleen een andere keer van dezelfde reeks op de werkagenda, dan telt deze keer als niet zichtbaar",
       len(niet7) == 1, str(niet7))
 g8 = NepGoogle([ev("e1", "Mehdi: [EL-IN] overleg")], vers={"e1": {"summary": "Siyan: [EL-IN] overleg"}})
-r8, _ = met(g8, W.firma_gasten, list(g8.items.values()), "tok")
+r8, _, _, _ = met(g8, W.firma_gasten, list(g8.items.values()), "tok")
 check("veranderde de collega de titel intussen naar zichzelf, dan wordt Mehdi niet toegevoegd",
       not g8.patches and any("niet meer voor Mehdi" in r for r in r8), str((g8.patches, r8)))
 g8b = NepGoogle([ev("e2", "Mehdi: [EL-IN] overleg")], vers={"e2": {"status": "cancelled"}})
@@ -260,7 +262,7 @@ class _Nep7(NepGoogle):
         return super().__call__(req, timeout, *a, **k)
 
 
-_, niet7b = met(_Nep7([_e7]), W.firma_gasten, [_e7], "tok")
+_, niet7b, _, _ = met(_Nep7([_e7]), W.firma_gasten, [_e7], "tok")
 check("twee verplaatste keren op hetzelfde uur: de oorspronkelijke tijd beslist (niet zichtbaar)", len(niet7b) == 1)
 _moeder2 = {"id": "reeks2", "summary": "Mehdi: [EL-IN] meeting", "etag": '"e-reeks2"', "attendees": [], "kalender": ELEVAIT,
             "_moeder": True}
@@ -326,7 +328,7 @@ check("dat blok sluit geen dag af voor de agent (geen markering)",
 _gast = [ev("k1", "SAIS26 | Panel", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}]),
          ev("k2", "SAIS26 | Diner", gasten=[{"email": W.WERKAGENDA, "responseStatus": "declined"}])]
 g14 = NepGoogle(_gast, zichtbaar=False)
-_, niet14 = met(g14, W.firma_gasten, _gast, "tok")
+_, niet14, _, _ = met(g14, W.firma_gasten, _gast, "tok")
 check("Mehdi als gast zonder zijn naam vooraan, niet zichtbaar (verborgen uitnodiging): naar het vangnet (punt 14)",
       [e["id"] for e in niet14] == ["k1"] and not g14.patches, str([e["id"] for e in niet14]))
 
@@ -348,7 +350,7 @@ class _Nep15(NepGoogle):
 
 _e15 = ev("m1_20261102", "Mehdi: [EL-IN] meeting", reeks="m1")
 g15 = _Nep15([_e15])
-_, niet15 = met(g15, W.firma_gasten, [_e15], "tok")
+_, niet15, _, _ = met(g15, W.firma_gasten, [_e15], "tok")
 check("verzet een collega het uur terwijl de gast gezet wordt, dan gelden voor controle en vangnet het nieuwe uur",
       len(niet15) == 1 and niet15[0]["start"]["dateTime"].endswith("14:00:00+01:00")
       and "13:59" in getattr(g15, "gezocht", ""), str((niet15, getattr(g15, "gezocht", ""))))
@@ -371,6 +373,71 @@ finally:
 check("een meerdaagse afspraak die gisteren begon en nog loopt, krijgt haar Bezet blok", len(_ins16) == 1, str(len(_ins16)))
 check("verdwijnt ze voor haar einde, dan Opgelost en Beschikbaar, ook al is de begindag voorbij (punt 2)",
       _opg16 == [("r1", True)], str(_opg16))
+
+# --- Codex-hertest 5: na een fout alleen de actuele afspraak; een later verzette afspraak neemt haar blok meteen mee --
+_e17 = ev("s1_20261102T090000Z", "Mehdi: [EL-IN] meeting", reeks="s1")
+r17, niet17, onz17, opn17 = met(NepGoogle([_e17], weg={"s1_20261102T090000Z"}), W.firma_gasten, [_e17], "tok")
+check("verdwijnt een reekskeer tijdens de controle (reeks verzet), dan geen blok op het oude uur en de agenda opnieuw lezen",
+      not niet17 and opn17 and not onz17, str((r17, niet17, onz17, opn17)))
+
+
+class _NepOnleesbaarGet(NepGoogle):
+    def __call__(self, req, timeout=None, *a, **k):
+        url = getattr(req, "full_url", req)
+        if "/events/" in url and "iCalUID" not in url:
+            raise OSError("netwerk weg")
+        return super().__call__(req, timeout, *a, **k)
+
+
+_e18 = ev("s2", "Mehdi: [EL-IN] meeting")
+_, niet18, onz18, _ = met(_NepOnleesbaarGet([_e18]), W.firma_gasten, [_e18], "tok")
+check("is de afspraak daarna niet te lezen, dan geen blok op een oude tijd; het vangnet laat haar staan (onzeker)",
+      not niet18 and onz18 == {f"{ELEVAIT}|s2"}, str((niet18, onz18)))
+
+_volg = []
+_o19 = (W.firma_afspraken, W.firma_gasten, W.firma_vangnet, W.agenda.zichtbaarheid, W.agenda._toegang, W.FIRMA_SLOT)
+_lees19 = [([_e17], []), ([dict(_e17, id="s1_20261102T130000Z")], [])]
+W.firma_afspraken = lambda tok, *a, **k: _lees19.pop(0)
+W.firma_gasten = lambda evs, tok: ([], [], set(), evs[0]["id"].endswith("090000Z"))
+W.firma_vangnet = lambda evs, niet, tok, **k: _volg.append([e["id"] for e in evs]) or []
+W.agenda.zichtbaarheid = lambda: {k: True for k in W.KALENDERS}
+W.agenda._toegang = lambda: "tok"
+W.FIRMA_SLOT = str(Path(tempfile.mkdtemp(prefix="firmaslot19-")) / "agenda-firma.lock")
+try:
+    W.firma_stap("2026-10-27")
+finally:
+    W.firma_afspraken, W.firma_gasten, W.firma_vangnet, W.agenda.zichtbaarheid, W.agenda._toegang, W.FIRMA_SLOT = _o19
+check("na een verdwenen keer leest de firmastap de agenda opnieuw en krijgt het vangnet de nieuwe keren",
+      _volg == [["s1_20261102T130000Z"]], str(_volg))
+
+from datetime import datetime as _dt, timezone as _tz  # noqa: E402
+_tz1 = _tz(timedelta(hours=1))
+_n20 = _dt(_nu.year, _nu.month, _nu.day, 11, 17, tzinfo=_tz1)
+_d20 = _n20.date().isoformat()
+_pat20, _ins20 = [], []
+_o20 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma20-")) / "agenda-firma-vragen.json")
+Path(W.FIRMA_VRAGEN).write_text(json.dumps({f"{ELEVAIT}|t1": {
+    "gevraagd": _d20, "dag": _d20, "start": f"{_d20}T10:00:00+01:00", "einde": f"{_d20}T11:00:00+01:00", "sterk": True,
+    "id": "q9"}}), encoding="utf-8")
+W._insert = lambda kal, body, tok, toch=False: _ins20.append(body) or {"id": "nieuw"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
+    W.FIRMAMERK: f"{ELEVAIT}|{'t1' if eid == 'q9' else 't2'}", W.MAILMERK: "abcdef0123456789"}}
+W._patch = lambda x, body, tok, **kw: _pat20.append((x["id"], body))
+try:
+    _t1 = dict(ev("t1", "Mehdi: [EL-IN] overleg"), start={"dateTime": f"{_d20}T14:00:00+01:00"},
+               end={"dateTime": f"{_d20}T15:00:00+01:00"})
+    met(NepGoogle([_t1]), W.firma_vangnet, [_t1], [_t1], "tok", _n20)
+    _reg20 = json.loads(Path(W.FIRMA_VRAGEN).read_text(encoding="utf-8"))
+    _t2 = dict(_t1, id="t2")
+    met(NepGoogle([_t2], bestaande_vraag=True), W.firma_vangnet, [_t2], [_t2], "tok", _n20)
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch = _o20
+check("verzet naar later nadat het oude uur voorbij is: hetzelfde blok gaat meteen naar het nieuwe uur (hertest 5, punt 2)",
+      _pat20[:1] and _pat20[0][0] == "q9" and _pat20[0][1]["start"]["dateTime"] == f"{_d20}T14:00:00+01:00" and not _ins20
+      and _reg20[f"{ELEVAIT}|t1"]["start"] == f"{_d20}T14:00:00+01:00", str((_pat20, _ins20)))
+check("staat de vraag er al zonder registratie, dan wordt ze meteen op de juiste tijd gezet, geen tweede",
+      len(_pat20) == 2 and _pat20[1][0] == "v" and not _ins20, str(_pat20))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
