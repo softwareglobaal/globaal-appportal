@@ -20,7 +20,7 @@ Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2):
 - is de reflog leeg of onleesbaar, dan telt alleen het anker.
 
 Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen mijn eigen
-stand. Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
+stand en haar slot (een ronde tegelijk). Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
 
     bouwwacht.py            een ronde
     bouwwacht.py --droog    meten en tonen, niets naar het bord en niets in de stand
@@ -29,6 +29,7 @@ Cron (oneven minuten, tussen de tikken van deploy.sh):
     1-59/2 * * * * ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/bouwwacht.py >> ~/agents/bouwwacht.log 2>&1
 """
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -55,6 +56,9 @@ DIENSTEN = ("mijnagents", "agents", "siyanagents")
 DREMPEL_MIN = 10
 REFLOG_MAX = 200
 OUD = 0     # ouder dan de drempel, hoe oud precies is onbekend
+
+
+STANDNOOD = "Bouwwacht kan zijn stand niet bewaren"
 
 
 def noodtekst(dienst):
@@ -106,11 +110,15 @@ def begin_volgens_reflog(dienst, gebouwd):
 
 
 def markering(dienst):
+    """De gebouwde boom; leeg als er geen markering is. Een markering die er is maar niet te lezen valt, is onbekend,
+    geen ontbrekende markering (Codex-resultaattoets 5)."""
     try:
         with open(os.path.join(MARKERINGEN, f"{dienst}-data", ".built"), encoding="utf-8") as f:
             return f.read().strip()
-    except OSError:
+    except FileNotFoundError:
         return ""
+    except (OSError, UnicodeDecodeError) as e:
+        raise Onleesbaar(f"markering niet leesbaar: {type(e).__name__}") from e
 
 
 def laatste_logregel(dienst):
@@ -134,11 +142,35 @@ def lees_stand():
 
 
 def bewaar_stand(stand):
-    os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
     tijdelijk = f"{STAND}.{os.getpid()}.tmp"
-    with open(tijdelijk, "w", encoding="utf-8") as f:
-        json.dump(stand, f, ensure_ascii=False, indent=1, sort_keys=True)
-    os.replace(tijdelijk, STAND)
+    try:
+        os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
+        with open(tijdelijk, "w", encoding="utf-8") as f:
+            json.dump(stand, f, ensure_ascii=False, indent=1, sort_keys=True)
+        os.replace(tijdelijk, STAND)
+    except OSError:
+        try:
+            os.remove(tijdelijk)
+        except OSError:
+            pass
+        raise
+
+
+def neem_slot():
+    """Een ronde tegelijk (Codex-resultaattoets 3): anders kan een oude ronde na herstel nog haar verouderde alarm zetten,
+    of een nieuw alarm sluiten met een lege lijst. Het slot geldt voor de hele ronde, tot en met de eindhartslag.
+    Geeft het open slotbestand, False als een andere ronde het heeft, of None als er geen slotbestand kan komen."""
+    try:
+        os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
+        f = open(f"{STAND}.slot", "a", encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return False
+    return f
 
 
 def meet_dienst(dienst, stand, nu):
@@ -191,15 +223,15 @@ def regel(m):
 def werk(r, nu=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
-        # Zonder grenzen geen werk (N2), zoals het sjabloon: de vaste vorm staat in AGENTNORM.md 8.
+        # Zonder grenzen geen werk (N2), zoals het sjabloon: de vaste vorm staat in AGENTNORM.md 8. Er is niet gemeten,
+        # dus een bouwnood die openstaat blijft open: het bord sluit niets (Codex-resultaattoets 2).
+        r.noden_onbekend = True
         r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return []
     stand = lees_stand()
     vorig = json.dumps(stand, sort_keys=True)
     uitslag = meet(stand, nu)
-    if json.dumps(stand, sort_keys=True) != vorig:
-        bewaar_stand(stand)
     noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
              for m in uitslag if m["stand"] in ("achter", "onbekend")]
     open_ = ag.open_noden() if noden else None
@@ -210,7 +242,22 @@ def werk(r, nu=None):
         if open_ is not None and tekst not in {n["tekst"] for n in open_}:
             ag.log(m["dienst"], "fout", regel(m))
     r.detail = "; ".join(regel(m) for m in uitslag)
+    # pas na de meting en haar noden: een stand die niet te bewaren is, houdt geen bouwnood tegen (Codex-resultaattoets 1)
+    if json.dumps(stand, sort_keys=True) != vorig:
+        try:
+            bewaar_stand(stand)
+        except OSError as e:
+            r.nood(STANDNOOD, wie="claude-code")
+            r.detail += f"; stand niet bewaard ({type(e).__name__})"
     return uitslag
+
+
+def zonder_bord(reden):
+    """V8: kan ik het bord niet bereiken, dan staat het hier, in het cronlog, met de meting erbij, en is de exitcode 1."""
+    print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} {reden}", file=sys.stderr)
+    for m in meet(lees_stand()):
+        print(f"  {regel(m)}", file=sys.stderr)
+    return 1
 
 
 def main(argv=None):
@@ -221,16 +268,24 @@ def main(argv=None):
         for m in uitslag:
             print(regel(m))
         return 1 if any(m["stand"] in ("achter", "onbekend") for m in uitslag) else 0
+    slot = neem_slot()
+    if slot is False:
+        print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} een vorige ronde loopt nog; deze slaat over",
+              file=sys.stderr)
+        return 0
     try:
-        with ag.ronde("bouw van de diensten nakijken") as r:
-            werk(r)
-    except bord.RondeGestopt as e:
-        # V8: zonder bord kan ik niets melden; dan staat het hier, in het cronlog, met de meting erbij.
-        print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} ronde gestopt: {e}", file=sys.stderr)
-        for m in meet(lees_stand()):
-            print(f"  {regel(m)}", file=sys.stderr)
-        return 1
-    return 0
+        try:
+            with ag.ronde("bouw van de diensten nakijken") as r:
+                werk(r)
+        except bord.RondeGestopt as e:
+            return zonder_bord(f"ronde gestopt: {e}")
+        if not ag.hartslag_ok:
+            # Codex-resultaattoets 4: het bord gaf de werkwijze, maar de eindhartslag met de noden kwam niet aan
+            return zonder_bord("eindhartslag niet aangekomen; de noden staan niet op het bord")
+        return 0
+    finally:
+        if slot:
+            slot.close()
 
 
 if __name__ == "__main__":

@@ -3076,8 +3076,11 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   de laatste regel van `~/deploy-<map>.log` in het detail; gelijk sluit de nood. Het begin van het verschil is het
   vroegste van twee: het moment dat de wacht het voor het eerst zag (`mijnagents-data/bouwwacht.json`, per dienst de
   markering en dat moment) en de reflogstap waarop HEAD wegging van de gebouwde boom. De wacht leest alleen (`git
-  rev-parse`, `git log -g`); `--droog` meet zonder bord en zonder stand. Werfverslag valt erbuiten (eigen bewaking via
-  `.mislukt`). Grendels: `tests/test_bouwwacht.py` in `agentnorm-grendels.yml`.
+  rev-parse`, `git log -g`); `--droog` meet zonder bord en zonder stand. Een ronde tegelijk (slot
+  `bouwwacht.json.slot`); een stand die niet te bewaren is, geeft een eigen nood en houdt geen bouwnood tegen; zonder
+  geldige grenzen sluit de ronde niets. Stopt de ronde zonder bord of komt de eindhartslag niet aan (`bord.Agent.hartslag_ok`),
+  dan exit 1 met de meting in `~/agents/bouwwacht.log`. Werfverslag valt erbuiten (eigen bewaking via `.mislukt`).
+  Grendels: `tests/test_bouwwacht.py` in `agentnorm-grendels.yml`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
   `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is

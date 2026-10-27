@@ -106,15 +106,16 @@ class Bord:
     """Vangt op wat de ronde naar het bord stuurt, zonder netwerk. open_noden: wat /api/nood teruggeeft voor bouwwacht
     (None: het bord weet het niet). weg: elke aanroep faalt, zoals een bord dat niet antwoordt."""
 
-    def __init__(self, open_noden=(), werkwijze=WERKWIJZE, weg=False):
+    def __init__(self, open_noden=(), werkwijze=WERKWIJZE, weg=False, status_weg=False):
         self.open_noden = None if open_noden is None else [dict(n, naam="bouwwacht") for n in open_noden]
         self.werkwijze = werkwijze
         self.weg = weg
+        self.status_weg = status_weg
         self.gestuurd = []
 
     def call(self, pad, payload=None, method=None):
         self.gestuurd.append((pad, payload))
-        if self.weg:
+        if self.weg or (self.status_weg and pad == "/agent-status"):
             raise OSError("bord onbereikbaar")
         if "werkwijze" in pad:
             return {"werkwijze": self.werkwijze}
@@ -416,11 +417,73 @@ def test_alleen_mijn_eigen_naam_op_het_bord(repo):
 
 
 @proef
-def test_zonder_grenzen_in_de_werkwijze_geen_werk(repo):
+def test_zonder_grenzen_in_de_werkwijze_geen_werk_en_geen_bouwnood_gesloten(repo):
     repo.zet("b", T0)
-    _, b = ronde(T0 + 12 * MIN, Bord(werkwijze="# Werkwijze\n\nIk kijk naar de bouw."))
+    _, b = ronde(T0 + 12 * MIN, Bord(werkwijze="# Werkwijze\n\nIk kijk naar de bouw.",
+                                     open_noden=[{"tekst": "Bouw loopt achter op de code: mijnagents", "wie": "claude-code"}]))
     assert noden(b) == {"Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist": "mehdi"}
+    assert b.eind()["nood_sluiten"] is False, "niet gemeten, dus de open bouwnood blijft open (Codex-resultaattoets 2)"
     assert not os.path.exists(repo.stand)
+
+
+@proef
+def test_een_stand_die_niet_te_bewaren_is_houdt_de_bouwnood_niet_tegen(repo):
+    with open(os.path.join(repo.map, "bestand"), "w") as f:
+        f.write("geen map")
+    B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 20 * MIN)
+    assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
+                        "Bouwwacht kan zijn stand niet bewaren": "claude-code"}
+    assert "stand niet bewaard" in b.eind()["detail"] and b.eind().get("nood_sluiten") is not False
+
+
+@proef
+def test_een_onleesbare_markering_is_onbekend_geen_vals_alarm(repo):
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
+    os.remove(pad)
+    os.makedirs(pad)
+    uit, b = ronde(T0 + MIN)
+    assert uit["mijnagents"]["stand"] == "onbekend" and "markering niet leesbaar" in uit["mijnagents"]["reden"]
+    assert noden(b) == {"Bouwwacht kan mijnagents niet nakijken": "claude-code"}
+
+
+@proef
+def test_een_tweede_ronde_tegelijk_slaat_over(repo):
+    repo.zet("b", T0)
+    b = Bord()
+    echt, bord.call = bord.call, b.call
+    echte_tijd, B.time = B.time, types.SimpleNamespace(time=lambda: T0 + 12 * MIN)
+    slot = B.neem_slot()
+    fout = io.StringIO()
+    try:
+        assert slot
+        with redirect_stdout(io.StringIO()), redirect_stderr(fout):
+            code = B.main([])
+        assert code == 0 and b.gestuurd == [] and "een vorige ronde loopt nog" in fout.getvalue()
+        slot.close()
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = B.main([])
+        assert code == 0 and "Bouw loopt achter op de code: mijnagents" in noden(b)
+    finally:
+        slot.close()
+        bord.call, B.time = echt, echte_tijd
+
+
+@proef
+def test_een_eindhartslag_die_niet_aankomt_geeft_exit_1(repo):
+    repo.zet("b", T0)
+    b = Bord(status_weg=True)
+    echt, bord.call = bord.call, b.call
+    echte_tijd, B.time = B.time, types.SimpleNamespace(time=lambda: T0 + 12 * MIN)
+    fout = io.StringIO()
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(fout):
+            code = B.main([])
+    finally:
+        bord.call, B.time = echt, echte_tijd
+    assert code == 1
+    assert "eindhartslag niet aangekomen" in fout.getvalue() and "mijnagents loopt achter, 12 min" in fout.getvalue()
 
 
 def test_runner_gaat_door_de_gedeelde_ronde():
