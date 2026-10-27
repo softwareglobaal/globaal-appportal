@@ -1218,8 +1218,9 @@ def test_fase2_weeknood_per_ronde():
         raise RuntimeError("kapot")
 
     oud = (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND)
+           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
+    D.weken_voor_de_nacht = lambda nu: ["2026-W43"]
     D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: vastgelegd.append(len(dagen)) or ""
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
@@ -1231,11 +1232,20 @@ def test_fase2_weeknood_per_ronde():
         D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG = True, False, None, None, False
         D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or f"week {week}"
         D.main()
-        assert gemaakt == [D.WO.vorige_week(datetime.now(timezone.utc))] and D.WEEKNOOD not in gemeld, (gemaakt, gemeld)
+        assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, (gemaakt, gemeld)
         del gemeld[:], gemaakt[:]
         D.weekoverzicht_maken = faal
         D.main()
         assert gemaakt and gemeld.count(D.WEEKNOOD) == 1, ("mislukt: de weeknood staat open", gemeld)
+        del gemeld[:], gemaakt[:]
+        # Codex-controle fase 2, ronde 3 (K3): een vastgelopen weekstap stopt op haar eigen grens, de nacht loopt door
+        import time
+        D.WEEK_TIJDSLIMIET = 0.2
+        D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or time.sleep(3) or "te laat"
+        begin = time.monotonic()
+        D.main()
+        assert time.monotonic() - begin < 2 and gemeld.count(D.WEEKNOOD) == 1, ("vastgelopen week: nood, nacht loopt door", gemeld)
+        D.WEEK_TIJDSLIMIET = oud[-1]
         del gemeld[:], gemaakt[:]
         D.NACHT = False
         D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": NU.isoformat(),
@@ -1247,11 +1257,50 @@ def test_fase2_weeknood_per_ronde():
         D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or f"week {week}"
         D.main()
         assert gemaakt == ["2026-W43"] and not vastgelegd and D.WEEKNOOD in gemeld, (gemaakt, vastgelegd, gemeld)
+        # met de hand mislukt: geen algemene weeknood (Codex-controle fase 2, ronde 3)
+        del gemeld[:], gemaakt[:]
+        D.ag.open_noden = lambda: []
+        D.weekoverzicht_maken = faal
+        with redirect_stderr(io.StringIO()):
+            D.main()
+        assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, gemeld
     finally:
         (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND) = oud
+         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET) = oud
         for naam in ("ronde", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
+
+
+def test_fase2_dagbestand_teruggelezen_voor_het_bord():
+    """X2 (Codex-controle fase 2, ronde 3): ook het dagbestand is teruggelezen voor het item naar het bord gaat."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        echt = D._lees
+        D._lees = lambda pad: "kapot" if str(pad).endswith(f"{DAG}.md") and "/dagboek/" in str(pad) else echt(pad)
+        try:
+            ronde(w)
+            raise AssertionError("een dagbestand dat niet terug te lezen is, moet de ronde laten falen")
+        except RuntimeError as e:
+            assert "niet teruggelezen" in str(e) and "bestand" in str(e), e
+        finally:
+            D._lees = echt
+        assert f"vaststelling:{DAG}" not in w.items, "geen item op het bord zonder teruggelezen dagbestand"
+
+
+def test_fase2_weken_voor_de_nacht():
+    """Codex-controle fase 2, ronde 3: de nacht maakt de laatst afgesloten week, en de week ervoor zolang die ontbreekt."""
+    nu = datetime(2026, 11, 2, 0, 30, tzinfo=timezone.utc)
+    with tempfile.TemporaryDirectory() as m:
+        oud = D.DAGBOEK
+        D.DAGBOEK = os.path.join(m, "dagboek")
+        try:
+            assert D.weken_voor_de_nacht(nu) == ["2026-W43", "2026-W44"], D.weken_voor_de_nacht(nu)
+            os.makedirs(os.path.join(m, "dagboek", "2026", "week"))
+            with open(os.path.join(m, "dagboek", "2026", "week", "2026-W43.json"), "w") as f:
+                f.write("{}")
+            assert D.weken_voor_de_nacht(nu) == ["2026-W44"], D.weken_voor_de_nacht(nu)
+        finally:
+            D.DAGBOEK = oud
 
 
 if __name__ == "__main__":

@@ -102,6 +102,34 @@ def dag_samenvatting(dag, v, dagversie=None):
     }
 
 
+# Het contract van een dagtelling: wat een bewaarde telling meebrengt buiten deze velden, valt weg (Codex-controle fase
+# 2, ronde 3, K5: een onverwacht naamveld mag nooit in het weekoverzicht of op het bord komen).
+TELLING_GETALLEN = {"afspraken": UITKOMSTEN + (PRIVE, "totaal"), "niet_gepland": ("gesprekken", "minuten", "bezoeken"),
+                    "gesprekken": ("aantal", "minuten", "met_opname", "alleen_zoom"),
+                    "whatsapp": ("gesprekken", "berichten", "oproepen", "minuten"), "telefoon": ("oproepen", "minuten"),
+                    "mail": ("binnen", "verzonden")}
+
+
+def _stand(x):
+    return x[:60] if isinstance(x, str) else None
+
+
+def telling_schoon(dag, x):
+    """Een bewaarde dagtelling met alleen de velden van het contract: getallen, de standen en de vlag onvolledig."""
+    uit = {"dag": dag, "vastgesteld": True, "dagversie": _getal(x.get("dagversie")), "zoom_chats": _getal(x.get("zoom_chats"))}
+    for veld, sleutels in TELLING_GETALLEN.items():
+        bron = x.get(veld)
+        uit[veld] = None if not isinstance(bron, dict) else {k: _getal(bron.get(k)) for k in sleutels}
+    for kanaal in ("whatsapp", "telefoon"):
+        if uit[kanaal] is not None:
+            uit[kanaal]["stand"] = _stand(x[kanaal].get("stand")) or ONBEKEND
+    if uit["mail"] is not None:
+        uit["mail"]["onvolledig"] = bool(x["mail"].get("onvolledig"))
+    standen = x.get("standen") if isinstance(x.get("standen"), dict) else {}
+    uit["standen"] = {k: _stand(standen.get(k)) or ONBEKEND for k in ("agenda", "zoom", "locatie")}
+    return uit
+
+
 def _optellen(waarden):
     """Som van wat gekend is; None als niets gekend is."""
     gekend = [w for w in waarden if w is not None]
@@ -223,7 +251,7 @@ def samenvatten(week, vaststellingen, planning, gemaakt):
     def rij(d):
         x = vaststellingen.get(d)
         if isinstance(x, dict) and x.get("vastgesteld") is True and x.get("dag") == d:
-            return x
+            return telling_schoon(d, x)
         return dag_samenvatting(d, *(x if isinstance(x, tuple) else (None, None)))
 
     rijen = [rij(d) for d in dagen]

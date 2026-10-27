@@ -242,12 +242,13 @@ def main():
         delen, nu = [], datetime.now(timezone.utc)
         if WEEK:
             # Met de hand (--week JJJJ-Www): alleen het weekoverzicht van die week, geen bundels en geen vaststelling;
-            # zoals elke ronde met de hand sluit ze geen noden.
+            # zoals elke ronde met de hand sluit ze geen noden. Een fout opent ook geen nood: die gaat over de nacht, en
+            # wie met de hand draait, ziet de fout zelf (Codex-controle fase 2, ronde 3).
             try:
                 r.detail = weekoverzicht_maken(WEEK, nu)
             except Exception as e:  # noqa: BLE001
                 ag.log("week", "fout", f"weekoverzicht {WEEK} mislukt: {type(e).__name__}: {str(e)[:200]}")
-                r.nood(WEEKNOOD, wie="claude-code")
+                print(f"weekoverzicht {WEEK} mislukt: {type(e).__name__}: {e}", file=sys.stderr)
                 r.detail = f"weekoverzicht {WEEK} mislukt"
             behoud(r, lambda t: True)
             return
@@ -309,11 +310,16 @@ def main():
             behoud(r, lambda t: t.startswith(VASTSTELLING_NODEN + (WEEKNOOD,)))
         if NACHT and not DAG_GEGEVEN and VENSTER is None and vastgesteld:
             # Fase 2 (overleg 27-10-2026, Q3 en K3): elke nacht het overzicht van de laatst afgesloten week, in een eigen
-            # blok. Zo werkt het zichzelf bij als een dag van die week herzien wordt, en een fout breekt de nacht niet.
-            try:
-                delen.append(weekoverzicht_maken(WO.vorige_week(nu), nu))
-            except Exception as e:  # noqa: BLE001
-                ag.log("week", "fout", f"weekoverzicht mislukt: {type(e).__name__}: {str(e)[:200]}")
+            # blok met een eigen tijdslimiet. Zo werkt het zichzelf bij als een dag van die week herzien wordt, en een
+            # fout of een vastgelopen lezing breekt de nacht niet.
+            mislukt = []
+            for week in weken_voor_de_nacht(nu):
+                try:
+                    delen.append(met_tijdslimiet(weekoverzicht_maken, WEEK_TIJDSLIMIET, week, nu))
+                except Exception as e:  # noqa: BLE001
+                    ag.log("week", "fout", f"weekoverzicht {week} mislukt: {type(e).__name__}: {str(e)[:200]}")
+                    mislukt.append(week)
+            if mislukt:
                 r.nood(WEEKNOOD, wie="claude-code")
         if HANDMATIG:
             # Codex-controle mailnood 5: een ronde met de hand kijkt een dag of een eigen venster na, niet alles; ze
@@ -640,6 +646,38 @@ KETEN_NODEN = ("Nachtronde buiten de nachtketen", "De Zoomwacht faalde in de nac
 # Fase 2 (overleg 27-10-2026, K3): alleen de nachtronde maakt het weekoverzicht, dus alleen zij sluit deze nood; de
 # ochtend en een ronde met de hand laten hem open.
 WEEKNOOD = "Weekoverzicht niet gemaakt, zie dagbundelaar.log"
+# Codex-controle fase 2, ronde 3 (K3): een vastgelopen lezing in de weekstap mag de nacht niet laten vastlopen. De keten
+# geeft De Dagbundelaar 1800 s; de weekstap krijgt per week een eigen grens, ruim onder wat er dan nog over is.
+WEEK_TIJDSLIMIET = 300
+
+
+class WeekTijdOp(Exception):
+    pass
+
+
+def met_tijdslimiet(f, seconden, *args):
+    """f(*args) met een eigen tijdslimiet (SIGALRM, alleen in de hoofddraad). Is de tijd op, dan WeekTijdOp; de vorige
+    alarmafhandeling komt altijd terug."""
+    import signal
+
+    def op(_signum, _frame):
+        raise WeekTijdOp(f"tijdslimiet van {seconden} s")
+
+    oud = signal.signal(signal.SIGALRM, op)
+    signal.setitimer(signal.ITIMER_REAL, seconden)
+    try:
+        return f(*args)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, oud)
+
+
+def weken_voor_de_nacht(nu):
+    """De laatst afgesloten week, en de week daarvoor zolang haar overzicht ontbreekt: zo blijft een week die mislukte
+    niet liggen na de wissel op maandag (Codex-controle fase 2, ronde 3)."""
+    laatste = WO.vorige_week(nu)
+    ervoor = WO.vorige_week(nu - timedelta(days=7))
+    return ([ervoor] if not os.path.exists(weekpad(ervoor, "json")) else []) + [laatste]
 
 
 def weekoverzicht_maken(week, nu=None):
@@ -950,18 +988,20 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         telling = json.dumps(WO.dag_samenvatting(dag, v, versie), ensure_ascii=False, indent=1, sort_keys=True) + "\n"
         if _lees(telpad(dag)) != telling:
             _schrijf(telpad(dag), telling)
+        # Teruglezen (E6, F8, X2): het dagbestand en de telling tonen letterlijk wat ik net vastlegde, voor het item naar
+        # het bord gaat (Codex-controle fase 2, ronde 3).
+        if _lees(dagpad(dag)) != tekst:
+            fouten.append(f"{dag}: bestand")
+            continue
         if _lees(telpad(dag)) != telling:
             fouten.append(f"{dag}: telling")
             continue
         titel = f"Dag {dag} vastgesteld" + (f" (versie {versie})" if versie > 1 else "")
         ag.klaarzet([{"voor": "mehdi", "soort": "dagvaststelling", "sleutel": dag, "titel": titel,
                       "uniek": f"vaststelling:{dag}", "inhoud": tekst, "revisie": True}])
-        # Teruglezen (E6, F8): het bestand en het item tonen letterlijk de tekst die ik net vastlegde.
         terug = (bord.call("/api/klaarzet?" + urllib.parse.urlencode(
             {"uniek": f"vaststelling:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
         op_bord = next((x.get("inhoud") for x in terug if x.get("uniek") == f"vaststelling:{dag}"), None)
-        if _lees(dagpad(dag)) != tekst:
-            fouten.append(f"{dag}: bestand")
         if op_bord != tekst:
             fouten.append(f"{dag}: bord")
     if fouten:

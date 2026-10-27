@@ -198,6 +198,17 @@ check("week (Codex fase 2, punt 1): een onbekende WhatsApp-dag is nooit 'niet aa
       w4["whatsapp"]["stand"] == "onbekend" and "WhatsApp op een dag onbekend" in w4["voorbehoud"]
       and "WhatsApp niet aangesloten" not in w4["voorbehoud"], json.dumps(w4["whatsapp"]))
 
+# Codex-controle fase 2, ronde 3 (K5): een bewaarde dagtelling met een onverwacht naamveld, ook genest
+_vies = dict(d1, naam="Jozef Lekker", afspraken=dict(d1["afspraken"], wie="Karel Lekker"),
+             whatsapp=dict(d1["whatsapp"], met="Lien Lekker"), standen=dict(d1["standen"], wie="Mon Lekker"))
+_wv = WO.samenvatten("2026-W43", {DAG: _vies}, p, "x")
+_wvt = json.dumps(_wv, ensure_ascii=False) + WO.tekst(_wv)
+check("K5 (Codex ronde 3): uit een bewaarde telling komen alleen de velden van het contract, nooit een naam",
+      "Lekker" not in _wvt and _wv["dagen"][0]["afspraken"] == d1["afspraken"]
+      and _wv["dagen"][0]["whatsapp"]["stand"] == d1["whatsapp"]["stand"], _wvt[:300])
+check("K5: een bewaarde telling en een verse vaststelling geven dezelfde week",
+      WO.samenvatten("2026-W43", {DAG: d1}, p, "x") == WO.samenvatten("2026-W43", {DAG: (V1, 2)}, p, "x"))
+
 # ------------------------------------------------- van begin tot eind: runner, klaarzet en de pagina /week (K5) ---
 BORD = os.path.join(os.path.dirname(os.path.dirname(HIER)), "mijnagents")
 try:
