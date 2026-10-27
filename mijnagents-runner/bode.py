@@ -428,6 +428,8 @@ def lees_whatsapp(staat, namen, nood):
         except Exception as e:  # noqa: BLE001
             agendaantwoord = None
             nood.append({"tekst": f"Agendavraag niet herkend ({type(e).__name__})", "wie": "claude-code"})
+            if agenda_whatsapp.lijkt_antwoord(tekst):
+                break                   # een agendaantwoord nooit kwijt: dit bericht volgende ronde opnieuw (PR 113)
         if agendaantwoord is not None:
             ag.log("bericht", "bron", "uit WhatsApp: antwoord op een agendavraag")
         elif tekst and tekst.lower() in WA_KORT:

@@ -740,6 +740,32 @@ check("verschuift een zorgafspraak van voorbij dag 120 naar binnen het venster, 
 check("de werkwijze (op het bord) noemt geen medische afspraak",
       "ECG" not in (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8"))
 
+# --- Codex-hertest 15 (PR 113) --------------------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw30-")) / "agenda-whatsapp.json")
+AW.sinds_zetten(W.nu_lokaal())
+_doel_start = f"{d2}T16:00:00+01:00"
+AW.gezet_onthouden(d2, "mis30", (_doel_start, f"{d2}T16:30:00+01:00"))          # de verschuiving was het voornemen
+_mis = dict(item("mis30", "!! [PR] Kine - Praktijk F", f"{d2}T09:00:00+01:00", f"{d2}T09:30:00+01:00", merk={W.ZORGMERK: "f"}),
+            _gemaakt="2026-01-01T00:00:00.000Z")                             # maar het blok staat nog op het oude uur
+W.zorg_whatsapp([_mis], "tok")
+check("mislukte een verschuiving in de eerste ronde, dan geen melding 'gezet' over het oude uur (hertest 15, punt 1)",
+      not any(k.startswith("zorg:mis30:") for k in AW._lees()["meldingen"]), str(AW._lees()["meldingen"]))
+import bode as _B  # noqa: E402
+_o31 = (_B.whatsapp.binnen, _B.agenda_whatsapp.antwoord_herkennen, _B.bord.call, _B.stuur)
+_bord31 = []
+_B.whatsapp.binnen = lambda sinds=0: [{"id": 5, "tekst": "A3 vervalt", "tijd": ""}, {"id": 6, "tekst": "Zoomwacht, hoi", "tijd": ""}]
+_B.agenda_whatsapp.antwoord_herkennen = lambda tekst: (_ for _ in ()).throw(OSError("wachtrij stuk"))
+_B.bord.call = lambda *a, **k: _bord31.append(a) or {"id": 1, "aan": "zoom-wacht"}
+_B.stuur = lambda *a, **k: "whatsapp"
+_staat31, _nood31 = {"wa_laatste_id": 4}, []
+try:
+    _B.lees_whatsapp(_staat31, {}, _nood31)
+finally:
+    _B.whatsapp.binnen, _B.agenda_whatsapp.antwoord_herkennen, _B.bord.call, _B.stuur = _o31
+check("kan De Bode de wachtrij niet lezen, dan houdt hij een agendaantwoord vast voor de volgende ronde (punt 2)",
+      _staat31["wa_laatste_id"] == 4 and not _bord31 and _nood31, str((_staat31, _bord31, _nood31)))
+check("een gewoon bericht ('hoi') lijkt geen agendaantwoord", not AW.lijkt_antwoord("Zoomwacht, hoi") and AW.lijkt_antwoord("A3 vervalt"))
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

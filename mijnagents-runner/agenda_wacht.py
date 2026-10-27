@@ -3571,14 +3571,14 @@ def _zorg_blok_met_merk(sleutel, tok):
 ZORG_GEZET = []      # (dag, id) van elk blok dat de zorgroute deze ronde zette, verzette of verhuisde
 
 
-def _zorg_gezet(dag, ident, nieuw=True):
+def _zorg_gezet(dag, ident, nieuw=True, doel=None):
     """Een blok dat de zorgroute gaat zetten, verzetten of verhuizen, voor de schrijfactie: duurzaam in de WhatsApp-
     wachtrij, zodat de meldstap het ook na een onderbreking of in de eerste ronde als nieuw ziet (Codex-hertest 8 tot 13,
     PR 113). ident: het id van het blok of, voor een nieuw blok, zijn zorgsleutel (het merk). Lukt het vastleggen niet,
     dan gooit dit: de schrijfactie gaat dan niet door. nieuw=False (alleen gekoppeld): geen melding in de eerste ronde,
     alleen de verre dag voor de meldstap."""
     if nieuw:
-        AW.gezet_onthouden(dag, ident)
+        AW.gezet_onthouden(dag, ident, doel)
     if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
         AW.verre_dagen([(dag, ident)])          # dag en id samen, meteen (Codex-hertest 11, PR 113)
     ZORG_GEZET.append((dag, ident, nieuw))
@@ -3656,7 +3656,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                         volledig = _lees_event(PRIVE_AGENDA, bestaand, tok)
                         if volledig is None:
                             raise RuntimeError("omschrijving niet te lezen")
-                        _zorg_gezet(a["start"][:10], bestaand)
+                        _zorg_gezet(a["start"][:10], bestaand, doel=(a["start"], a["einde"]))
                         _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                    "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
                                    "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van "
@@ -3690,7 +3690,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 continue
             body = _zorg_body(a, z, profiel)
             try:
-                _zorg_gezet(a["start"][:10], a.get("sleutel"))   # eerst vastleggen, dan pas zetten (Codex-hertest 13)
+                _zorg_gezet(a["start"][:10], a.get("sleutel"), doel=(a["start"], a["einde"]))   # eerst vastleggen (hertest 13)
                 e = _insert(PRIVE_AGENDA, body, tok)
             except DagMarkering as ex:
                 st["open"] += 1
@@ -3812,7 +3812,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     volledig = _lees_event(kal, eid, tok)
                     if volledig is None:
                         raise RuntimeError("omschrijving niet te lezen")   # nooit een afgekapte omschrijving terug (PR 113)
-                    _zorg_gezet(a["start"][:10], eid)    # vooraf: ook als de teruglezing daarna mislukt (Codex-hertest 10)
+                    _zorg_gezet(a["start"][:10], eid, doel=(a["start"], einde))    # vooraf (Codex-hertest 10)
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
                                "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
@@ -3878,7 +3878,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             st["prive"].append(f"{x['start'][:16]}: VOORSTEL zorgafspraak naar privé te verhuizen ({reden})")
             continue
         try:
-            _zorg_gezet((x.get("start") or "")[:10], x.get("id"))    # vooraf (Codex-hertest 10)
+            _zorg_gezet((x.get("start") or "")[:10], x.get("id"), doel=(x.get("start"), x.get("einde")))   # vooraf
             _verplaats_naar(x, PRIVE_AGENDA, tok)
             _patch(verhuisd_item, body, tok, eigen_zorgverhuis=True)
             probleem = _zorg_nalezen(PRIVE_AGENDA, x["id"], tok, titel_pr=True, weg_van=WERKAGENDA,
@@ -6251,6 +6251,18 @@ def _niet_meer_te_valideren(x, tok):
     x["titel"] = terug.get("summary")
 
 
+def _eerste_doel_gehaald(x):
+    """Wilde de eerste ronde dit blok zetten of verzetten, en staat het ook op het beoogde uur? Mislukte de verschuiving,
+    dan is het geen nieuw blok en komt er geen melding over het oude uur (Codex-hertest 15, PR 113)."""
+    doelen = AW.eerste_doel()
+    for ident in (x.get("id"), (x.get("_merk") or {}).get(ZORGMERK)):
+        if ident in AW.eerste_ids():
+            doel = doelen.get(ident)
+            if not doel or (_zelfde_tijd(x.get("start"), doel[0]) and _zelfde_tijd(x.get("einde"), doel[1])):
+                return True
+    return False
+
+
 def zorg_whatsapp(items, tok, nu=None, sinds=None):
     """W1 tot W4 en W8: een WhatsApp-melding per nieuwe of verschoven versie van een zorgblok uit mail, nooit twee keer.
     De eerste keer (basislijn) krijgt een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een
@@ -6269,7 +6281,7 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
             continue                    # deze versie is al gemeld (of stond er al voor deze code)
         botsing = botst_met(x, items)
         van_nu = ((x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
-                  or bool({x["id"], (x.get("_merk") or {}).get(ZORGMERK)} & AW.eerste_ids()))   # ook verschoven (hertest 8)
+                  or _eerste_doel_gehaald(x))      # ook verschoven, maar alleen als het beoogde uur er staat (hertest 8, 15)
         if eerste and not botsing and not van_nu:
             stil.append((x["id"], x["start"], x["einde"]))
             continue

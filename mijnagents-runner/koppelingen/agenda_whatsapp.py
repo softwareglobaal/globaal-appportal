@@ -92,19 +92,33 @@ def basislijn(versies):
             d.setdefault("laatste", {})[eid] = [start, einde]
         d["basislijn"] = _nu().isoformat()
         d.pop("eerste_ids", None)       # na de basislijn telt elke versie gewoon als nieuw
+        d.pop("eerste_doel", None)
 
 
-def gezet_onthouden(dag, eid):
-    """Een blok dat de zorgroute zette of verzette. Voor de basislijn: zijn id telt in de eerste ronde als nieuw."""
+def gezet_onthouden(dag, eid, doel=None):
+    """Een blok dat de zorgroute gaat zetten of verzetten, met het beoogde [begin, einde]. Voor de basislijn: telt in de
+    eerste ronde als nieuw, maar alleen als het blok ook echt op dat beoogde uur staat (Codex-hertest 15, PR 113)."""
     if not eid:
         return
     with _bewerk() as d:
         if not d.get("basislijn"):
             d["eerste_ids"] = sorted(set(d.get("eerste_ids") or []) | {eid})
+            if doel:
+                d.setdefault("eerste_doel", {})[eid] = list(doel)
 
 
 def eerste_ids():
     return set(_lees().get("eerste_ids") or [])
+
+
+def eerste_doel():
+    """{id of zorgsleutel: [begin, einde]} van wat de eerste ronde wilde zetten."""
+    return dict(_lees().get("eerste_doel") or {})
+
+
+def lijkt_antwoord(tekst):
+    """Lijkt dit op een agendaantwoord ('A3 ja')? Alleen de vorm, zonder de wachtrij te lezen."""
+    return bool(ANTWOORD.match((tekst or "").strip()))
 
 
 def laatste(eid):
