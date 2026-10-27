@@ -3695,7 +3695,10 @@ def _firma_vraag_body(k, e, start, sterk):
         tijd = {"start": {"date": dag}, "end": {"date": volgende}}
     titel = ("VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda" if sterk
              else "VR Agendawacht: firma-afspraak die jou lijkt aan te gaan")
-    return {"summary": f"{titel} ({_ddmm(dag)})"[:200], "reminders": {"useDefault": False, "overrides": []}, **tijd,
+    # met het uur erbij: twee blokken op een dag dragen zo elk hun eigen titel, en een rit (die zijn afspraak aan de titel
+    # herkent) kan niet naar het andere blok overlopen (Codex-hertest 29)
+    uur = f" {start[11:16]}" if "dateTime" in tijd.get("start", {}) else ""
+    return {"summary": f"{titel} ({_ddmm(dag)}{uur})"[:200], "reminders": {"useDefault": False, "overrides": []}, **tijd,
             "transparency": "opaque" if sterk else "transparent", "description": tekst, "extendedProperties": merk}
 
 

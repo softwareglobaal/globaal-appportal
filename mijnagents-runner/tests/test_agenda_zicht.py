@@ -1077,6 +1077,45 @@ check("een bestaand Bezet blok met een verkeerd adres wordt een keer hersteld na
       len(_pat52) == 1 and _pat52[0]["location"] == _ADR52 and _r52a.get("hersteld") and "andere plaats" in _m52a
       and _m52b == "", str((_pat52, _r52a, _m52a, _m52b)))
 
+# --- Codex-hertest 29: twee firmablokken op een dag, elk met zijn eigen rit ------------------------------------------
+_eA = dict(ev("a53", "Mehdi: [EL-IN] overleg A"), location=_ADR52)
+_eB = dict(ev("b53", "Mehdi: [EL-IN] overleg B"), location="Meir 50, 2000 Antwerpen",
+           start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
+_bA = W._firma_vraag_body("firma|a53@google.com|", _eA, f"{_morgen}T10:00:00+01:00", True)
+_bB = W._firma_vraag_body("firma|b53@google.com|", _eB, f"{_morgen}T14:00:00+01:00", True)
+check("twee firmablokken op een dag hebben elk een eigen titel (met het uur; hertest 29)",
+      _bA["summary"] != _bB["summary"] and _bA["summary"].endswith("10:00)") and _bB["summary"].endswith("14:00)"),
+      str((_bA["summary"], _bB["summary"])))
+def _blok53(eid, body):
+    return {"kalender": W.PRIVE_AGENDA, "id": eid, "titel": body["summary"], "start": body["start"]["dateTime"],
+            "einde": body["end"]["dateTime"], "locatie": body["location"], "_vrij": False, "maker": W.WERKAGENDA,
+            "omschrijving": body["description"], "deelnemers": [], "_merk": dict(body["extendedProperties"]["private"])}
+_ritB = {"kalender": W.PRIVE_AGENDA, "id": "rit-b", "titel": "Reistijd → Antwerpen", "start": f"{_morgen}T13:15:00+01:00",
+         "einde": f"{_morgen}T13:45:00+01:00", "locatie": "", "_vrij": False, "maker": W.WERKAGENDA, "deelnemers": [],
+         "omschrijving": f"Reistijd voor: {_bB['summary']} (25 min = vrije rijtijd x filefactor 1 + 5 min buffer, OSRM; "
+                         "adres uit agenda; rit thuis → Antwerpen)", "_merk": {}}
+check("de rit van blok B hoort niet bij blok A (hertest 29)",
+      W.rit_hoort_bij(_ritB, _bB["summary"], "voor") and not W.rit_hoort_bij(_ritB, _bA["summary"], "voor"))
+_pat53, _ins53 = [], []
+_o53 = {n: getattr(W, n) for n in _o52}
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (25, "proef")), (lambda *_a: "Antwerpen")
+W._insert = lambda kal, body, tok, *a, **k: _ins53.append(body) or {"id": f"n{len(_ins53)}"}
+W._patch = lambda x, body, tok, *a, **k: _pat53.append((x.get("id"), body))
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+try:
+    W.reistijd_zetten([_blok53("qA", _bA), _blok53("qB", _bB), dict(_ritB)])
+finally:
+    for _n, _f in _o53.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+_naar_A = [b for i, b in _pat53 if i == "rit-b" and "10:00" in json.dumps(b)]
+check("in de rittenroute krijgt blok A een eigen heenrit en neemt het de rit van blok B niet over (hertest 29)",
+      not _naar_A and any(b.get("description", "").startswith("Reistijd voor: ") and "10:00) (" in b["description"]
+                          for b in _ins53), str((_pat53, _ins53))[:600])
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
