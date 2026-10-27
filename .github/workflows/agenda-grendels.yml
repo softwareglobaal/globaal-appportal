@@ -24,7 +24,10 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_twee_letters.py
       - run: python3 mijnagents-runner/tests/test_foutenregister.py
       - run: python3 mijnagents-runner/tests/test_leren_in_lagen.py
+      # Driehoeksoverleg 27-10-2026 (L5, M6): de wisgrendel weigert wissen op Lara en in een reeks, behalve eigen ritten.
+      - run: python3 mijnagents-runner/tests/test_wisgrendel.py
       - run: python3 mijnagents-runner/tests/test_agenda_signaal.py
+      - run: python3 mijnagents-runner/tests/test_lara_vakanties.py
       - run: python3 mijnagents-runner/tests/test_annulering_en_thuis.py
       - run: python3 mijnagents-runner/tests/test_agenda_beweging.py
       # J6 (ontwerp regie-zoom v1.2): test_taken.py toetst taak_plannen op het echte bordschema uit init_db van

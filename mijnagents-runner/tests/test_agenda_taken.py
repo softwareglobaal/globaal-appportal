@@ -311,8 +311,9 @@ check("Nadien (boekhouder) en Wally (AI-software) staan in de lijst",
 check("ALGE staat niet op het dashboard (bewust een aparte lijst)", "ALGE" not in W.FIRMACODES)
 
 # Tijdens een schoolvakantie of feestdag geen Lara-ophaling en geen rit. Mehdi, 22-09-2026.
-# Hermetisch (A29): de agenda van Lara is een nagebootst Google-antwoord van twee pagina's; de echte functie leest het.
-# De echte agenda van Lara lezen is een live controle (onderaan, alleen met sleutels).
+# Sinds 27-10-2026 (driehoeksoverleg L2, FR-210) is de officiële kalender in werkwijze/schoolvakanties.json de enige
+# bron. Hermetisch (A29): de agenda van Lara is een nagebootst Google-antwoord met een eigen 'Herfstvakantie'-blok; dat
+# blok mag de vakantiedagen niet meer bepalen. De echte agenda van Lara lezen is een live controle (onderaan).
 from datetime import timedelta as _td185
 _lara = next((k for k, v in W.AGENDA_VASTE_KLEUR.items() if v.get("naam") == "Lara"), None)
 _v185 = W.nu_lokaal().date()
@@ -364,36 +365,54 @@ def _lara185(dag):
              "einde": dag + "T17:00:00+02:00", "locatie": "De Speelkriebel, 3010 Kessel-Lo", "id": "t", "hele_dag": False}]
 
 
+def _werkdag185(vakantie, vak):
+    """De eerste maandag tot vrijdag vanaf overmorgen die wel (vakantie=True) of niet in de officiële dagen ligt."""
+    d = _v185 + _td185(days=2)
+    while d.weekday() >= 5 or ((d.isoformat() in vak) != vakantie):
+        d += _td185(days=1)
+    return d.isoformat()
+
+
 try:
     _vak = W.lara_vakantiedagen()
-    _dag = sorted(_vak)[0] if _vak else "2026-10-26"
+    _dag = _werkdag185(True, _vak or frozenset())
     _g, _al, _geen, _fout, _reg = W.reistijd_zetten(_lara185(_dag), _dag)
-    # tegenproef: dezelfde afspraak op een schooldag (zelfde weekdag, twee weken later) krijgt wel een rit, anders zou
-    # 'geen rit op een vakantiedag' ook groen zijn als de nabootsing elke rit tegenhield
-    _school = (_v185 + _td185(days=21)).isoformat()
+    # tegenproef: dezelfde afspraak op een schooldag krijgt wel een rit, anders zou 'geen rit op een vakantiedag' ook
+    # groen zijn als de nabootsing elke rit tegenhield. Dag 7 tot 16 staat als 'Herfstvakantie' in de nagebootste
+    # Lara-agenda: is dat een schooldag volgens de bron, dan krijgt het toch een rit.
+    _school = next((d for d in ((_v185 + _td185(days=i)).isoformat() for i in range(7, 16))
+                    if W.datetime.fromisoformat(d).weekday() < 5 and d not in (_vak or ())), None) \
+        or _werkdag185(False, _vak or frozenset())
     _g2 = W.reistijd_zetten(_lara185(_school), _school)[0]
+    _vervalt = _lara185(_school)
+    _vervalt[0]["titel"] = "vervalt (vakantie) " + _vervalt[0]["titel"]
+    _g3 = W.reistijd_zetten(_vervalt, _school)[0]
 finally:
     urllib.request.urlopen = _ou185
     for _k, _v in _o185.items():
         setattr(W, _k, _v)
     W._lara_vrij["tot"] = W._geen_auto["tot"] = 0.0
-check("de agent leest de schoolvakanties uit de agenda van Lara", _vak is not None and len(_vak) > 30 and _vak == _vak_verwacht,
-      str(sorted(set(_vak or ()) ^ _vak_verwacht)[:6]))
-check("geen Lara-rit op een vakantiedag", _g == 0 and _al == 0)
-check("op een schooldag krijgt dezelfde Lara-afspraak wel een rit (tegenproef)", _g2 >= 1 and len(_rit185) >= 1,
-      str((_g2, _rit185)))
+_herfst26 = {f"2026-11-0{i}" for i in range(2, 9)}
+check("de agent leest de schoolvakanties uit de officiële bron (herfst 2026 is 2 tot 8/11, niet 26/10)",
+      _vak is not None and _herfst26 <= _vak and "2026-10-26" not in _vak and "2026-10-30" not in _vak,
+      str(sorted(_herfst26 - set(_vak or ()))[:4]))
+check("een eigen 'vakantie'-blok in de Lara-agenda bepaalt de vakantiedagen niet meer (FR-210)",
+      _vak is not None and _vak == W.schoolvakanties()[0], str(len(_vak or ())))
+check("geen Lara-rit op een officiële vakantiedag", _g == 0 and _al == 0, str((_dag, _g, _al)))
+check("op een schooldag krijgt dezelfde Lara-afspraak wel een rit (tegenproef), ook onder een fout Lara-blok",
+      _g2 >= 1 and len(_rit185) >= 1, str((_school, _g2, _rit185)))
+check("een ophaalmoment met 'vervalt' vooraan krijgt geen rit (markeren in plaats van wissen, L4)", _g3 == 0, str(_g3))
+_sv = W.schoolvakanties()
+check("de officiële bron dekt minstens 120 dagen vooruit (anders het volgende schooljaar overnemen van vlaanderen.be)",
+      _sv is not None and _sv[1] >= W.nu_lokaal().date() + _td185(days=W.SCHOOLVAKANTIE_MARGE_DAGEN), str(_sv and _sv[1]))
 
 
 def _live_lara():
-    W._lara_vrij["tot"] = 0.0
-    try:
-        v = _ECHT["lara"]()
-    finally:
-        W._lara_vrij["tot"] = 0.0
-    return v is not None and len(v) > 30, ("niet te lezen" if v is None else f"{len(v)} dagen gelezen")
+    b = W.lara_vakantieblokken()
+    return b is not None, ("niet te lezen" if b is None else f"{len(b)} vakantieblok(ken) gelezen")
 
 
-LIVE_CONTROLES.append(("de agent leest de schoolvakanties uit de echte agenda van Lara (meer dan 30 dagen)", _live_lara))
+LIVE_CONTROLES.append(("de echte agenda van Lara is te lezen voor de vergelijking met de officiële bron", _live_lara))
 check("de schoolvakantie-regel staat in de JSON", "schoolvakantie" in json.dumps(taken.get("reistijd", {})) or "vakantie" in json.dumps(taken))
 
 # Geen auto: de agent leest de marker en maakt geen rit op zo'n dag. Mehdi, 22-09-2026.
@@ -1123,8 +1142,10 @@ check("langs huis rekent eerst de geparkeerde gesprekken, en een oude terugrit o
 _src79 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een live rijtijd wordt alleen hergebruikt voor dezelfde rit, en een afspraak die geen rit meer vraagt houdt er geen vast",
       'f"rit {van_plaats} → {plaats})" in _oms' in _src79 and 'f"rit {plaats} → thuis)" in _toms' in _src79
-      and 'vast = (x["kalender"], e0) in grenzen or e0 in begins_alle' in _src79
-      and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):' in _src79)
+      and 'vast = (x["kalender"], e0) in grenzen or (e0 in begins_alle and not _van_zonder_rit)' in _src79
+      and 'if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \\' in _src79
+      # sinds FR-210 houdt ook een Lara-afspraak op een officiële vakantiedag of met 'vervalt' geen rit vast
+      and 'and not lara_zonder_rit(x, vrij):' in _src79)
 
 # Elke klant waar Mehdi naartoe gaat draagt het projectnummer, van welke firma ook (FR-80)
 _o80 = (W._tkn_mappen, W.projectadressen.index, W._patch, W.agenda._toegang)

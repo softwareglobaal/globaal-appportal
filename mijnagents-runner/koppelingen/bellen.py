@@ -277,6 +277,19 @@ def afgezegd(event):
             or afzegging_tekst(event))
 
 
+# Een afspraak van Lara herkent elke agent op dezelfde manier: [LA] of [LARA], ook met een soort en in kleine letters
+# (zoals PRIVECODE_RE in agenda_wacht). Voor zo'n afspraak of een rit klinkt nooit 'niet vertrekken' (FR-210).
+LARA_TITEL = re.compile(r"\[(?:LA|LARA)(?:-[A-Za-z0-9]{1,4})?\]", re.I)
+
+
+def is_lara_titel(titel):
+    return bool(LARA_TITEL.search(titel or ""))
+
+
+def _is_rit_titel(titel):
+    return "Reistijd" in (titel or "") or (titel or "").lstrip().startswith("\U0001F697")
+
+
 def belafspraak_actueel(regel):
     """Lees het Google-item vlak voor een vertrekoproep; onbekend is geen toestemming om te bellen."""
     from koppelingen import agenda
@@ -294,6 +307,9 @@ def belafspraak_actueel(regel):
         from datetime import datetime
         zelfde = bool(actueel) and datetime.fromisoformat(actueel) == datetime.fromisoformat(begin)
         if afgezegd(event):
+            # ook een bewaarde roosterregel van voor FR-210 (zonder Lara-merk, met gemaskeerde titel) wordt zo herkend
+            if is_lara_titel(event.get("summary")) or _is_rit_titel(event.get("summary")):
+                return False, "afgezegd-lara"
             return False, "afgezegd"
         if not zelfde:
             return False, "afspraak verplaatst of verdwenen"
@@ -631,6 +647,17 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
         titel = r.get("titel", "")
         actueel, reden = belafspraak_actueel(r)
         if not actueel:
+            if reden == "afgezegd-lara" or (reden == "afgezegd" and (r.get("lara") or r.get("rit") or is_lara_titel(titel)
+                                                                     or _is_rit_titel(titel)
+                                                                     or ("lara" not in r and titel == "privé-afspraak"))):
+                # Nooit 'niet vertrekken' voor een afspraak van Lara of een rit: een gewiste Lara-afspraak was op
+                # 22-10-2026 een fout, en wie dan niet vertrekt, laat Lara staan (FR-210). Afgerond zonder oproep.
+                gebeld[r["sleutel"]] = nu.isoformat()
+                if log:
+                    log("bellen", "afspraak", "niet gebeld: Lara-afspraak of rit afgezegd, geen niet-vertrekken-oproep (FR-210)")
+                if bewaar:
+                    _bewaar(bewaar, staat, log)
+                continue
             if reden == "afgezegd":
                 # Het afsprakenummer betekent voor Mehdi altijd "over vijf minuten vertrekken".
                 # Een afzegging wordt daarom met het andere nummer en met de reden uitgesproken.

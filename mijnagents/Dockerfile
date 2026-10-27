@@ -26,8 +26,9 @@ RUN python3 test_klaarzet_revisie.py
 # Grendel op de gesprekkentabel (ontwerp regie-zoom v1.2, Z10, Z11, M6): de koppelkolommen sessie en dubbel_van komen
 # er ook bij een oude databank en bij twee werkers tegelijk, een upsert zonder die sleutels wist geen koppeling, koppelen
 # maakt nooit een rij en weigert wat niet telt, en een andere afzender overschrijft geen klaargezet item.
-# Zie test_gesprekken_api.py.
-RUN python3 test_gesprekken_api.py
+# Zie test_gesprekken_api.py. P9 leest terug met mijnagents-runner/koppelingen/bordstand.py, dat niet in deze image zit;
+# de CI draait P9 in de hele repo (regie-grendels.yml), hier slaat de vlag hem zichtbaar over.
+RUN P9_OVERSLAAN_IN_BORDIMAGE=1 python3 test_gesprekken_api.py
 # Grendel op de weekpagina (/week): alleen beheer, een week die niet bestaat geeft 404, een lege of onleesbare week laat
 # de pagina niet vallen, null wordt een vraagteken, en de jaargrens 2026-W53 naar 2027-W01 klopt. Zie test_week.py.
 RUN python3 test_week.py

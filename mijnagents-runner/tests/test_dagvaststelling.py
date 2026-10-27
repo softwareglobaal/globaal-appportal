@@ -208,7 +208,7 @@ def test_mail():
                  "info@h-architects.be": {"berichten": [i1], "onvolledig": ["INBOX.ORDE: niet leesbaar"]}}
     verzonden = {"mch@h-architects.be": {"berichten": [k1, k2]},
                  "info@h-architects.be": {"berichten": [k1], "onvolledig": ["INBOX.Sent: bestaat maar is niet leesbaar"]},
-                 "mehdichegini@hotmail.com": {"berichten": [k3], "onvolledig": ["kopie van de Mac 150 uur oud"]}}
+                 "mehdichegini@hotmail.com": {"berichten": [k3], "onvolledig": ["kopie 150 uur oud"]}}
     m = V.mail_telling(DAG, ontvangen, verzonden, {"<i1@x>": "koud"})
     pv = m["postvakken"]
     eis(pv["mch@h-architects.be"]["binnen"] == 2 and pv["mch@h-architects.be"]["soorten"] == {"koud": 1}, f"binnen ({m})")
@@ -218,7 +218,7 @@ def test_mail():
     eis(m["onvolledig"], "een onvolledig postvak maakt het totaal onvolledig")
     t = V.tekst(vast(mail=m), prive_postvakken=("mehdichegini@hotmail.com",))
     eis("onvolledig: INBOX.ORDE: niet leesbaar; INBOX.Sent: bestaat maar is niet leesbaar" in t, f"onvolledig met reden\n{t}")
-    eis("kopie van de Mac 150 uur oud" in t, "oude Mac-kopie")
+    eis("kopie 150 uur oud" in t, "oude kopie")
     eis("Vriend" not in t, "privépostvak: geen ontvanger")
     eis("Pieter Claes" in t, "zakelijke ontvanger staat erbij")
     veel = {"info@h-architects.be": {"berichten": [k(f"{DAG}T10:0{i}:00+02:00", f"<v{i}@x>", f"klant{i}@x.be") for i in range(8)]}}
