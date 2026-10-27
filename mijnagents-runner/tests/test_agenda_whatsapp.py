@@ -233,8 +233,29 @@ check("eerste ronde: een zorgblok dat deze ronde gemaakt werd, krijgt toch zijn 
 # punt 4: de archiefagenda's tellen mee, en een onleesbaar archief stopt de melding
 _hoofd = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _aanroep = _hoofd[_hoofd.index("een WhatsApp-melding per nieuw of verschoven zorgblok uit mail"):][:900]
+_stap = _hoofd[_hoofd.index("def zorg_whatsapp_stap():"):][:1200]
 check("de WhatsApp-controle leest ook de archiefagenda's en wacht als die niet te lezen zijn (punt 4)",
-      "archief_afspraken(0, 120, alleen_lezen=True)" in _aanroep and "ARCHIEF_FOUT" in _aanroep)
+      "archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)" in _stap and "ARCHIEF_FOUT" in _stap
+      and "zorg_whatsapp_stap()" in _aanroep)
+_zr = _hoofd[_hoofd.index("def zorgronde():"):][:1500]
+check("ook de zorgronde (--zorg) roept de meldstap aan, zodat geen blok zonder melding blijft (hertest PR 113, 1)",
+      "zorg_whatsapp_stap()" in _zr and _zr.index("zorg_afspraken_zetten(") < _zr.index("zorg_whatsapp_stap()"))
+check("de meldstap leest even ver als de zorgroute zet (een jaar en meer; hertest PR 113, 2)", W.ZORG_WHATSAPP_DAGEN >= 365)
+_o9 = (W.afspraken, W.archief_afspraken, W.agenda._toegang)
+W.agenda._toegang = lambda: "tok"
+_ver = item("ver", "!! [PR] Tandarts - Praktijk V", "2027-05-04T09:00:00+02:00", "2027-05-04T09:30:00+02:00",
+            merk={W.ZORGMERK: "zv"})
+_vensters = []
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: _vensters.append((van, tot)) or [_ver]
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw9-")) / "agenda-whatsapp.json")
+AW.basislijn([])
+try:
+    _rz, _nz = W.zorg_whatsapp_stap()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o9
+check("een zorgblok over zes maanden krijgt zijn melding nu", any(k.startswith("zorg:ver:") for k in AW._lees()["meldingen"])
+      and _vensters and _vensters[0][1] >= 365, str((_rz, _nz, _vensters)))
 
 # --- review met meerdere agents (PR 113) -----------------------------------------------------------------------
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw4-")) / "agenda-whatsapp.json")

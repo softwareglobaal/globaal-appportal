@@ -6166,6 +6166,23 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
     return regels
 
 
+ZORG_WHATSAPP_DAGEN = 400      # zo ver als de zorgroute zet: een blok over vijf maanden krijgt zijn melding nu
+
+
+def zorg_whatsapp_stap():
+    """Lees alle agenda's en het archief tot ZORG_WHATSAPP_DAGEN vooruit en meld (zorg_whatsapp). Alleen op een volledige
+    lezing: een onleesbare agenda kan een botsing verbergen. Voor de volledige ronde en de zorgronde (--zorg), zodat
+    geen route een blok zet zonder melding (Codex-hertest PR 113). Geeft (regels, noden)."""
+    try:
+        items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
+        if any(x.get("fout") for x in items) or ARCHIEF_FOUT:
+            return [], [{"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, volgende ronde opnieuw",
+                         "wie": "claude"}]
+        return zorg_whatsapp(items, agenda._toegang()), []
+    except Exception as e:  # noqa: BLE001
+        return [], [{"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})", "wie": "claude"}]
+
+
 def whatsapp_antwoorden_verwerken(tok=None, nu=None):
     """W5: Mehdi's antwoord met code ('A3 ja', 'A3 vervalt'), door De Bode in de wachtrij gezet. ja: '??' weg; vervalt:
     'vervalt' vooraan en Beschikbaar, nooit wissen. Teruggelezen, dan pas bevestigd op WhatsApp. Geeft regels."""
@@ -6535,20 +6552,11 @@ def main():
                 mail_noden.extend(n for n in zst["noden"] if n["tekst"] not in {m["tekst"] for m in mail_noden})
                 MA.statussen_bewaren(mres)
                 ag.log(f"dag {vandaag}", "schrijf", zst["bord"][0])          # alleen tellingen: niets medisch op het bord
-                # een WhatsApp-melding per nieuw of verschoven zorgblok uit mail (Mehdi, 27-10-2026; W1 tot W8). Alleen
-                # op een volledige lezing: een onleesbare agenda kan een botsing verbergen.
-                try:
-                    _zi = afspraken(0, 120) + archief_afspraken(0, 120, alleen_lezen=True)
-                    if any(x.get("fout") for x in _zi) or ARCHIEF_FOUT:
-                        mail_noden.append({"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, "
-                                                    "volgende ronde opnieuw", "wie": "claude"})
-                    else:
-                        _zw = zorg_whatsapp(_zi, agenda._toegang())
-                        if _zw:
-                            ag.log(f"dag {vandaag}", "schrijf", "WhatsApp-meldingen: afspraken uit mail", "\n".join(_zw))
-                except Exception as e:  # noqa: BLE001
-                    mail_noden.append({"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})",
-                                       "wie": "claude"})
+                # een WhatsApp-melding per nieuw of verschoven zorgblok uit mail (Mehdi, 27-10-2026; W1 tot W8)
+                _zw, _zn = zorg_whatsapp_stap()
+                if _zw:
+                    ag.log(f"dag {vandaag}", "schrijf", "WhatsApp-meldingen: afspraken uit mail", "\n".join(_zw))
+                mail_noden.extend(_zn)
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
                 _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
@@ -6806,6 +6814,9 @@ def zorgronde():
         return 1
     zst = zorg_afspraken_zetten(mres, _alle, agenda._toegang())
     MA.statussen_bewaren(mres)
+    _zw, _zn = zorg_whatsapp_stap()          # ook hier: geen zorgblok zonder WhatsApp-melding (Codex-hertest PR 113)
+    for regel in _zw + [n["tekst"] for n in _zn]:
+        print("  [whatsapp] " + regel)
     mregels = mail_meldingen(mres, _alle, agenda._toegang())
     for mb, r in sorted(MA.leesstand().items()):
         print(f"  [leesstand] {mb}: {r.get('dekking')}, laatst gelukt {r.get('laatst_gelukt')}"
