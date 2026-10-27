@@ -277,8 +277,8 @@ def test_een_storing_geeft_een_signaal_voor_mehdi(repo):
     gebouwd = repo.boom("a", "mijnagents")[:7]
     assert s["voor"] == "mehdi" and s["soort"] == "signaal" and s["van"] == "bouwwacht"
     assert s["titel"] == "Bouw van mijnagents loopt achter op de code"
-    assert s["uniek"] == f"bouwwacht-achter-mijnagents-{gebouwd}"
-    assert "~/deploy-mijnagents.log" in s["inhoud"] and gebouwd in s["inhoud"]
+    assert s["uniek"] == f"bouwwacht-achter-mijnagents-{T0}", "het nummer van de storing is haar begin"
+    assert "~/deploy-mijnagents.log" in s["inhoud"] and gebouwd in s["inhoud"] and "10 minuten of langer" in s["inhoud"]
     # dezelfde storing, ook na een tweede pull en later: zelfde uniek en zelfde tekst, dus het bord maakt geen tweede
     repo.zet("d", T0 + 12 * MIN)
     _, b2 = ronde(T0 + 30 * MIN)
@@ -289,14 +289,77 @@ def test_een_storing_geeft_een_signaal_voor_mehdi(repo):
     assert b3.signalen() == []
     repo.zet("b", T0 + 40 * MIN)
     _, b4 = ronde(T0 + 55 * MIN)
-    assert [x["uniek"] for x in b4.signalen()] == [f"bouwwacht-achter-mijnagents-{repo.boom('d', 'mijnagents')[:7]}"]
+    assert [x["uniek"] for x in b4.signalen()] == [f"bouwwacht-achter-mijnagents-{T0 + 40 * MIN}"]
+
+
+@proef
+def test_na_herstel_door_terugzetten_is_de_volgende_storing_nieuw(repo):
+    """Codex-resultaattoets 6.1: zonder nieuwe bouw kreeg een latere storing dezelfde uniek, en dan geen signaal."""
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 10 * MIN)
+    assert [s["uniek"] for s in b.signalen()] == [f"bouwwacht-achter-mijnagents-{T0}"]
+    repo.zet("a", T0 + 12 * MIN)                 # terug naar de gebouwde code; geen ronde ziet het
+    repo.zet("b", T0 + 20 * MIN)
+    _, b = ronde(T0 + 31 * MIN)
+    assert [s["uniek"] for s in b.signalen()] == [f"bouwwacht-achter-mijnagents-{T0 + 20 * MIN}"]
+    repo.zet("a", T0 + 32 * MIN)                 # nu ziet een ronde de gelijkheid
+    uit, _ = ronde(T0 + 33 * MIN)
+    assert uit["mijnagents"]["stand"] == "gelijk"
+    repo.zet("b", T0 + 40 * MIN)
+    _, b = ronde(T0 + 50 * MIN)
+    assert [s["uniek"] for s in b.signalen()] == [f"bouwwacht-achter-mijnagents-{T0 + 40 * MIN}"]
+
+
+@proef
+def test_een_markering_die_even_ontbreekt_is_geen_nieuwe_storing(repo):
+    """Codex-resultaattoets 6.2 en 6.3: geen tweede signaal, en zonder markering zegt de tekst dat de duur onbekend is."""
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 10 * MIN)
+    [eerste] = b.signalen()
+    os.remove(pad)
+    _, b = ronde(T0 + 12 * MIN)
+    [s] = b.signalen()
+    assert s["uniek"] == eerste["uniek"] and "sinds een onbekende tijd" in s["inhoud"] and "10 minuten" not in s["inhoud"]
+    repo.bouw("mijnagents", naam="a")            # de oude markering komt terug
+    _, b = ronde(T0 + 14 * MIN)
+    assert [x["uniek"] for x in b.signalen()] == [eerste["uniek"]]
+    # ook als de markering van bij het begin ontbreekt en dan verschijnt
+    repo.zet("a", T0 + 20 * MIN)
+    ronde(T0 + 21 * MIN)
+    os.remove(pad)
+    repo.zet("b", T0 + 22 * MIN)
+    _, b = ronde(T0 + 23 * MIN)
+    [zonder] = b.signalen()
+    assert zonder["uniek"] == f"bouwwacht-achter-mijnagents-{T0 + 23 * MIN}"
+    repo.bouw("mijnagents", naam="a")
+    _, b = ronde(T0 + 35 * MIN)
+    assert [x["uniek"] for x in b.signalen()] == [zonder["uniek"]]
+
+
+@proef
+def test_zonder_reflog_en_zonder_bewaarbare_stand_een_vast_signaal(repo):
+    """Een storingsnummer dat elke ronde nieuw is, gaf elke ronde een signaal; dan telt de laatste geslaagde bouw."""
+    repo.git("config", "core.logAllRefUpdates", "false")
+    shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
+    with open(os.path.join(repo.map, "bestand"), "w") as f:
+        f.write("geen map")
+    B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
+    repo.zet("b", T0)
+    gebouwd = repo.boom("a", "mijnagents")[:7]
+    uniek = set()
+    for minuut in (1, 3, 5):
+        _, b = ronde(T0 + minuut * MIN)
+        uniek |= {s["uniek"] for s in b.signalen()}
+    assert uniek == {f"bouwwacht-achter-mijnagents-markering-{gebouwd}"}
 
 
 def test_de_signaaltitel_belt_mehdi_niet_op():
     """Het woord stil in een signaaltitel laat De Bode bellen (AGENTNORM.md 6); een bouw die achterloopt is geen oproep."""
     for dienst in B.DIENSTEN:
-        s = B.signaal({"dienst": dienst, "gebouwd": "abc1234"})
-        assert "stil" not in s["titel"].lower() and "stil" not in s["uniek"].lower(), s
+        for minuten in (None, 12):
+            s = B.signaal({"dienst": dienst, "gebouwd": "abc1234", "storing": T0, "minuten": minuten})
+            assert "stil" not in s["titel"].lower() and "stil" not in s["uniek"].lower(), s
 
 
 @proef
@@ -358,15 +421,17 @@ def test_toont_de_reflog_het_begin_dan_volgt_het_anker(repo):
     gebouwd = repo.boom("a", "mijnagents")
     os.makedirs(os.path.dirname(repo.stand), exist_ok=True)
     with open(repo.stand, "w") as f:
-        json.dump({"mijnagents": {"gebouwd": gebouwd, "sinds": T0 - 20 * MIN}}, f)
+        json.dump({"mijnagents": {"sinds": T0 - 20 * MIN, "storing": T0 - 20 * MIN, "markering": gebouwd}}, f)
     repo.zet("b", T0)
     uit, _ = ronde(T0 + 5 * MIN)
     assert uit["mijnagents"]["minuten"] == 5, "de reflog toont dat de code tot T0 gelijk was; het oude anker vervalt"
-    assert json.load(open(repo.stand))["mijnagents"]["sinds"] == T0
+    assert json.load(open(repo.stand))["mijnagents"] == {"sinds": T0, "storing": T0, "markering": gebouwd}
     with open(repo.stand, "w") as f:
-        json.dump({"mijnagents": {"gebouwd": gebouwd, "sinds": T0 + 4 * MIN}}, f)
+        json.dump({"mijnagents": {"sinds": T0 + 4 * MIN, "storing": T0 + 4 * MIN, "markering": gebouwd}}, f)
     uit, _ = ronde(T0 + 5 * MIN)
     assert uit["mijnagents"]["minuten"] == 5, "de reflog zet het begin vroeger dan het anker"
+    assert json.load(open(repo.stand))["mijnagents"] == {"sinds": T0, "storing": T0 + 4 * MIN, "markering": gebouwd}, \
+        "dezelfde storing houdt haar nummer"
 
 
 @proef
@@ -386,11 +451,12 @@ def test_tussen_twee_rondes_even_gelijk_begint_de_klok_opnieuw(repo):
 def test_een_nieuwe_markering_begint_het_anker_opnieuw(repo):
     os.makedirs(os.path.dirname(repo.stand), exist_ok=True)
     with open(repo.stand, "w") as f:
-        json.dump({"mijnagents": {"gebouwd": "f" * 40, "sinds": T0 - 86400}}, f)
+        json.dump({"mijnagents": {"sinds": T0 - 86400, "storing": T0 - 86400, "markering": "f" * 40}}, f)
     repo.zet("b", T0)
     uit, _ = ronde(T0 + 3 * MIN)
     assert uit["mijnagents"]["stand"] == "bezig" and uit["mijnagents"]["minuten"] == 3
-    assert json.load(open(repo.stand))["mijnagents"] == {"gebouwd": repo.boom("a", "mijnagents"), "sinds": T0}
+    assert json.load(open(repo.stand))["mijnagents"] == {"sinds": T0, "storing": T0,
+                                                        "markering": repo.boom("a", "mijnagents")}
 
 
 @proef

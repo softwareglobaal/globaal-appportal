@@ -75,16 +75,18 @@ def onbekendtekst(dienst):
 
 def signaal(m):
     """Een keer per storing een signaal voor Mehdi, via De Bode (zijn ja van 27-10-2026: een nood voor claude-code had
-    geen vaste lezer). Een storing is een dienst met zijn laatste geslaagde bouw: dezelfde `uniek` maakt het bord nooit
-    een tweede keer, ook niet bij een tweede pull tijdens de storing; na een geslaagde bouw is de volgende storing nieuw.
-    Titel en inhoud blijven gelijk zolang de storing duurt, zonder minuten, en de titel draagt nooit het woord dat De
-    Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
+    geen vaste lezer). De `uniek` draagt het nummer van de storing (`storing_anker`): het bord maakt een item met dezelfde
+    `uniek` nooit een tweede keer, ook niet bij een tweede pull tijdens de storing, en een nieuwe storing heeft een nieuw
+    nummer. Dat nummer is geen teller maar het begin van de storing, vast zolang ze duurt (N10). De inhoud draagt geen
+    minuten; de titel draagt nooit het woord dat De Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
+    duur = (f"de bouw loopt {DREMPEL_MIN} minuten of langer achter" if m["minuten"] is not None else
+            "de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt of staat niet meer in de reflog")
     return {"voor": "mehdi", "soort": "signaal", "sleutel": m["dienst"],
             "titel": f"Bouw van {m['dienst']} loopt achter op de code",
-            "uniek": f"bouwwacht-achter-{m['dienst']}-{m['gebouwd']}",
-            "inhoud": f"De VM draait voor {m['dienst']} niet de code die er na de laatste git pull staat: de bouw loopt "
-                      f"{DREMPEL_MIN} minuten of langer achter (laatste geslaagde bouw {m['gebouwd']}). De nood staat op "
-                      f"het bord voor claude-code; wat de bouw zegt, staat in ~/deploy-{m['dienst']}.log op de VM."}
+            "uniek": f"bouwwacht-achter-{m['dienst']}-{m['storing']}",
+            "inhoud": f"De VM draait voor {m['dienst']} niet de code die er na de laatste git pull staat: {duur} "
+                      f"(laatste geslaagde bouw {m['gebouwd']}). De nood staat op het bord voor claude-code; wat de bouw "
+                      f"zegt, staat in ~/deploy-{m['dienst']}.log op de VM."}
 
 
 class Onleesbaar(RuntimeError):
@@ -192,6 +194,32 @@ def neem_slot():
     return f
 
 
+def storing_anker(stand, dienst, gebouwd, begin, nu):
+    """Het anker van de storing van deze dienst: {"sinds", "storing", "markering"}, en of zijn nummer los staat (pas
+    gemaakt zonder reflog, dus alleen vast als de stand bewaard wordt).
+
+    Een storing loopt van het eerste verschil tot de wacht weer gelijkheid ziet; zo lang blijft haar nummer (`storing`)
+    hetzelfde, en daarmee de `uniek` van haar signaal. Een nieuwe storing begint ook als er intussen een andere bouw
+    slaagde (een andere markering), of als de reflog toont dat de code na het begin van het anker nog gelijk was aan de
+    gebouwde (Codex-resultaattoets 3.1 en 6.1). Een markering die even ontbreekt en terugkomt, is geen nieuwe storing (6.2).
+    """
+    a = stand.get(dienst)
+    nieuw = not (isinstance(a, dict) and isinstance(a.get("sinds"), int) and isinstance(a.get("storing"), int)
+                 and isinstance(a.get("markering"), str))
+    if not nieuw and gebouwd and a["markering"] and gebouwd != a["markering"]:
+        nieuw = True
+    if not nieuw and begin not in (None, OUD) and a["sinds"] != OUD and begin > a["sinds"]:
+        nieuw = True
+    if nieuw:
+        uit_reflog = begin not in (None, OUD)
+        stand[dienst] = {"sinds": int(nu) if begin is None else begin, "storing": begin if uit_reflog else int(nu),
+                         "markering": gebouwd}
+        return stand[dienst], not uit_reflog
+    if gebouwd:
+        a["markering"] = gebouwd
+    return a, False
+
+
 def meet_dienst(dienst, stand, nu):
     gebouwd = markering(dienst)
     nu_boom = boom("HEAD", dienst)
@@ -200,27 +228,21 @@ def meet_dienst(dienst, stand, nu):
     if gebouwd == nu_boom:
         stand.pop(dienst, None)
         return {"dienst": dienst, "stand": "gelijk"}
-    if not gebouwd:
-        stand.pop(dienst, None)
-        sinds, bron = OUD, "markering"
+    # zonder markering is het begin onbekend: ouder dan de drempel
+    begin = begin_volgens_reflog(dienst, gebouwd) if gebouwd else OUD
+    anker, los = storing_anker(stand, dienst, gebouwd, begin, nu)
+    if begin is None:
+        sinds, bron = anker["sinds"], "anker"
     else:
-        anker = stand.get(dienst)
-        if not (isinstance(anker, dict) and anker.get("gebouwd") == gebouwd and isinstance(anker.get("sinds"), int)):
-            anker = stand[dienst] = {"gebouwd": gebouwd, "sinds": int(nu)}
-        sinds = begin_volgens_reflog(dienst, gebouwd)
-        bron = "anker" if sinds is None else "reflog"
-        if sinds is None:
-            sinds = anker["sinds"]
-        else:
-            # Wat de reflog vaststelt, volgt het anker: het begin, ook als het anker van voor een tussentijdse gelijkheid
-            # was, of OUD, dat zo blijft tot gelijkheid of een nieuwe markering, ook als de reflog later wegvalt
-            # (Codex-resultaattoets 3.1 en 4.3).
-            anker["sinds"] = sinds
+        # Wat de reflog vaststelt, volgt het anker: het begin, of OUD, dat zo blijft tot gelijkheid of een nieuwe
+        # storing, ook als de reflog later wegvalt (Codex-resultaattoets 3.1 en 4.3).
+        sinds, bron = begin, "reflog" if gebouwd else "markering"
+        anker["sinds"] = begin
     minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
     achter = minuten is None or minuten >= DREMPEL_MIN
     return {"dienst": dienst, "stand": "achter" if achter else "bezig", "minuten": minuten,
             "gebouwd": gebouwd[:7] or "geen", "nieuw": nu_boom[:7], "log": laatste_logregel(dienst) if achter else "",
-            "bron": bron}
+            "bron": bron, "storing": anker["storing"], "storing_los": los}
 
 
 def meet(stand, nu=None):
@@ -272,6 +294,9 @@ def werk(r, nu=None):
         for m in uitslag:
             if m["stand"] == "bezig" and m.get("bron") == "anker":
                 m.update(stand="achter", minuten=None, log=laatste_logregel(m["dienst"]))
+            if m.get("storing_los"):
+                # een nummer dat elke ronde nieuw zou zijn, gaf elke ronde een signaal: dan de laatste geslaagde bouw
+                m["storing"] = f"markering-{m['gebouwd']}"
     noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
              for m in uitslag if m["stand"] in ("achter", "onbekend")]
     open_ = ag.open_noden() if noden else None
