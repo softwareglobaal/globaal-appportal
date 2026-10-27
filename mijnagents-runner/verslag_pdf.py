@@ -50,10 +50,11 @@ def _inline(t):
     return t
 
 
-# Een cursieve tekst over meer regels ("*Shell works ongoing.\nRoof works start next week.*", de Engelse tekst van een
-# tweetalig verslag): elke regel apart cursief, een lijstteken blijft vooraan. Anders kreeg de PDF losse sterretjes,
-# omdat _inline per regel werkt (33e review). Alleen binnen één alinea, nooit over een lege regel heen.
-_CURSIEF_BLOK = re.compile(r"(?m)^\*(?!\*)(\S(?:[^\n]|\n(?!\s*\n))*?\S)\*[ \t]*$")
+# Een cursieve tekst over meer regels of alinea's ("*Shell works ongoing.\nRoof works start next week.*", de Engelse tekst
+# van een tweetalig verslag): elke regel apart cursief, een lijstteken blijft vooraan, een lege regel blijft leeg. Anders
+# kreeg de PDF losse sterretjes, omdat _inline per regel werkt (33e en 34e review). Alleen als er binnenin geen ander
+# sterretje staat, zodat "*Nota* ..." en een latere *nadruk* niet aan elkaar geknoopt worden.
+_CURSIEF_BLOK = re.compile(r"(?m)^\*(?!\*)(\S[^*]*?\S)\*[ \t]*$")
 _LIJSTTEKEN = re.compile(r"(\s*(?:[-*]|\d+[.)])\s+)(.*)")
 
 

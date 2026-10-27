@@ -77,7 +77,9 @@ _TIJDSTIP = _OPNAMETIJD
 # Direct na het woord opname, transcript of recording is elk tijdstip een opnametijdstip, zoals in productie: ook 3:45,
 # 0:45, 3:45min of 12:30u, na een spatie, dubbelpunt, komma of streep ("(opname: 3:45)", "zie opname 7:12"), ook na een
 # samengesteld woord ("(audio-opname 3:45)"). Een schaal 1:100 is nooit zo'n tijdstip (31e en 32e review).
-_OPNAMEWOORD = r"(?:(?:audio|video|geluids|spraak)-?)?(?:opname|transcript|audio|recording)"
+# ook een samenstelling met koppelteken: "Plaud-opname", "Fathom-opname", "gsm-opname", "Plaud-transcript" (34e review);
+# zonder koppelteken alleen de vaste voorvoegsels, zodat "momentopname" een gewoon woord blijft
+_OPNAMEWOORD = r"(?:\w+-|(?:audio|video|geluids|spraak))?(?:opname|transcript|audio|recording)"
 _DIRECTTIJD = r"(?:(?<!\d)(?<!\d:)\d{1,2}:\d{2}(?::\d{2})?(?!\d|:\d)(?:min|sec|u|h|s)?\b|\b\d{1,2}m\d{2}s\b)"
 _DIRECTTIJDEN = _DIRECTTIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _DIRECTTIJD + r")?"
 # buiten haakjes: een spatie of een dubbelpunt, en alleen "van" of "at" ertussen zoals productie; "de opname op 1:50" of

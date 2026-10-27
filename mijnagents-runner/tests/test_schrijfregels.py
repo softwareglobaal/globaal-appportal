@@ -608,5 +608,25 @@ check("opname op 1:50 in een bestandsnaam blijft", S.bron_zichtbaar("Opname op 1
 for tekst, verwacht in [("De goot lekt, zie opname van 7:12.", "De goot lekt."), ("The gutter leaks, see recording at 3:45.", "The gutter leaks.")]:
     check(f"van/at blijft een verwijzing: {tekst!r}", S.toepassen(tekst)[0] == verwacht, S.toepassen(tekst))
 
+# Vierendertigste review 27-10-2026: een samenstelling met koppelteken (Plaud-opname, Fathom-opname, gsm-opname,
+# Plaud-transcript) is een opnameverwijzing, zoals productie; nu zonder het brokstuk "(Plaud-)" dat productie achterliet
+for tekst, verwacht in [("Diagonale barst boven de keukendeur, 0,4 mm breed (Plaud-opname 00:22:30-00:23:16).",
+                         "Diagonale barst boven de keukendeur, 0,4 mm breed."),
+                        ("De dorpel ligt 3 cm te laag, zie Plaud-opname 00:12:30.", "De dorpel ligt 3 cm te laag."),
+                        ("De dorpel ligt te laag (Plaud-opname 3:45).", "De dorpel ligt te laag."),
+                        ("De dorpel (Plaud-opname van 00:12:30) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (Plaud-transcript 00:12:30) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (Fathom-opname 00:12:30) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (gsm-opname 00:12:30) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel ligt te laag.\nZie Plaud-opname 00:12:30.\nDe goot lekt.", "De dorpel ligt te laag.\nDe goot lekt.")]:
+    for profiel in (None, "aankoopkeuring"):
+        t34, ing34 = S.toepassen(tekst, profiel)
+        check(f"samengestelde opname weg: {tekst[-40:]!r} {profiel}", t34 == verwacht and ing34 and S.toepassen(t34, profiel)[0] == t34, (t34, ing34))
+    check(f"samengestelde opname gemeld als S4: {tekst[-40:]!r}", any(r == "S4" for r, _ in S.controleer(tekst)), S.controleer(tekst))
+check("Plaud-opname weg uit de bron", S.bron_zichtbaar("verklaring bouwheer, Plaud-opname 00:12:30") == "verklaring bouwheer",
+      S.bron_zichtbaar("verklaring bouwheer, Plaud-opname 00:12:30"))
+check("momentopname blijft een gewoon woord", S.toepassen("Momentopname 3:45 van de werf.") == ("Momentopname 3:45 van de werf.", []),
+      S.toepassen("Momentopname 3:45 van de werf."))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

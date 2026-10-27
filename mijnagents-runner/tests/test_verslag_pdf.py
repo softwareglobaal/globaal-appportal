@@ -73,5 +73,11 @@ pdf = PdfReader(io.BytesIO(verslag_pdf.naar_pdf("# Werfverslag\n\n*Shell works o
 tekst = pdf.pages[0].extract_text()
 check("geen sterretje in de PDF-tekst", "*" not in tekst and "Roof works start next week." in tekst, tekst)
 
+# 34e review: ook over een lege regel heen (Engelse tekst in twee alinea's), maar nooit over een ander sterretje
+h = verslag_pdf.md_naar_html("*Shell works ongoing.\n\nThe roof follows next week.*")
+check("cursief over twee alinea's", "*" not in h and "<p><em>Shell works ongoing.</em></p>" in h and "<p><em>The roof follows next week.</em></p>" in h, h)
+h = verslag_pdf.md_naar_html("*Nota* de goot\n\nTekst met *nadruk*")
+check("losse cursieve woorden blijven los", "<p><em>Nota</em> de goot</p>" in h and "<p>Tekst met <em>nadruk</em></p>" in h, h)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
