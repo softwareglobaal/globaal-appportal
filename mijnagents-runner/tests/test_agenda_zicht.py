@@ -527,8 +527,11 @@ finally:
     W._insert, W.FIRMA_VRAGEN = _o23
 check("dezelfde afspraak op twee firma-agenda's (de ene nodigt de andere uit): een keer nagekeken en een blok",
       len(niet23) == 1 and len(_ins23) == 1, str((len(niet23), len(_ins23))))
+_o_uids, W._FIRMA_UIDS = W._FIRMA_UIDS, set()
+_kop_ok = W._firma_kopie({"_organisator": ELEVAIT}) and not W._firma_kopie({"_organisator": "klant@voorbeeld.test"})
+W._FIRMA_UIDS = _o_uids
 check("op de werkagenda-kopie van een firma-afspraak zet de agent geen telefoonnummer",
-      W._firma_kopie({"_organisator": ELEVAIT}) and not W._firma_kopie({"_organisator": "klant@voorbeeld.test"})
+      _kop_ok
       and "_firma_kopie(a)" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def contact_zetten")[1][:1500])
 
 # --- Codex-hertest 6: nergens schrijven op de gastkopie van een firma-afspraak; vlak voor een blok opnieuw lezen ---
@@ -574,6 +577,23 @@ g26 = NepGoogle([_e26], zichtbaar=False, vers={"z1": {"start": {"dateTime": f"{_
 _, niet26, _, _ = met(g26, W.firma_gasten, [_e26], "tok")
 check("is Mehdi al gast en is de afspraak intussen verzet, dan krijgt het vangnet de actuele tijd (hertest 6, punt 2)",
       len(niet26) == 1 and niet26[0]["start"]["dateTime"].endswith("14:00:00+01:00"), str(niet26))
+
+# --- Codex-hertest 7: een kopie met een collega als organisator is ook een firmakopie --------------------------------
+_o27 = W._FIRMA_UIDS
+try:
+    W._FIRMA_UIDS = {"siyan-afspraak@google.com"}
+    _k27 = {"_organisator": "siyan@voorbeeld.test", "_organisator_zelf": False, "_ical": "siyan-afspraak@google.com"}
+    check("een kopie van een firma-afspraak met een collega als organisator wordt herkend (zelfde iCalUID)",
+          W._firma_kopie(_k27))
+    check("een uitnodiging van een klant, niet op een firma-agenda, blijft gewoon van Mehdi",
+          not W._firma_kopie(dict(_k27, _ical="klant@google.com")))
+    check("een eigen afspraak van Mehdi met een firma-agenda als gast blijft van hem",
+          not W._firma_kopie(dict(_k27, _organisator_zelf=True, _organisator=W.WERKAGENDA)))
+    W._FIRMA_UIDS = False
+    check("is een firma-agenda niet te lezen, dan telt elke afspraak die Mehdi niet organiseerde als kopie (geen schrijven)",
+          W._firma_kopie(dict(_k27, _ical="klant@google.com")))
+finally:
+    W._FIRMA_UIDS = _o27
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

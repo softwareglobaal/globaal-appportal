@@ -3377,17 +3377,42 @@ def _firma_uid(e):
 
 
 _FIRMA_ADRESSEN = None
+_FIRMA_UIDS = None          # iCalUID's van de firma-agenda's, eenmaal per proces gelezen; False als dat niet lukte
+
+
+def _firma_uids():
+    """De iCalUID's van alle afspraken op de firma-agenda's (een jaar vooruit, een dag terug), eenmaal per proces.
+    False als een firma-agenda niet te lezen was: dan weet ik niet welke kopie van een collega is."""
+    global _FIRMA_UIDS
+    if _FIRMA_UIDS is None:
+        try:
+            tok = agenda._toegang()
+            evs, onleesbaar = firma_afspraken(tok, nu_lokaal() - timedelta(days=1))
+            _FIRMA_UIDS = False if onleesbaar else {e.get("iCalUID") for e in evs if e.get("iCalUID")}
+        except Exception:  # noqa: BLE001
+            _FIRMA_UIDS = False
+    return _FIRMA_UIDS
 
 
 def _firma_kopie(a):
     """Is dit item op Mehdi's werkagenda de gastkopie van een afspraak op een firma-agenda? Daarop schrijft de agent
     niets: geen telefoon, kleur, herinnering, titel of vraag. Het is de afspraak van een collega (review en
-    Codex-hertest 6, 27-10-2026). Een rit ernaartoe is wel van Mehdi en staat apart."""
+    Codex-hertest 6, 27-10-2026). Herkend aan de organisator (de firma-agenda) of aan dezelfde afspraak (iCalUID) op een
+    firma-agenda, ook als een collega de organisator is (Codex-hertest 7). Een eigen afspraak van Mehdi, met een
+    firma-agenda als gast, blijft van hem. Is een firma-agenda niet te lezen, dan telt elke afspraak die Mehdi niet zelf
+    organiseerde als kopie: liever een ronde geen kleur dan een schrijfactie op andermans afspraak. Een rit ernaartoe
+    is wel van Mehdi en staat apart."""
     global _FIRMA_ADRESSEN
+    if a.get("_organisator_zelf") is True or "_organisator" not in a:
+        return False                    # van Mehdi zelf, of een eigen hulpblok zonder Google-organisator
     if _FIRMA_ADRESSEN is None:
         _FIRMA_ADRESSEN = {adres.strip().lower() for adres, _ in firma_meelezen()}
-    org = (a.get("_organisator") or "").strip().lower()
-    return bool(org) and org in _FIRMA_ADRESSEN
+    if (a.get("_organisator") or "").strip().lower() in _FIRMA_ADRESSEN:
+        return True
+    uids = _firma_uids()
+    if uids is False:
+        return True
+    return bool(a.get("_ical")) and a["_ical"] in uids
 
 
 def _firma_beoordelen(ev, tok):
