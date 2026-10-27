@@ -518,6 +518,17 @@ check("bron twee rondes onleesbaar: geen vraag en exitcode niet 0, de eerste waa
       _rc7a != 0 and len(_wacht7) == 1, str((_rc7a, _wacht7)))
 check("na herstel van de bron komt de vraag er toch", _gemeld7 == [["2026-11-10"]], str(_gemeld7))
 
+# geen tegenstrijdige instructie meer in de bronnen die een volgende sessie of een PDF overneemt (Codex-hertest 8)
+_teksten = {n: (HIER / n).read_text(encoding="utf-8") for n in
+            ("werkwijze/agenda-taken.json", "werkwijze/agenda-wacht.md", "werkwijze/pdf/afspraken_pdf.py")}
+_verboden = ("leest de vakanties uit de agenda van Lara", "lees ik uit de agenda van Lara",
+             "26-10 en vrijdag 30-10 (herfstvakantie)", "Geen ophaling, geen rit, en ook geen marker")
+check("werkwijze, open taken en PDF zeggen nergens meer 'vakanties uit de Lara-agenda' of 26/10 en 30/10 als vakantie",
+      not [(n, v) for n, t in _teksten.items() for v in _verboden if v in t],
+      str([(n, v) for n, t in _teksten.items() for v in _verboden if v in t]))
+check("de werkwijze en de PDF zeggen 'nooit wissen' en noemen de officiële bron",
+      all("schoolvakanties.json" in _teksten[n] for n in ("werkwijze/agenda-wacht.md", "werkwijze/pdf/afspraken_pdf.py")))
+
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []
 try:

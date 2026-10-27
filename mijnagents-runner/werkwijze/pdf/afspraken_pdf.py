@@ -295,8 +295,9 @@ afzetten. Rit 15:45 heen, 17:00 terug.</td></tr>
 huis, tot 19:30 geblokkeerd zodat er tijd is om Lara van de les naar huis te brengen, zonder melding.</td></tr>
 <tr><td><b>Donderdag</b></td><td>17:45 Lara ophalen bij oma en thuis afzetten, <b>optioneel</b>: als Mehdi kan. Zo afgesproken met Leen.</td></tr>
 <tr><td><b>Maandag, werf</b></td><td>Na het wekelijkse werfbezoek 2145 (09:30 tot 11:30) gaat Mehdi naar huis.</td></tr>
-<tr><td><b>Schoolvakantie en feestdag</b></td><td>Geen ophaling, geen rit, en ook geen marker 'Geen buiten afspraken Lara ophalen': die dag
-mogen collega's juist wel buiten plannen. De agent leest de vakanties uit de agenda van Lara.</td></tr>
+<tr><td><b>Schoolvakantie en feestdag</b></td><td>Geen rit. De vaste Lara-afspraken en de marker 'Geen buiten afspraken Lara ophalen'
+blijven staan en Bezet tot Mehdi zegt welke vervallen; wat vervalt, krijgt 'vervalt (vakantie)' vooraan en Beschikbaar. Nooit wissen.
+De vakanties komen alleen uit de officiële kalender (werkwijze/schoolvakanties.json, vlaanderen.be), niet uit een blok in de agenda van Lara (FR-210).</td></tr>
 <tr><td><b>Per schooljaar</b></td><td>De reeksen lopen per schooljaar. Na elk schooljaar worden ze bijgesteld.</td></tr>
 </tbody></table>
 
