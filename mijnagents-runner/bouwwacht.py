@@ -15,7 +15,8 @@ Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2; Codex
   erna. Dat is de echte pull-tijd, ook in mijn eerste ronde, en het is bewijs: ook een anker van voor die gelijkheid
   begint dan opnieuw, want tussen twee rondes kan de code even terug gelijk geweest zijn;
 - staat de markering niet in een reflog die wel stappen heeft (ouder dan de reflog, of opgeschoond), of ontbreekt de
-  markering, dan geldt het verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt;
+  markering, dan geldt het verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt.
+  Dat blijft zo tot gelijkheid of een nieuwe markering, ook als de reflog daarna wegvalt;
 - is de reflog leeg of onleesbaar, dan is mijn eigen stand (STAND) de klok: per dienst de markering en het moment dat
   ik het verschil voor het eerst zag. Verandert de markering of zijn ze gelijk, dan begint dat opnieuw. Kan ik die
   stand niet bewaren, dan telt zo'n verschil als ouder dan de drempel.
@@ -194,8 +195,10 @@ def meet_dienst(dienst, stand, nu):
         bron = "anker" if sinds is None else "reflog"
         if sinds is None:
             sinds = anker["sinds"]
-        elif sinds != OUD:
-            # de reflog toont het begin; het anker volgt, ook als het van voor een tussentijdse gelijkheid was
+        else:
+            # Wat de reflog vaststelt, volgt het anker: het begin, ook als het anker van voor een tussentijdse gelijkheid
+            # was, of OUD, dat zo blijft tot gelijkheid of een nieuwe markering, ook als de reflog later wegvalt
+            # (Codex-resultaattoets 3.1 en 4.3).
             anker["sinds"] = sinds
     minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
     achter = minuten is None or minuten >= DREMPEL_MIN

@@ -263,6 +263,25 @@ def test_een_markering_die_niet_in_de_reflog_staat_is_ouder_dan_de_drempel(repo)
 
 
 @proef
+def test_een_vastgestelde_achterstand_blijft_als_de_reflog_wegvalt(repo):
+    """Codex-resultaattoets 4.3: anders begon de klok opnieuw en sloot het bord een bestaande bouwnood."""
+    repo.zet("b", T0)
+    repo.bouw("mijnagents", inhoud="0" * 40)
+    uit, _ = ronde(T0 + MIN)
+    assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None
+    repo.git("config", "core.logAllRefUpdates", "false")
+    shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
+    assert B.reflog() == []
+    uit, b = ronde(T0 + 3 * MIN)
+    assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None, uit["mijnagents"]
+    assert "Bouw loopt achter op de code: mijnagents" in noden(b)
+    repo.bouw("mijnagents")                      # gebouwd: gelijk, en het anker is weg
+    uit, b = ronde(T0 + 5 * MIN)
+    assert uit["mijnagents"]["stand"] == "gelijk" and b.eind()["nood"] == []
+    assert "mijnagents" not in json.load(open(repo.stand))
+
+
+@proef
 def test_zonder_reflog_is_de_eigen_stand_het_anker(repo):
     repo.git("config", "core.logAllRefUpdates", "false")
     shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
