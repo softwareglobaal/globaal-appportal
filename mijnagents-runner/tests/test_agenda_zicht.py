@@ -1366,6 +1366,35 @@ check("dan komt het gewone Bezet blok over die dag(en), met een uitleg die klopt
       _b62["transparency"] == "opaque" and _b62["start"] == {"date": _morgen} and "Beschikbaar" in _b62["summary"]
       and "Calendly" in _b62["description"], str(_b62))
 
+# --- Codex-hertest 31: een hernoemd firmablok wordt gelezen via zijn merk, niet via zijn titel ---------------------
+_uit63 = {}
+for _naam63 in ("onderweg naar Leuven: overleg minister", "[HA-PB][EL-KB] overleg minister"):
+    _ins63 = []
+    _o63 = {n: getattr(W, n) for n in _o52}
+    W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+    W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+    W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+    W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (25, "proef")), (lambda *_a: "Leuven")
+    W._insert = lambda kal, body, tok, *a, **k: _ins63.append(body) or {"id": f"n{len(_ins63)}"}
+    W._patch = lambda *a, **k: None
+    W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+    _blk63 = dict(_blok53("qA", _bA), titel=_naam63)
+    try:
+        W.reistijd_zetten([_blk63])
+    finally:
+        for _n, _f in _o63.items():
+            setattr(W, _n, _f)
+        W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+    _uit63[_naam63] = (any(b.get("description", "").startswith("Reistijd voor: ") for b in _ins63),
+                       bool(W.belrooster([_blk63], _nu.date().isoformat())))
+check("een firmablok dat Mehdi hernoemt tot 'onderweg naar ...' of met twee firmacodes houdt zijn rit en zijn oproep "
+      "(Codex-hertest 31)", all(r == (True, True) for r in _uit63.values()), str(_uit63))
+check("ritten en belrooster lezen een firmablok via zijn merk (_titel_info), nergens nog via de titel",
+      "lees_titel(" not in (lambda s: s[s.index("def reistijd_zetten("):s.index("\ndef ", s.index("def reistijd_zetten(") + 10)])(
+          (HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+      and W._titel_info({"titel": "onderweg naar Leuven", "_merk": {W.FIRMAMERK: "k"}})["reistijd"] is False
+      and W._titel_info({"titel": "onderweg naar Leuven"})["reistijd"] is True)
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

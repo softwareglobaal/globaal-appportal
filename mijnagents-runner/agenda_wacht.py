@@ -3216,6 +3216,15 @@ def _firma_blok_zonder_adres(a):
             and (mk.get(FIRMARIT) == "buiten" or (mk.get(FIRMARIT, "geen") == "geen" and _bruikbare_locatie(plaats))))
 
 
+def _titel_info(a):
+    """lees_titel() voor de ritten en het belrooster. Een item van de firmacontrole leest als zijn eigen titel zonder
+    code, ook als Mehdi het hernoemde ('onderweg naar ...' of twee firmacodes): dan beslist het merk, niet de titel
+    (Codex-hertest 31). Voor elk ander item is dit gewoon lees_titel()."""
+    if (a.get("_merk") or {}).get(FIRMAMERK):
+        return lees_titel("")
+    return lees_titel(a.get("titel") or "")
+
+
 def _vraagt_rit(a, info, fysiek):
     """Vraagt deze afspraak een rit? Een item van de firmacontrole beslist alleen via _firma_buitenblok, op elke plek
     (overleg review 3, R1 en R4); de rest volgt zijn titelcode."""
@@ -5243,7 +5252,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     if niet_op_kaart is not None:
         niet_op_kaart.clear()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
-    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
+    reistijden = [x for x in items if _titel_info(x)["reistijd"]]
     projecten = projectadressen.index()
 
     def handmatige_rit_bij(a, richting):
@@ -5295,7 +5304,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         if zonder_auto is None or (is_lara and (vrij is None or buiten_bron)):
             # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
-            _li = lees_titel(a["titel"])
+            _li = _titel_info(a)
             # ook een Bezet firmablok op een echt adres, met zijn algemene titel (Codex-hertest 30)
             if "T" in a.get("start", "") and not _li["reistijd"] and _vraagt_rit(a, _li, _bruikbare_locatie(adres)) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
@@ -5312,12 +5321,12 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # ('vervalt' vooraan, L4) krijgt ook geen rit.
         if lara_zonder_rit(a, vrij):
             continue
-        info = lees_titel(a["titel"])
+        info = _titel_info(a)
         if info["firma_conflict"]:
             continue          # H1-1, driehoeksoverleg C2, 17-10-2026: geen rit uit een dubbelzinnige firma.
         # Geen auto die dag: geen rit. Staat er toch een buitenafspraak, dan is dat een
         # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
-        if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
+        if a.get("start", "")[:10] in zonder_auto and not _titel_info(a)["reistijd"]:
             # ook een Bezet blok voor een verborgen firma-afspraak met een echt adres: dat draagt een algemene titel
             # (Codex-hertest 28)
             if _vraagt_rit(a, info, _bruikbare_locatie(adres)):
@@ -5421,7 +5430,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         for x in items:
             if is_zorgschaduw(x) or "T" not in x.get("start", "") or x.get("hele_dag"):
                 continue
-            ix = lees_titel(x["titel"])
+            ix = _titel_info(x)
             if ix["reistijd"] or ix["buiten"] or ix["soort"] in BUITEN_SOORTEN:
                 continue
             try:
@@ -5443,7 +5452,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         tijdens het rijden. Mandaat van Mehdi, 23-09-2026."""
         if is_zorgschaduw(x) or "T" not in x.get("start", "") or x.get("hele_dag"):
             return False
-        ix = lees_titel(x.get("titel") or "")
+        ix = _titel_info(x)
         if ix["reistijd"] or ix["buiten"] or ix["soort"] in BUITEN_SOORTEN + ("IN",):
             return False
         return ix["soort"] in EXTERN_ONLINE or x.get("kalender") == "zoomafspraken@gmail.com"
@@ -5465,7 +5474,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     def rijdend_toegestaan(x):
         """Een intern overleg op een werkagenda zonder fysieke plek mag tijdens het rijden (mandaat Mehdi 23-09-2026);
         het houdt een ketenrit dus niet tegen. Lara en privé tellen altijd als echte afspraak."""
-        ix = lees_titel(x.get("titel") or "")
+        ix = _titel_info(x)
         plek = (x.get("locatie") or "").strip().lower()
         return (ix["soort"] == "IN" and not ix["buiten"] and not ix["reistijd"]
                 and x.get("kalender") not in PRIVE_KALENDERS and (not plek or plek.startswith("http")))
@@ -5936,7 +5945,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     elders = {}          # tijdstip -> agenda's met een afspraak die dan begint of eindigt
     begins_alle, eindes_alle = set(), set()
     for x in items:
-        _lx = lees_titel(x["titel"]) if "T" in x.get("start", "") else None
+        _lx = _titel_info(x) if "T" in x.get("start", "") else None
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
         # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
         # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
@@ -6002,7 +6011,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
             # een firmablok dat geen rit meer vraagt (opgelost, Beschikbaar, hele dag of online) houdt ze niet vast,
             # ook niet als Mehdi het hernoemde (review 3, R1)
-            bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
+            bij = [y for y in items if m and not _titel_info(y)["reistijd"] and y["start"][:10] == x["start"][:10]
                    and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)
                    and not ((y.get("_merk") or {}).get(FIRMAMERK)
                             and not _vraagt_rit(y, {}, _bruikbare_locatie(y.get("locatie") or "")))]
@@ -6064,14 +6073,14 @@ def belrooster(items, vandaag):
     vertrekmoment van mijn rit, anders BEL_BUITEN_MIN vooraf. Niet voor intern (IN),
     terugkerend, hele dag, reistijd, Lara, feestdagen."""
     from datetime import timedelta
-    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"] and "T" in x["start"]]
+    reistijden = [x for x in items if _titel_info(x)["reistijd"] and "T" in x["start"]]
     regels = []
     for a in items:
         if (a.get("hele_dag") or a.get("_terugkerend") or a["start"][:10] < vandaag
                 or a.get("kalender", "").startswith("en.be#") or bellen.afgezegd(a)):
             continue
         kal = KALENDERS.get(a["kalender"], "")
-        info = lees_titel(a["titel"])
+        info = _titel_info(a)
         if info["reistijd"] or info["soort"] == "IN" or kal == "Lara" or lara_vervalt(a):
             continue
         start = datetime.fromisoformat(a["start"])
