@@ -3077,8 +3077,9 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   vroegste van twee: het moment dat de wacht het voor het eerst zag (`mijnagents-data/bouwwacht.json`, per dienst de
   markering en dat moment) en de reflogstap waarop HEAD wegging van de gebouwde boom. De wacht leest alleen (`git
   rev-parse`, `git log -g`); `--droog` meet zonder bord en zonder stand. Een ronde tegelijk (slot
-  `bouwwacht.json.slot`); een stand die niet te bewaren is, geeft een eigen nood en houdt geen bouwnood tegen; zonder
-  geldige grenzen sluit de ronde niets. Stopt de ronde zonder bord of komt de eindhartslag niet aan (`bord.Agent.hartslag_ok`),
+  `bouwwacht.json.slot`; is het bezet, dan slaat de ronde over, kan er geen slot komen, dan geen ronde en exit 1); een
+  stand die niet te bewaren is, geeft een eigen nood en houdt geen bouwnood tegen, en zonder reflog telt een verschil
+  dan als ouder dan de drempel; zonder geldige grenzen sluit de ronde niets. Stopt de ronde zonder bord of komt de eindhartslag niet aan (`bord.Agent.hartslag_ok`),
   dan exit 1 met de meting in `~/agents/bouwwacht.log`. Werfverslag valt erbuiten (eigen bewaking via `.mislukt`).
   Grendels: `tests/test_bouwwacht.py` in `agentnorm-grendels.yml`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
