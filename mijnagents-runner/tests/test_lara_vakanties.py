@@ -318,6 +318,11 @@ _vk2 = S.lara_wissing_kandidaat(LARA, dict(_inst, start={"dateTime": "2026-11-10
                                 _nu, dagen, dekking)
 check("verplaatst en gewist tussen twee controles: de actuele start van Google gaat voor de opgeslagen",
       (_vk2 or {}).get("dag") == "2026-11-10", str(_vk2))
+_blokweg = {"id": "hto6vqpr6vr9vodv76o1ett1pk", "status": "cancelled"}
+_blokvorig = [json.dumps(["🍂 Herfstvakantie Lara", "confirmed", {"date": "2026-10-26"}, {"date": "2026-11-02"}, "", [], False]),
+              "2026-10-26"]
+check("het foute vakantieblok weghalen (zoals de vraag aanraadt) geeft geen vraag 'gewiste Lara-afspraak'",
+      S.lara_wissing_kandidaat(LARA, _blokweg, _blokvorig, _nu, dagen, dekking) is None)
 _vak = dict(_inst, id="x_20261104T150000Z", originalStartTime={"dateTime": "2026-11-04T16:00:00+01:00"})
 check("op een officiële vakantiedag gebeurt niets", S.lara_wissing_kandidaat(LARA, _vak, None, _nu, dagen, dekking) is None)
 _za = dict(_inst, id="x_20261031T090000Z", originalStartTime={"dateTime": "2026-10-31T10:00:00+01:00"})
