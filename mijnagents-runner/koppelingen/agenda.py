@@ -154,6 +154,8 @@ def afspraken(van_dagen=-1, tot_dagen=8, schrijf_leesstand=True):
                                and a["email"].lower() not in _intern],
                 "_agendagasten": [a["email"].lower() for a in ev.get("attendees", []) if a.get("email", "").lower() in _intern],
                 "_organisator_zelf": bool((ev.get("organizer") or {}).get("self")),
+                "_organisator": (ev.get("organizer") or {}).get("email", ""),
+                "_ical": ev.get("iCalUID", ""),
                 # wie de afspraak heeft aangemaakt (Google: creator). Zo is achteraf te zien
                 # wie iets zette en waarom het ergens staat. Mandaat van Mehdi, 22-09-2026.
                 "maker": (ev.get("creator") or {}).get("email", ""),
@@ -181,6 +183,27 @@ def afspraken(van_dagen=-1, tot_dagen=8, schrijf_leesstand=True):
             pass
     uit.sort(key=lambda x: x.get("start", ""))
     return uit
+
+
+def zichtbaarheid():
+    """id -> True als de agenda in Mehdi's weergave te zien is: aangevinkt ('selected') en niet uit de lijst gehaald
+    ('hidden'); een agenda die uit de lijst gehaald is, toont Google niet, ook al staat het vinkje aan. Alleen lezen: zo kan
+    Claude 2 nagaan of het verbergen van de firma-agenda's gelukt is (driehoeksoverleg 27-10-2026, Z4). Aanpassen is
+    een instelling van Mehdi's account en gebeurt niet hier."""
+    kop = {"Authorization": "Bearer " + _toegang()}
+    uit, pagina = {}, None
+    while True:
+        q = {"maxResults": "250", "showHidden": "true", "fields": "items(id,selected,hidden),nextPageToken"}
+        if pagina:
+            q["pageToken"] = pagina
+        req = urllib.request.Request(API + "/users/me/calendarList?" + urllib.parse.urlencode(q), headers=kop)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.load(r)
+        for c in d.get("items", []):
+            uit[c["id"]] = bool(c.get("selected")) and not c.get("hidden")
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return uit
 
 
 def kalendernamen():
