@@ -222,11 +222,22 @@ def _is_s4(kern):
     return _s4_begin(kern) is not None
 
 
+# Een vervolgregel van een opnamezin die met een tijdstip begint ("(00:12:30).", "00:05:10).", "om 10:15."), of een regel
+# die eindigt op een woord waarmee geen zin eindigt ("... naar de opname van"): de zin loopt door (39e review)
+_TIJD_VOORAAN = re.compile(r"\s*[(\[]?\s*(?:(?:om|op|van|tot|at)\s+)?" + _DIRECTTIJD, re.I)
+_ONAF = re.compile(r"\b(?:van|de|het|een|naar|tot|om|met|voor|bij|door|aan|the|of|to|at|a|an)\s*$", re.I)
+
+
+def _vervolg(regel):
+    """Kan deze regel het vervolg van een zin op de vorige regel zijn: kleine letter of een tijdstip vooraan."""
+    return regel.lstrip()[:1].islower() or bool(_TIJD_VOORAAN.match(regel))
+
+
 def _vooruit(stukken, i, regels=3):
     """De volgende regels die nog bij dezelfde zin kunnen horen (geen leesteken op het einde, kleine letter vooraan)."""
     uit = stukken[i]
     for j in range(i + 1, min(i + regels, len(stukken))):
-        if uit.strip().endswith((".", "!", "?", ";", ":")) or "\n" not in uit or not stukken[j].lstrip()[:1].islower():
+        if uit.strip().endswith((".", "!", "?", ";", ":")) or "\n" not in uit or not _vervolg(stukken[j]):
             break
         uit += stukken[j]
     return uit
@@ -242,6 +253,8 @@ def _loopt_door(zin, volgende, vooruit=None):
     if not _is_s4(zin.strip()) and _begint_in(_s4_begin(samen), zin):
         return True
     if _is_s4(zin.strip()) and re.search(r"\b(?:opname|geluidsopname|transcript|tijdstip|haakjes|recording)\b", volgende, re.I):
+        return True
+    if _is_s4(zin.strip()) and (_TIJD_VOORAAN.match(volgende) or _ONAF.search(zin.rstrip())):
         return True
     return bool(_woorden_in(zin) and not _is_s4(zin.strip()) and _alleen_meta(zin) and _is_s4(samen))
 
@@ -295,7 +308,7 @@ def _opname_weg(tekst):
         # een harde regelovergang midden in een opnamezin: de regel eindigt zonder leesteken, de volgende begint klein,
         # en pas samen is het een S4-zin; dan worden ze samen beoordeeld
         while (i < len(stukken) and "\n" in zin and not zin.strip().endswith((".", "!", "?", ";", ":"))
-               and stukken[i].lstrip()[:1].islower() and _loopt_door(zin, stukken[i], _vooruit(stukken, i))):
+               and _vervolg(stukken[i]) and _loopt_door(zin, stukken[i], _vooruit(stukken, i))):
             zin += stukken[i]
             i += 1
         kern = zin.strip()

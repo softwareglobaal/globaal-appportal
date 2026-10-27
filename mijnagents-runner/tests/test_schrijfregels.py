@@ -687,5 +687,26 @@ for tekst, verwacht in [
     t38, ing38 = S.toepassen(tekst)
     check(f"sluitteken correct: {tekst[:40]!r}", t38 == verwacht and ing38 and S.toepassen(t38)[0] == t38, t38)
 
+# Negenendertigste review 27-10-2026: een opnamezin loopt over een harde regelovergang door als de volgende regel met
+# een tijdstip begint of de regel op "van", "de", ... eindigt; geen los "(00:12:30)." of "om 10:15." meer
+for tekst, verwacht in [
+        ("Bij het plaatsbezoek werd de achtergevel bekeken. De architect sprak zijn vaststellingen ter plaatse in\n(00:12:30). Er blijft water staan op het terras.",
+         "Bij het plaatsbezoek werd de achtergevel bekeken. Er blijft water staan op het terras."),
+        ("De architect sprak zijn vaststellingen in (opname\n00:05:10). De goot lekt aan de achterzijde.", "De goot lekt aan de achterzijde."),
+        ("De architect sprak zijn vaststellingen in\nom 10:15. De goot lekt.", "De goot lekt."),
+        ("Een tijdstip tussen haakjes verwijst naar de opname van\nhet plaatsbezoek. De dorpel ligt te laag.", "De dorpel ligt te laag."),
+        ("Er blijft water staan. Volgens de opname\n(00:24:10) is de dorpel 3 cm te laag.",
+         "Er blijft water staan. (geschrapt: schrijfregel S4, zie de schrijfregels van het kantoor)"),
+        ("De architect sprak zijn vaststellingen in\nde goot lekt\nde dorpel ligt te laag", "de goot lekt\nde dorpel ligt te laag")]:
+    for profiel in (None, "aankoopkeuring"):
+        t39, ing39 = S.toepassen(tekst, profiel)
+        check(f"opnamezin over regelovergang: {tekst[:40]!r} {profiel}", t39 == verwacht and ing39 and S.toepassen(t39, profiel)[0] == t39, (t39, ing39))
+import textwrap
+for alinea in ["Bij het plaatsbezoek werd de achtergevel bekeken. De architect sprak zijn vaststellingen ter plaatse in (00:12:30). Er blijft water staan op het terras naast de keuken.",
+               "Er blijft water staan op het terras. Volgens de opname (00:24:10) is de dorpel van de schuifdeur 3 cm te laag geplaatst.",
+               "De architect sprak zijn vaststellingen in om 10:15. De goot lekt aan de achterzijde en de dakrand is los."]:
+    lek = [w for w in range(30, 101) if re.search(r"\d{1,2}:\d{2}", S.toepassen(textwrap.fill(alinea, w))[0])]
+    check(f"geen tijdstip na afbreken op 30-100 tekens: {alinea[:35]!r}", not lek, lek)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
