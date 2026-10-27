@@ -402,7 +402,7 @@ _volg = []
 _o19 = (W.firma_afspraken, W.firma_gasten, W.firma_vangnet, W.agenda.zichtbaarheid, W.agenda._toegang, W.FIRMA_SLOT)
 _lees19 = [([_e17], []), ([dict(_e17, id="s1_20261102T130000Z")], [])]
 W.firma_afspraken = lambda tok, *a, **k: _lees19.pop(0)
-W.firma_gasten = lambda evs, tok: ([], [], set(), evs[0]["id"].endswith("090000Z"))
+W.firma_gasten = lambda evs, tok, onleesbaar=(): ([], [], set(), evs[0]["id"].endswith("090000Z"))
 W.firma_vangnet = lambda evs, niet, tok, **k: _volg.append([e["id"] for e in evs]) or []
 W.agenda.zichtbaarheid = lambda: {k: True for k in W.KALENDERS}
 W.agenda._toegang = lambda: "tok"
@@ -669,6 +669,31 @@ _, niet31, onz31, _ = met(NepGoogle([], zichtbaar=False), W.firma_gasten,
                           [_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"},
                                      attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])], "tok")
 check("en firma_gasten geeft ze als onzeker door, zonder blok", not niet31 and W._firma_sleutel(_c1) in onz31, str((niet31, onz31)))
+
+# --- Codex-hertest 12: is de agenda van de organisator onleesbaar, dan beslist een gastkopie niet ------------------
+_g1k = dict(ev("p9", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com", organizer={"email": ELEVAIT})
+_gk3, _onz3 = W._firma_kopieen_kiezen([_g1k], [ELEVAIT])
+check("een gastkopie alleen, terwijl de firma-agenda van de organisator onleesbaar is: onzeker (geen blok, niets verzet)",
+      not _gk3 and _onz3 == {W._firma_sleutel(_g1k)}, str((_gk3, _onz3)))
+_gk4, _onz4 = W._firma_kopieen_kiezen([_g1k], [])
+check("is de organisator wel leesbaar (of geen firma-agenda), dan telt die ene kopie gewoon", len(_gk4) == 1 and not _onz4)
+_opg32 = []
+_o32 = (W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch, W._insert)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma32-")) / "agenda-firma-vragen.json")
+Path(W.FIRMA_VRAGEN).write_text(json.dumps({W._firma_sleutel(_g1k): {
+    "gevraagd": _morgen, "dag": _morgen, "start": f"{_morgen}T08:00:00+01:00", "einde": f"{_morgen}T09:00:00+01:00",
+    "sterk": True, "id": "q32", "kalender": ELEVAIT}}), encoding="utf-8")
+_pat32 = []
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
+    W.FIRMAMERK: W._firma_sleutel(_g1k), W.MAILMERK: "abcdef0123456789"}}
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg32.append(x["id"]) or True
+W._patch = lambda x, body, tok, **kw: _pat32.append(body)
+W._insert = lambda kal, body, tok, toch=False: _pat32.append(body) or {"id": "nee"}
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_g1k], [_g1k], "tok", None, [ELEVAIT])
+finally:
+    W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch, W._insert = _o32
+check("en het vangnet verzet of rondt het bestaande blok dan niet af", not _pat32 and not _opg32, str((_pat32, _opg32)))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

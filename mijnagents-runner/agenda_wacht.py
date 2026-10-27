@@ -3310,7 +3310,7 @@ def _op_werkagenda(ev, tok):
     return False
 
 
-def firma_gasten(evs, tok):
+def firma_gasten(evs, tok, onleesbaar=()):
     """Z2: elke komende keer op een firma-agenda met 'Mehdi: ...' vooraan krijgt Mehdi als stille gast, en ik lees na
     dat ze zichtbaar op zijn werkagenda staat. Alleen keren, nooit de moederreeks: zo kan een keer van een collega,
     ook buiten het leesvenster, nooit mee (Codex-hertest 3, punt 11); een keer die later in het venster komt, krijgt de
@@ -3320,7 +3320,7 @@ def firma_gasten(evs, tok):
     onzeker zijn de sleutels die niet te beoordelen waren (het vangnet laat die staan), opnieuw is waar als een
     afspraak tijdens de controle verdween (een collega verzette de reeks): dan leest firma_stap de agenda opnieuw."""
     regels, niet_zichtbaar, opnieuw = [], [], False
-    evs, onzeker = _firma_kopieen_kiezen(evs)
+    evs, onzeker = _firma_kopieen_kiezen(evs, onleesbaar)
     gezien = set()
     for ev in evs:
         voor_mehdi = bool(MEHDI_VOORAAN.match(ev.get("summary") or ""))
@@ -3390,22 +3390,25 @@ def _firma_sleutel(e):
     return f"firma|{e.get('iCalUID') or e.get('id')}|{_utc(_tijd(e, 'originalStartTime'))}"
 
 
-def _firma_kopieen_kiezen(evs):
-    """Een afspraak kan op twee firma-agenda's staan (de ene nodigt de andere uit). Kloppen hun tijden, dan telt de eerste
-    kopie. Verschillen ze (een gast kan de tijd op zijn eigen kopie wijzigen), dan beslist de kopie van de organisator;
-    is die er niet, dan is de afspraak onzeker en verandert er niets (Codex-hertest 11). Geeft (gekozen, onzeker)."""
+def _firma_kopieen_kiezen(evs, onleesbaar=()):
+    """Een afspraak kan op twee firma-agenda's staan (de ene nodigt de andere uit). De kopie op de agenda van de
+    organisator beslist. Zonder die kopie: kloppen de tijden van de kopieën, dan telt de eerste; verschillen ze (een
+    gast kan de tijd op zijn eigen kopie wijzigen), of is de organisator een firma-agenda die nu niet te lezen is, dan
+    is de afspraak onzeker en verandert er niets (Codex-hertest 11 en 12). Geeft (gekozen, onzeker)."""
+    stuk = {a.lower() for a in onleesbaar or ()}
     groepen = {}
     for e in evs or []:
         groepen.setdefault(_firma_sleutel(e), []).append(e)
     gekozen, onzeker = [], set()
     for k, kopieen in groepen.items():
-        tijden = {(_utc(_tijd(e, "start")), _utc(_tijd(e, "end"))) for e in kopieen}
-        if len(tijden) == 1:
-            gekozen.append(kopieen[0])
-            continue
         org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()]
         if org:
             gekozen.append(org[0])
+            continue
+        tijden = {(_utc(_tijd(e, "start")), _utc(_tijd(e, "end"))) for e in kopieen}
+        org_kal = {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen}
+        if len(tijden) == 1 and not (org_kal & stuk):
+            gekozen.append(kopieen[0])
         else:
             onzeker.add(k)
     return gekozen, onzeker
@@ -3585,7 +3588,9 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         if _firma_uid(e) not in gezien:   # dezelfde afspraak op twee firma-agenda's: een blok (review 27-10-2026)
             gezien.add(_firma_uid(e))
             kand[_firma_sleutel(e)] = (e, True)
-    for e in _firma_kopieen_kiezen(evs)[0]:
+    gekozen, onz2 = _firma_kopieen_kiezen(evs, onleesbaar)
+    onzeker = set(onzeker) | onz2
+    for e in gekozen:
         tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
         if re.search(r"\bMehdi\b", tekst) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e) \
                 and _firma_uid(e) not in gezien:
@@ -3693,10 +3698,10 @@ def firma_stap(vandaag):
             return noden                # een andere ronde is er al mee bezig
         tok = agenda._toegang()
         evs, onleesbaar = firma_afspraken(tok)
-        gregels, niet_zichtbaar, onzeker, opnieuw = firma_gasten(evs, tok)
+        gregels, niet_zichtbaar, onzeker, opnieuw = firma_gasten(evs, tok, onleesbaar)
         if opnieuw:                     # een collega verzette een reeks tijdens de controle: de nieuwe keren lezen (hertest 5)
             evs, onleesbaar = firma_afspraken(tok)
-            g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok)
+            g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok, onleesbaar)
             gregels += g2
         vregels = firma_vangnet(evs, niet_zichtbaar, tok, onleesbaar=onleesbaar, onzeker=onzeker)
     if gregels or vregels:
