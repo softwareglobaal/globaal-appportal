@@ -166,8 +166,12 @@ check("bestaande gasten blijven staan met al hun velden (opmerking, extra gasten
 check("staat de afspraak daarna zichtbaar op de werkagenda, dan geen vangnet", not niet, str(niet))
 
 g2 = NepGoogle([ev("b1", "Mehdi: [EL-IN] overleg")], zichtbaar=False)
-_, niet2, _, _ = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
-check("komt de afspraak niet zichtbaar op de werkagenda (verborgen uitnodiging), dan gaat ze naar het vangnet",
+_, niet2a, onz2a, _ = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
+check("net als gast gezet en nog niet zichtbaar: deze ronde geen blok (Google toont de kopie soms even later)",
+      not niet2a and onz2a == {f"{ELEVAIT}|b1"}, str((niet2a, onz2a)))
+_b1 = ev("b1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA, "responseStatus": "needsAction"}])
+_, niet2, _, _ = met(NepGoogle([_b1], zichtbaar=False), W.firma_gasten, [_b1], "tok")
+check("de ronde erna, met Mehdi al als gast en nog altijd niet zichtbaar (verborgen uitnodiging): naar het vangnet",
       len(niet2) == 1)
 
 g3 = NepGoogle([ev("c9", "Mehdi: [EL-IN] overleg")], botsing={"c9"},
@@ -350,10 +354,10 @@ class _Nep15(NepGoogle):
 
 _e15 = ev("m1_20261102", "Mehdi: [EL-IN] meeting", reeks="m1")
 g15 = _Nep15([_e15])
-_, niet15, _, _ = met(g15, W.firma_gasten, [_e15], "tok")
-check("verzet een collega het uur terwijl de gast gezet wordt, dan gelden voor controle en vangnet het nieuwe uur",
-      len(niet15) == 1 and niet15[0]["start"]["dateTime"].endswith("14:00:00+01:00")
-      and "13:59" in getattr(g15, "gezocht", ""), str((niet15, getattr(g15, "gezocht", ""))))
+_, niet15, onz15, _ = met(g15, W.firma_gasten, [_e15], "tok")
+check("verzet een collega het uur terwijl de gast gezet wordt, dan geldt het nieuwe uur en komt er geen blok op het oude",
+      not niet15 and onz15 == {f"{ELEVAIT}|m1_20261102"} and "13:59" in getattr(g15, "gezocht", ""),
+      str((niet15, onz15, getattr(g15, "gezocht", ""))))
 
 _gist = (_nu - timedelta(days=1)).date().isoformat()
 _overmorgen = (_nu + timedelta(days=2)).date().isoformat()
@@ -438,6 +442,94 @@ check("verzet naar later nadat het oude uur voorbij is: hetzelfde blok gaat mete
       and _reg20[f"{ELEVAIT}|t1"]["start"] == f"{_d20}T14:00:00+01:00", str((_pat20, _ins20)))
 check("staat de vraag er al zonder registratie, dan wordt ze meteen op de juiste tijd gezet, geen tweede",
       len(_pat20) == 2 and _pat20[1][0] == "v" and not _ins20, str(_pat20))
+
+# --- review met meerdere agents (27-10-2026) -----------------------------------------------------------------------
+check("een einde dat voorbij is: een hele dag telt exclusief, leeg telt niet als voorbij",
+      W._einde_voorbij(_nu.date().isoformat(), _nu) and not W._einde_voorbij("", _nu)
+      and not W._einde_voorbij((_nu + timedelta(days=1)).date().isoformat(), _nu))
+_namen = [r for r in (HIER / "agenda_wacht.py").read_text(encoding="utf-8").splitlines() if r.startswith("def ")]
+check("geen functienaam staat twee keer in agenda_wacht.py (een latere definitie overschrijft stil de eerste)",
+      len({r.split("(")[0] for r in _namen}) == len(_namen),
+      str(sorted({r.split("(")[0] for r in _namen if sum(1 for q in _namen if q.split("(")[0] == r.split("(")[0]) > 1})))
+
+
+class _NepSchrijf:
+    """Echte _insert en _patch, met nagemaakte Google: telt POST en PATCH naar de privé-agenda."""
+
+    def __init__(self):
+        self.post, self.patch = [], []
+
+    def __call__(self, req, timeout=None, *a, **k):
+        m = req.get_method() if hasattr(req, "get_method") else "GET"
+        if m == "POST":
+            self.post.append(json.loads(req.data))
+            return io.BytesIO(json.dumps({"id": "b1"}).encode())
+        if m == "PATCH":
+            self.patch.append(json.loads(req.data))
+            return io.BytesIO(b"{}")
+        return io.BytesIO(json.dumps({"items": []}).encode())     # geen bestaande vraag met dit merk
+
+
+_dagm = (_nu + timedelta(days=4)).date().isoformat()
+_o21 = (W.FIRMA_VRAGEN, W._prive_item_lezen, W.gearchiveerd, dict(W._MARKERS))
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma21-")) / "agenda-firma-vragen.json")
+W.gearchiveerd = lambda: set()
+W._MARKERS[_dagm] = [("Buitenland (Suriname)", "alles")]
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "VR Agendawacht: x", "deelnemers": [],
+                                        "_agendagasten": [], "maker": W.WERKAGENDA, "start": f"{_dagm}T10:00:00+01:00",
+                                        "hele_dag": False, "_merk": {W.FIRMAMERK: f"{ELEVAIT}|u1",
+                                                                     W.MAILMERK: "abcdef0123456789"}}
+_ns = _NepSchrijf()
+try:
+    _u1 = dict(ev("u1", "Mehdi: [EL-IN] overleg minister"), start={"dateTime": f"{_dagm}T10:00:00+01:00"},
+               end={"dateTime": f"{_dagm}T11:00:00+01:00"})
+    _r21 = met(_ns, W.firma_vangnet, [_u1], [_u1], "tok")
+    _u1b = dict(_u1, start={"dateTime": f"{_dagm}T15:00:00+01:00"}, end={"dateTime": f"{_dagm}T16:00:00+01:00"})
+    _r21b = met(_ns, W.firma_vangnet, [_u1b], [_u1b], "tok")
+    _r21c = met(_ns, W.firma_vangnet, [], [], "tok")
+finally:
+    W.FIRMA_VRAGEN, W._prive_item_lezen, W.gearchiveerd = _o21[:3]
+    W._MARKERS.clear()
+    W._MARKERS.update(_o21[3])
+check("op een dag met 'Buitenland' krijgt een verborgen firma-afspraak voor Mehdi toch haar Bezet blok (geen ja-stempel)",
+      len(_ns.post) == 1 and _ns.post[0]["start"]["dateTime"].endswith("10:00:00+01:00")
+      and W.JA_MERK not in json.dumps(_ns.post[0]), str((_r21, _ns.post)))
+check("en het blok volgt zijn afspraak naar een ander uur op zo'n dag",
+      _ns.patch[:1] and _ns.patch[0]["start"]["dateTime"].endswith("15:00:00+01:00"), str((_r21b, _ns.patch[:1])))
+check("verdwijnt ze, dan wordt het opgeloste blok een hele-dag-item (geen oproep, geen botsing meer)",
+      any(b.get("start", {}).get("date") == _dagm and b["start"].get("dateTime", "x") is None for b in _ns.patch[1:])
+      and any(b.get("transparency") == "transparent" for b in _ns.patch[1:]), str((_r21c, _ns.patch[1:])))
+
+
+class _NepWerkStuk(NepGoogle):
+    def __call__(self, req, timeout=None, *a, **k):
+        if "iCalUID" in getattr(req, "full_url", req):
+            raise urllib.error.HTTPError(req.full_url, 503, "Unavailable", {}, None)
+        return super().__call__(req, timeout, *a, **k)
+
+
+_w = [ev(f"w{i}", "Mehdi, Siyan: [EL-IN] Wekelijkse", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+      for i in (1, 2)]
+_, niet22, onz22, _ = met(_NepWerkStuk(_w), W.firma_gasten, _w, "tok")
+check("is de werkagenda even niet te lezen, dan geen blokken voor afspraken die er al op staan (onzeker)",
+      not niet22 and onz22 == {f"{ELEVAIT}|w1", f"{ELEVAIT}|w2"}, str((niet22, onz22)))
+
+_d1 = ev("x1", "Mehdi: [EL-PO] overleg HDS en Elevait", gasten=[{"email": W.WERKAGENDA, "responseStatus": "needsAction"}])
+_d2 = dict(_d1, kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV")
+_, niet23, _, _ = met(NepGoogle([_d1], zichtbaar=False), W.firma_gasten, [_d1, _d2], "tok")
+_ins23 = []
+_o23 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma23-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins23.append(body) or {"id": "y"}
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_d1, _d2], [_d1, _d2], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o23
+check("dezelfde afspraak op twee firma-agenda's (de ene nodigt de andere uit): een keer nagekeken en een blok",
+      len(niet23) == 1 and len(_ins23) == 1, str((len(niet23), len(_ins23))))
+check("op de werkagenda-kopie van een firma-afspraak zet de agent geen telefoonnummer",
+      W._firma_kopie({"_organisator": ELEVAIT}) and not W._firma_kopie({"_organisator": "klant@voorbeeld.test"})
+      and "_firma_kopie(a)" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def contact_zetten")[1][:1500])
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

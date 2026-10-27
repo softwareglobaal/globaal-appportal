@@ -366,7 +366,10 @@ zet (`KALENDERS`: mehdi werk agenda, prive agenda Mehdi, Lara, H-Architects, UNA
 - Komt een afspraak voor Mehdi niet door, dan zet ik een Bezet blok in zijn privé-agenda op haar tijd (op het uur, of
   over haar hele dagen). Noemt een firma-afspraak Mehdi zonder hem als gast, dan een dagvraag op Beschikbaar (komende
   zeven dagen). Eenmaal per afspraak. Het blok volgt zijn afspraak: verschuift ze, dan schuift het mee; verdwijnt ze
-  of komt ze door, dan `Opgelost` en Beschikbaar.
+  of komt ze door, dan `Opgelost`, Beschikbaar en een hele-dag-item (geen oproep meer). Het blok spiegelt een bestaande
+  afspraak: het komt er ook op een dag met `Buitenland` of `geen afspraken`. Vlak na het zetten van de gast wacht ik een
+  ronde; een werkagenda die even niet te lezen is, maakt geen blok. Dezelfde afspraak op twee firma-agenda's: een blok.
+  Op de werkagenda-kopie van een firma-afspraak schrijf ik niets, ook geen telefoonnummer.
 - Een onleesbare firma-agenda stopt de andere niet; van haar rond ik niets af. Een agenda waarop ik ritten zet en die
   Mehdi verborgen heeft, wordt een nood: hij zet het vinkje terug.
 - Dit draait in de volledige ronde en in de kleurronde (om :17 en :47, elke dag, ook in het weekend).

@@ -154,6 +154,7 @@ def afspraken(van_dagen=-1, tot_dagen=8, schrijf_leesstand=True):
                                and a["email"].lower() not in _intern],
                 "_agendagasten": [a["email"].lower() for a in ev.get("attendees", []) if a.get("email", "").lower() in _intern],
                 "_organisator_zelf": bool((ev.get("organizer") or {}).get("self")),
+                "_organisator": (ev.get("organizer") or {}).get("email", ""),
                 # wie de afspraak heeft aangemaakt (Google: creator). Zo is achteraf te zien
                 # wie iets zette en waarom het ergens staat. Mandaat van Mehdi, 22-09-2026.
                 "maker": (ev.get("creator") or {}).get("email", ""),
