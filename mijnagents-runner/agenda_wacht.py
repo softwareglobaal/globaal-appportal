@@ -3779,9 +3779,12 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     einde = (datetime.fromisoformat(a["start"]) + duur).isoformat()
                     notitie = " Het einde stond niet in de mail: de oude duur is behouden."
                 try:
+                    volledig = _lees_event(kal, eid, tok)
+                    if volledig is None:
+                        raise RuntimeError("omschrijving niet te lezen")   # nooit een afgekapte omschrijving terug (PR 113)
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
-                               "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
+                               "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
                                                f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip(),
                                **_niet_meer_vervallen(x)}, tok)
                     probleem = _zorg_nalezen(kal, eid, tok, start=a["start"], einde=einde)

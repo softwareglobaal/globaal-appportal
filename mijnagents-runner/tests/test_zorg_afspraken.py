@@ -337,6 +337,20 @@ check("A04 een verplaatsing zonder einde verzet hetzelfde blok met zijn oude duu
       _rvz["verzet"] == 1 and _vpat and _vpat[0]["end"]["dateTime"].startswith("2026-11-27T09:30") and "oude duur" in _vpat[0]["description"],
       str((_rvz, _vpat)))
 
+# PR 113 (Codex-hertest 9): bij een verzet blijft een lange omschrijving volledig (de agenda-lijst kapt af na 2000 tekens)
+_lang_oms = "Praktijk Proef, notities van Mehdi. " + ("x" * 2500) + " EINDE"
+_vpat2 = []
+W._patch = lambda a, body, tok, toch=False: _vpat2.append(body)
+W._lees_event = lambda kal, eid, tok: {"start": {"dateTime": "2026-11-27T09:00:00+01:00"},
+                                       "end": {"dateTime": "2026-11-27T09:30:00+01:00"}, "description": _lang_oms}
+try:
+    W.zorg_afspraken_zetten([dict(_vz, status="afwijkend")], [dict(_vz_item, omschrijving=_lang_oms[:2000])], "t",
+                            W.nu_lokaal().replace(year=2026, month=10, day=15))
+finally:
+    W._patch, W._lees_event = _o_fn[1], _o_fn[3]
+check("PR 113: een verzet zorgblok houdt zijn volledige omschrijving van meer dan 2000 tekens",
+      _vpat2 and _vpat2[0]["description"].startswith(_lang_oms), str([len(b.get("description", "")) for b in _vpat2]))
+
 # A05: een ingekorte privétitel in een logregel wordt gemaskeerd; privé gaat nooit naar een afdeling
 import bord as _bord  # noqa: E402
 _lang = "!! [PR] Mondhygiëne - Een Heel Lange Naam Voor De Proef Van Het Masker"
