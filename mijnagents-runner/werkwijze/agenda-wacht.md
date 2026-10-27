@@ -353,6 +353,23 @@ niets buiten plannen.
   online boeking.** Calendly boekt alleen online afspraken; die vragen geen auto, dus
   de online boeking blijft open en wordt niet geblokkeerd door de geen-auto-marker.
 
+## Alleen zien wat Mehdi aangaat (driehoeksoverleg 27-10-2026, Z1 tot Z8)
+
+Mehdi wil in zijn agenda alleen zien wat hij moet doen of waar hij bij moet zijn. Zichtbaar blijven mehdi werk agenda,
+prive agenda Mehdi, Lara en de Belgische feestdagen. De firma-agenda's van collega's (Elevait N.V., High Design Studio NV,
+in `agenda-taken.json` onder `firma_meelezen`) verbergt Mehdi in zijn weergave; niets wordt verwijderd of afgemeld.
+
+- Ik lees die firma-agenda's alleen mee. Een afspraak met `Mehdi: ...` vooraan krijgt Mehdi als stille gast (zonder
+  mail, alleen de gastenlijst verandert), zodat ze op zijn werkagenda staat. Ik lees na dat ze daar staat.
+- Komt ze niet door, of noemt een firma-afspraak Mehdi zonder hem als gast, dan zet ik eenmaal een vraag in zijn
+  privé-agenda (komende zeven dagen, nooit twee keer voor dezelfde afspraak).
+- Verder schrijf ik niets op een firma-agenda: geen rit, kleur of vraag (`mag_schrijven()` kent ze niet).
+- Calendly verandert niet: geen firma-agenda telt als bezet.
+- Mehdi's weergave aanpassen is zijn instelling: hij vinkt ze zelf uit, of geeft een keer zijn ja. Wie voor zichzelf
+  plant in een firma-agenda, zet zijn eigen naam vooraan (`Siyan: ...`).
+
+De grendel is `tests/test_agenda_zicht.py`.
+
 ## Lara tijdens schoolvakanties (mandaat van Mehdi, 22-09-2026)
 
 Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan:

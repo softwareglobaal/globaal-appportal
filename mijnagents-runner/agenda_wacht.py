@@ -3126,6 +3126,175 @@ def lara_gewist_bijwerken(eid, uur, titel, sleutel, tok, dagen):
     return True
 
 
+# Firma-agenda's van collega's (driehoeksoverleg 27-10-2026, Z1 tot Z7). Mehdi verbergt ze in zijn weergave; hij wil
+# alleen zien wat hij moet doen of waar hij bij moet zijn. De agent leest ze alleen mee (werkwijze/agenda-taken.json,
+# 'firma_meelezen'): een afspraak die Mehdi aangaat ('Mehdi: ...' vooraan), krijgt Mehdi als stille gast, zonder mail,
+# zodat ze op zijn werkagenda verschijnt. Verder schrijft de agent er niets: mag_schrijven() kent deze agenda's niet.
+MEHDI_VOORAAN = re.compile(r"^\W*(?:VR\s+)?(?:!+\s*)?Mehdi\b[^:\n]{0,60}:", re.I)
+FIRMAMERK = "agendawacht_firma"
+FIRMA_VRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-vragen.json")
+FIRMA_VOORUIT_DAGEN = 14
+FIRMA_VANGNET_DAGEN = 7
+
+
+def firma_meelezen():
+    """[(adres, naam)] van de firma-agenda's die de agent alleen meeleest. Geen kopie in de code (Z1)."""
+    try:
+        d = json.loads((Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8"))
+        return [(a["adres"], a.get("naam") or a["adres"]) for a in d.get("firma_meelezen") or [] if a.get("adres")]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _gast_mehdi(ev):
+    return any((g.get("email") or "").lower() == WERKAGENDA for g in ev.get("attendees") or [])
+
+
+def firma_afspraken(tok, nu=None, dagen=FIRMA_VOORUIT_DAGEN):
+    """De komende afspraken op de firma-agenda's, als ruwe Google-items met 'kalender' erbij, of None als een agenda niet
+    te lezen is: dan geen gast en geen vangnet op een halve lezing."""
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    nu = nu or nu_lokaal()
+    uit = []
+    for adres, naam in firma_meelezen():
+        q = {"timeMin": nu.isoformat(), "timeMax": (nu + timedelta(days=dagen)).isoformat(), "singleEvents": "true",
+             "maxResults": "2500"}
+        try:
+            url = f"{agenda.API}/calendars/{urllib.parse.quote(adres, safe='')}/events?" + urllib.parse.urlencode(q)
+            d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}),
+                                                 timeout=30))
+        except Exception:  # noqa: BLE001
+            return None
+        uit += [{**e, "kalender": adres, "_agendanaam": naam} for e in d.get("items", []) if e.get("status") != "cancelled"]
+    return uit
+
+
+def _gast_erbij(ev, tok):
+    """Zet alleen Mehdi erbij als gast, zonder mail (sendUpdates=none). Niets anders aan de afspraak van de collega
+    verandert: de body draagt alleen 'attendees' (Z2, Z6)."""
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    gasten = [{k: v for k, v in g.items() if k in ("email", "responseStatus", "optional", "displayName")}
+              for g in ev.get("attendees") or []]
+    body = {"attendees": gasten + [{"email": WERKAGENDA, "responseStatus": "needsAction"}]}
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(ev['kalender'], safe='')}/events/"
+           f"{urllib.parse.quote(ev['id'], safe='')}?sendUpdates=none")
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PATCH",
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(req, timeout=30))
+
+
+def _op_werkagenda(eid, tok):
+    """Staat de afspraak (als uitnodiging) op Mehdi's werkagenda? Google zet een uitgenodigde gast niet altijd
+    automatisch op zijn agenda (instelling 'uitnodigingen toevoegen'); daarom lees ik het na (Codex in het overleg)."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(WERKAGENDA, safe='')}/events/{urllib.parse.quote(eid, safe='')}"
+    try:
+        ev = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}),
+                                              timeout=30))
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):
+            return False
+        raise
+    return ev.get("status") != "cancelled"
+
+
+def firma_gasten(evs, tok):
+    """Z2: elke komende afspraak op een firma-agenda met 'Mehdi: ...' vooraan krijgt Mehdi als stille gast, en ik lees
+    na dat ze op zijn werkagenda staat. Geeft (regels, niet_zichtbaar) met niet_zichtbaar de items voor het vangnet."""
+    regels, niet_zichtbaar = [], []
+    for ev in evs or []:
+        if not MEHDI_VOORAAN.match(ev.get("summary") or ""):
+            continue
+        try:
+            if not _gast_mehdi(ev):
+                terug = _gast_erbij(ev, tok)
+                if not _gast_mehdi(terug):
+                    raise RuntimeError("gast niet teruggelezen")
+                regels.append(f"{(ev.get('start') or {}).get('dateTime', '')[:16]} gast gezet op {ev['_agendanaam']}")
+            if not _op_werkagenda(ev["id"], tok):
+                niet_zichtbaar.append(ev)
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"gast niet gezet op {ev.get('_agendanaam')} ({type(e).__name__})")
+            niet_zichtbaar.append(ev)
+    return regels, niet_zichtbaar
+
+
+def _firma_vragen_lezen():
+    try:
+        with open(FIRMA_VRAGEN, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def firma_vangnet(evs, niet_zichtbaar, tok, nu=None):
+    """Z3: wat op een firma-agenda Mehdi lijkt aan te gaan maar niet op zijn werkagenda staat, wordt eenmaal een vraag in
+    de privé-agenda: een 'Mehdi: ...'-afspraak die niet doorkwam, of een afspraak die Mehdi in titel of omschrijving
+    noemt zonder hem als gast. Alleen de komende FIRMA_VANGNET_DAGEN; elke afspraak hoogstens één vraag (register)."""
+    nu = nu or nu_lokaal()
+    grens = (nu + timedelta(days=FIRMA_VANGNET_DAGEN)).isoformat()
+    reg = _firma_vragen_lezen()
+    kand = {f"{e['kalender']}|{e['id']}": e for e in niet_zichtbaar}
+    for e in evs or []:
+        tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
+        if re.search(r"\bMehdi\b", tekst) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e):
+            kand.setdefault(f"{e['kalender']}|{e['id']}", e)
+    regels, gewijzigd = [], False
+    for k, e in kand.items():
+        start = (e.get("start") or {}).get("dateTime") or (e.get("start") or {}).get("date") or ""
+        if not start or start[:10] < nu.date().isoformat() or start > grens or k in reg:
+            continue
+        dag = start[:10]
+        tekst = (f"Agendawacht vraagt: op de agenda {e.get('_agendanaam')} staat '{(e.get('summary') or '')[:80]}' op "
+                 f"{_ddmm(dag)}{(' om ' + start[11:16]) if 'T' in start else ''}, en die lijkt jou aan te gaan, maar ze staat "
+                 f"niet op je werkagenda. Moet jij erbij zijn? Zeg het, dan komt ze erop; anders laat je deze vraag weg.")
+        body = {"summary": f"VR Agendawacht: firma-afspraak die jou lijkt aan te gaan ({_ddmm(dag)})"[:200],
+                "start": {"date": dag}, "end": {"date": (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()},
+                "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []}, "description": tekst,
+                "extendedProperties": {"private": {MAILMERK: hashlib.sha256(f"firma:{k}".encode()).hexdigest()[:16],
+                                                   FIRMAMERK: k}}}
+        try:
+            _insert(PRIVE_AGENDA, body, tok)
+            reg[k] = {"gevraagd": nu.date().isoformat(), "dag": dag}
+            gewijzigd = True
+            regels.append(f"{dag} vraag gezet: firma-afspraak die Mehdi lijkt aan te gaan")
+        except Exception as ex:  # noqa: BLE001
+            regels.append(f"{dag} vraag niet gezet ({type(ex).__name__})")
+    oud = (nu - timedelta(days=60)).date().isoformat()
+    for k in [k for k, r in reg.items() if (r.get("dag") or "") < oud]:
+        reg.pop(k)
+        gewijzigd = True
+    if gewijzigd:
+        os.makedirs(os.path.dirname(FIRMA_VRAGEN), exist_ok=True)
+        tmp = f"{FIRMA_VRAGEN}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(reg, f, ensure_ascii=False, indent=0)
+        os.replace(tmp, FIRMA_VRAGEN)
+    return regels
+
+
+def firma_stap(vandaag):
+    """De firma-stap van de volledige ronde (Z2 en Z3). Geeft noden met een vaste tekst, zonder teller (N10)."""
+    if not firma_meelezen():
+        return []
+    tok = agenda._toegang()
+    evs = firma_afspraken(tok)
+    if evs is None:
+        return [{"tekst": "Een firma-agenda is niet te lezen: afspraken voor Mehdi daarin niet nagekeken", "wie": "claude"}]
+    gregels, niet_zichtbaar = firma_gasten(evs, tok)
+    vregels = firma_vangnet(evs, niet_zichtbaar, tok)
+    ag.log(f"dag {vandaag}", "schrijf", "firma-agenda's: Mehdi als stille gast waar het hem aangaat",
+           "\n".join(gregels + vregels))
+    if any("niet gezet" in r for r in gregels + vregels):
+        return [{"tekst": "Een gast of vraag voor een firma-afspraak is niet gezet; zie het werkverslag", "wie": "claude"}]
+    return []
+
+
 # Zorgafspraken uit mail ('Opdracht voor Claude - kine en tandarts in de privéagenda' v1.0, 14-10-2026). Een smalle
 # uitzondering op 'uit mail zet ik niets': een bevestigde afspraak voor Mehdi bij een beheerde persoonlijke zorgpraktijk
 # (profielen in het privéregister, nooit in git) wordt een echt blok in de privé-agenda: begin en einde uit de mail,
@@ -6317,6 +6486,10 @@ def main():
                 ag.log(f"dag {vandaag}", "schrijf", f"codes van twee letters: {rg} reeks(en) omgezet", "\n".join(rregels))
         if not DAG_ARG and not ALLEEN_VANDAAG:
             mail_noden.extend(lara_vakantie_stap(rit_items, vandaag))
+            try:
+                mail_noden.extend(firma_stap(vandaag))
+            except Exception as e:  # noqa: BLE001
+                mail_noden.append({"tekst": f"Firma-agenda's niet nagekeken ({type(e).__name__})", "wie": "claude"})
         # Agendagasten: collega's en partners op de afspraken waar ze bij horen, zonder mail (Mehdi, 03-10-2026).
         # Volledige ronde: twee maanden vooruit; de wijzigingsroute: de dag die veranderde.
         try:

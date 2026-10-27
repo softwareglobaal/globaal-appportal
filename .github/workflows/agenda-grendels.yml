@@ -28,6 +28,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_wisgrendel.py
       - run: python3 mijnagents-runner/tests/test_agenda_signaal.py
       - run: python3 mijnagents-runner/tests/test_lara_vakanties.py
+      - run: python3 mijnagents-runner/tests/test_agenda_zicht.py
       - run: python3 mijnagents-runner/tests/test_annulering_en_thuis.py
       - run: python3 mijnagents-runner/tests/test_agenda_beweging.py
       # J6 (ontwerp regie-zoom v1.2): test_taken.py toetst taak_plannen op het echte bordschema uit init_db van
