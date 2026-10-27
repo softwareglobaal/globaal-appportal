@@ -2072,6 +2072,23 @@ def kleur_gewenst(a, info):
 
 
 HANDKLEUREN = []   # de vragen van de laatste kleurronde
+DOOR_KLEURSCRIPT = []   # wat daarvan het Apps Script van FR-21 had veranderd
+
+# De bron van FR-21, gevonden 27-10-2026 in de Drive van de werkagenda (alleen gelezen): een Apps Script in Mehdi's eigen
+# account mehdiprivewerkagenda, project 'Naamloos project' van 14-04-2025, functie colorCodeEvents. Elke 30 minuten (om
+# :15 en :45 UTC) geeft het elke afspraak van de werkagenda voor 30 dagen de kleur van het eerste woord uit deze lijst dat
+# in de titel staat, wat de soort ook is. Codes van twee letters (UB, TK, HA, HB) raakt het niet; een Calendly-titel met
+# UNABO of TKN wel, en met gasten zet ik die titel niet om. Uitzetten kan alleen in dat account, met een ja van Mehdi.
+KLEURSCRIPT = "het Apps Script 'Naamloos project' (colorCodeEvents) van mehdiprivewerkagenda"
+KLEURSCRIPT_UIT = "trigger verwijderen op script.google.com/home/triggers, aangemeld als mehdiprivewerkagenda@gmail.com"
+KLEURSCRIPT_WOORDEN = (("harmoniebouw", "6"), ("h-architects", "8"), ("unabo", "3"), ("tkn", "5"),
+                       ("energie efficient", "7"))
+
+
+def kleurscript_kleur(titel):
+    """De kleur die het Apps Script van FR-21 op deze titel zet, of '' als het de titel niet raakt."""
+    t = (titel or "").lower()
+    return next((kleur for woord, kleur in KLEURSCRIPT_WOORDEN if woord in t), "")
 
 
 def kleuren_zetten(items, alleen_dag=None):
@@ -2081,8 +2098,8 @@ def kleuren_zetten(items, alleen_dag=None):
     tok = agenda._toegang()
     nu_dag = nu_lokaal().date().isoformat()
     gezet, goed, geen, fout, vast = 0, 0, 0, 0, 0
-    global HANDKLEUREN
-    HANDKLEUREN = []
+    global HANDKLEUREN, DOOR_KLEURSCRIPT
+    HANDKLEUREN, DOOR_KLEURSCRIPT = [], []
     for a in items:
         if _firma_kopie(a):
             continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
@@ -2100,11 +2117,14 @@ def kleuren_zetten(items, alleen_dag=None):
             continue
         actie = kleur_actie(a, wens)
         regel = None
+        door_script = False
         if actie == "herstellen":
             # Iets buiten de agent zette een andere kleur. Ik zet ze terug en meld het, met het
             # tijdstip van die wijziging: zo is te zien wie of wat het doet (FR-20, FR-21).
+            door_script = a.get("_kleur") == kleurscript_kleur(a["titel"])
             regel = (f"{a['start'][:16]} {a['titel'][:55]}: {KLEURNAAM.get(a.get('_kleur'), a.get('_kleur'))} "
-                     f"teruggezet naar {KLEURNAAM.get(wens, wens)} (gewijzigd op {(a.get('_gewijzigd') or '?')[:16]} UTC)")
+                     f"teruggezet naar {KLEURNAAM.get(wens, wens)} (gewijzigd op {(a.get('_gewijzigd') or '?')[:16]} UTC"
+                     f"{', door het Apps Script' if door_script else ''})")
         merk = {"extendedProperties": {"private": {KLEURMERK: wens}}}
         try:
             if actie == "goed":
@@ -2118,6 +2138,8 @@ def kleuren_zetten(items, alleen_dag=None):
             gezet += 1
             if regel:
                 HANDKLEUREN.append(regel)     # pas na een geslaagde patch: 'teruggezet' telt alleen wat lukte (audit A14, FR-95)
+                if door_script:
+                    DOOR_KLEURSCRIPT.append(regel)
         except Exception as e:  # noqa: BLE001
             fout += 1
             print("kleur mislukt:", _toon(a), type(e).__name__, file=sys.stderr)
@@ -2127,7 +2149,8 @@ def kleuren_zetten(items, alleen_dag=None):
 # Kleurherstel om :17 en :47, ook 's nachts en in het weekend (FR-21). Gemeten 26-09-2026 met een
 # volgmeting: elke 30 minuten, om :15 en :45 UTC, zet iets buiten de agent, rechtstreeks bij Google,
 # elke afspraak met UNABO of TKNB in de titel voor de komende vier weken op paars en geel, een per seconde. Het zit niet op de server,
-# niet op de Mac, niet in Claude of Codex. De volledige ronde kijkt maar acht dagen vooruit en
+# niet op de Mac, niet in Claude of Codex: het is het Apps Script KLEURSCRIPT (gevonden 27-10-2026, zie hierboven). Zolang
+# het niet uit staat, noemt dit herstel het bij naam, met de stap om het uit te zetten. De volledige ronde kijkt maar acht dagen vooruit en
 # draait niet in het weekend, dus bleef de agenda van zaterdag de hele dag fout. Deze korte ronde
 # zet alleen de kleuren terug (geen ritten, geen Routes, geen oproepen) en onthoudt wanneer.
 KLEUR_VOORUIT_DAGEN = 29
@@ -2139,9 +2162,11 @@ def kleurherstel():
     _slot = slot_nemen()  # noqa: F841
     items = [i for i in afspraken(0, KLEUR_VOORUIT_DAGEN) if not i.get("fout")]
     gezet, goed, geen, fout, vast = kleuren_zetten(items)
-    terug = len(HANDKLEUREN)
+    terug, script = len(HANDKLEUREN), len(DOOR_KLEURSCRIPT)
     print(f"  [schrijf] kleurherstel ({KLEUR_VOORUIT_DAGEN} dagen): {terug} teruggezet omdat iets anders ze veranderde, "
           f"{gezet - terug} nieuw gezet, {goed} klopten al, {geen} zonder code, {fout} niet gelukt", flush=True)
+    if script:
+        print(f"    waarvan {script} door {KLEURSCRIPT}; uitzetten: {KLEURSCRIPT_UIT}")
     for regel in HANDKLEUREN[:40]:
         print("    " + regel)
     if gezet or fout:
@@ -2150,7 +2175,7 @@ def kleurherstel():
                 geschiedenis = json.load(f)
         except (OSError, ValueError):
             geschiedenis = []
-        geschiedenis.append({"tijd": nu_lokaal().isoformat(timespec="minutes"), "teruggezet": terug,
+        geschiedenis.append({"tijd": nu_lokaal().isoformat(timespec="minutes"), "teruggezet": terug, "door_script": script,
                              "nieuw": gezet - terug, "mislukt": fout, "voorbeelden": HANDKLEUREN[:10]})
         with open(KLEURHERSTEL_LOG, "w", encoding="utf-8") as f:
             json.dump(geschiedenis[-200:], f, ensure_ascii=False, indent=1)
@@ -7942,7 +7967,10 @@ def main():
             gebeld = bel_als_vastgelopen(items + archief)
             if gebeld:
                 ag.log(f"dag {vandaag}", "bellen", "vastgelopen: Mehdi gebeld", gebeld)
-        if HANDKLEUREN:
+        if DOOR_KLEURSCRIPT:
+            noden.append({"tekst": f"{KLEURSCRIPT[0].upper()}{KLEURSCRIPT[1:]} kleurt nog op titelwoorden (FR-21): {KLEURSCRIPT_UIT}",
+                          "wie": "mehdi"})
+        if len(HANDKLEUREN) > len(DOOR_KLEURSCRIPT):
             noden.append({"tekst": "Iets buiten de agent verandert kleuren (tijdstippen in het signaal): welke tool of wie?", "wie": "mehdi"})
         if open_na:
             noden.append({"tekst": "Afspraken voorbij met ??: doorgegaan of niet?", "wie": "mehdi"})

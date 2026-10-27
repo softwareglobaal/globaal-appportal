@@ -719,6 +719,10 @@ Wat ik daaruit meeneem:
   UNABO- en TKNB-afspraken van de komende vier weken op paars en geel. Daarom zet `agenda_wacht.py --kleuren` om
   :17 en :47, ook 's nachts en in het weekend, alleen de kleuren terug, 29 dagen vooruit. Elke keer staat in
   `mijnagents-data/agenda-kleurherstel.json`; de zelfcontrole meldt het (kleur_nacht) tot de bron uit is.
+  De bron (gevonden 27-10-2026) is het Apps Script 'Naamloos project' (colorCodeEvents) in Mehdi's account
+  mehdiprivewerkagenda: het kleurt op het woord unabo, tkn, harmoniebouw, h-architects of energie efficient in de titel.
+  Codes van twee letters raakt het niet. Ik noem het bij naam met de stap om het uit te zetten (trigger verwijderen op
+  script.google.com/home/triggers); dat doe ik alleen met een ja van Mehdi.
 - Alle tijden zijn Brusselse tijd. De VM draait op UTC; cron start mij vaker en ik beslis
   zelf of het mijn beurt is. Elke ronde begint in het logboek met haar tijdstip.
 - Het Google-plafond (100 per dag) is hard. De omgeving kan het alleen verlagen.

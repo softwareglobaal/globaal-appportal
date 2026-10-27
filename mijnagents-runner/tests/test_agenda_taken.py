@@ -1511,6 +1511,42 @@ check("de kleuren worden elk uur vier weken vooruit teruggezet, ook in het weeke
       and _kh_src.index('"--kleuren" in sys.argv') < _kh_src.index('"--ronde" in sys.argv and not is_rondetijd'),
       str((_kh_terug, _khd, _khb)))
 
+# De bron van FR-21 bij naam (27-10-2026): het Apps Script colorCodeEvents kleurt op het eerste titelwoord. Dit zijn de vier
+# Calendly-afspraken van 27-10 die elke kleurronde terugkwamen, met de kleur die het script zette en mijn merk.
+_ks_items = [("Mehdi: [TKN-PO]: Sander Smeets - Offerte bespreking", "5", "6"), ("Mehdi: [UNABO-PO] Sevag Mardirosian - STA", "3", "6"),
+             ("Mehdi: [UNABO-KO] Torben De Moor", "3", "7"), ("Mehdi: [TKN-PO]: RAF VAN DYCK", "5", "6"),
+             ("Mehdi: [HA-IN] weekoverleg", "3", "10")]      # paars op een HA-titel: dat doet het script niet
+check("het Apps Script van FR-21 raakt alleen het oude firmawoord in de titel, geen code van twee letters",
+      [W.kleurscript_kleur(t) for t, _, _ in _ks_items] == ["5", "3", "3", "5", ""]
+      and [W.kleurscript_kleur(t) for t in ("Mehdi: [UB-PO] Sevag", "Mehdi: [TK-PO] Raf", "[HA-KO] 2605 - Simone", "[HB-IN] werf")]
+      == ["", "", "", ""] and W.kleurscript_kleur("Overleg Harmoniebouw") == "6")
+_ksb = []
+_ks_oud = (W._patch, W.agenda._toegang, W.afspraken, W.slot_nemen, W.KLEURHERSTEL_LOG)
+W._patch = lambda a, body, tok: _ksb.append(body)
+W.agenda._toegang = lambda: "tok"
+W.afspraken = lambda van, tot: [{"id": f"k{i}", "titel": t, "start": (_dk + _td(days=i)).isoformat(),
+                                 "einde": (_dk + _td(days=i, hours=1)).isoformat(), "kalender": W.WERKAGENDA,
+                                 "_kleur": kleur, "_merk": {W.KLEURMERK: merk}, "_gewijzigd": "2026-10-27T15:15:02Z"}
+                                for i, (t, kleur, merk) in enumerate(_ks_items)]
+W.slot_nemen = lambda *x, **k: None
+W.KLEURHERSTEL_LOG = os.path.join(_tf.mkdtemp(), "kleurherstel.json")
+_ks_uit = io.StringIO()
+try:
+    with __import__("contextlib").redirect_stdout(_ks_uit):
+        _ks_terug = W.kleurherstel()
+    _ks_log = json.loads(Path(W.KLEURHERSTEL_LOG).read_text(encoding="utf-8"))
+    _ks_zc = [x["tekst"] for x in Z.kleur_nacht(_ks_log, W.nu_lokaal())]
+finally:
+    W._patch, W.agenda._toegang, W.afspraken, W.slot_nemen, W.KLEURHERSTEL_LOG = _ks_oud
+check("het kleurherstel noemt het Apps Script bij naam, met de stap om het uit te zetten",
+      _ks_terug == 5 and [b.get("colorId") for b in _ksb] == ["6", "6", "7", "6", "10"]
+      and _ks_log[-1]["door_script"] == 4 and len(W.DOOR_KLEURSCRIPT) == 4
+      and "waarvan 4 door het Apps Script 'Naamloos project' (colorCodeEvents)" in _ks_uit.getvalue()
+      and "script.google.com/home/triggers" in _ks_uit.getvalue()
+      and not W.HANDKLEUREN[4].endswith("door het Apps Script)")
+      and len(_ks_zc) == 1 and "4 daarvan door het Apps Script" in _ks_zc[0] and "script.google.com/home/triggers" in _ks_zc[0],
+      str((_ks_terug, _ksb, _ks_log[-1], _ks_zc, _ks_uit.getvalue()[-400:])))
+
 check("de controle bestaat", (HIER / "controle_agenda.py").exists())
 check("de archiefgrendel bestaat", (HIER / "tests" / "test_agenda_archief.py").exists())
 

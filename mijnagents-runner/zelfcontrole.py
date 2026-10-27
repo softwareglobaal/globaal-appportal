@@ -294,14 +294,21 @@ def omgeving(nu):
     except Exception as e:  # noqa: BLE001
         uit.append({"controle": "regelwijziging_open", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
                     "tekst": f"de takenlijst is niet te lezen ({type(e).__name__})", "door": ""})
+    return uit + kleur_nacht(herstel, nu)
+
+
+def kleur_nacht(herstel, nu):
+    """Wat het kleurherstel de laatste 24 uur terugzette, met de bron bij naam en de stap om ze uit te zetten (FR-21)."""
     grens = (nu - timedelta(days=1)).isoformat(timespec="minutes")
     recent = [h for h in herstel if h.get("tijd", "") >= grens and h.get("teruggezet")]
-    if recent:
-        uit.append({"controle": "kleur_nacht", "dag": nu.date().isoformat(), "uur": recent[-1]["tijd"][11:16],
-                    "agenda": "", "titel": "",
-                    "tekst": f"iets buiten de agent veranderde {sum(h['teruggezet'] for h in recent)} kleuren in 24 uur; "
-                             f"het kleurherstel zette ze terug", "door": ""})
-    return uit
+    if not recent:
+        return []
+    script = sum(int(h.get("door_script") or 0) for h in recent)
+    bron = f"; {script} daarvan door {W.KLEURSCRIPT}, {W.KLEURSCRIPT_UIT}" if script else ""
+    return [{"controle": "kleur_nacht", "dag": nu.date().isoformat(), "uur": recent[-1]["tijd"][11:16],
+             "agenda": "", "titel": "",
+             "tekst": f"iets buiten de agent veranderde {sum(h['teruggezet'] for h in recent)} kleuren in 24 uur; "
+                      f"het kleurherstel zette ze terug{bron}", "door": ""}]
 
 
 CONTROLEPUNTEN = Path.home() / "appportal/mijnagents-data/agenda-signaal-controlepunten.json"
