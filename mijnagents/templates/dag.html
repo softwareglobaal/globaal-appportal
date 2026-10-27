@@ -30,7 +30,7 @@
 </style>
 </head>
 <body>
-<header><h1>Dag {{ datum }}</h1><a href="{{ url_for('dagen_pagina') }}">← alle dagen</a><a href="{{ url_for('bord') }}">bord</a></header>
+<header><h1>Dag {{ datum }}</h1><a href="{{ url_for('dagen_pagina') }}">← alle dagen</a><a href="{{ url_for('week_pagina', week=week) if week else url_for('week_nu') }}">week</a><a href="{{ url_for('bord') }}">bord</a></header>
 <main>
 
   <div class="blok">

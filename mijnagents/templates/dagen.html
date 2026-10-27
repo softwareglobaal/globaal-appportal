@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dagen — {{ app_naam }}</title>
+<title>Dagen · {{ app_naam }}</title>
 <style>
   :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--stil:#f59e0b}
   *{box-sizing:border-box}
@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-<header><h1>Dagen</h1><a href="{{ url_for('bord') }}">← bord</a></header>
+<header><h1>Dagen</h1><a href="{{ url_for('bord') }}">← bord</a><a href="{{ url_for('week_nu') }}">week</a></header>
 <main>
   <p class="uitleg">Per dag wat de logboek-laag samenbracht. Klik op de datum voor de dagpagina met alles van die dag: overzicht en bundels, spiegel, locatie, agenda, gesprekken, mail, foto's en lichaam. Ontbreekt een kolom, dan zegt de agent op zijn kaart wat hij daarvoor nodig heeft.</p>
   <div class="wrap">
