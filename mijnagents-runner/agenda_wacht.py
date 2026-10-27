@@ -3177,12 +3177,51 @@ FIRMA_SLOT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma.lock")
 FIRMA_NODEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-noden.json")
 
 
-def _firma_buitenblok(a, fysiek):
-    """Mijn open Bezet blok voor een verborgen firma-afspraak op een echt adres: voor de ritten een buitenafspraak, ook al
-    draagt het een algemene titel (Codex-hertest 24)."""
+FIRMARIT = "agendawacht_firma_rit"     # wat de titelcode van de firma-afspraak zegt: buiten, anders of geen
+# een Belgische of Nederlandse postcode met de gemeente erna ('3000 Leuven', '1012 AB Amsterdam')
+FIRMA_POSTCODE_RE = re.compile(r"(?<![\d.,/-])[1-9]\d{3}(?:\s?[A-Z]{2})?\s+[A-Za-zÀ-ÿ]")
+
+
+def _firma_ritcode(e):
+    """De titelcode van de firma-afspraak, voor de ritten: 'buiten' (een buitencode), 'anders' (een code zonder rit,
+    zoals IN of een online code) of 'geen' (geen code: dan beslist de plaats). Overleg review 3, R4."""
+    info = lees_titel((e or {}).get("summary") or "")
+    if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
+        return "buiten"
+    return "anders" if info["soort"] else "geen"
+
+
+def _firma_open_blok(a):
+    """Mijn open Bezet blok met een uur voor een verborgen firma-afspraak, in de privé-agenda."""
     mk = a.get("_merk") or {}
-    return bool(fysiek and mk.get(FIRMAMERK) and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
+    return bool(mk.get(FIRMAMERK) and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
                 and not a.get("_vrij") and "T" in (a.get("start") or "") and a.get("kalender") == PRIVE_AGENDA)
+
+
+def _firma_buitenblok(a, fysiek):
+    """Mijn open Bezet blok voor een verborgen firma-afspraak: voor de ritten een buitenafspraak, ook al draagt het een
+    algemene titel (Codex-hertest 24). Het volgt de titelcode van zijn firma-afspraak (een code zonder rit: geen rit) en
+    vraagt een volledig adres met een Belgische of Nederlandse postcode: 'Keizerstraat 12' kan net zo goed in Paramaribo
+    liggen (overleg review 3, R4)."""
+    mk = a.get("_merk") or {}
+    return bool(fysiek and _firma_open_blok(a) and mk.get(FIRMARIT, "geen") != "anders"
+                and FIRMA_POSTCODE_RE.search(a.get("locatie") or ""))
+
+
+def _firma_blok_zonder_adres(a):
+    """Een open firmablok dat een rit zou vragen maar geen volledig adres heeft: dan geen rit, wel een regel (R4)."""
+    mk = a.get("_merk") or {}
+    plaats = a.get("locatie") or ""
+    return (_firma_open_blok(a) and not FIRMA_POSTCODE_RE.search(plaats)
+            and (mk.get(FIRMARIT) == "buiten" or (mk.get(FIRMARIT, "geen") == "geen" and _bruikbare_locatie(plaats))))
+
+
+def _vraagt_rit(a, info, fysiek):
+    """Vraagt deze afspraak een rit? Een item van de firmacontrole beslist alleen via _firma_buitenblok, op elke plek
+    (overleg review 3, R1 en R4); de rest volgt zijn titelcode."""
+    if (a.get("_merk") or {}).get(FIRMAMERK):
+        return _firma_buitenblok(a, fysiek)
+    return bool(info["buiten"] or info["soort"] in BUITEN_SOORTEN)
 
 
 FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette, verzette of afrondde: daar meteen de dagroute
@@ -3428,6 +3467,14 @@ def _op_werkagenda(ev, tok):
         if orig and (not xo or datetime.fromisoformat(xo if "T" in xo else xo + "T00:00:00+00:00")
                      != datetime.fromisoformat(orig if "T" in orig else orig + "T00:00:00+00:00")):
             continue
+        if "date" in (x.get("start") or {}) and x.get("transparency") == "transparent" and any(
+                wat == "alles" and patroon.search(t or "") for patroon, wat in DAG_MARKERINGEN
+                for t in (x.get("summary"), ev.get("summary"))):
+            # een hele dag die alles afsluit ('geen afspraken', 'Buitenland') maar op Beschikbaar staat, zoals Google een
+            # hele dag zet: Calendly telt ze niet, dus telt ze niet als doorgekomen; dan het gewone Bezet blok over die
+            # dag(en). Op de kopie zelf schrijf ik niets (overleg review 3, R3; FR-84)
+            ev["_op_beschikbaar"] = True
+            continue
         return True
     return False
 
@@ -3663,7 +3710,8 @@ def _firma_vraag_body(k, e, start, sterk):
     dag = start[:10]
     eind = _tijd(e, "end")
     volgende = (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()
-    merk = {"private": {MAILMERK: hashlib.sha256(f"firma:{k}".encode()).hexdigest()[:16], FIRMAMERK: k}}
+    merk = {"private": {MAILMERK: hashlib.sha256(f"firma:{k}".encode()).hexdigest()[:16], FIRMAMERK: k,
+                        FIRMARIT: _firma_ritcode(e)}}
     if sterk is None:
         # twijfel: alleen gastkopieën, het uur van de organisator is niet te lezen (Codex-hertest 13)
         waar = "; ".join(f"op {n}: {_ddmm((t or '')[:10])}" + (f" om {t[11:16]}" if "T" in (t or "") else " (hele dag)")
@@ -3697,6 +3745,12 @@ def _firma_vraag_body(k, e, start, sterk):
         tijd = {"start": {"date": dag}, "end": {"date": volgende}}
     titel = ("VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda" if sterk
              else "VR Agendawacht: firma-afspraak die jou lijkt aan te gaan")
+    if sterk and e.get("_op_beschikbaar"):
+        # wel op de werkagenda, maar een hele dag op Beschikbaar (R3)
+        titel = "VR Agendawacht: firma-dag voor jou staat op Beschikbaar"
+        tekst = (f"Agendawacht: op de agenda {e.get('_agendanaam')} sluit '{(e.get('summary') or '')[:80]}' {_ddmm(dag)} af. "
+                 "Op je werkagenda staat ze op Beschikbaar (zo zet Google een hele dag), en dan telt Calendly ze niet. Dit "
+                 "blok houdt de dag bezet. Zet je de dag op je werkagenda zelf op Bezet, dan rond ik dit blok af.")
     # met het uur en het eigen kenmerk erbij: elk blok draagt zo zijn eigen titel, ook twee op hetzelfde uur, en een rit
     # (die zijn afspraak aan de titel herkent) kan niet naar een ander blok overlopen (Codex-hertest 29 en 30)
     uur = (f" {start[11:16]}, #{merk['private'][MAILMERK][:6]}" if "dateTime" in tijd.get("start", {}) else "")
@@ -3735,7 +3789,9 @@ def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
     Mehdi het, dan blijven zijn titel en tekst staan en verandert alleen de tijd, de status en de plaats."""
     body = _firma_vraag_body(k, e, start, sterk)
     nieuw = {"transparency": body["transparency"], "start": _tijd_patch(body["start"]), "end": _tijd_patch(body["end"]),
-             "location": body.get("location", ""), "reminders": body["reminders"]}     # ook de herinnering (hertest 25)
+             "location": body.get("location", ""), "reminders": body["reminders"],     # ook de herinnering (hertest 25)
+             # en de titelcode van de afspraak, die beslist over de rit; het merk blijft (overleg review 3, R4)
+             "extendedProperties": {"private": {**(x.get("_merk") or {}), FIRMARIT: _firma_ritcode(e)}}}
     if (x.get("titel") or "").startswith("VR Agendawacht:"):
         nieuw.update(summary=body["summary"], description=body["description"])
     _patch(x, nieuw, tok)
@@ -3785,7 +3841,8 @@ def _firma_blok_nakijken(k, r, g, tok):
     # ook de plaats: een blok met een verkeerd adres stuurt de rit naar die plaats (Codex-hertest 28)
     plaats = (_firma_vraag_body(k, e, start, sterk).get("location") or "").strip()
     goed = (_utc(x.get("start")) == _utc(start) and _utc(x.get("einde")) == _utc(einde)
-            and raw.get("transparency", "opaque") != "transparent" and (raw.get("location") or "").strip() == plaats)
+            and raw.get("transparency", "opaque") != "transparent" and (raw.get("location") or "").strip() == plaats
+            and mk.get(FIRMARIT, "geen") == _firma_ritcode(e))
     if goed:
         return ""
     if r.get("hersteld"):
@@ -3858,7 +3915,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         if not start or _einde_voorbij(_tijd(e, "end"), nu) or (zwak and start > zwak_grens):
             continue
         # een Bezet blok volgt ook de plaats van zijn afspraak: een nieuw adres werkt het blok bij (Codex-hertest 21)
-        vinger = e.get("_vinger") or (hashlib.sha256((e.get("location") or "").encode()).hexdigest()[:12]
+        # en de titelcode: een collega die IN in PB verandert, verandert of er een rit komt (overleg review 3, R4)
+        vinger = e.get("_vinger") or (hashlib.sha256(f"{e.get('location') or ''}|{_firma_ritcode(e)}".encode()).hexdigest()[:12]
                                       if sterk and (e.get("location") or "") else "")
         gewenst[k] = (e, sterk, start, _tijd(e, "end"), vinger)
     regels, gewijzigd = [], False
@@ -5239,8 +5297,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
             _li = lees_titel(a["titel"])
             # ook een Bezet firmablok op een echt adres, met zijn algemene titel (Codex-hertest 30)
-            if "T" in a.get("start", "") and not _li["reistijd"] and (
-                    _li["buiten"] or _li["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, _bruikbare_locatie(adres))) \
+            if "T" in a.get("start", "") and not _li["reistijd"] and _vraagt_rit(a, _li, _bruikbare_locatie(adres)) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
                     and not any(x.get("kalender") == a.get("kalender") and _zelfde_tijd(x.get("einde"), a["start"])
                                 and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
@@ -5263,7 +5320,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
             # ook een Bezet blok voor een verborgen firma-afspraak met een echt adres: dat draagt een algemene titel
             # (Codex-hertest 28)
-            if info["buiten"] or info["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, _bruikbare_locatie(adres)):
+            if _vraagt_rit(a, info, _bruikbare_locatie(adres)):
                 regels.append(f"{a['start'][:16]} {_toon(a, 50)}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
         fysiek = _bruikbare_locatie(adres)
@@ -5281,7 +5338,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 woord, vp = vaste_plek(a["titel"])
                 if vp:
                     adres, fysiek, bron_adres = vp["adres"], True, f"vaste plek ({woord})"
-        if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, fysiek)):
+        if info["reistijd"] or not _vraagt_rit(a, info, fysiek):
+            if _firma_blok_zonder_adres(a) and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag):
+                regels.append(f"{a['start'][:16]} {_toon(a, 50)}: firmablok zonder volledig adres: geen rit")
             continue
         a["_bron_adres"] = bron_adres
         if fysiek and bron_adres == "agenda" and info["nummer"] in projecten:
@@ -5881,13 +5940,14 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
         # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
         # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
-        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
+        if _lx and not _lx["reistijd"] and (x.get("_merk") or {}).get(FIRMAMERK):
+            # ook een Bezet blok van een verborgen firma-afspraak houdt zijn ritten vast (Codex-hertest 26), maar alleen
+            # zolang het een rit vraagt, ook als Mehdi het hernoemde: dan beslist alleen _firma_buitenblok (review 3, R1)
+            if _vraagt_rit(x, _lx, _bruikbare_locatie(x.get("locatie") or "")):
+                grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
+                grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+        elif _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
                 and not lara_zonder_rit(x, vrij):
-            grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
-            grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
-        elif _lx and not _lx["reistijd"] and (x.get("_merk") or {}).get(FIRMAMERK) \
-                and _firma_buitenblok(x, _bruikbare_locatie(x.get("locatie") or "")):
-            # ook een Bezet blok van een verborgen firma-afspraak houdt zijn ritten vast (Codex-hertest 26)
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
         if "T" in x.get("start", "") and not _lx["reistijd"]:
@@ -5945,7 +6005,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
                    and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)
                    and not ((y.get("_merk") or {}).get(FIRMAMERK)
-                            and not _firma_buitenblok(y, _bruikbare_locatie(y.get("locatie") or "")))]
+                            and not _vraagt_rit(y, {}, _bruikbare_locatie(y.get("locatie") or "")))]
             if any(y["kalender"] == x["kalender"] for y in bij):
                 continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
             ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})

@@ -962,14 +962,14 @@ check("organisator onleesbaar en een gastkopie met onzekere tijd: onzeker (een b
       not _gk48 and _onz48 == {W._firma_sleutel(_c48)} and not _tw48, str((_gk48, _onz48, _tw48)))
 
 # --- Codex-hertest 24: het Bezet blok krijgt een rit en het belrooster wordt meteen bijgewerkt ----------------------
-_blk = {"kalender": W.PRIVE_AGENDA, "start": f"{_morgen}T10:00:00+01:00", "_vrij": False,
+_blk = {"kalender": W.PRIVE_AGENDA, "start": f"{_morgen}T10:00:00+01:00", "_vrij": False, "locatie": "Kerkstraat 1, 2000 Antwerpen",
         "_merk": {W.FIRMAMERK: "firma|x@google.com|", W.MAILMERK: "abcdef0123456789"}}
 check("een open Bezet blok voor een firma-afspraak op een echt adres telt voor de ritten als buitenafspraak",
       W._firma_buitenblok(_blk, True) and not W._firma_buitenblok(_blk, False)
       and not W._firma_buitenblok(dict(_blk, _merk={W.FIRMAMERK: "x", W.MAILMERK: "opgelost:abc"}), True))
 _src = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de rittenroute gebruikt dat, en de kleurronde werkt het belrooster meteen bij na een nieuw of verzet blok",
-      "_firma_buitenblok(a, fysiek)" in _src.split("def reistijd_zetten(")[1][:60000]
+      "_vraagt_rit(a, info, fysiek)" in _src.split("def reistijd_zetten(")[1][:60000]
       and "firma_dagen_afwerken()" in _src.split("def firma_kleurronde(")[1][:1500])
 _pat49 = []
 _o49 = (W._patch,)
@@ -1007,7 +1007,7 @@ check("na de volledige ronde worden de wachtende dagen ook afgewerkt (niet in de
 check("bij een verschuiving naar een andere dag komen de oude en de nieuwe dag in de lijst",
       "oude en nieuwe dag" in _src26.split("def firma_vangnet(")[1][:9000])
 check("een Bezet blok van een firma-afspraak houdt zijn ritten vast bij de opruimcontrole",
-      "_firma_buitenblok(x, _bruikbare_locatie(" in _src26.split("def reistijd_zetten(")[1])
+      "_vraagt_rit(x, _lx, _bruikbare_locatie(" in _src26.split("def reistijd_zetten(")[1])
 
 # --- Codex-hertest 27 ------------------------------------------------------------------------------------------
 import subprocess as _sp  # noqa: E402
@@ -1031,7 +1031,7 @@ _ADR52 = "Kerkstraat 1, 2000 Antwerpen"
 _blk52 = {"kalender": W.PRIVE_AGENDA, "id": "q52", "titel": "VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda",
           "start": f"{_morgen}T10:00:00+01:00", "einde": f"{_morgen}T11:00:00+01:00", "locatie": _ADR52, "_vrij": False,
           "maker": W.WERKAGENDA, "omschrijving": "", "deelnemers": [],
-          "_merk": {W.FIRMAMERK: "firma|x52@google.com|", W.MAILMERK: "abcdef0123456789"}}
+          "_merk": {W.FIRMAMERK: "firma|x52@google.com|", W.MAILMERK: "abcdef0123456789", W.FIRMARIT: "buiten"}}
 _o52 = {n: getattr(W, n) for n in ("_cache_laden", "_cache_bewaren", "lara_vakantiedagen", "schoolvakantie_dekking",
                                    "geen_auto_dagen", "plek_zoeken", "vaste_plek", "coord", "rijtijd_min", "ritlabel",
                                    "_insert", "_patch")}
@@ -1061,7 +1061,7 @@ _bron28 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een tijdelijke kaartstoring in de dagroute: de dag blijft wachten, en de ritstap schrijft die regel (hertest 28)",
       _uit52[0] is False and '[reistijd] rit ontbreekt door een storing: {_storing}' in _bron28
       and '"kaartdienst niet beschikbaar" in r or "grendelbron niet te lezen" in r' in _bron28, str(_uit52))
-_e52 = dict(ev("x52", "Mehdi: [EL-IN] overleg"), location=_ADR52)
+_e52 = dict(ev("x52", "Mehdi: [EL-PB] overleg"), location=_ADR52)
 _pat52, _raw52 = [], {"transparency": "opaque", "location": "Verkeerde straat 9, 9999 Elders"}
 _o52b = (W._prive_item_lezen, W._google, W._patch)
 W._prive_item_lezen = lambda eid, tok: dict(_blk52, locatie=_raw52["location"])
@@ -1079,8 +1079,8 @@ check("een bestaand Bezet blok met een verkeerd adres wordt een keer hersteld na
       and _m52b == "", str((_pat52, _r52a, _m52a, _m52b)))
 
 # --- Codex-hertest 29: twee firmablokken op een dag, elk met zijn eigen rit ------------------------------------------
-_eA = dict(ev("a53", "Mehdi: [EL-IN] overleg A"), location=_ADR52)
-_eB = dict(ev("b53", "Mehdi: [EL-IN] overleg B"), location="Meir 50, 2000 Antwerpen",
+_eA = dict(ev("a53", "Mehdi: [EL-PB] overleg A"), location=_ADR52)
+_eB = dict(ev("b53", "Mehdi: [EL-PB] overleg B"), location="Meir 50, 2000 Antwerpen",
            start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
 _bA = W._firma_vraag_body("firma|a53@google.com|", _eA, f"{_morgen}T10:00:00+01:00", True)
 _bB = W._firma_vraag_body("firma|b53@google.com|", _eB, f"{_morgen}T14:00:00+01:00", True)
@@ -1118,7 +1118,7 @@ check("in de rittenroute krijgt blok A een eigen heenrit en neemt het de rit van
                           for b in _ins53), str((_pat53, _ins53))[:600])
 
 # --- Codex-hertest 30: twee firmablokken op hetzelfde uur; een onleesbare bron voor dagen zonder auto -------------
-_eC = dict(_eB, id="c54", iCalUID="c54@google.com", summary="Mehdi: [EL-IN] overleg C",
+_eC = dict(_eB, id="c54", iCalUID="c54@google.com", summary="Mehdi: [EL-PB] overleg C",
            start={"dateTime": f"{_morgen}T10:00:00+01:00"}, end={"dateTime": f"{_morgen}T11:00:00+01:00"})
 _bC = W._firma_vraag_body("firma|c54@google.com|", _eC, f"{_morgen}T10:00:00+01:00", True)
 _ritC = dict(_ritB, id="rit-c", start=f"{_morgen}T09:15:00+01:00", einde=f"{_morgen}T09:45:00+01:00",
@@ -1266,6 +1266,105 @@ _b58 = _g58.store["b57"]
 check("lukt de eerste schrijfactie en zou een tweede falen, dan staat het blok toch als hele dag (R2)",
       _b58["summary"].startswith("Opgelost") and "date" in _b58["start"] and _b58.get("transparency") == "transparent",
       str(_b58.get("start")))
+
+# --- Review 3 (R4): een firmablok volgt de titelcode van zijn afspraak en vraagt een volledig adres --------------
+check("de titelcode van de firma-afspraak beslist: buitencode wel, IN of online niet, geen code: de plaats (R4)",
+      [W._firma_ritcode({"summary": s}) for s in ("Mehdi: [EL-KB] werfbezoek", "Mehdi: [EL-IN] overleg",
+                                                   "Mehdi: [EL-KO] call", "Mehdi: werfbezoek")]
+      == ["buiten", "anders", "anders", "geen"])
+_b59 = lambda plaats, code: dict(_blk, locatie=plaats, _merk={**_blk["_merk"], W.FIRMARIT: code})
+check("een rit alleen met een Belgische of Nederlandse postcode en een code die een rit toelaat (R4)",
+      W._firma_buitenblok(_b59("Kerkstraat 1, 2000 Antwerpen", "geen"), True)
+      and W._firma_buitenblok(_b59("Damrak 1, 1012 LG Amsterdam", "buiten"), True)
+      and not W._firma_buitenblok(_b59("Keizerstraat 12", "geen"), True)
+      and not W._firma_buitenblok(_b59("Kernkampweg 5, Paramaribo", "buiten"), True)
+      and not W._firma_buitenblok(_b59("Kerkstraat 1, 2000 Antwerpen", "anders"), True))
+check("een firmablok zonder volledig adres krijgt een regel, een online blok of een IN-blok niet (R4)",
+      W._firma_blok_zonder_adres(_b59("Keizerstraat 12", "geen")) and W._firma_blok_zonder_adres(_b59("", "buiten"))
+      and not W._firma_blok_zonder_adres(_b59("https://teams.microsoft.com/l/x", "geen"))
+      and not W._firma_blok_zonder_adres(_b59("Keizerstraat 12", "anders")))
+_eK = dict(ev("k59", "Mehdi: werfbezoek"), location="Keizerstraat 12")
+_bK = W._firma_vraag_body("firma|k59@google.com|", _eK, f"{_morgen}T10:00:00+01:00", True)
+_ins59, _coord59 = [], []
+_o59 = {n: getattr(W, n) for n in (*_o52, "DAG_ARG")}
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord = lambda adres, _c: _coord59.append(adres) or (1, 1)
+W.rijtijd_min, W.ritlabel = (lambda *_a: (25, "proef")), (lambda *_a: "Antwerpen")
+W._insert, W._patch = (lambda kal, body, tok, *a, **k: _ins59.append(body) or {"id": "n"}), (lambda *a, **k: None)
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+try:
+    _r59 = W.reistijd_zetten([_blok53("qK", _bK)])
+finally:
+    for _n, _f in _o59.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+check("'Keizerstraat 12' zonder postcode: geen rit, geen kaartvraag, wel een regel in het werkverslag (R4)",
+      not _ins59 and "Keizerstraat 12" not in _coord59
+      and any("firmablok zonder volledig adres: geen rit" in r for r in _r59[-1]), str((_ins59, _coord59, _r59[-1])))
+_g60 = _Nep57()
+_e60 = dict(ev("u60", "Mehdi: [EL-IN] overleg"), location="Bondgenotenlaan 1, 3000 Leuven")
+_o60 = (W.FIRMA_VRAGEN, W.FIRMA_DAGEN_WACHT, W.gearchiveerd)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma60-")) / "agenda-firma-vragen.json")
+W.FIRMA_DAGEN_WACHT = str(Path(tempfile.mkdtemp(prefix="firmadagen60-")) / "agenda-firma-dagen.json")
+W.gearchiveerd = lambda: set()
+try:
+    met(_g60, W.firma_vangnet, [_e60], [_e60], "tok", _nu)
+    _code60a = _g60.store["b57"]["extendedProperties"]["private"].get(W.FIRMARIT)
+    _e60b = dict(_e60, summary="Mehdi: [EL-PB] overleg")             # de collega verandert de code
+    met(_g60, W.firma_vangnet, [_e60b], [_e60b], "tok", _nu)
+    _mk60 = _g60.store["b57"]["extendedProperties"]["private"]
+finally:
+    W.FIRMA_VRAGEN, W.FIRMA_DAGEN_WACHT, W.gearchiveerd = _o60
+check("verandert de collega de code (IN naar PB), dan volgt het blok: het merk blijft en de ritcode wordt bijgewerkt (R4)",
+      _code60a == "anders" and _mk60.get(W.FIRMARIT) == "buiten" and _mk60.get(W.FIRMAMERK) == "firma|u60@google.com|"
+      and not str(_mk60.get(W.MAILMERK)).startswith("opgelost:"), str((_code60a, _mk60)))
+
+# --- Review 3 (R1, aangepast): een hernoemd blok met een buitencode in de titel houdt geen rit vast als het online werd ---
+_weg61 = []
+_o61 = {n: getattr(W, n) for n in (*_o52, "_eigen_rit_weg", "_verplaats", "_vertrekmelding_zetten", "DAG_ARG")}
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (30, "1")), (lambda *_a: "Leuven")
+W._insert, W._patch = (lambda *a, **k: {"id": "n"}), (lambda *a, **k: None)
+W._eigen_rit_weg = lambda x, tok: _weg61.append(x["id"]) or True
+W._verplaats = lambda x, doel, tok: _weg61.append(("verhuisd", x["id"]))
+W._vertrekmelding_zetten = lambda *a, **k: False
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+W.DAG_ARG = _morgen
+try:
+    W.reistijd_zetten([dict(_teams56, titel="[HA-PB] werfbezoek Leuven")] + _ritten56("[HA-PB] werfbezoek Leuven"),
+                      alleen_dag=_morgen)
+finally:
+    for _n, _f in _o61.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+check("hernoemd met een buitencode en daarna online: de eigen ritten gaan toch weg (R1, aangepast)",
+      sorted(_weg61) == ["ritH", "ritT"], str(_weg61))
+
+# --- Review 3 (R3): een dag-afsluitende firmakopie op Beschikbaar telt niet als doorgekomen -----------------------
+def _kopie62(titel, transp):
+    return {"id": "w62", "status": "confirmed", "summary": titel, "start": {"date": _morgen},
+            "end": {"date": (_nu + timedelta(days=2)).date().isoformat()}, "transparency": transp}
+_e62 = dict(ev("d62", "Mehdi: Buitenland (Suriname)"), start={"date": _morgen},
+            end={"date": (_nu + timedelta(days=2)).date().isoformat()})
+_uit62 = []
+for _titel, _tr in (("Mehdi: Buitenland (Suriname)", "transparent"), ("Mehdi: Buitenland (Suriname)", "opaque"),
+                    ("Mehdi: verjaardag Siyan", "transparent")):
+    _x62 = dict(_e62, summary=_titel)
+    _ur.urlopen = (lambda k: lambda req, timeout=None, *a, **kw: io.BytesIO(json.dumps({"items": [k]}).encode()))(_kopie62(_titel, _tr))
+    try:
+        _uit62.append((W._op_werkagenda(_x62, "tok"), bool(_x62.get("_op_beschikbaar"))))
+    finally:
+        _ur.urlopen = _echt
+check("'Buitenland' op Beschikbaar telt niet als doorgekomen; op Bezet wel; een gewone hele dag op Beschikbaar wel (R3)",
+      _uit62 == [(False, True), (True, False), (True, False)], str(_uit62))
+_b62 = W._firma_vraag_body("firma|d62@google.com|", dict(_e62, _op_beschikbaar=True), _morgen, True)
+check("dan komt het gewone Bezet blok over die dag(en), met een uitleg die klopt (R3)",
+      _b62["transparency"] == "opaque" and _b62["start"] == {"date": _morgen} and "Beschikbaar" in _b62["summary"]
+      and "Calendly" in _b62["description"], str(_b62))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
