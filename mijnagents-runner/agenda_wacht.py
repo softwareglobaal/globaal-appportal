@@ -594,6 +594,8 @@ def markeringen_bezet(items, tok=None):
     stond op Beschikbaar en Jordy Scheurmans boekte via Calendly om 10:30 (FR-84). Geeft de lijst die ik op Bezet zette."""
     gezet = []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if not a.get("hele_dag") or not a.get("_vrij") or a.get("_archief") or (a.get("_merk") or {}).get(LARAMERK):
             continue
         if any(wat == "alles" and patroon.search(a.get("titel") or "") for patroon, wat in DAG_MARKERINGEN):
@@ -843,6 +845,8 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
     import urllib.request
     if is_zorgschaduw(a):
         raise SchaduwItem("schaduw van een privé-zorgafspraak")
+    if _firma_kopie(a):
+        raise SchaduwItem("gastkopie van een firma-afspraak")    # elke route slaat ze over; dit is de grendel
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
     nieuwe_herinneringen = None
@@ -940,6 +944,8 @@ def herinneringen_zetten(items, alleen_dag=None):
     nu_iso = nu_lokaal().isoformat()
     gezet, al, weg, fout = 0, 0, 0, 0
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if _voorbij(a["start"], nu_iso) or a.get("kalender", "").startswith("en.be#"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1333,6 +1339,8 @@ def titels_normaliseren(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1430,6 +1438,8 @@ def uitroep_vooraan(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels, reeksen = 0, [], set()
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu) \
                 or a.get("_archief") or not mag_schrijven(a.get("kalender", "")):
             continue
@@ -1793,6 +1803,8 @@ def titels_aanvullen(items, alleen_dag=None):
     projecten = projectadressen.index()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu) or a.get("_archief"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1879,6 +1891,8 @@ def zoom_zetten(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -2065,6 +2079,8 @@ def kleuren_zetten(items, alleen_dag=None):
     global HANDKLEUREN
     HANDKLEUREN = []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a["start"][:10] < nu_dag or a.get("kalender", "").startswith("en.be#"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -3335,23 +3351,23 @@ def firma_gasten(evs, tok):
                     # al als gast, beslist of ze verborgen blijft; zo komt er geen blok voor een paar seconden (review)
                     onzeker.add(f"{ev['kalender']}|{ev['id']}")
                 else:
-                    niet_zichtbaar.append(ev)
+                    uitslag = _firma_beoordelen(ev, tok)    # vlak voor het blok: alleen wat er nu staat (hertest 6, 2)
+                    if uitslag[0] == "blok":
+                        niet_zichtbaar.append(uitslag[1])
+                    elif uitslag[0] == "onzeker":
+                        onzeker.add(f"{ev['kalender']}|{ev['id']}")
+                    elif uitslag[0] == "weg":
+                        opnieuw = True
         except Exception as e:  # noqa: BLE001
             regels.append(f"gast niet gezet op {ev.get('_agendanaam')} ("
                           + ("de afspraak bleef veranderen" if isinstance(e, _BlijftVeranderen) else type(e).__name__) + ")")
-            nu_ev = _firma_actueel(ev, tok)
-            if nu_ev is None:
+            uitslag = _firma_beoordelen(ev, tok)
+            if uitslag[0] == "blok":
+                niet_zichtbaar.append(uitslag[1])
+            elif uitslag[0] == "onzeker":
                 onzeker.add(f"{ev['kalender']}|{ev['id']}")
-            elif nu_ev is False:
+            elif uitslag[0] == "weg":
                 opnieuw = True          # verdwenen of geschrapt: de agenda opnieuw lezen, de nieuwe keren tellen
-            elif _gast_status(nu_ev) is None and MEHDI_VOORAAN.match(nu_ev.get("summary") or ""):
-                niet_zichtbaar.append(nu_ev)    # geen gast: dan staat ze zeker niet op zijn werkagenda
-            elif _gast_status(nu_ev) not in (None, "declined"):
-                try:
-                    if not _op_werkagenda(nu_ev, tok):
-                        niet_zichtbaar.append(nu_ev)
-                except Exception:  # noqa: BLE001
-                    onzeker.add(f"{ev['kalender']}|{ev['id']}")   # werkagenda niet te lezen: niets veranderen (review)
     return regels, niet_zichtbaar, onzeker, opnieuw
 
 
@@ -3360,10 +3376,37 @@ def _firma_uid(e):
     return (e.get("iCalUID") or e.get("id"), _tijd(e, "originalStartTime") or _tijd(e, "start"))
 
 
+_FIRMA_ADRESSEN = None
+
+
 def _firma_kopie(a):
     """Is dit item op Mehdi's werkagenda de gastkopie van een afspraak op een firma-agenda? Daarop schrijft de agent
-    niets, ook geen telefoonnummer: het is de afspraak van een collega (review 27-10-2026)."""
-    return (a.get("_organisator") or "").strip().lower() in {adres.lower() for adres, _ in firma_meelezen()}
+    niets: geen telefoon, kleur, herinnering, titel of vraag. Het is de afspraak van een collega (review en
+    Codex-hertest 6, 27-10-2026). Een rit ernaartoe is wel van Mehdi en staat apart."""
+    global _FIRMA_ADRESSEN
+    if _FIRMA_ADRESSEN is None:
+        _FIRMA_ADRESSEN = {adres.strip().lower() for adres, _ in firma_meelezen()}
+    org = (a.get("_organisator") or "").strip().lower()
+    return bool(org) and org in _FIRMA_ADRESSEN
+
+
+def _firma_beoordelen(ev, tok):
+    """Lees de afspraak opnieuw en beslis op wat er nu staat, vlak voor een blok (Codex-hertest 5 en 6):
+    ('blok', actueel), ('weg', None), ('onzeker', None) of ('niets', None)."""
+    nu_ev = _firma_actueel(ev, tok)
+    if nu_ev is None:
+        return "onzeker", None
+    if nu_ev is False:
+        return "weg", None
+    st = _gast_status(nu_ev)
+    if st is None:                      # geen gast: dan staat ze zeker niet op zijn werkagenda
+        return ("blok", nu_ev) if MEHDI_VOORAAN.match(nu_ev.get("summary") or "") else ("niets", None)
+    if st == "declined":
+        return "niets", None
+    try:
+        return ("niets", None) if _op_werkagenda(nu_ev, tok) else ("blok", nu_ev)
+    except Exception:  # noqa: BLE001
+        return "onzeker", None          # werkagenda niet te lezen: niets veranderen (review)
 
 
 def _firma_actueel(ev, tok):
@@ -3836,6 +3879,8 @@ def zorg_profielplaatsen_zetten(items, tok, nu=None, profielen=None):
     profielen = MA.zorgprofielen() if profielen is None else profielen
     gezet, open_ = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if not _toekomst(a.get("start"), nu) or a.get("kalender") != PRIVE_AGENDA or not is_zorg_titel(a.get("titel")):
             continue
         p = _zorg_profiel_kiezen(a, profielen, nu)
@@ -4412,6 +4457,8 @@ def duur_ter_plaatse_zetten(items, tok=None, nu=None):
         return 0, ["Duur ter plaatse: masterregel niet leesbaar; geen afspraak gewijzigd"]
     gezet, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         doel = _duur_doel(a, minuten, patroon)
         if not doel or (a.get("_merk") or {}).get(DUURMERK) == str(minuten):
             continue
@@ -4537,6 +4584,8 @@ def agendagasten_zetten(items, tok=None, nu=None):
     nu_iso = (nu or nu_lokaal()).isoformat()
     uit, reeksen, voorgestelde_reeksen = [], {}, set()
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if (is_zorgschaduw(a) or a.get("hele_dag") or a.get("fout") or a.get("_archief") or "T" not in a.get("start", "")
                 or _voorbij(a["start"], nu_iso) or not a.get("_organisator_zelf")
                 or a.get("kalender") != WERKAGENDA or lees_titel(a["titel"])["reistijd"]):
@@ -5309,7 +5358,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 gemaakt += 1
             elif is_laatste:
                 al += 1
-            melding = _vertrekmelding_zetten(a, vertrek_min + 5, tok)
+            # de rit is van Mehdi, de afspraak van een collega: op een firmakopie geen vertrekmelding (Codex-hertest 6)
+            melding = _vertrekmelding_zetten(a, vertrek_min + 5, tok) if not _firma_kopie(a) else False
             regels.append(f"{a['start'][:16]} {_toon(a, 44)}: {van_plaats} → {plaats} {heen} min (file x{fh})"
                           + (f", terug naar huis {terug} min (file x{ft})" if is_laatste else ", daarna door naar de volgende")
                           + f", adres uit {bron_adres}"
@@ -5744,6 +5794,8 @@ def projectnummers_zetten(items, alleen_dag=None, ook_verleden=False):
     nu = nu_lokaal().isoformat()
     gezet, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or a.get("_archief") \
                 or a["titel"].lower().startswith("canceled"):
             continue
@@ -6337,6 +6389,8 @@ def vragen_in_agenda(items, nu=None, niet_op_kaart=None):
             open_[id_] = zin
     gezet = weg = 0
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         eigen = (a.get("maker") or "").strip().lower() in _eigen_accounts()
         ander = a.get("kalender") in PRIVE_KALENDERS
         sluit_adres = ((a.get("titel") or "").startswith("VR ")

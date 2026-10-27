@@ -531,6 +531,50 @@ check("op de werkagenda-kopie van een firma-afspraak zet de agent geen telefoonn
       W._firma_kopie({"_organisator": ELEVAIT}) and not W._firma_kopie({"_organisator": "klant@voorbeeld.test"})
       and "_firma_kopie(a)" in (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def contact_zetten")[1][:1500])
 
+# --- Codex-hertest 6: nergens schrijven op de gastkopie van een firma-afspraak; vlak voor een blok opnieuw lezen ---
+import ast  # noqa: E402
+_boom = ast.parse((HIER / "agenda_wacht.py").read_text(encoding="utf-8"))
+_routes = []
+for _f in [n for n in _boom.body if isinstance(n, ast.FunctionDef)]:
+    _src = ast.get_source_segment((HIER / "agenda_wacht.py").read_text(encoding="utf-8"), _f) or ""
+    if "for a in items:" in _src and ("_patch(a," in _src or "_vertrekmelding_zetten(a," in _src):
+        _routes.append((_f.name, "_firma_kopie(a)" in _src))
+check("elke schrijfroute die over de agenda-items loopt, slaat de gastkopie van een firma-afspraak over",
+      len(_routes) >= 12 and all(g for _, g in _routes), str([n for n, g in _routes if not g]))
+_kopie = {"kalender": W.WERKAGENDA, "id": "elev1", "titel": "Mehdi, Siyan: [EL-IN] Wekelijkse", "_organisator": ELEVAIT,
+          "start": f"{_morgen}T10:00:00+01:00", "einde": f"{_morgen}T11:00:00+01:00", "hele_dag": False, "deelnemers": [],
+          "_agendagasten": [], "maker": "siyan@voorbeeld.test", "_reminders": {"useDefault": True}, "omschrijving": "",
+          "_kleur": "1", "_merk": {}}
+_pat24 = []
+_o24 = (W._patch, W.agenda._toegang, W.gearchiveerd)
+W._patch = lambda a, body, tok, **kw: _pat24.append((a.get("id"), body))
+W.agenda._toegang = lambda: "tok"
+W.gearchiveerd = lambda: set()
+try:
+    W.herinneringen_zetten([dict(_kopie)])
+    W.kleuren_zetten([dict(_kopie)])
+finally:
+    W._patch, W.agenda._toegang, W.gearchiveerd = _o24
+check("herinneringen en kleuren laten de gastkopie van een firma-afspraak ongemoeid (geen standaardherinnering weg)",
+      not _pat24, str(_pat24))
+_o25 = W.gearchiveerd
+W.gearchiveerd = lambda: set()
+try:
+    W._patch(dict(_kopie), {"colorId": "5"}, "tok")
+    _grendel = False
+except W.SchaduwItem:
+    _grendel = True
+finally:
+    W.gearchiveerd = _o25
+check("en _patch zelf weigert elke schrijfactie op zo'n kopie (grendel)", _grendel)
+
+_e26 = ev("z1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+g26 = NepGoogle([_e26], zichtbaar=False, vers={"z1": {"start": {"dateTime": f"{_morgen}T14:00:00+01:00"},
+                                                       "end": {"dateTime": f"{_morgen}T15:00:00+01:00"}}})
+_, niet26, _, _ = met(g26, W.firma_gasten, [_e26], "tok")
+check("is Mehdi al gast en is de afspraak intussen verzet, dan krijgt het vangnet de actuele tijd (hertest 6, punt 2)",
+      len(niet26) == 1 and niet26[0]["start"]["dateTime"].endswith("14:00:00+01:00"), str(niet26))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
