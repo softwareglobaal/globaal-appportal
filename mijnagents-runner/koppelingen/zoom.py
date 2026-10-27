@@ -203,7 +203,8 @@ def token_halen(cid, geheim, account):
     url = "https://zoom.us/oauth/token?" + urllib.parse.urlencode({"grant_type": "account_credentials", "account_id": account})
     try:
         d = json.load(urllib.request.urlopen(urllib.request.Request(url, method="POST",
-                                                                    headers={"Authorization": "Basic " + basic}), timeout=30))
+                                                                    headers={"Authorization": "Basic " + basic}),
+                                             timeout=_wachttijd(30)))  # Codex controle 11, punt 52: ook binnen de rondegrens
     except urllib.error.HTTPError as e:
         raise ZoomFout(f"geen token (HTTP {e.code})") from None
     except (urllib.error.URLError, OSError, ValueError) as e:
@@ -565,7 +566,8 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False, bewak
         if streng and not isinstance(m.get("recording_files"), list):
             raise ZoomFout("onvolledig antwoord van Zoom (meeting zonder lijst van bestanden)")
         bestanden = []
-        for f in m.get("recording_files") or []:
+        # Codex controle 11, punt 50: ook de geluidsbestanden per deelnemer (een aparte lijst in het antwoord van Zoom)
+        for f in (m.get("recording_files") or []) + (m.get("participant_audio_files") or []):
             bid = str(f.get("id") or "")
             if bid and f.get("download_url"):
                 _DOWNLOADS[bid] = f["download_url"]
@@ -574,7 +576,8 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False, bewak
                               "grootte": _grootte(f.get("file_size"), streng), "opnametype": f.get("recording_type") or "",
                               "extensie": f.get("file_extension") or "", "link": bool(f.get("download_url"))})
         uit.append({"uuid": m.get("uuid") or "", "nummer": str(m.get("id") or ""), "onderwerp": m.get("topic") or "",
-                    "start": m.get("start_time") or "", "duur": int(m.get("duration") or 0), "bestanden": bestanden})
+                    "start": m.get("start_time") or "", "duur": int(m.get("duration") or 0), "bestanden": bestanden,
+                    "aantal": m.get("recording_count") if type(m.get("recording_count")) is int else None})
     return uit
 
 

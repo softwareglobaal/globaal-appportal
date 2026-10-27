@@ -400,6 +400,10 @@ def problemen(m):
     Een bestand dat Zoom nog verwerkt, is geen probleem; het houdt alleen de dekking tegen tot het gekopieerd is."""
     if not m["bestanden"]:
         return {f"meeting:{m['uuid']}": ("meeting zonder opnamebestanden", "")}
+    if type(m.get("aantal")) is int and m["aantal"] > len(m["bestanden"]):
+        # Codex controle 11, punt 50: Zoom geeft meer opnames op dan het meelevert (recording_count); gemeten: tijdens
+        # de verwerking is recording_count 0, dus alleen een tekort telt
+        return {f"meeting:{m['uuid']}": ("Zoom geeft minder bestanden dan het aantal opnames", "")}
     uit, tel = {}, {}
     for f in m["bestanden"]:
         if not f.get("id") or f.get("status") not in ("completed", "processing") or \
@@ -563,11 +567,15 @@ OPNAME_AFWIJKING = "Beschrijving van een Zoom-opname in Dropbox wijkt af van wat
 
 
 def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu):
+    bekend = {}  # wat deze ronde al weet, voor een vroege stop (de stand van de wisregel)
     """Een ronde. Elke ronde leest de hele opnamelijst (Codex controle 4, punt 19: een korte ronde ziet niet wat buiten
     haar venster opduikt), kijkt elk bewijs na, kopieert wat ontbreekt, en berekent de dekking uit wat ze zelf zag."""
     def stop(tekst, wie, detail, staat=None):
         if tekst:
             r.nood(tekst, wie=wie)
+        if (bekend.get("stand") or {}).get("aan"):
+            # punt 51: de wisregel staat aan en deze ronde kon de kopie niet bewijzen: dan is ze niet veilig
+            r.nood(NOOD_WISREGEL_AAN, wie="mehdi")
         if staat is not None:
             _meld_blijvend(r, staat)
         r.noden_onbekend = True  # deze ronde keek niet alles na: het bord sluit niets, wat open stond blijft open
@@ -611,7 +619,7 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
                                   "dekking": staat["dekking"]})
     D.GRENS["tot"] = Z.GRENS["tot"] = time.monotonic() + max(0.0, hard - klok())
     try:
-        return _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen)
+        return _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen, bekend)
     except (Stop, D.TijdOp, Z.TijdOp, SystemExit, KeyboardInterrupt):
         raise
     except Exception as e:  # noqa: BLE001
@@ -624,7 +632,7 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         D.GRENS["tot"] = Z.GRENS["tot"] = None
 
 
-def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen=False):
+def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop, alleen_tellen=False, bekend=None):
     vroeg = None
     try:
         reden = dropbox_controle(staat)
@@ -639,6 +647,8 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     if vroeg:
         return stop(vroeg[0], vroeg[1], "niets gelezen of gekopieerd: " + vroeg[0], staat)
     stand = wisregel_stand()  # O2: elke ronde vers, voor account en gebruiker, met de termijn
+    if bekend is not None:
+        bekend["stand"] = stand
 
     vandaag = nu_utc().astimezone(BRUSSEL).date()
     try:
@@ -872,14 +882,6 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     dekking = gaaf and not te_doen and not bezig
     # Veilig voor de wisregel: niets ouder dan de termijn zonder bewijs, ook niet in verwerking, en de wisregel leesbaar.
     veilig = gaaf and stand is not None and not oud_open
-    if not droog:
-        # O2: het archief is de eigenaar van de waarschuwing, ook met het sein uit; De Zoomwacht waarschuwt niet meer
-        if stand is None:
-            r.nood(NOOD_WISREGEL_ONBEKEND, wie="claude-code")
-        elif stand["aan"] and not veilig:
-            r.nood(NOOD_WISREGEL_AAN, wie="mehdi")
-    if not SEIN_AAN:
-        dekking = veilig = False
     if (dekking or veilig) and not droog:
         # Codex controle 7, punt 37: een opname kan opduiken in een venster dat al gelezen was. Voor groen lees ik de lijst
         # daarom opnieuw; wat er dan bij is en niet bewezen, of in verwerking, of onvolledig, maakt het nee.
@@ -902,6 +904,15 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                     veilig = False
         binnen = klok() <= hard
         dekking, veilig = dekking and binnen, veilig and binnen
+    if not droog:
+        # O2: het archief is de eigenaar van de waarschuwing, ook met het sein uit; De Zoomwacht waarschuwt niet meer.
+        # Codex controle 11, punt 51: na de laatste veiligheidscontrole (ook de tweede lezing)
+        if stand is None:
+            r.nood(NOOD_WISREGEL_ONBEKEND, wie="claude-code")
+        elif stand["aan"] and not veilig:
+            r.nood(NOOD_WISREGEL_AAN, wie="mehdi")
+    if not SEIN_AAN:
+        dekking = veilig = False
     if not droog:
         staat["dekking"] = dekking
         staat["inventaris"] = moment

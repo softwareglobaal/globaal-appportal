@@ -36,6 +36,7 @@ from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
 ECHT_RONDE_GESLAAGD = ZA_ACC.archief_ronde_geslaagd
 ECHT_WISREGEL_STAND = ZA.wisregel_stand
+ECHT_OPNAMES = Z.opnames
 
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
 os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
@@ -1543,6 +1544,64 @@ def test_gemeten_een_plaatshouder_zonder_soort_wordt_vervangen_door_de_bestanden
     s = ZA.lees_staat()
     assert not s["verdwenen"] and not s["vervanging"] and len(s["bestanden"]) == 3, (s["verdwenen"], s["vervanging"])
     assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r) and not VOORSTELLEN
+
+
+# --------------------------------------------------------------------- Codex-controle 11 (27-10-2026) ---
+def test_codex50_geluid_per_deelnemer_en_een_tekort_tegen_recording_count():
+    Z._VAST["id"] = "mehdi-id"
+    echt = Z.lees_alles
+    Z.lees_alles = lambda *a, **k: [{"uuid": "u", "id": 1, "topic": "x", "start_time": "2026-10-20T09:00:00Z",
+                                     "recording_count": 2,
+                                     "recording_files": [{"id": "r1", "file_type": "MP4", "status": "completed",
+                                                          "recording_start": "2026-10-20T09:00:01Z", "file_size": 5,
+                                                          "download_url": "https://proef.zoom.us/rec/download/r1"}],
+                                     "participant_audio_files": [{"id": "p1", "file_type": "M4A", "status": "completed",
+                                                                  "recording_start": "2026-10-20T09:00:01Z", "file_size": 3,
+                                                                  "download_url": "https://proef.zoom.us/rec/download/p1"}]}]
+    try:
+        m = ECHT_OPNAMES("2026-10-01", "2026-10-30", streng=True)[0]
+    finally:
+        Z.lees_alles = echt
+    assert {f["id"] for f in m["bestanden"]} == {"r1", "p1"} and m["aantal"] == 2, "het geluid per deelnemer telt mee"
+    assert not ZA.problemen(m)
+    assert ZA.problemen({**m, "aantal": 3}), "minder bestanden dan Zoom opgeeft is onvolledig"
+    assert not ZA.problemen({**m, "aantal": 0}), "tijdens de verwerking is recording_count 0: geen tekort"
+
+
+def test_codex51_de_waarschuwing_komt_na_de_tweede_lezing_en_bij_een_vroege_stop():
+    z, _, _ = opzet(wisregel={"aan": True, "dagen": 30})
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    echt = z.opnames
+    gezien = {"n": 0}
+
+    def opnames(van, tot, profiel="lees", prullenbak="", streng=False, bewaker=None):
+        uit = echt(van, tot, profiel, prullenbak, streng, bewaker)
+        if prullenbak == "recording_file":
+            gezien["n"] += 1
+            if gezien["n"] == 1:  # na de eerste lezing duikt een oude opname zonder kopie op
+                z.meeting("laat", "2022-02-02T09:00:00Z", bestanden=[("M4A", "audio_only", b"l")])
+                z.fout[z.meetings["laat"]["bestanden"][0]["id"]] = Z.GeenRecht("x:y:admin")
+        return uit
+    Z.opnames = opnames
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["veilig"] and ZA.NOOD_WISREGEL_AAN in teksten(r), "de tweede lezing maakt het onveilig: waarschuwen"
+    Z.opnames = z.opnames
+    z.lijstfout = Z.ZoomFout("HTTP 500")
+    r, uit = ronde(nu=NU + timedelta(hours=2))
+    assert uit is None and ZA.NOOD_WISREGEL_AAN in teksten(r), "vroege stop met de wisregel aan: waarschuwen"
+
+
+def test_codex52_het_token_valt_binnen_de_rondegrens():
+    Z.GRENS["tot"] = Z.time.monotonic() - 1
+    try:
+        try:
+            Z.token_halen("id", "geheim", "account")
+            raise AssertionError("voorbij de grens begint geen tokenaanvraag")
+        except Z.TijdOp:
+            pass
+    finally:
+        Z.GRENS["tot"] = None
 
 if __name__ == "__main__":
     goed = fout = 0
