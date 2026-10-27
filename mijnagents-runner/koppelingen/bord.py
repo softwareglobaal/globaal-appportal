@@ -171,6 +171,9 @@ class Agent:
         self._log = []
         self._prive = set()
         self._prive_re = None
+        # kwam de laatste hartslag aan; None zolang er geen was. Een runner die zijn eindhartslag moet zien aankomen,
+        # leest dit na de ronde (De Bouwwacht, Codex-resultaattoets 4, 27-10-2026)
+        self.hartslag_ok = None
 
     # Privacygrens (nacontrole v1.3, R1): een agent meldt de teksten uit een privébron aan (privé-agenda, Lara,
     # Hotmail). Elk bericht naar het bord (hartslag, nood, logboek, klaargezet) gaat door maskeer(), welke route ook.
@@ -208,7 +211,9 @@ class Agent:
                 p["nood_sluiten"] = False
         try:
             call("/agent-status", self.maskeer(p))
+            self.hartslag_ok = True
         except Exception as e:  # noqa: BLE001
+            self.hartslag_ok = False
             print("hartslag mislukt:", e, file=sys.stderr)
 
     def log(self, onderwerp, stap, tekst, detail=""):
