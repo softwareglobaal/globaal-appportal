@@ -393,7 +393,7 @@ check("een zorgblok dat deze ronde ver voorbij het venster gezet werd, wordt met
       str((_r11, _n11, _lezingen)))
 _hoofd2 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de eerste ronde legt haar begin vast voor de zorgroute iets zet (main en zorgronde)",
-      _hoofd2.split("def main():")[1][:400].count("AW.sinds_zetten(RONDE_START)") == 1
+      "WACHTRIJ_KLAAR = _wachtrij_begin()" in _hoofd2.split("def main():")[1][:400]
       and _hoofd2.split("def zorgronde():")[1][:600].count("AW.sinds_zetten(RONDE_START)") == 1)
 
 # --- Codex-hertest 3 (PR 113) ---------------------------------------------------------------------------------
@@ -469,6 +469,32 @@ check("een nog niet verstuurd bericht over het oude uur gaat niet meer weg (punt
 check("ook een mislukte oude vraag geldt niet meer na een verschuiving (punt 4)",
       _m15["verwerkt"]["uitkomst"] == "vervangen" and not AW.open_antwoorden()
       and "ontvangen" not in (AW.antwoord_herkennen(f"{_m15['code']} vervalt") or ""))
+
+# --- Codex-hertest 5 (PR 113): een zorgafspraak voorbij dag 120 krijgt geen tweede blok -------------------------
+import mail_afspraken as _MA  # noqa: E402
+_ins16, _gevonden = [], {}
+_o16 = (W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen)
+W._insert = lambda kal, body, tok, toch=False: _ins16.append(body) or _gevonden.__setitem__("s16", "nieuw1") or {"id": "nieuw1"}
+W._zorg_teruglezen = lambda kal, eid, body, tok, gelezen=None: ""
+W._zorg_blok_met_merk = lambda sleutel, tok: _gevonden.get(sleutel, "")
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+_ver_start = (W.nu_lokaal() + timedelta(days=200)).replace(hour=9, minute=0, second=0, microsecond=0)
+def _mail16():
+    return [{"soort": "zorg", "status": "ontbreekt", "sleutel": "s16", "titel": "Tandarts Proef", "start": _ver_start.isoformat(),
+             "einde": (_ver_start + timedelta(minutes=30)).isoformat(), "geannuleerd": 0, "ics_uid": "", "locatie": "",
+             "bron_ontvangen": "2026-10-27T10:00:00+01:00", "bron_mailbox": "proef@voorbeeld.be", "bron_onderwerp": "Afspraak",
+             "bron_afzender": "info@tandarts-voorbeeld.test", "bron_message_id": "<zorg@proef>",
+             "zorg": {"praktijk": "p", "gebeurtenis": "bevestiging", "mehdi": True, "behandelaar": "Proef"}}]
+try:
+    _rz1 = W.zorg_afspraken_zetten(_mail16(), [], "tok")
+    _rz2 = W.zorg_afspraken_zetten(_mail16(), [], "tok")       # de volgende ronde: weer 'ontbreekt' (buiten 120 dagen)
+except Exception as _e:  # noqa: BLE001
+    _rz1 = _rz2 = {"prive": [repr(_e)]}
+finally:
+    W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen = _o16
+check("een zorgafspraak voorbij dag 120: de tweede ronde koppelt het bestaande blok, geen tweede blok (hertest 5)",
+      len(_ins16) == 1 and any("stond er al" in r for r in _rz2.get("prive", [])), str((len(_ins16), _rz1.get("prive"), _rz2.get("prive"))))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

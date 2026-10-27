@@ -3536,6 +3536,28 @@ def _toekomst(start, nu):
         return False
 
 
+def _zorg_blok_met_merk(sleutel, tok):
+    """Het id van een blok in de privé-agenda met dit zorgmerk, op welke datum ook, of ''. Over alle pagina's."""
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    if not sleutel:
+        return ""
+    pagina = None
+    while True:
+        q = {"privateExtendedProperty": f"{ZORGMERK}={sleutel}", "showDeleted": "false", "maxResults": "50"}
+        if pagina:
+            q["pageToken"] = pagina
+        url = f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events?" + urllib.parse.urlencode(q)
+        d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}),
+                                             timeout=30))
+        for x in d.get("items", []):
+            if x.get("status") != "cancelled" and x.get("id"):
+                return x["id"]
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return ""
+
+
 ZORG_GEZET = []      # de dagen waarop de zorgroute deze ronde een blok zette, verzette of verhuisde
 WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
 
@@ -3568,6 +3590,22 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["noden"].append({"tekst": f"Huisartsafspraak {wanneer} op {begint:%d-%m %H:%M}: "
                                              "kijk in je privé-agenda.", "wie": "mehdi"})
         if a["status"] == "ontbreekt" and toekomst and a.get("einde"):
+            try:
+                # binnen het venster van de mailvergelijking zag die het blok al; daarbuiten niet: dan op het merk zoeken
+                ver = (datetime.fromisoformat(a["start"]).astimezone(TIJDZONE).date() - nu.astimezone(TIJDZONE).date()).days \
+                    >= MAIL_VENSTER_DAGEN - 1
+                bestaand = _zorg_blok_met_merk(a.get("sleutel"), tok) if ver else ""
+            except Exception as ex:  # noqa: BLE001
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: niet gezet, bestaand blok niet na te gaan ({type(ex).__name__})")
+                continue
+            if bestaand:
+                # het blok staat er al, maar buiten het leesvenster van de mailvergelijking (120 dagen): koppelen, geen
+                # tweede blok en geen tweede melding (Codex-hertest 5, PR 113)
+                a["status"], a["google"] = "gekoppeld", f"{PRIVE_AGENDA}|{bestaand}"
+                st["gekoppeld"] += 1
+                st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
+                continue
             body = _zorg_body(a, z, profiel)
             try:
                 e = _insert(PRIVE_AGENDA, body, tok)
@@ -6457,14 +6495,20 @@ def terugkijkstand(argv):
     return 0
 
 
+def _wachtrij_begin():
+    """Het begin van de eerste ronde in de WhatsApp-wachtrij, voor de zorgroute iets zet: zo telt een blok van deze ronde
+    nooit als 'oud' (PR 113). Lukt dat niet, dan False: dan zet de zorgroute deze ronde niets (Codex-hertest 4)."""
+    try:
+        AW.sinds_zetten(RONDE_START)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
     global WACHTRIJ_KLAAR
-    try:
-        AW.sinds_zetten(RONDE_START)    # voor de zorgroute: zo telt een blok van deze ronde nooit als 'oud' (PR 113)
-        WACHTRIJ_KLAAR = True
-    except Exception:  # noqa: BLE001
-        WACHTRIJ_KLAAR = False          # dan zet de zorgroute deze ronde niets (Codex-hertest 4, PR 113)
+    WACHTRIJ_KLAAR = _wachtrij_begin()
     werkwijze = ag.werkwijze()
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -6834,7 +6878,10 @@ class _Onvolledig(Exception):
     """Een bron is niet volledig gelezen: de stap die erop steunt, slaat over."""
 
 
-def _agenda_voor_mail(van=-14, tot=120):
+MAIL_VENSTER_DAGEN = 120      # zo ver vergelijkt de mail met de agenda
+
+
+def _agenda_voor_mail(van=-14, tot=MAIL_VENSTER_DAGEN):
     """De agenda waartegen de mail vergeleken wordt, en de agenda's die niet te lezen waren. Een uitnodiging die in een
     ongelezen agenda staat, is niet 'ontbreekt': dan vergelijk ik niet (Codex A15, 15-10-2026)."""
     ruw = afspraken(van, tot)
