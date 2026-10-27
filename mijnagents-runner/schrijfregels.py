@@ -51,7 +51,11 @@ VERBODEN = [
     ("S1", re.compile(r"\b(?:no|not)\s+(?:previous|prior|earlier)\s+(?:site\s+)?(?:visits?|inspections?)\b", re.I)),
     ("S1", re.compile(r"\b(?:architect|office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:visited|present|attended|checked|inspected|supervised)\b", re.I)),
     ("S1", re.compile(r"\b(?:only|at\s+most|a\s+maximum\s+of)\s+(?:one|1)\s+(?:site\s+)?visit\b", re.I)),
-    ("S5", re.compile(r"\b(?:liable|in\s+default|breach\s+of\s+contract|at\s+fault|negligen(?:t|ce)|culpable)\b", re.I)),
+    # "liable to rot" of "liable to crack" (vatbaar voor) is gewone technische tekst; "liable for", "held liable", "liable to
+    # the client" en "liable to pay" zijn een juridisch oordeel (35e review)
+    ("S5", re.compile(r"\b(?:liable\b(?!\s+to\s+(?!(?:the|a|an|him|her|them|us|you|it|his|their|our|its|any|each|all|pay|"
+                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b|breach\s+of\s+contract\b|at\s+fault\b|"
+                      r"negligen(?:t|ce)\b|culpable\b)", re.I)),
 ]
 
 VERBODEN_PROFIEL = {
@@ -70,7 +74,10 @@ VERBODEN_PROFIEL = {
 # "(transcript 12:30)", "volgens de opname", "sprak zijn vaststellingen in".
 # "Zie opname 00:12:05." als eigen zin: weg samen met de punt, zodat er geen ".." of losse punt overblijft
 # Een opnametijdstip: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
-_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
+# een eenheid achter een tijdstip hoort erbij: 10:15u, 10:15uur, 10:15 uur, 3:45min, 3:45mins, 3:45hr, 3:45m (35e review);
+# met een spatie alleen de lange vormen, zodat "10:15 u ziet" het woord u niet opslokt
+_EENHEID = r"(?:(?:uur|u|h|hr|hrs|min|mins|m|sec|secs|s)\b|\s(?:uur|min|mins|sec|secs|hr|hrs)\b)"
+_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?(?:" + _EENHEID + r"|\b)|\b\d:\d{2}:\d{2}(?:" + _EENHEID + r"|\b)|\b\d{1,2}m\d{2}s\b)"
 _OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
 # 30e review: los of verder in een haakje telt alleen die strenge vorm, zodat "(Opname ..., schaal 1:50)" gewone tekst blijft
 _TIJDSTIP = _OPNAMETIJD
@@ -80,7 +87,7 @@ _TIJDSTIP = _OPNAMETIJD
 # ook een samenstelling met koppelteken: "Plaud-opname", "Fathom-opname", "gsm-opname", "Plaud-transcript" (34e review);
 # zonder koppelteken alleen de vaste voorvoegsels, zodat "momentopname" een gewoon woord blijft
 _OPNAMEWOORD = r"(?:\w+-|(?:audio|video|geluids|spraak))?(?:opname|transcript|audio|recording)"
-_DIRECTTIJD = r"(?:(?<!\d)(?<!\d:)\d{1,2}:\d{2}(?::\d{2})?(?!\d|:\d)(?:min|sec|u|h|s)?\b|\b\d{1,2}m\d{2}s\b)"
+_DIRECTTIJD = r"(?:(?<!\d)(?<!\d:)\d{1,2}:\d{2}(?::\d{2})?(?!\d|:\d)(?:" + _EENHEID + r"|\b)|\b\d{1,2}m\d{2}s\b)"
 _DIRECTTIJDEN = _DIRECTTIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _DIRECTTIJD + r")?"
 # buiten haakjes: een spatie of een dubbelpunt, en alleen "van" of "at" ertussen zoals productie; "de opname op 1:50" of
 # "de opname om 9:30" is gewone tekst over een opmeting of plaatsbeschrijving en blijft (33e review)

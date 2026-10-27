@@ -628,5 +628,25 @@ check("Plaud-opname weg uit de bron", S.bron_zichtbaar("verklaring bouwheer, Pla
 check("momentopname blijft een gewoon woord", S.toepassen("Momentopname 3:45 van de werf.") == ("Momentopname 3:45 van de werf.", []),
       S.toepassen("Momentopname 3:45 van de werf."))
 
+# Vijfendertigste review 27-10-2026: (1) een eenheid achter het opnametijdstip hoort erbij (10:15uur, 3:45m, 3:45mins,
+# 3:45hr), zoals productie; (2) "liable to rot" (vatbaar voor) is gewone Engelse tekst, "liable for" blijft S5
+for tekst, verwacht in [("De zinken dakgoot lekt aan de achtergevel (opname 10:15uur).", "De zinken dakgoot lekt aan de achtergevel."),
+                        ("De dorpel ligt 3 cm te laag, zie opname 3:45m.", "De dorpel ligt 3 cm te laag."),
+                        ("De dorpel (transcript 10:15uur) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (opname 3:45mins) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (opname 3:45hr) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel (opname werfbezoek 12/10, 10:15u) ligt te laag.", "De dorpel ligt te laag."),
+                        ("De dorpel ligt te laag, zie opname 10:15 uur.", "De dorpel ligt te laag.")]:
+    for profiel in (None, "aankoopkeuring"):
+        t35, ing35 = S.toepassen(tekst, profiel)
+        check(f"tijdstip met eenheid weg: {tekst[-35:]!r} {profiel}", t35 == verwacht and ing35 and S.toepassen(t35, profiel)[0] == t35, (t35, ing35))
+check("eenheid weg uit de bron", S.bron_zichtbaar("verklaring bouwheer, opname 10:15uur") == "verklaring bouwheer", S.bron_zichtbaar("verklaring bouwheer, opname 10:15uur"))
+check("een uur zonder opname blijft", S.toepassen("Afspraak om 10:15u op de werf.") == ("Afspraak om 10:15u op de werf.", []), S.toepassen("Afspraak om 10:15u op de werf."))
+for tekst in ["The untreated roof timber is stored unprotected outside and is liable to rot.", "The plaster is liable to crack in frost."]:
+    check(f"liable to <werkwoord> blijft: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []) and S.controleer(tekst) == [], S.toepassen(tekst))
+for tekst in ["The contractor is liable for the damage.", "The contractor is held liable.", "The contractor is liable to the client.",
+              "The contractor is liable to pay damages."]:
+    check(f"juridisch liable blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
