@@ -3171,10 +3171,29 @@ FIRMA_SLOT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma.lock")
 FIRMA_NODEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-noden.json")
 
 
+def _firma_buitenblok(a, fysiek):
+    """Mijn open Bezet blok voor een verborgen firma-afspraak op een echt adres: voor de ritten een buitenafspraak, ook al
+    draagt het een algemene titel (Codex-hertest 24)."""
+    mk = a.get("_merk") or {}
+    return bool(fysiek and mk.get(FIRMAMERK) and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
+                and not a.get("_vrij") and "T" in (a.get("start") or "") and a.get("kalender") == PRIVE_AGENDA)
+
+
+FIRMA_BLOK_VERANDERD = False     # zette of verzette deze ronde een Bezet blok? Dan het belrooster meteen bijwerken
+
+
 def firma_kleurronde(vandaag):
     """De firmacontrole in de kleurronde. De noden gaan daar niet naar het bord (dat zet de volledige ronde, declaratief);
     verandert wat er mis is, dan komt het in het werkverslag, zodat Mehdi het ook in het weekend ziet (overleg P8)."""
     teksten = sorted(n["tekst"] for n in firma_stap(vandaag))
+    if FIRMA_BLOK_VERANDERD:
+        # een nieuw of verzet Bezet blok in het weekend of 's avonds: het belrooster meteen bijwerken, niet pas in de
+        # volgende volledige ronde (Codex-hertest 24)
+        try:
+            rooster = rooster_maken([x for x in afspraken(-1, 8) if not x.get("fout")], archief_afspraken(-1, 8), vandaag, [])
+            bellen.rooster_schrijven(rooster)
+        except Exception as e:  # noqa: BLE001
+            teksten.append(f"Belrooster niet bijgewerkt na een firmablok ({type(e).__name__})")
     try:
         with open(FIRMA_NODEN, encoding="utf-8") as f:
             vorige = json.load(f)
@@ -3602,15 +3621,17 @@ def _firma_vraag_body(k, e, start, sterk):
                 "opgelost is." if sterk else "lijkt jou aan te gaan, maar ze staat niet op je werkagenda. Moet jij erbij zijn? "
                 "Zeg het, dan komt ze erop; anders laat je deze vraag weg."))
     if sterk and "T" in start and "T" in eind:
-        tijd = {"start": {"dateTime": start}, "end": {"dateTime": eind}, "location": e.get("location") or ""}
+        tijd = {"start": {"dateTime": start}, "end": {"dateTime": eind}, "location": e.get("location") or "",
+                # een eigen herinnering: ook in het weekend, voor de volledige ronde een oproep plant (Codex-hertest 24)
+                "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]}}
     elif sterk:
         tijd = {"start": {"date": dag}, "end": {"date": eind[:10] if eind[:10] > dag else volgende}}
     else:
         tijd = {"start": {"date": dag}, "end": {"date": volgende}}
     titel = ("VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda" if sterk
              else "VR Agendawacht: firma-afspraak die jou lijkt aan te gaan")
-    return {"summary": f"{titel} ({_ddmm(dag)})"[:200], **tijd, "transparency": "opaque" if sterk else "transparent",
-            "reminders": {"useDefault": False, "overrides": []}, "description": tekst, "extendedProperties": merk}
+    return {"summary": f"{titel} ({_ddmm(dag)})"[:200], "reminders": {"useDefault": False, "overrides": []}, **tijd,
+            "transparency": "opaque" if sterk else "transparent", "description": tekst, "extendedProperties": merk}
 
 
 def _einde_voorbij(t, nu):
@@ -3886,6 +3907,9 @@ def firma_stap(vandaag):
             g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok, onleesbaar)
             gregels += g2
         vregels = firma_vangnet(evs, niet_zichtbaar, tok, onleesbaar=onleesbaar, onzeker=onzeker)
+    global FIRMA_BLOK_VERANDERD
+    FIRMA_BLOK_VERANDERD = any(("voor Mehdi die niet doorkwam" in r or "mee verschoven" in r or "opnieuw gezet" in r
+                                or "hersteld" in r) for r in vregels)
     if gregels or vregels:
         ag.log(f"dag {vandaag}", "schrijf", "firma-agenda's: Mehdi als stille gast waar het hem aangaat",
                "\n".join(gregels + vregels))
@@ -5037,7 +5061,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 woord, vp = vaste_plek(a["titel"])
                 if vp:
                     adres, fysiek, bron_adres = vp["adres"], True, f"vaste plek ({woord})"
-        if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
+        if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, fysiek)):
             continue
         a["_bron_adres"] = bron_adres
         if fysiek and bron_adres == "agenda" and info["nummer"] in projecten:

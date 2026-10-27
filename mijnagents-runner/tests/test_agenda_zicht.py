@@ -242,9 +242,11 @@ check("de tweede ronde zet geen tweede vraag", not any("vraag gezet" in r for r 
 check("staat de vraag er al (na een time-out), dan geen tweede vraag", len(_ins) == _n, str(len(_ins)))
 _zwak = [b for _, b in _ins if "date" in b["start"]]
 _sterk = [b for _, b in _ins if "dateTime" in b["start"]]
-check("elke vraag is een eigen melding zonder herinnering, met mailmerk en firmamerk",
-      all(b["reminders"]["overrides"] == [] and len(b["extendedProperties"]["private"][W.MAILMERK]) == 16
-          and b["extendedProperties"]["private"][W.FIRMAMERK] for _, b in _ins))
+check("elke vraag is een eigen melding met mailmerk en firmamerk; een vraag zonder uur heeft geen herinnering, een Bezet blok "
+      "met een uur een eigen herinnering van 15 minuten (Codex-hertest 24)",
+      all(len(b["extendedProperties"]["private"][W.MAILMERK]) == 16 and b["extendedProperties"]["private"][W.FIRMAMERK]
+          and b["reminders"]["overrides"] == ([{"method": "popup", "minutes": 15}] if "dateTime" in b["start"] else [])
+          for _, b in _ins), str([b["reminders"] for _, b in _ins]))
 check("een afspraak die Mehdi alleen noemt: een dagvraag op Beschikbaar die geen dag afsluit",
       len(_zwak) == 1 and _zwak[0]["transparency"] == "transparent"
       and not W.markeringen_uit([{"titel": _zwak[0]["summary"], "start": _zwak[0]["start"]["date"],
@@ -955,6 +957,17 @@ _c48 = dict(ev("o48", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com
 _gk48, _onz48, _tw48 = W._firma_kopieen_kiezen([_c48], [ELEVAIT])
 check("organisator onleesbaar en een gastkopie met onzekere tijd: onzeker (een bestaand blok blijft), geen twijfelvraag",
       not _gk48 and _onz48 == {W._firma_sleutel(_c48)} and not _tw48, str((_gk48, _onz48, _tw48)))
+
+# --- Codex-hertest 24: het Bezet blok krijgt een rit en het belrooster wordt meteen bijgewerkt ----------------------
+_blk = {"kalender": W.PRIVE_AGENDA, "start": f"{_morgen}T10:00:00+01:00", "_vrij": False,
+        "_merk": {W.FIRMAMERK: "firma|x@google.com|", W.MAILMERK: "abcdef0123456789"}}
+check("een open Bezet blok voor een firma-afspraak op een echt adres telt voor de ritten als buitenafspraak",
+      W._firma_buitenblok(_blk, True) and not W._firma_buitenblok(_blk, False)
+      and not W._firma_buitenblok(dict(_blk, _merk={W.FIRMAMERK: "x", W.MAILMERK: "opgelost:abc"}), True))
+_src = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de rittenroute gebruikt dat, en de kleurronde werkt het belrooster meteen bij na een nieuw of verzet blok",
+      "_firma_buitenblok(a, fysiek)" in _src.split("def reistijd_zetten(")[1][:60000]
+      and "bellen.rooster_schrijven(rooster)" in _src.split("def firma_kleurronde(")[1][:1500])
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
