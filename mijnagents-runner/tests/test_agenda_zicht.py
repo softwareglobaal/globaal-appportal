@@ -654,6 +654,22 @@ check("de sleutel is dezelfde in Suriname- en Brusselse tijd (oorspronkelijke ti
       W._firma_sleutel({"iCalUID": "r@google.com", "originalStartTime": {"dateTime": "2026-11-02T06:00:00-03:00"}})
       == W._firma_sleutel({"iCalUID": "r@google.com", "originalStartTime": {"dateTime": "2026-11-02T10:00:00+01:00"}}))
 
+# --- Codex-hertest 11: kopieën met een ander uur: de organisator beslist, anders onzeker -------------------------------
+_c1 = dict(ev("o1", "Mehdi: [EL-PO] overleg"), iCalUID="tw@google.com", kalender="hdssuriname@gmail.com",
+           organizer={"email": ELEVAIT})
+_c2 = dict(ev("o2", "Mehdi: [EL-PO] overleg"), iCalUID="tw@google.com", organizer={"email": ELEVAIT},
+           start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
+_gk, _onz = W._firma_kopieen_kiezen([_c1, _c2])
+check("verschillen twee kopieën in tijd, dan beslist de kopie op de agenda van de organisator",
+      [e["id"] for e in _gk] == ["o2"] and not _onz, str(([e["id"] for e in _gk], _onz)))
+_gk2, _onz2 = W._firma_kopieen_kiezen([_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"})])
+check("zonder kopie van de organisator is zo'n afspraak onzeker: geen blok, geen verschuiving",
+      not _gk2 and _onz2 == {W._firma_sleutel(_c1)}, str((_gk2, _onz2)))
+_, niet31, onz31, _ = met(NepGoogle([], zichtbaar=False), W.firma_gasten,
+                          [_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"},
+                                     attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])], "tok")
+check("en firma_gasten geeft ze als onzeker door, zonder blok", not niet31 and W._firma_sleutel(_c1) in onz31, str((niet31, onz31)))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

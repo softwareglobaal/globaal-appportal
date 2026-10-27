@@ -3319,9 +3319,10 @@ def firma_gasten(evs, tok):
     vangnet krijgt nooit een oude tijd (Codex-hertest 5, punt 1). Geeft (regels, niet_zichtbaar, onzeker, opnieuw):
     onzeker zijn de sleutels die niet te beoordelen waren (het vangnet laat die staan), opnieuw is waar als een
     afspraak tijdens de controle verdween (een collega verzette de reeks): dan leest firma_stap de agenda opnieuw."""
-    regels, niet_zichtbaar, onzeker, opnieuw = [], [], set(), False
+    regels, niet_zichtbaar, opnieuw = [], [], False
+    evs, onzeker = _firma_kopieen_kiezen(evs)
     gezien = set()
-    for ev in evs or []:
+    for ev in evs:
         voor_mehdi = bool(MEHDI_VOORAAN.match(ev.get("summary") or ""))
         status = _gast_status(ev)
         if status == "declined" or (not voor_mehdi and status is None):
@@ -3387,6 +3388,27 @@ def _firma_sleutel(e):
     en een kopie op een tweede firma-agenda kan een ander id hebben (Codex-hertest 9 en 10). Een verschoven afspraak
     houdt zo haar sleutel, en elke leesbare kopie werkt hetzelfde blok bij."""
     return f"firma|{e.get('iCalUID') or e.get('id')}|{_utc(_tijd(e, 'originalStartTime'))}"
+
+
+def _firma_kopieen_kiezen(evs):
+    """Een afspraak kan op twee firma-agenda's staan (de ene nodigt de andere uit). Kloppen hun tijden, dan telt de eerste
+    kopie. Verschillen ze (een gast kan de tijd op zijn eigen kopie wijzigen), dan beslist de kopie van de organisator;
+    is die er niet, dan is de afspraak onzeker en verandert er niets (Codex-hertest 11). Geeft (gekozen, onzeker)."""
+    groepen = {}
+    for e in evs or []:
+        groepen.setdefault(_firma_sleutel(e), []).append(e)
+    gekozen, onzeker = [], set()
+    for k, kopieen in groepen.items():
+        tijden = {(_utc(_tijd(e, "start")), _utc(_tijd(e, "end"))) for e in kopieen}
+        if len(tijden) == 1:
+            gekozen.append(kopieen[0])
+            continue
+        org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()]
+        if org:
+            gekozen.append(org[0])
+        else:
+            onzeker.add(k)
+    return gekozen, onzeker
 
 
 def _firma_uid(e):
@@ -3563,7 +3585,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         if _firma_uid(e) not in gezien:   # dezelfde afspraak op twee firma-agenda's: een blok (review 27-10-2026)
             gezien.add(_firma_uid(e))
             kand[_firma_sleutel(e)] = (e, True)
-    for e in evs or []:
+    for e in _firma_kopieen_kiezen(evs)[0]:
         tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
         if re.search(r"\bMehdi\b", tekst) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e) \
                 and _firma_uid(e) not in gezien:
