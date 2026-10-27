@@ -930,7 +930,8 @@ finally:
     W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google = _o46
 check("is het Bezet blok verdwenen terwijl de afspraak bleef, dan zet de agent het een keer opnieuw (hertest 22)",
       _n46 == 2, str(_n46))
-check("en haalt Mehdi het daarna weer weg, dan respecteert de agent dat (geen gevecht)", _n46b == 2, str(_n46b))
+check("en haalt Mehdi het daarna weer weg, dan geen nieuw blok maar een keer een vraag op Beschikbaar (hertest 23)",
+      _n46b == 3 and "weg" in _ins46[2]["summary"] and _ins46[2]["transparency"] == "transparent", str(_ins46[2:]))
 _ins47, _pat47 = [], []
 _o47 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google)
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma47-")) / "agenda-firma-vragen.json")
@@ -947,6 +948,13 @@ finally:
     W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google = _o47
 check("staat het Bezet blok op Beschikbaar, dan zet de agent het een keer terug op Bezet",
       len(_pat47) == 1 and _pat47[0]["transparency"] == "opaque", str(_pat47))
+
+# --- Codex-hertest 23: een onleesbare organisator gaat voor op een onzekere tijd -------------------------------------
+_c48 = dict(ev("o48", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com", organizer={"email": ELEVAIT},
+            _tijd_onzeker=True)
+_gk48, _onz48, _tw48 = W._firma_kopieen_kiezen([_c48], [ELEVAIT])
+check("organisator onleesbaar en een gastkopie met onzekere tijd: onzeker (een bestaand blok blijft), geen twijfelvraag",
+      not _gk48 and _onz48 == {W._firma_sleutel(_c48)} and not _tw48, str((_gk48, _onz48, _tw48)))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

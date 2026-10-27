@@ -3449,10 +3449,10 @@ def _firma_kopieen_kiezen(evs, onleesbaar=()):
                and not e.get("_tijd_onzeker")]
         if org:
             gekozen.append(org[0])      # een zekere kopie van de organisator beslist altijd (Codex-hertest 18)
+        elif {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & stuk:
+            onzeker.add(k)              # organisator onleesbaar: niets veranderen, ook een bestaand blok niet (hertest 23)
         elif any(e.get("_tijd_onzeker") for e in kopieen):
             twijfel[k] = kopieen        # tijdzone onbekend: nooit een blok op een gok (Codex-hertest 17)
-        elif {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & stuk:
-            onzeker.add(k)
         else:
             twijfel[k] = kopieen
     return gekozen, onzeker, twijfel
@@ -3650,16 +3650,38 @@ def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
     _patch(x, nieuw, tok)
 
 
+def _firma_tweede_afwijking(k, r, e, start, tok):
+    """Het Bezet blok verdween of verschoof opnieuw na mijn herstel: ik zet het niet nog eens (Mehdi beslist), maar ik
+    leg het hem een keer zichtbaar voor, als vraag op Beschikbaar in zijn privé-agenda (Codex-hertest 23)."""
+    if r.get("tweede_gemeld"):
+        return ""
+    dag = start[:10]
+    volgende = (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()
+    body = {"summary": f"VR Agendawacht: Bezet blok voor een firma-afspraak weg ({_ddmm(dag)})"[:200],
+            "start": {"date": dag}, "end": {"date": volgende}, "transparency": "transparent",
+            "reminders": {"useDefault": False, "overrides": []},
+            "description": (f"Agendawacht vraagt: '{(e.get('summary') or '')[:80]}' staat nog op {e.get('_agendanaam')} op "
+                            f"{_ddmm(dag)}{(' om ' + start[11:16]) if 'T' in start else ''}. Het Bezet blok ervoor is weer weg of "
+                            "verzet; ik zet het niet opnieuw. Calendly kan dat uur nu boeken. Klopt dat? Anders zet je het blok "
+                            "terug of laat je het me weten."),
+            "extendedProperties": {"private": {MAILMERK: hashlib.sha256(f"firma-weg:{k}".encode()).hexdigest()[:16],
+                                               FIRMAMERK: f"{k}|weg"}}}
+    _insert(PRIVE_AGENDA, body, tok)
+    r["tweede_gemeld"] = True
+    return f"{dag} Bezet blok voor een firma-afspraak opnieuw weg of verzet: Mehdi een keer gevraagd"
+
+
 def _firma_blok_nakijken(k, r, g, tok):
     """De afspraak veranderde niet, maar staat mijn Bezet blok er nog zoals het hoort? Verdwenen, verschoven of op
-    Beschikbaar gezet: een keer herstellen, zodat Calendly niet over de verborgen afspraak boekt (Codex-hertest 22). Doet
-    Mehdi het daarna opnieuw, dan respecteer ik dat: dan beslist hij. Werkt r bij en geeft een regel, of ''."""
-    if r.get("hersteld"):
-        return ""
+    Beschikbaar gezet: een keer herstellen, zodat Calendly niet over de verborgen afspraak boekt (Codex-hertest 22). Ik
+    blijf het nakijken: gebeurt het opnieuw, dan zet ik het niet nog eens maar vraag ik het Mehdi een keer zichtbaar
+    (hertest 23). Werkt r bij en geeft een regel, of ''."""
     e, sterk, start, einde, _ = g
     import urllib.parse  # noqa: PLC0415
     x = _prive_item_lezen(r["id"], tok) if r.get("id") else None    # None: echt weg; een leesfout gooit (dan niets doen)
     if x is None:
+        if r.get("hersteld"):
+            return _firma_tweede_afwijking(k, r, e, start, tok)
         n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
         r.update(id=n.get("id", ""), hersteld=True)
         return f"{start[:10]} Bezet blok voor een firma-afspraak was weg: een keer opnieuw gezet"
@@ -3672,6 +3694,8 @@ def _firma_blok_nakijken(k, r, g, tok):
             and raw.get("transparency", "opaque") != "transparent")
     if goed:
         return ""
+    if r.get("hersteld"):
+        return _firma_tweede_afwijking(k, r, e, start, tok)
     _firma_blok_bijzetten(x, k, e, start, sterk, tok)
     r["hersteld"] = True
     return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven of Beschikbaar: een keer hersteld"
