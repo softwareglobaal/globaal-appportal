@@ -382,7 +382,7 @@ _lezingen = []
 W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: _lezingen.append((van, tot)) or ([_heel_ver] if van > 400 else [])
 W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
 W.agenda._toegang = lambda: "tok"
-W.ZORG_GEZET[:] = ["2028-03-07"]
+W.ZORG_GEZET[:] = [("2028-03-07", "hv")]
 try:
     _r11, _n11 = W.zorg_whatsapp_stap()
 finally:
@@ -421,7 +421,7 @@ _o13 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
 W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: [{"fout": True, "kalender": "x"}]     # de lezing mislukt
 W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
 W.agenda._toegang = lambda: "tok"
-W.ZORG_GEZET[:] = ["2028-03-07"]
+W.ZORG_GEZET[:] = [("2028-03-07", "x1")]
 try:
     W.zorg_whatsapp_stap()
     W.ZORG_GEZET[:] = []                        # een nieuw proces: het geheugen is leeg
@@ -429,7 +429,7 @@ try:
 finally:
     W.afspraken, W.archief_afspraken, W.agenda._toegang = _o13[:3]
     W.ZORG_GEZET[:] = _o13[3]
-check("mislukt de meldstap, dan blijft een verre dag bewaard voor de volgende ronde (hertest 3)", _bewaard == ["2028-03-07"],
+check("mislukt de meldstap, dan blijft een verre dag bewaard voor de volgende ronde (hertest 3)", _bewaard == {"2028-03-07": ["x1"]},
       str(_bewaard))
 _st = (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def zorg_whatsapp_stap():")[1][:2600]
 check("de meldstap markeert de zorgschaduwen op haar eigen lijst en houdt die van de ronde",
@@ -442,21 +442,21 @@ _voor = _h4[:_h4.index("zst = zorg_afspraken_zetten(mres, rit_items")][-400:]
 check("zonder bewaard begin van de ronde zet de zorgroute niets (hertest 4, punt 1)",
       "if not WACHTRIJ_KLAAR:" in _voor and "raise _Onvolledig" in _voor
       and "return 1" in _h4.split("def zorgronde():")[1][:700])
-_stap4 = _h4.split("def zorg_whatsapp_stap():")[1][:900]
+_stap4 = _h4.split("def zorg_whatsapp_stap():")[1][:2500]
 check("de verre dagen worden bewaard voor er gelezen wordt (punt 2)",
-      _stap4.index("AW.verre_dagen(ZORG_GEZET)") < _stap4.index("afspraken(0, ZORG_WHATSAPP_DAGEN)"))
+      _stap4.index("AW.verre_dagen(") < _stap4.index("afspraken(0, ZORG_WHATSAPP_DAGEN)"))
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw14-")) / "agenda-whatsapp.json")
 _o14 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
 W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: []          # een lege lezing: het blok is (nog) niet te zien
 W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
 W.agenda._toegang = lambda: "tok"
-W.ZORG_GEZET[:] = ["2028-03-07"]
+W.ZORG_GEZET[:] = [("2028-03-07", "x2")]
 try:
     W.zorg_whatsapp_stap()
 finally:
     W.afspraken, W.archief_afspraken, W.agenda._toegang = _o14[:3]
     W.ZORG_GEZET[:] = _o14[3]
-check("na een lege lezing blijft de verre dag staan tot haar blok gemeld is (punt 2)", AW.verre_dagen() == ["2028-03-07"])
+check("na een lege lezing blijft de verre dag staan tot haar blok gemeld is (punt 2)", AW.verre_dagen() == {"2028-03-07": ["x2"]})
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw15-")) / "agenda-whatsapp.json")
 AW.versie_melden("blk", "s1", "e1", "oud uur {code}", {"id": "blk", "start": "s1", "einde": "e1"})
 _k1 = next(iter(AW._lees()["meldingen"]))
@@ -473,13 +473,17 @@ check("ook een mislukte oude vraag geldt niet meer na een verschuiving (punt 4)"
 # --- Codex-hertest 5 (PR 113): een zorgafspraak voorbij dag 120 krijgt geen tweede blok -------------------------
 import mail_afspraken as _MA  # noqa: E402
 _ins16, _gevonden = [], {}
-_o16 = (W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen)
+_o16 = (W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen, W._prive_item_lezen)
 W._insert = lambda kal, body, tok, toch=False: _ins16.append(body) or _gevonden.__setitem__("s16", "nieuw1") or {"id": "nieuw1"}
 W._zorg_teruglezen = lambda kal, eid, body, tok, gelezen=None: ""
 W._zorg_blok_met_merk = lambda sleutel, tok: _gevonden.get(sleutel, "")
 _MA._zorg_json = lambda a: a["zorg"]
 _MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
 _ver_start = (W.nu_lokaal() + timedelta(days=200)).replace(hour=9, minute=0, second=0, microsecond=0)
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "start": _ver_start.isoformat(),
+                                        "einde": (_ver_start + timedelta(minutes=30)).isoformat()}
+
+
 def _mail16():
     return [{"soort": "zorg", "status": "ontbreekt", "sleutel": "s16", "titel": "Tandarts Proef", "start": _ver_start.isoformat(),
              "einde": (_ver_start + timedelta(minutes=30)).isoformat(), "geannuleerd": 0, "ics_uid": "", "locatie": "",
@@ -492,9 +496,51 @@ try:
 except Exception as _e:  # noqa: BLE001
     _rz1 = _rz2 = {"prive": [repr(_e)]}
 finally:
-    W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen = _o16
+    W._insert, W._zorg_teruglezen, W._zorg_blok_met_merk, _MA._zorg_json, _MA.zorgprofielen, W._prive_item_lezen = _o16
 check("een zorgafspraak voorbij dag 120: de tweede ronde koppelt het bestaande blok, geen tweede blok (hertest 5)",
       len(_ins16) == 1 and any("stond er al" in r for r in _rz2.get("prive", [])), str((len(_ins16), _rz1.get("prive"), _rz2.get("prive"))))
+
+# --- Codex-hertest 6 (PR 113) ---------------------------------------------------------------------------------
+# een blok voorbij dag 120 op een ander uur: het verschuift mee
+_pat17 = []
+_o17 = (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen,
+        list(W.ZORG_GEZET))
+W._insert = lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen nieuw blok"))
+W._zorg_blok_met_merk = lambda sleutel, tok: "bestaand17"
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "!! [PR] Tandarts - Proef",
+                                        "start": (_ver_start - timedelta(days=7)).isoformat(),
+                                        "einde": (_ver_start - timedelta(days=7) + timedelta(minutes=30)).isoformat(),
+                                        "omschrijving": "praktijk", "deelnemers": [], "maker": W.WERKAGENDA, "_merk": {}}
+W._patch = lambda x, body, tok, **kw: _pat17.append(body)
+W._zorg_nalezen = lambda *a, **k: ""
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+W.ZORG_GEZET[:] = []
+try:
+    _rz17 = W.zorg_afspraken_zetten(_mail16(), [], "tok")
+    _gezet17 = list(W.ZORG_GEZET)
+finally:
+    (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen) = _o17[:7]
+    W.ZORG_GEZET[:] = _o17[7]
+check("een zorgblok voorbij dag 120 dat de praktijk verzette, schuift mee (zelfde item) en de meldstap kijkt het na",
+      _pat17 and _pat17[0]["start"]["dateTime"] == _ver_start.isoformat() and _gezet17 == [(_ver_start.date().isoformat(), "bestaand17")]
+      and any("verzet (zelfde item" in r for r in _rz17["prive"]), str((_pat17[:1], _gezet17, _rz17["prive"])))
+# een verre dag blijft tot elk nieuw blok gemeld is, ook als een ander blok van die dag al gemeld was
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw17-")) / "agenda-whatsapp.json")
+AW.basislijn([("oud18", "2028-03-07T08:00:00+01:00", "2028-03-07T08:30:00+01:00")])
+_oud18 = item("oud18", "!! [PR] Kine - Q", "2028-03-07T08:00:00+01:00", "2028-03-07T08:30:00+01:00", merk={W.ZORGMERK: "q"})
+_o18 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: [_oud18] if van > 400 else []   # het nieuwe blok is nog niet te zien
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+W.agenda._toegang = lambda: "tok"
+W.ZORG_GEZET[:] = [("2028-03-07", "nieuw18")]
+try:
+    W.zorg_whatsapp_stap()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o18[:3]
+    W.ZORG_GEZET[:] = _o18[3]
+check("een verre dag blijft bewaard zolang het nieuwe blok niet gevonden en gemeld is (hertest 6)",
+      AW.verre_dagen() == {"2028-03-07": ["nieuw18"]}, str(AW.verre_dagen()))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

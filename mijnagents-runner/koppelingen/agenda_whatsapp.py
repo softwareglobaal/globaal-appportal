@@ -116,17 +116,24 @@ def versie_melden(eid, start, einde, tekst, vraag=None):
 
 
 def verre_dagen(nieuw=()):
-    """De dagen voorbij het leesvenster waarop de zorgroute een blok zette: bewaard tot hun melding klaarstaat, zodat een
-    mislukte meldstap ze niet vergeet (Codex-hertest 3, PR 113). Voegt nieuw toe en geeft de hele lijst."""
+    """De blokken voorbij het leesvenster die de zorgroute zette, als {dag: [id, ...]}: bewaard tot elk van hen gemeld
+    is, zodat een mislukte meldstap of een trage lezing ze niet vergeet (Codex-hertest 3 en 6, PR 113). nieuw: [(dag, id)].
+    Geeft alles."""
     with _bewerk() as d:
-        d["verre_dagen"] = sorted(set(d.get("verre_dagen") or []) | {x for x in nieuw if x})
-        return list(d["verre_dagen"])
+        oud = d.get("verre_dagen") or {}
+        if isinstance(oud, list):
+            oud = {x: [] for x in oud}
+        for dag, eid in nieuw:
+            if dag and eid:
+                oud[dag] = sorted(set(oud.get(dag) or []) | {eid})
+        d["verre_dagen"] = oud
+        return {k: list(v) for k, v in oud.items()}
 
 
 def verre_dagen_klaar(dagen):
     """Haal deze dagen weg: hun blokken staan gemeld (of de dag is voorbij)."""
     with _bewerk() as d:
-        d["verre_dagen"] = [x for x in d.get("verre_dagen") or [] if x not in set(dagen)]
+        d["verre_dagen"] = {k: v for k, v in (d.get("verre_dagen") or {}).items() if k not in set(dagen)}
 
 
 def klaarzetten(sleutel, tekst, vraag=None):
