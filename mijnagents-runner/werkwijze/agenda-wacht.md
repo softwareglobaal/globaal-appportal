@@ -66,7 +66,8 @@ Aanvulling v8.16 (18-10-2026): E1b laat mij oude dagen op vraag alleen lezend te
 Ik zet het agendabewijs op het bord; oude afspraken, ritten, kleuren en gasten blijven onaangeraakt.
 
 Aanvulling v8.15 (17-10-2026): een expliciete annulering krijgt een eigen melding vanaf het vaste agentnummer
-met "afgezegd, niet vertrekken". De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
+met "afgezegd, niet vertrekken", nooit voor een afspraak van Lara (de agenda van Lara of `[LA]`) of een rit (FR-210):
+een gewiste Lara-afspraak op een schooldag wordt een vraag in de privé-agenda. De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
 dat niet, dan klinkt geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Mislukte
 afzegmeldingen blijven open. Een annuleerlink of voorwaardelijke zin is geen annulering; een latere expliciete
 bevestiging herroept de afzegzin.
@@ -354,15 +355,26 @@ niets buiten plannen.
 
 ## Lara tijdens schoolvakanties (mandaat van Mehdi, 22-09-2026)
 
-Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan is er:
+Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan:
 
-- geen ophaalafspraak en geen reistijd (ik maak geen Lara-rit op zo'n dag), en
-- geen hele-dag marker `Geen buiten afspraken Lara ophalen` (die dag mogen collega's
-  juist wel buiten-afspraken plannen).
+- maak ik geen Lara-rit op zo'n dag;
+- blijven de vaste Lara-ophaalafspraken **staan en Bezet**, en blijft de marker
+  `Geen buiten afspraken Lara ophalen` **staan en Beschikbaar** (online boeken mag), tot
+  Mehdi zegt welke vervallen. Ik zet per vakantieweek één vraag
+  in de privé-agenda. Wat vervalt, krijgt `vervalt (vakantie)` vooraan en Beschikbaar
+  (Claude 1, na Mehdi's ja). Een afspraak met `vervalt` vooraan krijgt geen rit en een
+  marker met `vervalt` vooraan sluit de dag niet meer af. **Nooit wissen**, ook niet
+  één instantie van een reeks (driehoeksoverleg 27-10-2026, L4; FR-210).
 
-De vakantie- en feestdagen lees ik uit de agenda van Lara zelf (all-day items met
-`vakantie` of `feestdag`); ze horen daar als volledige weken in te staan. De grendel
-is `lara_vakantiedagen()`.
+De vakantie- en feestdagen komen **alleen** uit de officiële Vlaamse kalender in
+`werkwijze/schoolvakanties.json` (bron vlaanderen.be, elk schooljaar overnemen). Een
+blok in de agenda van Lara telt niet: wijkt het af (een fout, een eigen reis, een vrije
+dag van de school), dan plan ik de ritten zoals op een schooldag en zet ik een vraag in
+de privé-agenda. Wordt een vaste Lara-afspraak op een schooldag gewist, door wie ook,
+dan zet het agendasignaal een vraag in de privé-agenda; ik zet ze niet zelf terug en bel
+nooit "niet vertrekken" voor een Lara-afspraak of een rit. De grendels:
+`lara_vakantiedagen()`, `lara_vakantie_afwijkingen()`, `lara_wissing_kandidaat()` en
+`tests/test_lara_vakanties.py`.
 
 **Deze Lara-regelingen gelden per schooljaar** (ophalen, oma, zwemles, vakanties) en
 moeten elk jaar opnieuw bijgesteld worden; ze staan niet voor altijd vast.

@@ -2,7 +2,7 @@
  "versie": "5.18",
  "datum": "2026-10-27",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
- "annulering": "Een expliciete afzegging in Google of de afspraakomschrijving wordt met het vaste agentnummer gemeld: afgezegd, niet vertrekken. Vlak voor de vijfminutenoproep wordt de afspraak opnieuw gelezen; bij onleesbare agenda geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Een mislukte afzegmelding blijft open voor herkansing. Een annuleerlink of een voorwaardelijke zin op zichzelf is geen afzegging; een latere expliciete bevestiging heft een afzegzin op.",
+ "annulering": "Een expliciete afzegging in Google of de afspraakomschrijving wordt met het vaste agentnummer gemeld: afgezegd, niet vertrekken. Nooit voor een afspraak van Lara (de agenda van Lara of [LA]) of een rit: een gewiste Lara-afspraak op een schooldag wordt een vraag in de privé-agenda (FR-210). Vlak voor de vijfminutenoproep wordt de afspraak opnieuw gelezen; bij onleesbare agenda geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Een mislukte afzegmelding blijft open voor herkansing. Een annuleerlink of een voorwaardelijke zin op zichzelf is geen afzegging; een latere expliciete bevestiging heft een afzegzin op.",
  "thuisafspraak": "Herfstlaan 65, 3010 Leuven is Mehdi's thuis: geen reis van thuis naar thuis, geen buitenconflict of vertrekoproep. Bij Catalin geldt de bekende koppeling met Harmoniebouw; een deal met invulnaam Voornaam Achternaam is geen bewijs voor een klanttitel. Als Mehdi naast de activiteit een naam of inhoudswoord invoerde, mag een andere persoon uit een adresdeal zijn titel niet overschrijven. Bij onvoldoende zekerheid vraagt de agent Mehdi.",
  "duur_ter_plaatse": {
   "trefwoorden": [
@@ -624,7 +624,7 @@
    "vervangen_door": "Calendly-titelsjablonen naar UB/TK (twee letters, 02-10-2026); zie de taak 'Calendly-titelsjablonen schrijven nog UNABO/TKN'"
   },
   {
-   "wat": "Lara ophalen staat nog in de reeks op drie vrije dagen: maandag 26-10 en vrijdag 30-10 (herfstvakantie) en vrijdag 02-07-2027 (zomervakantie). Waar haalt Mehdi haar die dagen op, of vallen ze weg?",
+   "wat": "Lara ophalen op vrijdag 02-07-2027 (officiële zomervakantie): blijft staan en Bezet tot Mehdi zegt dat het vervalt; dan 'vervalt (vakantie)' vooraan en Beschikbaar, nooit wissen. Maandag 26-10 en vrijdag 30-10-2026 waren GEEN vakantie (officieel herfst 2 tot 8/11; FR-210): die ophaalmomenten gaan gewoon door.",
    "wie": "Mehdi",
    "wanneer": "voor 26-10",
    "status": "open"
@@ -738,7 +738,7 @@
   },
   {
    "datum": "2026-09-22",
-   "wat": "tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen 'Geen buiten afspraken'-marker; de agent leest de vakantiedagen uit de agenda van Lara. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
+   "wat": "ACHTERHAALD op 27-10-2026 (FR-210, zie reistijd.schoolvakantie): de vakantiedagen komen niet meer uit de agenda van Lara maar uit werkwijze/schoolvakanties.json, en de afspraken en de marker blijven staan en worden gemarkeerd, nooit gewist. Oorspronkelijk: tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen marker. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
   },
   {
    "datum": "2026-09-22",
@@ -957,7 +957,7 @@
     "19:00-19:30 Mehdi: Lara naar huis brengen, dat is zelf de terugrit, dus geen tweede"
    ],
    "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf",
-   "vakantie": "vervalt tijdens schoolvakanties en feestdagen"
+   "vakantie": "tijdens officiële schoolvakanties en feestdagen geen rit; de dinsdagafspraken blijven staan en Bezet tot Mehdi zegt dat ze vervallen, dan 'vervalt (vakantie)' vooraan en Beschikbaar, nooit wissen (FR-210)"
   },
   "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
   "lara_maandag_vrijdag": {
@@ -966,8 +966,8 @@
    "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
    "afzetten": "thuis, Herfstlaan 65",
    "ritten": "15:45-16:00 thuis → De Speelkriebel en 17:00-17:15 De Speelkriebel → thuis, roze op de agenda van Lara",
-   "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027, niet op vakantie- en feestdagen van de agenda van Lara. Daar staat het ophalen nog in de reeks (26-10, 30-10 en 02-07-2027) en vraagt de agent het",
-   "vakantie": "tijdens schoolvakanties en feestdagen geen ophaling; buiten de vakanties elke maandag en vrijdag"
+   "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027. Maandag 26-10 en vrijdag 30-10-2026 zijn gewone schooldagen (officieel herfst 2 tot 8/11; FR-210). Vrijdag 02-07-2027 is officieel zomervakantie: blijft staan tot Mehdi zegt dat het vervalt",
+   "vakantie": "tijdens officiële schoolvakanties en feestdagen (werkwijze/schoolvakanties.json) geen rit; de afspraak blijft staan en Bezet tot Mehdi zegt dat ze vervalt, dan 'vervalt (vakantie)' vooraan, nooit wissen. Buiten de vakanties elke maandag en vrijdag"
   },
   "lara_vooruit": {
    "regel": "de agenda van Lara loopt in vaste reeksen per schooljaar. Haar ritten zet de agent tot 300 dagen vooruit, tot het einde van het schooljaar; voor de rest acht dagen, want werkafspraken schuiven",
@@ -988,11 +988,11 @@
    "optioneel": "de donderdag bij oma is optioneel (zo afgesproken met Leen): als Mehdi kan gaat hij, anders niet. Daarom draagt de titel '(optioneel)'; dat blijft staan"
   },
   "schoolvakantie": {
-   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen ophaalafspraak, geen rit, en de marker 'Geen buiten afspraken Lara ophalen' hoort er die dag ook niet (dan mogen collega's wel buiten-afspraken plannen)",
-   "bron": "de agent leest de vakantie- en feestdagen uit de agenda van Lara (all-day items met 'vakantie' of 'feestdag'); die horen als volledige weken in de agenda te staan",
-   "grendel": "lara_vakantiedagen() -> geen rit voor een Lara-afspraak op zo'n dag",
+   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit. De vaste Lara-ophaalafspraken blijven staan en Bezet, de dagmarker 'Geen buiten afspraken Lara ophalen' blijft staan en Beschikbaar (online boeken mag), tot Mehdi zegt welke vervallen; wat vervalt krijgt 'vervalt (vakantie)' vooraan en Beschikbaar. Nooit wissen, ook geen instantie van een reeks (driehoeksoverleg 27-10-2026, L4; FR-210)",
+   "bron": "alleen de officiële Vlaamse kalender in werkwijze/schoolvakanties.json (vlaanderen.be). Een blok in de Lara-agenda telt niet; wijkt het af, dan een vraag in de privé-agenda (L2)",
+   "grendel": "lara_vakantiedagen(), lara_vakantie_afwijkingen(), lara_vakantieweken(), lara_vervalt() en in agenda_signaal lara_wissing_kandidaat(); tests/test_lara_vakanties.py",
    "per_schooljaar": "deze Lara-regelingen (ophalen, oma, zwemles, vakanties) gelden per schooljaar en moeten elk jaar opnieuw bijgesteld worden; ze staan niet voor altijd vast",
-   "mehdi": "22-09-2026"
+   "mehdi": "22-09-2026; bron en markeren 27-10-2026"
   },
   "maandag_na_werfbezoek": "op maandag komt Mehdi na werfbezoek 2145 (tot 11:30) naar huis voor de online afspraak van 12:00; afspraak C is voor die maandag bevestigd (22-09-2026)",
   "google_alleen_dichtbij": "Google live verkeer alleen voor ritten die binnen 48 uur vertrekken; verder vooruit de gratis routeplanner maal de filefactor. Gezien 23-09-2026: de dagteller stond om de middag al op 100/100 door verre ritten, zodat de rit van morgen naar Genk geen echt verkeer kreeg",

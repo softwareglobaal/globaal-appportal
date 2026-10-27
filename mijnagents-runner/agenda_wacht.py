@@ -594,7 +594,7 @@ def markeringen_bezet(items, tok=None):
     stond op Beschikbaar en Jordy Scheurmans boekte via Calendly om 10:30 (FR-84). Geeft de lijst die ik op Bezet zette."""
     gezet = []
     for a in items:
-        if not a.get("hele_dag") or not a.get("_vrij") or a.get("_archief"):
+        if not a.get("hele_dag") or not a.get("_vrij") or a.get("_archief") or (a.get("_merk") or {}).get(LARAMERK):
             continue
         if any(wat == "alles" and patroon.search(a.get("titel") or "") for patroon, wat in DAG_MARKERINGEN):
             try:
@@ -614,8 +614,8 @@ def markeringen_uit(items, dag):
     """[(titel, wat verboden is)] van de hele-dag-items die deze dag dekken. Pure functie op de items."""
     uit = []
     for x in items:
-        if not x.get("hele_dag"):
-            continue
+        if not x.get("hele_dag") or lara_vervalt(x) or (x.get("_merk") or {}).get(LARAMERK):
+            continue          # een markering met 'vervalt' vooraan of een eigen Lara-vraag sluit geen dag af (FR-210)
         s, e = (x.get("start") or "")[:10], (x.get("einde") or "")[:10]
         if not (s == dag or s <= dag < (e or s)):
             continue
@@ -648,7 +648,7 @@ def markering_tegen(titel, dag, markers=None, locatie=""):
     """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
     zelf (de reden van de markering) tellen niet."""
     t = (titel or "").strip()
-    if not t or not dag or t.startswith("\U0001F697") or "[LARA]" in t.upper() or "[LA]" in t.upper():
+    if not t or not dag or t.startswith("\U0001F697") or bellen.is_lara_titel(t):
         return None
     info = lees_titel(t)
     if info["reistijd"]:
@@ -1412,6 +1412,8 @@ def tekens_vooraan(titel):
     # alleen het teken zelf, niet de uitroep achter een woord ('Lara jaardag!!')
     if not re.search(r"(?<!\w)!!", titel) or titel.lstrip().startswith("\U0001F697"):
         return titel
+    if re.match(r"\s*(?:VR\s+)?vervalt\b", titel, re.I):
+        return titel          # 'vervalt' blijft vooraan, anders herkent de agent de markering niet meer (FR-210)
     vr = re.match(r"^\s*VR\s+", titel)
     kern = titel[vr.end():] if vr else titel
     kern = re.sub(r"\s{2,}", " ", re.sub(r"\s*(?<!\w)!!\s*", " ", kern)).strip()
@@ -2379,51 +2381,178 @@ def rijtijd_min(van, naar, vertrek):
 
 
 _lara_vrij = {"tot": 0.0, "dagen": frozenset()}
+# Eén bron voor Lara's schoolvakanties: de officiële Vlaamse kalender in de repo (driehoeksoverleg 27-10-2026, L2). Tot
+# dan telde elk hele-dag-blok in de Lara-agenda met 'vakanti' of 'feestdag'. Een fout blok (26/10 tot 1/11, gezet op
+# 26-05-2026) liet de Lara-ritten wegvallen; een assistent wiste daarop de vaste Lara-afspraken van die week en Calendly
+# boekte een klant op de rit van de zwemles naar huis (FR-210).
+SCHOOLVAKANTIES = Path(__file__).resolve().parent / "werkwijze" / "schoolvakanties.json"
+SCHOOLVAKANTIE_MARGE_DAGEN = 365    # zo ver zet ik Lara-ritten (RIT_VOORUIT_ALLES); de bron moet minstens zo ver gaan
+
+
+def schoolvakanties():
+    """(dagen, dekking_tot, namen) uit werkwijze/schoolvakanties.json: de vakantie- en feestdagen als ISO-datums, de
+    laatste dag die de bron dekt (date) en per dag de naam van de vakantie. None als het bestand ontbreekt, niet klopt
+    of de schooljaren niet aansluiten: onbekend is niet 'geen vakantie' (Codex A11)."""
+    from datetime import date
+    try:
+        d = json.loads(SCHOOLVAKANTIES.read_text(encoding="utf-8"))
+        jaren = sorted((d.get("schooljaren") or {}).values(), key=lambda j: j["van"])
+        if not jaren:
+            return None
+        dagen, namen, vorig = set(), {}, None
+        for j in jaren:
+            begin, eind = date.fromisoformat(j["van"]), date.fromisoformat(j["tot"])
+            if eind < begin or (vorig and begin != vorig + timedelta(days=1)):
+                return None              # een gat tussen twee schooljaren zou als schooldagen tellen
+            vorig = eind
+            for p in j["vrij"]:
+                a, b = date.fromisoformat(p["van"]), date.fromisoformat(p["tot"])
+                if b < a or not (begin <= a and b <= eind) or not p.get("naam"):
+                    return None
+                while a <= b:
+                    dagen.add(a.isoformat())
+                    namen[a.isoformat()] = p["naam"]
+                    a += timedelta(days=1)
+        return frozenset(dagen), vorig, namen
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def lara_vakantiedagen():
-    """De dagen die de agenda van Lara als schoolvakantie of feestdag markeert. Op zo'n
-    dag is er geen Lara-ophaling, dus maakt de agent geen Lara-rit. Mandaat van Mehdi,
-    22-09-2026. Staat een vakantie maar als losse dag in de agenda in plaats van als
-    volledige week, dan dekt deze grendel alleen die dag; de weken horen als meerdaagse
-    events in de agenda te staan. Lukt het lezen niet, dan None en niets onthouden: onbekend is niet 'geen vakantie'
-    (Codex A11, zoals FR-94)."""
-    import time
+    """De officiële schoolvakantie- en feestdagen (schoolvakanties()). Op zo'n dag is er geen Lara-ophaling, dus maakt
+    de agent geen Lara-rit (mandaat van Mehdi, 22-09-2026). Een blok in de Lara-agenda telt niet meer mee: wijkt het
+    af, dan wordt het een vraag (lara_vakantie_afwijkingen). Is de bron niet te lezen, dan None: onbekend is niet 'geen
+    vakantie' (Codex A11, zoals FR-94)."""
+    sv = schoolvakanties()
+    if sv is None:
+        return None
+    _lara_vrij["dagen"] = sv[0]
+    return sv[0]
+
+
+def schoolvakantie_dekking():
+    """De laatste dag die de officiële bron dekt, of None. Een Lara-afspraak daarna krijgt geen rit (niet te toetsen)."""
+    sv = schoolvakanties()
+    return sv[1] if sv else None
+
+
+def lara_vervalt(a):
+    """Een Lara-afspraak die Mehdi liet vervallen: 'vervalt' vooraan in de titel (en Beschikbaar). Zo wordt een
+    ophaalmoment in een vakantie of op een eigen reis gemarkeerd in plaats van gewist (driehoeksoverleg 27-10-2026, L4).
+    Daarvoor zet de agent geen rit."""
+    return bool(re.match(r"\s*(?:VR\s+)?(?:!!\s*)?vervalt\b", a.get("titel") or "", re.I))
+
+
+def zonder_vervalt(titel):
+    """De titel zonder de markering 'vervalt (...)' vooraan: zo blijft een rit gekoppeld aan zijn afspraak (hertest 14)."""
+    return re.sub(r"^\s*(?:VR\s+)?(?:!!\s*)?vervalt\b\s*(?:\([^)]*\))?\s*", "", titel or "", flags=re.I)
+
+
+def lara_zonder_rit(a, vrij):
+    """Een Lara-afspraak die geen rit (meer) vraagt: op een officiële vakantiedag of met 'vervalt' vooraan. Die houdt
+    ook geen eigen rit vast: een rit die er nog aan hing, ruimt de agent op (reviewronde 27-10-2026, FR-79 en FR-210)."""
+    return lara_vervalt(a) or (a.get("kalender") in AGENDA_VASTE_KLEUR
+                               and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"
+                               and vrij is not None and (a.get("start") or "")[:10] in vrij)
+
+
+# Hele-dag-blokken in de Lara-agenda die een vrije dag aankondigen: alleen om te vergelijken met de officiële bron. Ook
+# een pedagogische studiedag of vrije dag van de school wordt zo een vraag; ritten schakelt alleen de bron uit (hertest 16)
+LARA_VRIJ_RE = re.compile(r"vakanti|feestdag|studiedag|vrije\s+dag|geen\s+school|schoolvrij|facultatie|brugdag", re.I)
+
+
+def lara_vakantieblokken():
+    """De hele-dag-blokken in de Lara-agenda met 'vakanti' of 'feestdag' in de titel, van vandaag tot 400 dagen
+    vooruit: [{id, titel, van, tot}] met tot exclusief (zoals Google), of None als de agenda niet te lezen is. Alleen
+    om te vergelijken met de officiële bron; ze bepalen de ritten niet meer (L2)."""
     import urllib.parse
     import urllib.request
-    from datetime import date, timedelta
-    if time.time() < _lara_vrij["tot"]:
-        return _lara_vrij["dagen"]
     lara = next((k for k, val in AGENDA_VASTE_KLEUR.items() if val.get("naam") == "Lara"), None)
-    dagen = set()
-    if lara:
+    if not lara:
+        return None
+    blokken = []
+    try:
+        nu = datetime.now().astimezone()
+        tok = None
+        while True:
+            q = {"timeMin": nu.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+                 "timeMax": (nu + timedelta(days=400)).isoformat(),
+                 "singleEvents": "true", "maxResults": "2500"}
+            if tok:
+                q["pageToken"] = tok
+            url = f"{agenda.API}/calendars/{urllib.parse.quote(lara, safe='')}/events?" + urllib.parse.urlencode(q)
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {agenda._toegang()}"})
+            d = json.load(urllib.request.urlopen(req, timeout=25))
+            for e in d.get("items", []):
+                if e.get("status") == "cancelled" or "date" not in (e.get("start") or {}) \
+                        or not LARA_VRIJ_RE.search(e.get("summary") or ""):
+                    continue
+                blokken.append({"id": e.get("id", ""), "titel": e.get("summary") or "",
+                                "van": e["start"]["date"], "tot": e["end"]["date"]})
+            tok = d.get("nextPageToken")
+            if not tok:
+                break
+    except Exception:  # noqa: BLE001
+        return None
+    return blokken
+
+
+def lara_vakantie_afwijkingen(blokken, officieel, vandaag, dekking=None):
+    """Pure functie: de blokken uit lara_vakantieblokken() met minstens één schooldag (maandag tot vrijdag, niet in de
+    officiële bron) vanaf vandaag. Zo'n blok is een eigen reis, een vrije dag van de school of een fout: de agent plant
+    de ritten zoals op een schooldag en vraagt het aan Mehdi (L2). Geeft [{id, titel, van, tot, schooldagen}]."""
+    from datetime import date
+    uit = []
+    for b in blokken or []:
         try:
-            nu = datetime.now().astimezone()
-            tok = None
-            while True:
-                q = {"timeMin": nu.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
-                     "timeMax": (nu + timedelta(days=400)).isoformat(),
-                     "singleEvents": "true", "maxResults": "2500"}
-                if tok:
-                    q["pageToken"] = tok
-                url = f"{agenda.API}/calendars/{urllib.parse.quote(lara, safe='')}/events?" + urllib.parse.urlencode(q)
-                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {agenda._toegang()}"})
-                d = json.load(urllib.request.urlopen(req, timeout=25))
-                for e in d.get("items", []):
-                    t = (e.get("summary") or "").lower()
-                    if "date" not in e.get("start", {}) or not ("vakanti" in t or "feestdag" in t):
-                        continue
-                    a, b = date.fromisoformat(e["start"]["date"]), date.fromisoformat(e["end"]["date"])
-                    while a < b:
-                        dagen.add(a.isoformat()); a += timedelta(days=1)
-                tok = d.get("nextPageToken")
-                if not tok:
-                    break
-        except Exception:  # noqa: BLE001
-            return None
-    _lara_vrij["dagen"] = frozenset(dagen)
-    _lara_vrij["tot"] = time.time() + 3600
-    return _lara_vrij["dagen"]
+            a, eind = max(date.fromisoformat(b["van"]), vandaag), date.fromisoformat(b["tot"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        school = []
+        if dekking is not None:
+            eind = min(eind, dekking + timedelta(days=1))    # na de bron is een dag onbekend, geen schooldag
+        while a < eind:
+            if a.weekday() < 5 and a.isoformat() not in officieel:
+                school.append(a.isoformat())
+            a += timedelta(days=1)
+        if school:
+            uit.append({**b, "schooldagen": school})
+    return uit
+
+
+def lara_vakantieweken(items, namen, vandaag, vooruit=21):
+    """Pure functie: per officiële vakantieweek in de komende `vooruit` dagen de vaste Lara-afspraken die er nog staan
+    (geen rit, geen hele dag, niet vervallen). Die blijven staan en Bezet tot Mehdi zegt welke vervallen; de agent wist
+    niets en past de reeks niet aan (L4). Geeft [{week, naam, van, tot, afspraken: [(start, titel)]}]."""
+    from datetime import date
+    lara = {k for k, val in AGENDA_VASTE_KLEUR.items() if val.get("naam") == "Lara"}
+    grens = vandaag + timedelta(days=vooruit)
+    weken = {}
+    for a in items or []:
+        dag = (a.get("start") or "")[:10]
+        if a.get("kalender") not in lara or a.get("hele_dag") or "T" not in (a.get("start") or "") \
+                or dag not in namen or lees_titel(a.get("titel") or "")["reistijd"] or lara_vervalt(a):
+            continue
+        if not (a.get("_reeks") or a.get("_terugkerend")
+                or re.search(r"ophal|zwemles|naar huis brengen", a.get("titel") or "", re.I)):
+            continue          # een eenmalig feest of uitstap is geen vast ophaalmoment (hertest 17)
+        d = date.fromisoformat(dag)
+        if not (vandaag <= d <= grens):
+            continue
+        j, w, _ = d.isocalendar()
+        weken.setdefault(f"{j}-W{w:02d}", {"naam": namen[dag], "dagen": set(), "afspraken": [], "ids": [], "kenmerk": {}})
+        weken[f"{j}-W{w:02d}"]["afspraken"].append((a["start"][:16], a.get("titel") or ""))
+        _id = a.get("id") or a["start"][:16]
+        weken[f"{j}-W{w:02d}"]["ids"].append(_id)
+        weken[f"{j}-W{w:02d}"]["kenmerk"][_id] = f"{a['start'][:16]}|{a.get('titel') or ''}"
+    uit = []
+    for wk, v in sorted(weken.items()):
+        j, w = int(wk[:4]), int(wk[-2:])
+        maandag = date.fromisocalendar(j, w, 1)
+        vrij = [maandag + timedelta(days=i) for i in range(7) if (maandag + timedelta(days=i)).isoformat() in namen]
+        uit.append({"week": wk, "naam": v["naam"], "van": max(min(vrij), vandaag).isoformat(), "tot": max(vrij).isoformat(),
+                    "afspraken": sorted(v["afspraken"]), "ids": sorted(v["ids"]), "kenmerk": v["kenmerk"]})
+    return uit
 
 
 _geen_auto = {"tot": 0.0, "dagen": frozenset()}
@@ -2750,6 +2879,250 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
     x["titel"] = nieuwe_titel
     x["omschrijving"] = nieuwe_oms
     x["_merk"] = nieuwe_merk
+    return True
+
+
+# Lara en de schoolvakanties (driehoeksoverleg 27-10-2026, L2 tot L4; FR-210). Wat niet klopt met de officiële kalender,
+# en elke vakantieweek met vaste Lara-afspraken, wordt een vraag in de privé-agenda (alleen Mehdi ziet die; Leen ziet de
+# Lara-agenda). De vraag draagt het mailmerk (zodat de bestaande eigendomscontrole ze als eigen melding kent) en een
+# eigen Lara-sleutel. De agent wist nooit een Lara-afspraak en past geen reeks aan: wat vervalt, markeert Claude 1 na
+# Mehdi's ja met 'vervalt (vakantie)' vooraan en Beschikbaar.
+LARAMERK = "agendawacht_lara"
+LARA_INHOUD = "agendawacht_lara_inhoud"     # vingerafdruk van de tekst: een vraag volgt haar inhoud (reviewronde)
+LARA_VRAAG_VOORUIT = 120          # dagen vooruit voor een afwijkend blok; een vakantieweek: 21 dagen
+LARA_MARKEREN = ("Vervalt een ophaalmoment, laat het dan markeren met 'vervalt (vakantie)' vooraan en Beschikbaar. "
+                 "Wissen doe ik nooit.")
+
+
+def _lara_mailk(k):
+    return hashlib.sha256(f"lara:{k}".encode()).hexdigest()[:16]
+
+
+def _lara_body(k, titel, van, tot, tekst):
+    """Een hele-dag-vraag in de privé-agenda van van tot en met tot (ISO-datums), Beschikbaar, zonder herinnering."""
+    from datetime import date as _d  # noqa: PLC0415
+    return {"summary": titel[:200], "start": {"date": van},
+            "end": {"date": (_d.fromisoformat(tot) + timedelta(days=1)).isoformat()},
+            "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []},
+            "description": tekst[:1900],
+            "extendedProperties": {"private": {MAILMERK: _lara_mailk(k), LARAMERK: k,
+                                               LARA_INHOUD: hashlib.sha256(tekst.encode()).hexdigest()[:12]}}}
+
+
+def _ddmm(dag):
+    return f"{dag[8:10]}/{dag[5:7]}"
+
+
+def lara_afwijking_body(b, vandaag):
+    from datetime import date as _d  # noqa: PLC0415
+    k = f"afwijking:{b['id']}"
+    van = max(b["van"], vandaag.isoformat())
+    tot = (_d.fromisoformat(b["tot"]) - timedelta(days=1)).isoformat()
+    tekst = (f"Agendawacht vraagt: is dit een eigen reis of een vrije dag van de school? Volgens de officiële kalender "
+             f"(vlaanderen.be) zijn {', '.join(_ddmm(d) for d in b['schooldagen'][:10])} schooldagen. Ik plan de ophaalritten "
+             f"zoals op een schooldag tot jij beslist. {LARA_MARKEREN}\n\n"
+             f"Blok in de agenda Lara: '{b['titel'][:80]}', {_ddmm(b['van'])} tot en met {_ddmm(tot)}.")
+    return k, _lara_body(k, f"VR Agendawacht: Lara-blok valt niet in de officiële schoolvakantie ({_ddmm(b['van'])} tot "
+                            f"{_ddmm(tot)})", van, tot, tekst)
+
+
+def lara_week_body(w):
+    k = f"week:{w['week']}"
+    lijst = "\n".join(f"- {_ddmm(s[:10])} {s[11:16]} {t[:70]}" for s, t in w["afspraken"][:15])
+    tekst = (f"Agendawacht vraagt: welke vaste Lara-afspraken vervallen in de {w['naam']} ({_ddmm(w['van'])} tot "
+             f"{_ddmm(w['tot'])})? Ze blijven staan en Bezet, zodat Calendly er niet over boekt. {LARA_MARKEREN}\n\n{lijst}")
+    return k, _lara_body(k, f"VR Agendawacht: {w['naam']} Lara, ophaalmomenten blijven Bezet tot jij zegt welke vervallen",
+                         w["van"], w["tot"], tekst)
+
+
+LARA_VRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-lara-vragen.json")
+
+
+def _lara_vragen_lezen():
+    try:
+        with open(LARA_VRAGEN, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _lara_vragen_bewaren(d):
+    os.makedirs(os.path.dirname(LARA_VRAGEN), exist_ok=True)
+    tmp = f"{LARA_VRAGEN}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=0)
+    os.replace(tmp, LARA_VRAGEN)
+
+
+def _prive_item_lezen(eid, tok):
+    """Een item uit de privé-agenda op id, in de vorm van agenda.afspraken(), of None als het weg is. Zo vindt de agent
+    een eigen vraag terug die buiten het leesvenster van de ronde valt (Codex-controle 27-10-2026, punt 3)."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    url = (f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events/"
+           f"{urllib.parse.quote(eid, safe='')}")
+    try:
+        ev = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}),
+                                              timeout=30))
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):
+            return None
+        raise
+    if ev.get("status") == "cancelled":
+        return None
+    s, e_ = ev.get("start") or {}, ev.get("end") or {}
+    return {"kalender": PRIVE_AGENDA, "id": ev.get("id", ""), "titel": ev.get("summary", ""),
+            "start": s.get("dateTime") or s.get("date", ""), "einde": e_.get("dateTime") or e_.get("date", ""),
+            "hele_dag": "date" in s and "dateTime" not in s, "omschrijving": (ev.get("description") or "")[:2000],
+            "deelnemers": [a.get("email", "") for a in ev.get("attendees", []) if a.get("email")],
+            "_agendagasten": [], "maker": (ev.get("creator") or {}).get("email", ""),
+            "_merk": (ev.get("extendedProperties") or {}).get("private") or {}, "_reminders": ev.get("reminders") or {}}
+
+
+def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
+    """Zet of werkt bij: een vraag per afwijkend Lara-blok en per vakantieweek met vaste Lara-afspraken. Elke vraag
+    wordt een keer gesteld: het register (LARA_VRAGEN) onthoudt ze, ook als Mehdi de vraag weghaalt of beantwoordt
+    terwijl het blok blijft staan (een echte reis); zo vraagt de agent niet elke ronde opnieuw (Codex-controle
+    27-10-2026, punt 2). Wat niet meer geldt, krijgt 'Opgelost' (zoals een mailmelding), ook buiten het leesvenster;
+    wissen doet de agent niet. Alleen aanroepen na een volledige lezing. Geeft regels zonder Lara-titels (privé)."""
+    nu = nu or nu_lokaal()
+    gewenst = dict([lara_afwijking_body(b, nu.date()) for b in afwijkingen] + [lara_week_body(w) for w in weken])
+    weekinhoud = {f"week:{w['week']}": w.get("ids") or [s_ for s_, _ in w["afspraken"]] for w in weken}
+    weekkenmerk = {f"week:{w['week']}": w.get("kenmerk") or {} for w in weken}
+    reg = _lara_vragen_lezen()
+    er = {(x.get("_merk") or {}).get(LARAMERK): x for x in bestaande
+          if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(LARAMERK)
+          and not str((x.get("_merk") or {}).get(MAILMERK, "")).startswith("opgelost:")}
+    regels, gewijzigd = [], False
+    for k, body in gewenst.items():
+        x = er.get(k)
+        soort = k.split(":", 1)[0]
+        try:
+            inhoud = body["extendedProperties"]["private"][LARA_INHOUD]
+            # een week krijgt alleen opnieuw een vraag (of een bijgewerkte) als er een ophaalmoment bijkomt dat nog niet
+            # gevraagd was; een voorbije afspraak die uit de lijst valt, telt niet (hertest 14 tot 16)
+            sleutels = sorted(set(weekinhoud.get(k) or []))      # id van de afspraak: een titelwijziging is niets nieuws
+            nieuw_bij = bool(set(sleutels) - set((reg.get(k) or {}).get("afspraken") or []))
+            # een komende afspraak met dezelfde id die van uur of titel veranderde: de vraag bijwerken, niet opnieuw vragen
+            oud_km = (reg.get(k) or {}).get("kenmerk") or {}
+            km = weekkenmerk.get(k) or {}
+            vandaag_s = nu.date().isoformat()
+            # ook bijwerken als een nog komend moment verdwijnt (vervalt of weg) of terugkomt; het gewone verstrijken van
+            # een afspraak telt niet (hertest 19)
+            veranderd = (any(i in oud_km and oud_km[i] != v_ for i, v_ in km.items())
+                         or any(i not in km and v_[:10] >= vandaag_s for i, v_ in oud_km.items())
+                         or any(i not in oud_km for i in km if i in set((reg.get(k) or {}).get("afspraken") or [])))
+            heropen = k.startswith("week:") and k in reg and nieuw_bij
+            if x is None and (k not in reg or heropen):
+                n = _insert(PRIVE_AGENDA, body, tok) or {}
+                reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud,
+                          "afspraken": sorted(set(sleutels) | set((reg.get(k) or {}).get("afspraken") or [])),
+                          "kenmerk": dict(km)}
+                gewijzigd = True
+                regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
+            elif x is not None and ((x.get("titel") or "") != body["summary"]
+                                    or (k.startswith("week:") and (nieuw_bij or veranderd))
+                                    or (k.startswith("afwijking:") and (x.get("start") or "")[:10] != body["start"]["date"])):
+                _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description", "extendedProperties")}, tok)
+                if k in reg:
+                    reg[k] = {**reg[k], "inhoud": inhoud,
+                              "afspraken": sorted(set(sleutels) | set(reg[k].get("afspraken") or [])),
+                              "kenmerk": dict(km)}
+                    gewijzigd = True
+                regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{body['start']['date']} Lara-vraag niet gezet ({soort}, {type(e).__name__})")
+    for k, r in list(reg.items()):
+        if k in gewenst or not r.get("open") or not (k.startswith("afwijking:") or k.startswith("week:")):
+            continue          # een vraag over een gewiste afspraak (agenda_signaal) rondt Mehdi zelf af
+        reden = ("het blok wijkt niet meer af van de officiële kalender" if k.startswith("afwijking:")
+                 else "de vakantieweek is voorbij of er staat geen vaste Lara-afspraak meer open")
+        try:
+            x = er.get(k) or (_prive_item_lezen(r["id"], tok) if r.get("id") else None)
+            if x is not None and (x.get("_merk") or {}).get(LARAMERK) == k \
+                    and not str((x.get("_merk") or {}).get(MAILMERK, "")).startswith("opgelost:"):
+                if not _eigen_melding_opgelost(x, (x.get("_merk") or {}).get(MAILMERK), tok, nu, reden):
+                    continue
+                regels.append(f"{(x.get('start') or '')[:10]} Lara-vraag op opgelost gezet")
+            reg[k] = {**r, "open": False, "afgerond": nu.date().isoformat()}
+            gewijzigd = True
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"{r.get('gevraagd', '')} Lara-vraag niet bijgewerkt ({type(e).__name__})")
+    grens = (nu.date() - timedelta(days=400)).isoformat()
+    for k in [k for k, r in reg.items() if not r.get("open") and (r.get("afgerond") or r.get("gevraagd", "")) < grens]:
+        reg.pop(k)
+        gewijzigd = True
+    if gewijzigd:
+        _lara_vragen_bewaren(reg)
+    return regels
+
+
+def lara_vakantie_stap(rit_items, vandaag):
+    """De Lara-stap van de volledige ronde: afwijkende blokken en vakantieweken als vraag in de privé-agenda. Geeft
+    noden (vaste tekst, geen teller, geen Lara-titel: N10 en privé). Alleen op een volledige lezing (Codex A15, A17)."""
+    noden = []
+    sv = schoolvakanties()
+    if sv is None:
+        return [{"tekst": "De officiële schoolvakanties (werkwijze/schoolvakanties.json) zijn niet te lezen: geen Lara-ritten",
+                 "wie": "claude"}]
+    officieel, dekking, namen = sv
+    nu = nu_lokaal()
+    if dekking < nu.date() + timedelta(days=SCHOOLVAKANTIE_MARGE_DAGEN):
+        noden.append({"tekst": "De officiële schoolvakanties van het volgende schooljaar ontbreken in "
+                               "werkwijze/schoolvakanties.json; overnemen van vlaanderen.be", "wie": "claude"})
+    lara = {k for k, val in AGENDA_VASTE_KLEUR.items() if val.get("naam") == "Lara"}
+    if VERRE_FOUT or PRIVE_AGENDA in ONGELEZEN or lara & ONGELEZEN:
+        return noden                 # halve lezing: geen vraag zetten of afronden, anders komt er een dubbel
+    blokken = lara_vakantieblokken()
+    if blokken is None:
+        return noden + [{"tekst": "De Lara-agenda is niet te lezen: afwijkende vakantieblokken niet nagekeken", "wie": "claude"}]
+    grens = (nu.date() + timedelta(days=LARA_VRAAG_VOORUIT)).isoformat()
+    afw = [b for b in lara_vakantie_afwijkingen(blokken, officieel, nu.date(), dekking) if b["van"] <= grens]
+    weken = lara_vakantieweken(rit_items, namen, nu.date())
+    try:
+        regels = lara_meldingen(afw, weken, rit_items, agenda._toegang(), nu)
+    except Exception as e:  # noqa: BLE001
+        return noden + [{"tekst": f"Lara-vragen in de privé-agenda niet gezet ({type(e).__name__})", "wie": "claude"}]
+    ag.log(f"dag {vandaag}", "schrijf", f"Lara en schoolvakanties: {len(afw)} afwijkend blok, {len(weken)} vakantieweek",
+           "\n".join(regels))
+    if any("niet gezet" in r or "niet bijgewerkt" in r for r in regels):
+        noden.append({"tekst": "Een Lara-vraag in de privé-agenda is niet gezet of niet bijgewerkt", "wie": "claude"})
+    return noden
+
+
+def _lara_gewist_body(dag, uur, titel, sleutel, dagen):
+    k = f"gewist:{sleutel}"
+    dagen = sorted(set(dagen or [dag]))
+    waar = (f"op {_ddmm(dagen[0])} is een vaste Lara-afspraak{(' van ' + uur) if uur else ''}" if len(dagen) == 1 else
+            f"op {', '.join(_ddmm(d) for d in dagen[:10])}{' en later' if len(dagen) > 10 else ''} zijn vaste "
+            f"Lara-afspraken van dezelfde reeks")
+    tekst = (f"Agendawacht vraagt: {waar} uit de agenda gehaald, maar volgens de officiële kalender (vlaanderen.be) zijn "
+             f"het schooldagen. Klopt dat? Zo niet, laat Claude 1 ze terugzetten. {LARA_MARKEREN}\n\n"
+             f"Afspraak: {titel[:80] or '(titel onbekend)'}.")
+    return _lara_body(k, f"VR Agendawacht: vaste Lara-afspraak gewist op een schooldag ({_ddmm(dagen[0])})",
+                      dagen[0], dagen[0], tekst)
+
+
+def lara_gewist_melden(dag, uur, titel, sleutel, tok, dagen=None):
+    """Een vaste Lara-afspraak werd gewist op een officiële schooldag (agenda_signaal ziet dat, ook als een assistent
+    buiten Claude Code het deed): een vraag in de privé-agenda op de eerste dag. Een hele reeks geeft één vraag met de
+    lijst van de dagen. De agent zet zelf niets terug (L3). Geeft het id van de vraag."""
+    n = _insert(PRIVE_AGENDA, _lara_gewist_body(dag, uur, titel, sleutel, dagen), tok) or {}
+    return n.get("id") or ""
+
+
+def lara_gewist_bijwerken(eid, uur, titel, sleutel, tok, dagen):
+    """Vult de bestaande vraag over een gewiste reeks aan met dagen die in een latere ronde geschrapt werden, in plaats
+    van een tweede vraag (Codex-hertest 27-10-2026, punt 1). False als de vraag er niet meer is of niet van de agent."""
+    x = _prive_item_lezen(eid, tok) if eid else None
+    if x is None or (x.get("_merk") or {}).get(LARAMERK) != f"gewist:{sleutel}" \
+            or str((x.get("_merk") or {}).get(MAILMERK, "")).startswith("opgelost:") \
+            or not (x.get("titel") or "").startswith("VR Agendawacht:"):
+        return False          # weg, niet van mij, of al afgerond: dan een nieuwe vraag (reviewronde)
+    body = _lara_gewist_body(min(dagen), uur, titel, sleutel, dagen)
+    _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
     return True
 
 
@@ -3827,6 +4200,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     buiten = []
     begonnen = set()      # buitenafspraken van vandaag die al begonnen zijn: vertrekpunt, geen eigen ritten meer (FR-97)
     vrij = lara_vakantiedagen()
+    dekking = schoolvakantie_dekking() if vrij is not None else None
     zonder_auto = geen_auto_dagen()
     if vrij is None:
         regels.append("Lara-vakanties niet te lezen: deze ronde geen Lara-ritten (onbekend is niet 'geen vakantie')")
@@ -3839,8 +4213,10 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         if is_thuis_adres(adres) or _afspraak_is_huisbezoek(a, nu=nu):
             # Ook bij een onleesbare grendel of een dag zonder auto is thuis geen buitenrit.
             continue
-        if zonder_auto is None or (vrij is None and a.get("kalender") in AGENDA_VASTE_KLEUR
-                                   and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"):
+        is_lara = a.get("kalender") in AGENDA_VASTE_KLEUR and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"
+        # na de laatste dag van de officiële bron is een schooldag niet te toetsen: zoals een onleesbare bron (L2)
+        buiten_bron = is_lara and dekking is not None and a.get("start", "")[:10] > dekking.isoformat()
+        if zonder_auto is None or (is_lara and (vrij is None or buiten_bron)):
             # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
             _li = lees_titel(a["titel"])
@@ -3850,12 +4226,14 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                                 and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
                 # alleen de gevraagde dag, en niet als er op dezelfde agenda al een heenrit eindigt op het begin van deze
                 # afspraak (Codex A11, ronde 4 tot 6)
-                regels.append(f"{a['start'][:16]} {_toon(a, 50)}: geen rit, grendelbron niet te lezen")
+                regels.append(f"{a['start'][:16]} {_toon(a, 50)}: geen rit, "
+                              + ("schoolvakanties van dat schooljaar nog niet in de bron" if buiten_bron and vrij is not None
+                                 else "grendelbron niet te lezen"))
             continue
-        # Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor
-        # een afspraak op de agenda van Lara op zo'n dag. Mandaat van Mehdi, 22-09-2026.
-        if a.get("kalender") in AGENDA_VASTE_KLEUR and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara" \
-                and a.get("start", "")[:10] in vrij:
+        # Tijdens een officiële schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit voor een afspraak op de
+        # agenda van Lara op zo'n dag (mandaat van Mehdi, 22-09-2026). Een ophaalmoment dat Mehdi liet vervallen
+        # ('vervalt' vooraan, L4) krijgt ook geen rit.
+        if lara_zonder_rit(a, vrij):
             continue
         info = lees_titel(a["titel"])
         if info["firma_conflict"]:
@@ -4017,7 +4395,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         uit = []
         for x in items:
             if (x is doel or is_zorgschaduw(x) or x.get("hele_dag") or is_eigen_rit(x) or bellen.afgezegd(x)
-                    or "T" not in x.get("start", "") or "T" not in x.get("einde", "")
+                    or lara_vervalt(x) or "T" not in x.get("start", "") or "T" not in x.get("einde", "")
                     or (rijdend_vrij and rijdend_toegestaan(x))):
                 continue
             try:
@@ -4478,8 +4856,10 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     for x in items:
         _lx = lees_titel(x["titel"]) if "T" in x.get("start", "") else None
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
-        # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026)
-        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN):
+        # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
+        # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
+        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
+                and not lara_zonder_rit(x, vrij):
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
         if "T" in x.get("start", "") and not _lx["reistijd"]:
@@ -4495,10 +4875,17 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         s0, e0 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
         # een heenrit hangt aan zijn einde (begin van de afspraak of van een geparkeerd gesprek), een terugrit aan
         # zijn begin; een heenrit die toevallig na een gesprek vertrekt, hangt nergens aan (FR-79, Lara 02-10)
+        # een rit van een afspraak die geen rit meer vraagt (vervallen, of Lara op een officiële vakantiedag) hangt niet
+        # meer aan een toevallig gesprek dat op zijn einde begint (reviewronde 27-10-2026, FR-210)
+        _mr = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
+        _van_zonder_rit = bool(_mr) and any(lara_zonder_rit(y, vrij) and y.get("start", "")[:10] == x["start"][:10]
+                                            and y.get("kalender") == x.get("kalender")
+                                            and titel_sleutel(zonder_vervalt(y["titel"])) == titel_sleutel(zonder_vervalt(_mr.group(1)))
+                                            for y in items)
         if "Reistijd voor:" in (x.get("omschrijving") or ""):
-            vast = (x["kalender"], e0) in grenzen or e0 in begins_alle
+            vast = (x["kalender"], e0) in grenzen or (e0 in begins_alle and not _van_zonder_rit)
         else:
-            vast = (x["kalender"], s0) in grenzen or s0 in eindes_alle or (x["kalender"], e0) in grenzen
+            vast = (x["kalender"], s0) in grenzen or (s0 in eindes_alle and not _van_zonder_rit) or (x["kalender"], e0) in grenzen
         if vast and s0 >= nu and _rit_tekst(x) and not (x.get("_merk") or {}).get(RITMERK) and gemerkt < RIT_MERKEN_PER_RONDE \
                 and sum(1 for y in reistijden if y.get("kalender") == x["kalender"] and y.get("start") == x["start"]
                         and y.get("einde") == x["einde"]) == 1 and len(_afspraak_van_rit(x, items, s0, e0)) == 1:
@@ -4526,7 +4913,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
             m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
             bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
-                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1))]
+                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)]
             if any(y["kalender"] == x["kalender"] for y in bij):
                 continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
             ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})
@@ -4593,7 +4980,7 @@ def belrooster(items, vandaag):
             continue
         kal = KALENDERS.get(a["kalender"], "")
         info = lees_titel(a["titel"])
-        if info["reistijd"] or info["soort"] == "IN" or kal == "Lara":
+        if info["reistijd"] or info["soort"] == "IN" or kal == "Lara" or lara_vervalt(a):
             continue
         start = datetime.fromisoformat(a["start"])
         adres = a.get("locatie") or ""
@@ -4624,7 +5011,10 @@ def belrooster(items, vandaag):
         klant = "je privé-afspraak" if prive else (info["klant"] or a["titel"][:60])
         tekst = f"Mehdi, {hoe}: {klant}, om {start.strftime('%H:%M')}." + (" De link staat in je agenda." if not buiten else " Adres staat in je agenda.")
         regels.append({"sleutel": f"{a['kalender']}:{a['id']}:{a['start']}", "tijd": beltijd.isoformat(), "tekst": tekst,
-                       "titel": "privé-afspraak" if prive else a["titel"][:80]})
+                       "titel": "privé-afspraak" if prive else a["titel"][:80],
+                       # de titel kan gemaskeerd zijn: het Lara-merk blijft, zodat een afzegging nooit 'niet vertrekken'
+                       # wordt (Codex-hertest 13)
+                       "lara": bellen.is_lara_titel(a["titel"])})
     regels.sort(key=lambda r: r["tijd"])
     return regels
 
@@ -4684,7 +5074,8 @@ def _nakijken(regels, tok=None, ritten=(), noden=None):
         except Exception:  # noqa: BLE001
             vers = []
         if vers:
-            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"], "tijd": vers[0]["tijd"]})
+            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"], "tijd": vers[0]["tijd"],
+                         "lara": vers[0].get("lara", False)})
         else:
             weg += 1
     return goed, weg
@@ -5497,7 +5888,8 @@ def botsingen(items):
     """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
     uit = []
     tijd = [(datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"]), x) for x in items
-            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")]
+            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")
+            and not lara_vervalt(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
     tijd.sort(key=lambda t: t[0])
     for i, (s1, e1, a) in enumerate(tijd):
         for s2, e2, b in tijd[i + 1:]:
@@ -5841,6 +6233,8 @@ def main():
             rg, rregels = codes_reeksen(kort_items)
             if rregels:
                 ag.log(f"dag {vandaag}", "schrijf", f"codes van twee letters: {rg} reeks(en) omgezet", "\n".join(rregels))
+        if not DAG_ARG and not ALLEEN_VANDAAG:
+            mail_noden.extend(lara_vakantie_stap(rit_items, vandaag))
         # Agendagasten: collega's en partners op de afspraken waar ze bij horen, zonder mail (Mehdi, 03-10-2026).
         # Volledige ronde: twee maanden vooruit; de wijzigingsroute: de dag die veranderde.
         try:

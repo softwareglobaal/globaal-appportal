@@ -186,7 +186,9 @@ def _stuk(*a, **k):
     raise OSError("netwerk weg")
 
 
-with vervang((_ur, "urlopen", _stuk), (W.agenda, "_toegang", lambda: "t")):
+# de vakantiedagen komen sinds 27-10-2026 uit werkwijze/schoolvakanties.json (FR-210): een ontbrekend bestand is onbekend
+with vervang((_ur, "urlopen", _stuk), (W.agenda, "_toegang", lambda: "t"),
+             (W, "SCHOOLVAKANTIES", W.SCHOOLVAKANTIES.with_name("bestaat-niet.json"))):
     W._lara_vrij["tot"] = W._geen_auto["tot"] = 0
     _v, _g = W.lara_vakantiedagen(), W.geen_auto_dagen()
 check("A11 vakantie- en geen-autodagen niet te lezen: None, geen lege set", _v is None and _g is None, f"{_v!r} {_g!r}")

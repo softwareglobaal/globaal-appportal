@@ -9,7 +9,7 @@
    "opdracht": "(?i)(method=\"DELETE\"|-X DELETE|trash_|delete_event|contact_verwijderen)",
    "regels": [
     "Niets verwijderen zonder expliciete ja van Mehdi; alleen eigen ritblokken die niet meer kloppen ruimt de agent zelf op (FR-68).",
-    "Een terugkerende reeks nooit verwijderen: stopzetten met UNTIL.",
+    "Een terugkerende reeks nooit verwijderen: stopzetten met UNTIL. Een Lara-reeks in een vakantie nooit stopzetten of wissen: per afspraak 'vervalt (vakantie)' vooraan na Mehdi's ja (FR-210).",
     "Na het wissen nakijken wat er nog staat en het tonen."
    ]
   },
