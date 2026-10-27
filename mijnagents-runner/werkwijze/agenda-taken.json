@@ -733,7 +733,7 @@
   },
   {
    "datum": "2026-09-22",
-   "wat": "tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen 'Geen buiten afspraken'-marker; de agent leest de vakantiedagen uit de agenda van Lara. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
+   "wat": "ACHTERHAALD op 27-10-2026 (FR-210, zie reistijd.schoolvakantie): de vakantiedagen komen niet meer uit de agenda van Lara maar uit werkwijze/schoolvakanties.json, en de afspraken en de marker blijven staan en worden gemarkeerd, nooit gewist. Oorspronkelijk: tijdens schoolvakanties en feestdagen geen Lara-ophaling, geen rit en geen marker. Deze Lara-regelingen gelden per schooljaar. Donderdag bij oma blijft optioneel (met Leen). Maandag na werfbezoek 2145 komt Mehdi naar huis. Zondag 27-09 is Lara thuis (Leen werkt), geen ophaling"
   },
   {
    "datum": "2026-09-22",
@@ -957,8 +957,8 @@
    "bron": "de agenda van Lara zelf: 'Lara → Cokido' op 10-08-2026, locatie 'haar school De Speelkriebel'",
    "afzetten": "thuis, Herfstlaan 65",
    "ritten": "15:45-16:00 thuis → De Speelkriebel en 17:00-17:15 De Speelkriebel → thuis, roze op de agenda van Lara",
-   "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027, niet op vakantie- en feestdagen van de agenda van Lara. Daar staat het ophalen nog in de reeks (26-10, 30-10 en 02-07-2027) en vraagt de agent het",
-   "vakantie": "tijdens schoolvakanties en feestdagen geen ophaling; buiten de vakanties elke maandag en vrijdag"
+   "stand": "adres gezet in alle komende afspraken van maandag en vrijdag tot 02-07-2027. Maandag 26-10 en vrijdag 30-10-2026 zijn gewone schooldagen (officieel herfst 2 tot 8/11; FR-210). Vrijdag 02-07-2027 is officieel zomervakantie: blijft staan tot Mehdi zegt dat het vervalt",
+   "vakantie": "tijdens officiële schoolvakanties en feestdagen (werkwijze/schoolvakanties.json) geen rit; de afspraak blijft staan en Bezet tot Mehdi zegt dat ze vervalt, dan 'vervalt (vakantie)' vooraan, nooit wissen. Buiten de vakanties elke maandag en vrijdag"
   },
   "lara_vooruit": {
    "regel": "de agenda van Lara loopt in vaste reeksen per schooljaar. Haar ritten zet de agent tot 300 dagen vooruit, tot het einde van het schooljaar; voor de rest acht dagen, want werkafspraken schuiven",

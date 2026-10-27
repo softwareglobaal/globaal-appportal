@@ -522,10 +522,16 @@ check("na herstel van de bron komt de vraag er toch", _gemeld7 == [["2026-11-10"
 _teksten = {n: (HIER / n).read_text(encoding="utf-8") for n in
             ("werkwijze/agenda-taken.json", "werkwijze/agenda-wacht.md", "werkwijze/pdf/afspraken_pdf.py")}
 _verboden = ("leest de vakanties uit de agenda van Lara", "lees ik uit de agenda van Lara",
-             "26-10 en vrijdag 30-10 (herfstvakantie)", "Geen ophaling, geen rit, en ook geen marker")
+             "26-10 en vrijdag 30-10 (herfstvakantie)", "Geen ophaling, geen rit, en ook geen marker",
+             "; de agent leest de vakantiedagen uit de agenda van Lara", "niet op vakantie- en feestdagen van de agenda van Lara",
+             "(26-10, 30-10 en 02-07-2027)")
 check("werkwijze, open taken en PDF zeggen nergens meer 'vakanties uit de Lara-agenda' of 26/10 en 30/10 als vakantie",
       not [(n, v) for n, t in _teksten.items() for v in _verboden if v in t],
       str([(n, v) for n, t in _teksten.items() for v in _verboden if v in t]))
+_taken = json.loads(_teksten["werkwijze/agenda-taken.json"])
+check("de Lara-regels in agenda-taken noemen de officiële bron en 'nooit wissen'",
+      "schoolvakanties.json" in _taken["reistijd"]["schoolvakantie"]["bron"]
+      and "nooit wissen" in json.dumps(_taken, ensure_ascii=False).lower())
 check("de werkwijze en de PDF zeggen 'nooit wissen' en noemen de officiële bron",
       all("schoolvakanties.json" in _teksten[n] for n in ("werkwijze/agenda-wacht.md", "werkwijze/pdf/afspraken_pdf.py")))
 
