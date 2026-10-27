@@ -908,6 +908,46 @@ finally:
 check("verandert alleen de plaats van de afspraak, dan krijgt het Bezet blok het nieuwe adres (hertest 21)",
       len(_ins45) == 1 and len(_pat45) == 1 and _pat45[0]["location"] == "Tiensestraat 2, 3000 Leuven", str(_pat45))
 
+# --- Codex-hertest 22: het Bezet blok zelf wordt nagekeken en een keer hersteld -------------------------------------
+_e46 = ev("n46", "Mehdi: [EL-IN] overleg")
+_k46 = W._firma_sleutel(_e46)
+_staat46 = {"blok": None}
+_ins46, _pat46 = [], []
+_o46 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma46-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins46.append(body) or {"id": f"b46_{len(_ins46)}"}
+W._prive_item_lezen = lambda eid, tok: _staat46["blok"]
+W._patch = lambda x, body, tok, **kw: _pat46.append(body)
+W._google = lambda url, tok, *a, **k: {"transparency": _staat46.get("transp", "opaque")}
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_e46], [_e46], "tok")                  # ronde 1: het blok komt er
+    _staat46["blok"] = None                                                      # Mehdi (of iemand) haalt het weg
+    met(NepGoogle([]), W.firma_vangnet, [_e46], [_e46], "tok")                  # ronde 2: een keer opnieuw gezet
+    _n46 = len(_ins46)
+    met(NepGoogle([]), W.firma_vangnet, [_e46], [_e46], "tok")                  # ronde 3: weer weg: nu beslist Mehdi
+    _n46b = len(_ins46)
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google = _o46
+check("is het Bezet blok verdwenen terwijl de afspraak bleef, dan zet de agent het een keer opnieuw (hertest 22)",
+      _n46 == 2, str(_n46))
+check("en haalt Mehdi het daarna weer weg, dan respecteert de agent dat (geen gevecht)", _n46b == 2, str(_n46b))
+_ins47, _pat47 = [], []
+_o47 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma47-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins47.append(body) or {"id": "b47"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "maker": W.WERKAGENDA,
+                                        "start": _e46["start"]["dateTime"], "einde": _e46["end"]["dateTime"],
+                                        "_merk": {W.FIRMAMERK: _k46, W.MAILMERK: "abcdef0123456789"}}
+W._patch = lambda x, body, tok, **kw: _pat47.append(body)
+W._google = lambda url, tok, *a, **k: {"transparency": "transparent"}             # iemand zette het op Beschikbaar
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_e46], [_e46], "tok")
+    met(NepGoogle([]), W.firma_vangnet, [_e46], [_e46], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._google = _o47
+check("staat het Bezet blok op Beschikbaar, dan zet de agent het een keer terug op Bezet",
+      len(_pat47) == 1 and _pat47[0]["transparency"] == "opaque", str(_pat47))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

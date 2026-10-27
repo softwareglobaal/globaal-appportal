@@ -370,6 +370,10 @@ zet (`KALENDERS`: mehdi werk agenda, prive agenda Mehdi, Lara, H-Architects, UNA
   afspraak: het komt er ook op een dag met `Buitenland` of `geen afspraken`. Vlak na het zetten van de gast wacht ik een
   ronde; een werkagenda die even niet te lezen is, maakt geen blok. Dezelfde afspraak op twee firma-agenda's: een blok.
   Op de werkagenda-kopie van een firma-afspraak schrijf ik niets, ook geen telefoonnummer.
+- Alleen de kopie van de organisator bepaalt het uur. Zijn er alleen gastkopieën of is de tijdzone onbekend, dan geen
+  blok maar een vraag 'uur niet zeker' (Beschikbaar). Een afspraak die Mehdi zelf organiseert, blijft van hem.
+- Verdwijnt of verschuift mijn Bezet blok terwijl de afspraak bleef, dan herstel ik het een keer; doet Mehdi het daarna
+  opnieuw, dan beslist hij.
 - Een onleesbare firma-agenda stopt de andere niet; van haar rond ik niets af. Een agenda waarop ik ritten zet en die
   Mehdi verborgen heeft, wordt een nood: hij zet het vinkje terug.
 - Dit draait in de volledige ronde en in de kleurronde (om :17 en :47, elke dag, ook in het weekend).

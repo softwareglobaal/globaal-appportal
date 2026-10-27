@@ -3650,6 +3650,33 @@ def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
     _patch(x, nieuw, tok)
 
 
+def _firma_blok_nakijken(k, r, g, tok):
+    """De afspraak veranderde niet, maar staat mijn Bezet blok er nog zoals het hoort? Verdwenen, verschoven of op
+    Beschikbaar gezet: een keer herstellen, zodat Calendly niet over de verborgen afspraak boekt (Codex-hertest 22). Doet
+    Mehdi het daarna opnieuw, dan respecteer ik dat: dan beslist hij. Werkt r bij en geeft een regel, of ''."""
+    if r.get("hersteld"):
+        return ""
+    e, sterk, start, einde, _ = g
+    import urllib.parse  # noqa: PLC0415
+    x = _prive_item_lezen(r["id"], tok) if r.get("id") else None    # None: echt weg; een leesfout gooit (dan niets doen)
+    if x is None:
+        n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
+        r.update(id=n.get("id", ""), hersteld=True)
+        return f"{start[:10]} Bezet blok voor een firma-afspraak was weg: een keer opnieuw gezet"
+    mk = x.get("_merk") or {}
+    if mk.get(FIRMAMERK) != k or str(mk.get(MAILMERK, "")).startswith("opgelost:") or not _firma_blok_open(x, k):
+        return ""                       # door Mehdi afgerond of niet meer van mij: niets doen
+    raw = _google(f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events/"
+                  f"{urllib.parse.quote(r['id'], safe='')}?fields=transparency", tok)
+    goed = (_utc(x.get("start")) == _utc(start) and _utc(x.get("einde")) == _utc(einde)
+            and raw.get("transparency", "opaque") != "transparent")
+    if goed:
+        return ""
+    _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+    r["hersteld"] = True
+    return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven of Beschikbaar: een keer hersteld"
+
+
 def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
     """Z3: wat op een firma-agenda Mehdi aangaat maar niet op zijn werkagenda staat, wordt eenmaal een vraag in de
     privé-agenda: een afspraak voor Mehdi die niet doorkwam (een Bezet blok, tot FIRMA_VOORUIT_DAGEN vooruit), of een
@@ -3728,6 +3755,14 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             gewijzigd = True
             continue
         if g and (g[1], g[2], g[3], g[4]) == (r.get("sterk"), r.get("start"), r.get("einde"), r.get("vinger", "")):
+            if g[1] is True:
+                try:
+                    regel = _firma_blok_nakijken(k, r, g, tok)
+                    if regel:
+                        regels.append(regel)
+                        gewijzigd = True
+                except Exception as ex:  # noqa: BLE001
+                    regels.append(f"{r.get('dag')} Bezet blok niet nagekeken ({type(ex).__name__})")
             continue
         try:
             x = _prive_item_lezen(r["id"], tok) if r.get("id") else None
