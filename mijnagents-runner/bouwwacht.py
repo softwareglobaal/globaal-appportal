@@ -8,32 +8,35 @@ probeerde het elke 2 minuten opnieuw, en niemand zag het.
 Per dienst schrijft deploy.sh de boom van zijn map (`git rev-parse HEAD:<map>`) pas in `<map>-data/.built` na een
 geslaagde bouw. De VM haalt main niet zelf binnen, dus een verschil ontstaat alleen na een `git pull` die nog niet
 gebouwd is. Duurt dat verschil DREMPEL_MIN minuten of langer, dan zet ik een nood met een vaste tekst (N10); zijn ze
-weer gelijk, dan staat de nood niet meer in mijn lijst en sluit het bord hem. Per storing gaat er ook een keer een
-signaal naar Mehdi, via De Bode (zijn ja van 27-10-2026), want een nood voor claude-code heeft geen vaste lezer.
+weer gelijk, of loopt er weer een gewone bouw, dan staat de nood niet meer in mijn lijst en sluit het bord hem.
 
-Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2; Codex-resultaattoets 3.1):
-- toont de reflog van HEAD de laatste stap waarop de boom gelijk was aan de markering, dan begon het verschil bij de stap
-  erna. Dat is de echte pull-tijd, ook in mijn eerste ronde, en het is bewijs: ook een anker van voor die gelijkheid
-  begint dan opnieuw, want tussen twee rondes kan de code even terug gelijk geweest zijn;
+Sinds wanneer het verschil bestaat, zegt alleen de reflog van HEAD (driehoeksoverleg 27-10-2026, X2):
+- toont ze de laatste stap waarop de boom gelijk was aan de markering, dan begon het verschil bij de stap erna. Dat is
+  de echte pull-tijd, ook in mijn eerste ronde, en een gelijkheid tussen twee rondes zet de klok terecht opnieuw;
 - staat de markering niet in een reflog die wel stappen heeft (ouder dan de reflog, of opgeschoond), of ontbreekt de
-  markering, dan geldt het verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt.
-  Dat blijft zo tot gelijkheid of een nieuwe markering, ook als de reflog daarna wegvalt;
-- is de reflog leeg of onleesbaar, dan is mijn eigen stand (STAND) de klok: per dienst de markering en het moment dat
-  ik het verschil voor het eerst zag. Verandert de markering of zijn ze gelijk, dan begint dat opnieuw. Kan ik die
-  stand niet lezen of niet bewaren, dan telt zo'n verschil als ouder dan de drempel.
+  markering, dan geldt het verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt;
+- is de reflog leeg of onleesbaar, dan ook, met de nood REFLOGNOOD, die zegt waarom er dan na elke pull meteen een nood
+  komt.
+Een eigen stand als klok (K2) is er niet meer: hij gaf in zes Codex-toetsen telkens nieuwe randgevallen (een stand die
+niet te bewaren, beschadigd of hersteld was), en de duurzame stand van een storing staat al op het bord.
 
-Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen mijn eigen
-stand en haar slot (een ronde tegelijk). Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
+Een storing is de tijd dat mijn bouwnood voor een dienst op het bord openstaat. Het bord geeft die nood een nummer en
+sluit hem pas als ik hem niet meer meld; een nieuwe storing is een nieuwe nood met een nieuw nummer. Per storing gaat er
+een keer een signaal naar Mehdi, via De Bode (zijn ja van 27-10-2026, want een nood voor claude-code heeft geen vaste
+lezer), met dat nummer in de `uniek`: het bord maakt een item met dezelfde `uniek` nooit een tweede keer. Het signaal
+komt de ronde nadat de nood openging.
+
+Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen een
+slotbestand (een ronde tegelijk). Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
 
     bouwwacht.py            een ronde
-    bouwwacht.py --droog    meten en tonen, niets naar het bord en niets in de stand
+    bouwwacht.py --droog    meten en tonen, niets naar het bord
 
 Cron (oneven minuten, tussen de tikken van deploy.sh):
     1-59/2 * * * * ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/bouwwacht.py >> ~/agents/bouwwacht.log 2>&1
 """
 import argparse
 import fcntl
-import json
 import os
 import re
 import subprocess
@@ -52,7 +55,7 @@ REPO = os.environ.get("BOUWWACHT_REPO", os.path.expanduser("~/appportal"))
 # waar <map>-data/.built staat; standaard dezelfde map als in deploy.sh ($HOME/appportal)
 MARKERINGEN = os.environ.get("BOUWWACHT_DATA", REPO)
 LOGS = os.environ.get("BOUWWACHT_LOGS", os.path.expanduser("~"))
-STAND = os.environ.get("BOUWWACHT_STAND", os.path.expanduser("~/appportal/mijnagents-data/bouwwacht.json"))
+SLOT = os.environ.get("BOUWWACHT_SLOT", os.path.expanduser("~/appportal/mijnagents-data/bouwwacht.slot"))
 # De diensten in deze repo met hetzelfde deploypatroon (HEAD:<map> tegenover <map>-data/.built) en zonder eigen
 # bewaking. Niet werfverslag: eigen repo, eigen bewaking (.mislukt, door werfverslag-dashboard gemeld).
 DIENSTEN = ("mijnagents", "agents", "siyanagents")
@@ -60,8 +63,7 @@ DREMPEL_MIN = 10
 REFLOG_MAX = 200
 OUD = 0     # ouder dan de drempel, hoe oud precies is onbekend
 
-
-STANDNOOD = "Bouwwacht kan zijn stand niet lezen of bewaren"
+REFLOGNOOD = "Bouwwacht kan de reflog van de VM niet lezen"
 SIGNAALNOOD = "Bouwwacht kan het signaal voor Mehdi niet klaarzetten"
 
 
@@ -73,24 +75,23 @@ def onbekendtekst(dienst):
     return f"Bouwwacht kan {dienst} niet nakijken"
 
 
-def signaal(m):
-    """Een keer per storing een signaal voor Mehdi, via De Bode (zijn ja van 27-10-2026: een nood voor claude-code had
-    geen vaste lezer). De `uniek` draagt het nummer van de storing (`storing_anker`): het bord maakt een item met dezelfde
-    `uniek` nooit een tweede keer, ook niet bij een tweede pull tijdens de storing, en een nieuwe storing heeft een nieuw
-    nummer. Dat nummer is geen teller maar het begin van de storing, vast zolang ze duurt (N10). De inhoud draagt geen
-    minuten; de titel draagt nooit het woord dat De Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
+def signaal(m, nood_id):
+    """Het signaal voor Mehdi bij de storing met bouwnood `nood_id`. Dat nummer is geen teller maar de nood van deze
+    storing, vast zolang ze duurt (N10). De inhoud draagt geen minuten; de titel draagt nooit het woord dat De Bode als
+    alarm leest en hem doet bellen (AGENTNORM.md 6)."""
     duur = (f"de bouw loopt {DREMPEL_MIN} minuten of langer achter" if m["minuten"] is not None else
-            "de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt of staat niet meer in de reflog")
+            "de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt, staat niet meer in de reflog, of "
+            "de reflog is niet te lezen")
     return {"voor": "mehdi", "soort": "signaal", "sleutel": m["dienst"],
             "titel": f"Bouw van {m['dienst']} loopt achter op de code",
-            "uniek": f"bouwwacht-achter-{m['dienst']}-{m['storing']}",
+            "uniek": f"bouwwacht-achter-{m['dienst']}-{nood_id}",
             "inhoud": f"De VM draait voor {m['dienst']} niet de code die er na de laatste git pull staat: {duur} "
                       f"(laatste geslaagde bouw {m['gebouwd']}). De nood staat op het bord voor claude-code; wat de bouw "
                       f"zegt, staat in ~/deploy-{m['dienst']}.log op de VM."}
 
 
 class Onleesbaar(RuntimeError):
-    """git gaf geen antwoord over deze dienst. Onbekend is niet gelijk."""
+    """git of de markering gaf geen antwoord over deze dienst. Onbekend is niet gelijk."""
 
 
 def git(*args):
@@ -152,41 +153,13 @@ def laatste_logregel(dienst):
     return regels[-1][:160] if regels else ""
 
 
-def lees_stand():
-    """(stand, leesbaar). Geen bestand is een lege stand; een bestand dat niet te lezen of beschadigd is, is een kapotte
-    stand: dan weet ik niet wat erin stond, en dat is niet leeg (Codex-resultaattoets 7.3)."""
-    try:
-        with open(STAND, encoding="utf-8") as f:
-            stand = json.load(f)
-    except FileNotFoundError:
-        return {}, True
-    except (OSError, ValueError):
-        return {}, False
-    return (stand, True) if isinstance(stand, dict) else ({}, False)
-
-
-def bewaar_stand(stand):
-    tijdelijk = f"{STAND}.{os.getpid()}.tmp"
-    try:
-        os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
-        with open(tijdelijk, "w", encoding="utf-8") as f:
-            json.dump(stand, f, ensure_ascii=False, indent=1, sort_keys=True)
-        os.replace(tijdelijk, STAND)
-    except OSError:
-        try:
-            os.remove(tijdelijk)
-        except OSError:
-            pass
-        raise
-
-
 def neem_slot():
     """Een ronde tegelijk (Codex-resultaattoets 3): anders kan een oude ronde na herstel nog haar verouderde alarm zetten,
     of een nieuw alarm sluiten met een lege lijst. Het slot geldt voor de hele ronde, tot en met de eindhartslag.
     Geeft het open slotbestand, of None als een andere ronde het heeft. Elke andere fout (geen slotbestand, een andere
     flock-fout) gaat door als OSError: dan draait er geen ronde zonder slot (Codex-resultaattoets 2.2)."""
-    os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
-    f = open(f"{STAND}.slot", "a", encoding="utf-8")
+    os.makedirs(os.path.dirname(SLOT) or ".", exist_ok=True)
+    f = open(SLOT, "a", encoding="utf-8")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -198,67 +171,31 @@ def neem_slot():
     return f
 
 
-def storing_anker(stand, dienst, gebouwd, begin, nu):
-    """Het anker van de storing van deze dienst: {"sinds", "storing", "markering"}, en of zijn nummer los staat (pas
-    gemaakt zonder reflog, dus alleen vast als de stand bewaard wordt).
-
-    Een storing loopt van het eerste verschil tot de wacht weer gelijkheid ziet; zo lang blijft haar nummer (`storing`)
-    hetzelfde, en daarmee de `uniek` van haar signaal. Het nummer is het begin van de storing: uit de reflog, of het
-    moment dat ik ze voor het eerst zag. Het wordt nooit overschreven; `sinds` (voor de minuten) wel. Een nieuwe storing
-    begint ook als er intussen een andere bouw slaagde (een andere markering), of als het begin volgens de reflog na het
-    nummer ligt: dan was de code daartussen nog gelijk aan de gebouwde (Codex-resultaattoets 3.1, 6.1 en 7.1). Een
-    markering die even ontbreekt en terugkomt, is geen nieuwe storing (6.2).
-    """
-    a = stand.get(dienst)
-    nieuw = not (isinstance(a, dict) and isinstance(a.get("sinds"), int) and isinstance(a.get("storing"), int)
-                 and isinstance(a.get("markering"), str))
-    if not nieuw and gebouwd and a["markering"] and gebouwd != a["markering"]:
-        nieuw = True
-    if not nieuw and begin not in (None, OUD) and begin > a["storing"]:
-        nieuw = True
-    if nieuw:
-        uit_reflog = begin not in (None, OUD)
-        stand[dienst] = {"sinds": int(nu) if begin is None else begin, "storing": begin if uit_reflog else int(nu),
-                         "markering": gebouwd}
-        return stand[dienst], not uit_reflog
-    if gebouwd:
-        a["markering"] = gebouwd
-    return a, False
-
-
-def meet_dienst(dienst, stand, nu):
+def meet_dienst(dienst, nu):
     gebouwd = markering(dienst)
     nu_boom = boom("HEAD", dienst)
     if nu_boom is None:
         raise Onleesbaar(f"{dienst} niet gevonden in HEAD")
     if gebouwd == nu_boom:
-        stand.pop(dienst, None)
         return {"dienst": dienst, "stand": "gelijk"}
     # zonder markering is het begin onbekend: ouder dan de drempel
     begin = begin_volgens_reflog(dienst, gebouwd) if gebouwd else OUD
-    anker, los = storing_anker(stand, dienst, gebouwd, begin, nu)
-    if begin is None:
-        sinds, bron = anker["sinds"], "anker"
-    else:
-        # Wat de reflog vaststelt, volgt het anker: het begin, of OUD, dat zo blijft tot gelijkheid of een nieuwe
-        # storing, ook als de reflog later wegvalt (Codex-resultaattoets 3.1 en 4.3).
-        sinds, bron = begin, "reflog" if gebouwd else "markering"
-        anker["sinds"] = begin
+    sinds = OUD if begin is None else begin
     minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
     achter = minuten is None or minuten >= DREMPEL_MIN
     return {"dienst": dienst, "stand": "achter" if achter else "bezig", "minuten": minuten,
             "gebouwd": gebouwd[:7] or "geen", "nieuw": nu_boom[:7], "log": laatste_logregel(dienst) if achter else "",
-            "bron": bron, "storing": anker["storing"], "storing_los": los}
+            "zonder_reflog": begin is None}
 
 
-def meet(stand, nu=None):
+def meet(nu=None):
     """Per dienst: gelijk, bezig (verschil korter dan de drempel), achter, of onbekend. Een dienst die faalt, houdt de
-    andere niet tegen. Werkt `stand` bij; bewaren doet de ronde."""
+    andere niet tegen."""
     nu = time.time() if nu is None else nu
     uit = []
     for dienst in DIENSTEN:
         try:
-            uit.append(meet_dienst(dienst, stand, nu))
+            uit.append(meet_dienst(dienst, nu))
         except Exception as e:  # noqa: BLE001  onbekend is niet gelijk, en de volgende dienst gaat door
             uit.append({"dienst": dienst, "stand": "onbekend", "reden": str(e)[:160] or type(e).__name__})
     return uit
@@ -275,6 +212,22 @@ def regel(m):
     return tekst + (f"; deploylog: {m['log']}" if m.get("log") else "")
 
 
+def open_noden():
+    """Mijn open noden op het bord als {tekst: nummer}, of None als dat onbekend is. Het nummer is de rij van de nood:
+    het bord geeft een nood die opnieuw opengaat een nieuw nummer, en dat maakt er een storing van."""
+    try:
+        antwoord = bord.call("/api/nood")
+    except Exception:  # noqa: BLE001
+        return None
+    rijen = antwoord.get("nood") if isinstance(antwoord, dict) else None
+    if not isinstance(rijen, list) or not all(isinstance(r, dict) for r in rijen):
+        return None
+    mijn = [r for r in rijen if r.get("naam") == NAAM]
+    if not all(isinstance(r.get("tekst"), str) and isinstance(r.get("id"), int) for r in mijn):
+        return None
+    return {r["tekst"]: r["id"] for r in mijn}
+
+
 def werk(r, nu=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
@@ -284,66 +237,51 @@ def werk(r, nu=None):
         r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return []
-    nu = time.time() if nu is None else nu
-    stand, leesbaar = lees_stand()
-    vorig = json.dumps(stand, sort_keys=True)
-    uitslag = meet(stand, nu)
-    # Een kapotte stand (niet te lezen, of niet te bewaren) houdt geen bouwnood tegen (Codex-resultaattoets 1). Een
-    # beschadigde stand overschrijf ik niet: claude-code kijkt hem na (de nood hieronder).
-    kapot = None if leesbaar else "niet leesbaar"
-    if leesbaar and json.dumps(stand, sort_keys=True) != vorig:
-        try:
-            bewaar_stand(stand)
-        except OSError as e:
-            kapot = f"niet bewaard, {type(e).__name__}"
-    if kapot:
-        for m in uitslag:
-            # Zonder reflog is mijn stand de enige klok; kapot begint ze elke ronde opnieuw. Een verschil dat alleen
-            # daarop steunt, telt dan als ouder dan de drempel, zodat een bouwnood blijft (2.1, 7.3).
-            if m["stand"] == "bezig" and m.get("bron") == "anker":
-                m.update(stand="achter", minuten=None, log=laatste_logregel(m["dienst"]))
-            # Een storingsnummer dat elke ronde nieuw zou zijn, gaf elke ronde een signaal. Zolang de stand kapot is,
-            # is het signaal daarom begrensd tot een per dienst per dag (7.2).
-            if m.get("storing_los"):
-                m["storing"] = "dag-" + time.strftime("%Y-%m-%d", time.gmtime(nu))
+    uitslag = meet(nu)
     noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
              for m in uitslag if m["stand"] in ("achter", "onbekend")]
-    open_ = ag.open_noden() if noden else None
+    open_ = open_noden() if noden else None
     for m, tekst in noden:
         r.nood(tekst, wie="claude-code")
         # een regel in het werkverslag als de nood nieuw is, niet elke 2 minuten dezelfde; weet het bord niet wat
         # open staat, dan geen regel (de nood zelf gaat wel mee)
-        if open_ is not None and tekst not in {n["tekst"] for n in open_}:
+        if open_ is not None and tekst not in open_:
             ag.log(m["dienst"], "fout", regel(m))
+    if any(m.get("zonder_reflog") for m in uitslag):
+        r.nood(REFLOGNOOD, wie="claude-code")
     r.detail = "; ".join(regel(m) for m in uitslag)
-    signalen = [signaal(m) for m in uitslag if m["stand"] == "achter"]
+    achter = [m for m in uitslag if m["stand"] == "achter"]
+    if achter and open_ is None:
+        # zonder de open noden ken ik het nummer van de storing niet; de volgende ronde probeert opnieuw
+        r.nood(SIGNAALNOOD, wie="claude-code")
+        r.detail += "; signaal wacht: open noden onbekend"
+        return uitslag
+    # Het signaal van een storing gaat zodra haar nood op het bord openstaat, dus de ronde nadat ze begon. Elke ronde
+    # opnieuw zolang ze duurt: het bord maakt het maar een keer (zelfde uniek), en lukte het een keer niet, dan probeert
+    # de volgende ronde het vanzelf opnieuw.
+    signalen = [signaal(m, open_[noodtekst(m["dienst"])]) for m in achter if noodtekst(m["dienst"]) in open_]
     if signalen:
-        # elke ronde zolang de storing duurt: het bord maakt het maar een keer (zelfde uniek), en lukte het een keer
-        # niet, dan probeert de volgende ronde het vanzelf opnieuw
         try:
             ag.klaarzet(signalen)
         except Exception as e:  # noqa: BLE001  een signaal dat niet lukt, houdt de bouwnood niet tegen
             r.nood(SIGNAALNOOD, wie="claude-code")
             r.detail += f"; signaal niet klaargezet ({type(e).__name__})"
-    if kapot:
-        r.nood(STANDNOOD, wie="claude-code")
-        r.detail += f"; stand {kapot}"
     return uitslag
 
 
 def in_cronlog(reden):
     """V8: wat niet op het bord kan, staat hier, in het cronlog, met de meting erbij, en de exitcode is 1."""
     print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} {reden}", file=sys.stderr)
-    for m in meet(lees_stand()[0]):
+    for m in meet():
         print(f"  {regel(m)}", file=sys.stderr)
     return 1
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="Ziet of de diensten op de VM de code draaien die er na een git pull staat.")
-    p.add_argument("--droog", action="store_true", help="meten en tonen, niets naar het bord en niets in de stand")
+    p.add_argument("--droog", action="store_true", help="meten en tonen, niets naar het bord")
     if p.parse_args(argv).droog:
-        uitslag = meet(lees_stand()[0])
+        uitslag = meet()
         for m in uitslag:
             print(regel(m))
         return 1 if any(m["stand"] in ("achter", "onbekend") for m in uitslag) else 0
