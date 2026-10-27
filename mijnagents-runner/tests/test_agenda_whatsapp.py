@@ -6,6 +6,7 @@ botsing, ook met een hele-dag-blok zoals 'ANTWERK vakbeurs', staat het blok op '
 """
 import json
 import os
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(__import__("tempfile").mkdtemp(prefix="aw-test-"), "agenda-whatsapp.json"))  # nooit de echte wachtrij
 import sys
 import tempfile
 from datetime import timedelta
@@ -629,6 +630,36 @@ check("bevestigt de mailhistorie de verschuiving voorbij dag 120, dan verzet het
       _rz22["verzet"] == 1 and len(_pat22) == 1 and _pat22[0]["start"]["dateTime"] == _ver_start.isoformat()
       and _pat22[0]["description"].startswith("praktijk"), str((_rz22["prive"], _pat22)))
 check("zonder die bevestiging blijft het een open punt, niets verzet", _rz22b["open"] == 1 and len(_pat22) == 1, str(_rz22b["prive"]))
+
+# --- Codex-hertest 13 (PR 113) --------------------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw23-")) / "agenda-whatsapp.json")
+W._zorg_gezet((_ver_start + timedelta(days=1)).date().isoformat(), "gekoppeld23", nieuw=False)
+W.ZORG_GEZET[:] = []
+check("een blok dat alleen gekoppeld wordt, telt in de eerste ronde niet als nieuw gezet (hertest 13, punt 1)",
+      "gekoppeld23" not in AW.eerste_ids())
+_ins24 = []
+_o24 = (W._insert, AW.gezet_onthouden, _MA._zorg_json, _MA.zorgprofielen, W._zorg_blok_met_merk, list(W.ZORG_GEZET))
+W._insert = lambda kal, body, tok, toch=False: _ins24.append(body) or {"id": "nee"}
+AW.gezet_onthouden = lambda dag, ident: (_ for _ in ()).throw(OSError("wachtrij niet schrijfbaar"))
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+W._zorg_blok_met_merk = lambda sleutel, tok: ""
+try:
+    _r24 = W.zorg_afspraken_zetten(_mail16(), [], "tok")
+finally:
+    W._insert, AW.gezet_onthouden, _MA._zorg_json, _MA.zorgprofielen, W._zorg_blok_met_merk = _o24[:5]
+    W.ZORG_GEZET[:] = _o24[5]
+check("lukt het vastleggen in de wachtrij niet, dan zet de zorgroute het blok niet (hertest 13, punt 2)",
+      not _ins24 and any("niet gezet" in r for r in _r24["prive"]), str((_ins24, _r24["prive"])))
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw25-")) / "agenda-whatsapp.json")
+AW.sinds_zetten(W.nu_lokaal())
+W._zorg_gezet(d2, "zorg|nieuw-sleutel")
+W.ZORG_GEZET[:] = []
+_nb25 = dict(item("nb25", "!! [PR] Kine - Praktijk N", f"{d2}T18:00:00+01:00", f"{d2}T18:30:00+01:00",
+                  merk={W.ZORGMERK: "zorg|nieuw-sleutel"}), _gemaakt="2026-01-01T00:00:00.000Z")
+W.zorg_whatsapp([_nb25], "tok")
+check("een nieuw blok, vooraf vastgelegd op zijn zorgsleutel, krijgt in de eerste ronde zijn melding",
+      any(k.startswith("zorg:nb25:") for k in AW._lees()["meldingen"]), str(AW._lees()))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

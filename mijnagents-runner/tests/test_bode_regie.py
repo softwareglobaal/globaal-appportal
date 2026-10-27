@@ -35,6 +35,7 @@ Draaien: python3 mijnagents-runner/tests/test_bode_regie.py
 import io
 import json
 import os
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(__import__("tempfile").mkdtemp(prefix="aw-test-"), "agenda-whatsapp.json"))  # nooit de echte wachtrij
 import random
 import re
 import shutil

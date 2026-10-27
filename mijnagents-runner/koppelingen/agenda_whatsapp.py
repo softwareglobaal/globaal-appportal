@@ -22,7 +22,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 BRUSSEL = ZoneInfo("Europe/Brussels")
-WACHTRIJ = os.path.expanduser("~/appportal/mijnagents-data/agenda-whatsapp.json")
+# een test zet AGENDA_WHATSAPP_WACHTRIJ op een tijdelijk bestand: nooit de echte wachtrij
+WACHTRIJ = os.environ.get("AGENDA_WHATSAPP_WACHTRIJ") or os.path.expanduser("~/appportal/mijnagents-data/agenda-whatsapp.json")
 KOP = "Agendawacht"
 MAX_POGINGEN = 3            # zo vaak weigert Meta een melding voor ze 'mislukt' is
 ANTWOORD = re.compile(r"^\s*(?:@?agendawacht\s*[,:]?\s*)?(?:(?P<c1>a\s?\d{1,4})\s*[:,.\-]?\s*(?P<k1>ja|vervalt)"
@@ -58,7 +59,10 @@ def _bewerk():
     with open(WACHTRIJ + ".lock", "w", encoding="utf-8") as slot:
         fcntl.flock(slot, fcntl.LOCK_EX)
         d = _lees()
+        voor = json.dumps(d, sort_keys=True)
         yield d
+        if json.dumps(d, sort_keys=True) == voor and os.path.exists(WACHTRIJ):
+            return                      # niets veranderd: niet schrijven
         tmp = f"{WACHTRIJ}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(d, f, ensure_ascii=False, indent=0)

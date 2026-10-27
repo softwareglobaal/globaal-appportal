@@ -3571,17 +3571,17 @@ def _zorg_blok_met_merk(sleutel, tok):
 ZORG_GEZET = []      # (dag, id) van elk blok dat de zorgroute deze ronde zette, verzette of verhuisde
 
 
-def _zorg_gezet(dag, eid):
-    """Een blok dat de zorgroute zette, verzette of verhuisde: in het geheugen voor deze ronde, en meteen duurzaam in de
-    WhatsApp-wachtrij, zodat de meldstap het ook na een onderbreking of in de eerste ronde als nieuw ziet (Codex-hertest 8,
-    PR 113)."""
-    ZORG_GEZET.append((dag, eid))
-    try:
-        AW.gezet_onthouden(dag, eid)
-        if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
-            AW.verre_dagen([(dag, eid)])        # dag en id samen, meteen (Codex-hertest 11, PR 113)
-    except Exception:  # noqa: BLE001
-        pass                            # de meldstap probeert het ook nog, met ZORG_GEZET
+def _zorg_gezet(dag, ident, nieuw=True):
+    """Een blok dat de zorgroute gaat zetten, verzetten of verhuizen, voor de schrijfactie: duurzaam in de WhatsApp-
+    wachtrij, zodat de meldstap het ook na een onderbreking of in de eerste ronde als nieuw ziet (Codex-hertest 8 tot 13,
+    PR 113). ident: het id van het blok of, voor een nieuw blok, zijn zorgsleutel (het merk). Lukt het vastleggen niet,
+    dan gooit dit: de schrijfactie gaat dan niet door. nieuw=False (alleen gekoppeld): geen melding in de eerste ronde,
+    alleen de verre dag voor de meldstap."""
+    if nieuw:
+        AW.gezet_onthouden(dag, ident)
+    if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
+        AW.verre_dagen([(dag, ident)])          # dag en id samen, meteen (Codex-hertest 11, PR 113)
+    ZORG_GEZET.append((dag, ident))
 WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
 
 
@@ -3635,8 +3635,12 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 if _zelfde_tijd(x.get("start"), a["start"]) and _zelfde_tijd(x.get("einde"), a["einde"]):
                     a["status"] = "gekoppeld"
                     st["gekoppeld"] += 1
-                    # ook na een herstart tussen zetten en melden kijkt de meldstap dit blok na (Codex-hertest 7, PR 113)
-                    _zorg_gezet(a["start"][:10], bestaand)
+                    # ook na een herstart tussen zetten en melden kijkt de meldstap dit blok na (Codex-hertest 7, PR 113);
+                    # een gekoppeld blok is niet nieuw: geen melding 'gezet' in de eerste ronde (hertest 13)
+                    try:
+                        _zorg_gezet(a["start"][:10], bestaand, nieuw=False)
+                    except Exception:  # noqa: BLE001
+                        pass                    # er verandert niets in de agenda; de meldstap leest het later toch
                     st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
                     continue
                 # een ander uur dan de mail. Bevestigt de mailhistorie de verschuiving (van dit uur naar het nieuwe), dan
@@ -3683,6 +3687,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 continue
             body = _zorg_body(a, z, profiel)
             try:
+                _zorg_gezet(a["start"][:10], a.get("sleutel"))   # eerst vastleggen, dan pas zetten (Codex-hertest 13)
                 e = _insert(PRIVE_AGENDA, body, tok)
             except DagMarkering as ex:
                 st["open"] += 1
@@ -3692,7 +3697,6 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["fout"] += 1
                 st["prive"].append(f"{wat}: niet gezet ({type(ex).__name__})")
                 continue
-            _zorg_gezet(a["start"][:10], e.get("id"))   # meteen na het zetten, voor de teruglezing (Codex-hertest 10)
             gelezen = {}
             probleem = _zorg_teruglezen(PRIVE_AGENDA, e.get("id"), body, tok, gelezen)
             a["google"] = f"{PRIVE_AGENDA}|{e.get('id')}"
@@ -6262,7 +6266,7 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
             continue                    # deze versie is al gemeld (of stond er al voor deze code)
         botsing = botst_met(x, items)
         van_nu = ((x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
-                  or x["id"] in AW.eerste_ids())     # ook een blok dat deze ronde verschoven werd (Codex-hertest 8)
+                  or bool({x["id"], (x.get("_merk") or {}).get(ZORGMERK)} & AW.eerste_ids()))   # ook verschoven (hertest 8)
         if eerste and not botsing and not van_nu:
             stil.append((x["id"], x["start"], x["einde"]))
             continue
@@ -6332,6 +6336,8 @@ def zorg_whatsapp_stap():
         ZORG_SCHADUW_IDS.update(bewaard)
         regels = zorg_whatsapp(items, agenda._toegang())
         gevonden = {x["id"]: x for x in items if x.get("kalender") == PRIVE_AGENDA and x.get("id")}
+        gevonden.update({(x.get("_merk") or {}).get(ZORGMERK): x for x in list(gevonden.values())
+                         if (x.get("_merk") or {}).get(ZORGMERK)})      # een nieuw blok staat er onder zijn zorgsleutel
         klaar = []
         for dag, ids in verre.items():
             # pas weg als elk blok dat op die dag gezet werd, gevonden en gemeld is (Codex-hertest 6, PR 113)
