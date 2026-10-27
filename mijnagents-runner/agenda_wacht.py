@@ -2889,9 +2889,10 @@ def mail_meldingen(res, bestaande, tok, nu=None):
     return regels
 
 
-def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost", vrij=False):
+def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost", vrij=False, extra=None):
     """Zet alleen een eigen mailmelding (merk van de agent, privé-agenda) op 'Opgelost'. Wissen doet de agent niet.
-    Met vrij=True wordt het blok ook Beschikbaar: een opgelost Bezet blok houdt geen uur meer vast (Codex-hertest 3, 13)."""
+    Met vrij=True wordt het blok ook Beschikbaar: een opgelost Bezet blok houdt geen uur meer vast (Codex-hertest 3, 13).
+    extra gaat mee in dezelfde schrijfactie (bv. een hele dag), zodat er nooit een halve afronding blijft (review 3, R2)."""
     if x.get("kalender") != PRIVE_AGENDA or (x.get("_merk") or {}).get(MAILMERK) != k or not x.get("id"):
         return False
     titel = re.sub(r"^VR Agendawacht:\s*", "", x.get("titel") or "")
@@ -2901,7 +2902,7 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost", vrij=False):
     _patch(x, {"summary": nieuwe_titel,
                "description": nieuwe_oms,
                "extendedProperties": {"private": nieuwe_merk},
-               **({"transparency": "transparent"} if vrij else {})}, tok)
+               **({"transparency": "transparent"} if vrij else {}), **(extra or {})}, tok)
     x["titel"] = nieuwe_titel
     x["omschrijving"] = nieuwe_oms
     x["_merk"] = nieuwe_merk
@@ -3906,15 +3907,18 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                     if r.get("sterk"):
                         FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
                 elif open_:
-                    _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
-                                            "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True)
-                    if r.get("sterk"):
-                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
+                    dag_ = {}
                     if not x.get("hele_dag") and "T" in (x.get("start") or ""):
-                        # een opgelost blok met een uur kreeg anders nog een oproep (belrooster) en telde als botsing
+                        # een opgelost blok met een uur kreeg anders nog een oproep (belrooster) en telde als botsing; in
+                        # dezelfde schrijfactie als 'Opgelost', zodat een fout ertussen geen opgelost blok met uur laat
+                        # staan (review 3, R2)
                         d0 = x["start"][:10]
                         d1 = (datetime.fromisoformat(d0) + timedelta(days=1)).date().isoformat()
-                        _patch(x, {"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})}, tok)
+                        dag_ = {"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})}
+                    _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
+                                            "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True, extra=dag_)
+                    if r.get("sterk"):
+                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
                     regels.append(f"{r.get('dag')} vraag over een firma-afspraak op opgelost en Beschikbaar gezet")
                 reg.pop(k)              # weg of al afgerond: staat de afspraak er nog, dan volgt hieronder een nieuwe vraag
             gewijzigd = True
@@ -5936,8 +5940,12 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             # verhuist mijn rit mee. Gezien 24-09-2026: de ritten voor een privé-afspraak van
             # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
             m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
+            # een firmablok dat geen rit meer vraagt (opgelost, Beschikbaar, hele dag of online) houdt ze niet vast,
+            # ook niet als Mehdi het hernoemde (review 3, R1)
             bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
-                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)]
+                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)
+                   and not ((y.get("_merk") or {}).get(FIRMAMERK)
+                            and not _firma_buitenblok(y, _bruikbare_locatie(y.get("locatie") or "")))]
             if any(y["kalender"] == x["kalender"] for y in bij):
                 continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
             ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})

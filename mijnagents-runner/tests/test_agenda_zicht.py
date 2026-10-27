@@ -293,7 +293,7 @@ W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma13-")) / "agenda-firma-v
 W._insert = lambda kal, body, tok, toch=False: _ins13.append(body) or {"id": f"q{len(_ins13)}"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
     W.FIRMAMERK: f"firma|g1@google.com|", W.MAILMERK: "abcdef0123456789" if _open13.get(eid, True) else "opgelost:abcdef0123456789"}}
-W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg13.append((x["id"], vrij)) or True
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False, extra=None: _opg13.append((x["id"], vrij)) or True
 W._patch = lambda x, body, tok, **kw: _pat13.append((x["id"], body))
 try:
     _g1 = ev("g1", "Overleg KDS", beschrijving="Mehdi beslist mee")
@@ -372,7 +372,7 @@ W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma16-")) / "agenda-firma-v
 W._insert = lambda kal, body, tok, toch=False: _ins16.append(body) or {"id": "r1"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
     W.FIRMAMERK: f"firma|n1@google.com|", W.MAILMERK: "abcdef0123456789"}}
-W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg16.append((x["id"], vrij)) or True
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False, extra=None: _opg16.append((x["id"], vrij)) or True
 try:
     _n1 = dict(ev("n1", "Mehdi: [EL-IN] beurs"), start={"date": _gist}, end={"date": _overmorgen})
     met(NepGoogle([_n1]), W.firma_vangnet, [_n1], [_n1], "tok")          # begon gisteren, loopt nog
@@ -642,7 +642,7 @@ W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma30-")) / "agenda-firma-v
 W._insert = lambda kal, body, tok, toch=False: _ins30.append(body) or {"id": "b30"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "hele_dag": True, "start": _morgen,
                                         "_merk": {W.FIRMAMERK: "firma|gedeeld@google.com|", W.MAILMERK: "abcdef0123456789"}}
-W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg30.append(x["id"]) or True
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False, extra=None: _opg30.append(x["id"]) or True
 W._patch = lambda x, body, tok, **kw: None
 try:
     _a = dict(ev("idA", "Mehdi: [EL-PO] overleg"), iCalUID="gedeeld@google.com", kalender="hdssuriname@gmail.com")
@@ -693,7 +693,7 @@ Path(W.FIRMA_VRAGEN).write_text(json.dumps({W._firma_sleutel(_g1k): {
 _pat32 = []
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
     W.FIRMAMERK: W._firma_sleutel(_g1k), W.MAILMERK: "abcdef0123456789"}}
-W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg32.append(x["id"]) or True
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False, extra=None: _opg32.append(x["id"]) or True
 W._patch = lambda x, body, tok, **kw: _pat32.append(body)
 W._insert = lambda kal, body, tok, toch=False: _pat32.append(body) or {"id": "nee"}
 try:
@@ -1149,6 +1149,123 @@ check("in de rittenroute krijgt blok A een eigen heenrit naast blok C op hetzelf
       str((_pat54, _ins54))[:600])
 check("is de bron voor dagen zonder auto niet te lezen, dan staat het firmablok zelf in de meldingen (geen rit; hertest 30)",
       any(_bA["start"]["dateTime"][:16] in r and "grendelbron niet te lezen" in r for r in _r55[-1]), str(_r55[-1]))
+
+# --- Review 3 (R1): een firmablok dat geen rit meer vraagt, houdt zijn ritten niet vast ----------------------------
+def _rit56(rid, richting, titel_afspraak, s, e):
+    return {"kalender": W.PRIVE_AGENDA, "id": rid, "start": s, "einde": e, "hele_dag": False, "locatie": "",
+            "titel": "🚗 Reistijd: thuis → Leuven" if richting == "voor" else "🚗 Reistijd: Leuven → thuis",
+            "_vrij": False, "maker": W.WERKAGENDA, "deelnemers": [], "_merk": {W.RITMERK: rid},
+            "omschrijving": f"Reistijd {richting}: {titel_afspraak} (30 min = vrije rijtijd x filefactor 1 + 5 min buffer, "
+                            + ("OSRM; adres uit agenda; rit thuis → Leuven)" if richting == "voor" else "OSRM; rit Leuven → thuis)")}
+_ritten56 = lambda titel: [_rit56("ritH", "voor", titel, f"{_morgen}T09:25:00+01:00", f"{_morgen}T10:00:00+01:00"),
+                           _rit56("ritT", "na", titel, f"{_morgen}T11:00:00+01:00", f"{_morgen}T11:35:00+01:00")]
+_blokA56 = _blok53("qA", _bA)
+_opg56 = dict(_blokA56, titel="Overleg minister Leuven", start=_morgen, einde=(_nu + timedelta(days=2)).date().isoformat(),
+              hele_dag=True, _vrij=True, _merk={**_blokA56["_merk"], W.MAILMERK: "opgelost:" + _blokA56["_merk"][W.MAILMERK]})
+_teams56 = dict(_blokA56, locatie="https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc")
+_weg56 = []
+_o56 = {n: getattr(W, n) for n in (*_o52, "_eigen_rit_weg", "_verplaats", "_vertrekmelding_zetten", "DAG_ARG")}
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (30, "1")), (lambda *_a: "Leuven")
+W._insert, W._patch = (lambda *a, **k: {"id": "n"}), (lambda *a, **k: None)
+W._eigen_rit_weg = lambda x, tok: _weg56.append(x["id"]) or True
+W._verplaats = lambda x, doel, tok: _weg56.append(("verhuisd", x["id"]))
+W._vertrekmelding_zetten = lambda *a, **k: False
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+W.ONGELEZEN.clear()
+W.DAG_ARG = _morgen                                  # zoals de dagroute na een gewijzigd firmablok (--dag)
+try:
+    W.reistijd_zetten([dict(_opg56)] + _ritten56("Overleg minister Leuven"), alleen_dag=_morgen)
+    _weg56a = list(_weg56); _weg56.clear()
+    W.reistijd_zetten([dict(_teams56)] + _ritten56(_bA["summary"]), alleen_dag=_morgen)
+    _weg56b = list(_weg56); _weg56.clear()
+    W.reistijd_zetten([dict(_blokA56)] + _ritten56(_bA["summary"]), alleen_dag=_morgen)
+    _weg56c = list(_weg56)
+finally:
+    for _n, _f in _o56.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+check("een hernoemd firmablok dat opgelost werd (hele dag, Beschikbaar): zijn eigen ritten gaan weg (review 3, R1)",
+      sorted(_weg56a) == ["ritH", "ritT"], str(_weg56a))
+check("een firmablok waarvan de plaats een Teams-link werd: zijn eigen ritten gaan weg (R1)",
+      sorted(_weg56b) == ["ritH", "ritT"], str(_weg56b))
+check("een open firmablok op een echt adres houdt zijn ritten (R1)", _weg56c == [], str(_weg56c))
+
+# --- Review 3 (R2): een blok afronden is een schrijfactie; een fout ertussen laat geen opgelost blok met uur ------
+class _Nep57:
+    def __init__(self):
+        self.store, self.faal, self.plan, self.patches = {}, 0, [], 0
+    def __call__(self, req, timeout=None, *a, **k):
+        u = urllib.parse.urlparse(getattr(req, "full_url", req))
+        q = dict(urllib.parse.parse_qsl(u.query))
+        m = req.get_method() if hasattr(req, "get_method") else "GET"
+        if m == "POST":
+            b = dict(json.loads(req.data), id="b57", status="confirmed", creator={"email": W.WERKAGENDA})
+            self.store["b57"] = b
+            return io.BytesIO(json.dumps(b).encode())
+        if m == "PATCH":
+            self.patches += 1
+            if self.faal or (self.plan and self.plan.pop(0)):
+                self.faal = max(0, self.faal - 1)
+                raise OSError("503")
+            ev = self.store[urllib.parse.unquote(u.path.rsplit("/", 1)[1])]
+            for kk, vv in json.loads(req.data).items():
+                if kk in ("start", "end"):
+                    ev[kk] = {x: y for x, y in {**ev.get(kk, {}), **vv}.items() if y is not None}
+                elif kk == "extendedProperties":
+                    ev[kk] = {"private": {**(ev.get(kk) or {}).get("private", {}), **vv["private"]}}
+                else:
+                    ev[kk] = vv
+            return io.BytesIO(json.dumps(ev).encode())
+        if "privateExtendedProperty" in q:
+            k = q["privateExtendedProperty"].split("=", 1)[1]
+            return io.BytesIO(json.dumps({"items": [e for e in self.store.values()
+                                                    if (e.get("extendedProperties") or {}).get("private", {}).get(W.FIRMAMERK) == k]}).encode())
+        if "/events/" in u.path:
+            eid = urllib.parse.unquote(u.path.rsplit("/", 1)[1])
+            if eid not in self.store:
+                raise urllib.error.HTTPError(u.geturl(), 404, "nf", {}, None)
+            return io.BytesIO(json.dumps(self.store[eid]).encode())
+        return io.BytesIO(json.dumps({"items": []}).encode())
+_e57 = dict(ev("u57", "Mehdi: [EL-KB] werfbezoek"), location="Bondgenotenlaan 1, 3000 Leuven")
+_g57 = _Nep57()
+_o57 = (W.FIRMA_VRAGEN, W.FIRMA_DAGEN_WACHT, W.gearchiveerd)
+W.gearchiveerd = lambda: set()
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma57-")) / "agenda-firma-vragen.json")
+W.FIRMA_DAGEN_WACHT = str(Path(tempfile.mkdtemp(prefix="firmadagen57-")) / "agenda-firma-dagen.json")
+try:
+    met(_g57, W.firma_vangnet, [_e57], [_e57], "tok", _nu)        # het Bezet blok komt er
+    _g57.faal = 1
+    _r57a = met(_g57, W.firma_vangnet, [], [], "tok", _nu)         # de afspraak is weg; de schrijfactie faalt
+    _tussen57 = json.loads(json.dumps(_g57.store["b57"]))
+    _p57 = _g57.patches
+    _r57b = met(_g57, W.firma_vangnet, [], [], "tok", _nu)         # de volgende ronde maakt het af
+    _p57 = _g57.patches - _p57
+    # zoals het echte geval: de eerste schrijfactie lukt, een tweede zou falen (review 3, R2)
+    _g58 = _Nep57()
+    met(_g58, W.firma_vangnet, [_e57], [_e57], "tok", _nu)
+    _g58.plan = [False, True]
+    met(_g58, W.firma_vangnet, [], [], "tok", _nu)
+    met(_g58, W.firma_vangnet, [], [], "tok", _nu)
+finally:
+    W.FIRMA_VRAGEN, W.FIRMA_DAGEN_WACHT, W.gearchiveerd = _o57
+_b57 = _g57.store["b57"]
+check("faalt het afronden, dan blijft het blok onaangeroerd (geen half opgelost blok met uur; review 3, R2)",
+      "dateTime" in _tussen57["start"] and _tussen57.get("transparency") == "opaque"
+      and not _tussen57["summary"].startswith("Opgelost"), str((_r57a, _tussen57.get("summary"))))
+check("de volgende ronde rondt het af in een keer: Opgelost, Beschikbaar, hele dag, en geen oproep (R2)",
+      _p57 == 1 and _b57["summary"].startswith("Opgelost") and _b57.get("transparency") == "transparent" and "date" in _b57["start"]
+      and W.belrooster([{"kalender": W.PRIVE_AGENDA, "id": "b57", "titel": _b57["summary"], "start": _b57["start"]["date"],
+                         "einde": _b57["end"]["date"], "hele_dag": True, "locatie": _b57.get("location", ""),
+                         "omschrijving": "", "deelnemers": [], "_vrij": True, "_merk": _b57["extendedProperties"]["private"]}],
+                       _nu.date().isoformat()) == [], str((_r57b, _b57)))
+
+_b58 = _g58.store["b57"]
+check("lukt de eerste schrijfactie en zou een tweede falen, dan staat het blok toch als hele dag (R2)",
+      _b58["summary"].startswith("Opgelost") and "date" in _b58["start"] and _b58.get("transparency") == "transparent",
+      str(_b58.get("start")))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
