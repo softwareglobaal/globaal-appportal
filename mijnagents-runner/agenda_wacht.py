@@ -6140,16 +6140,15 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
     eerste = not AW.basislijn_gezet()
     stil, regels = [], []
     for x in zorg:
-        versie = f"zorg:{x['id']}:{x['start']}:{x['einde']}"
-        if AW.bekend(versie):
-            continue
+        if AW.laatste(x["id"]) == [x["start"], x["einde"]]:
+            continue                    # deze versie is al gemeld (of stond er al voor deze code)
         botsing = botst_met(x, items)
         van_nu = (x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
         if eerste and not botsing and not van_nu:
-            stil.append(versie)
+            stil.append((x["id"], x["start"], x["einde"]))
             continue
         eerder = {k: v for k, v in AW._lees()["meldingen"].items() if k.startswith(f"zorg:{x['id']}:")}
-        verschoven, kan_vragen = bool(eerder), bool(botsing)
+        verschoven, kan_vragen = AW.laatste(x["id"]) is not None, bool(botsing)
         if botsing and "??" not in (x.get("titel") or ""):
             try:
                 _te_valideren(x, botsing, tok, nu)
@@ -6165,8 +6164,8 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{x['start'][:16]} (zorg): ?? niet weggehaald ({type(e).__name__}); volgende ronde opnieuw")
                 continue
-        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven, kan_vragen),
-                              {"id": x["id"], "start": x["start"], "einde": x["einde"]} if kan_vragen else None)
+        code = AW.versie_melden(x["id"], x["start"], x["einde"], _zorg_bericht(x, botsing, verschoven, kan_vragen),
+                                {"id": x["id"], "start": x["start"], "einde": x["einde"]} if kan_vragen else None)
         regels.append(f"{x['start'][:16]} (zorg): WhatsApp-melding {code} klaargezet"
                       + (", botst: te valideren" if botsing else ""))
     if eerste:
@@ -6184,9 +6183,11 @@ def zorg_whatsapp_stap():
     try:
         items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
         fout = bool(ARCHIEF_FOUT)
-        # een blok dat de zorgroute deze ronde verder dan het venster zette: die dag ook lezen, meteen melden (PR 113)
+        # een blok dat de zorgroute verder dan het venster zette: die dag ook lezen, meteen melden; de dagen blijven
+        # bewaard tot de melding klaarstaat (PR 113, Codex-hertest 2 en 3)
         vandaag = nu_lokaal().date()
-        for dag in sorted({d for d in ZORG_GEZET if d}):
+        verre = AW.verre_dagen(ZORG_GEZET)
+        for dag in verre:
             try:
                 off = (datetime.fromisoformat(dag).date() - vandaag).days
             except ValueError:
@@ -6197,7 +6198,14 @@ def zorg_whatsapp_stap():
         if any(x.get("fout") for x in items) or fout:
             return [], [{"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, volgende ronde opnieuw",
                          "wie": "claude"}]
-        return zorg_whatsapp(items, agenda._toegang()), []
+        # de schaduw van een zorgafspraak op werk telt niet als botsing, ook buiten het mailvenster; de markering van de
+        # ronde zelf blijft staan (Codex-hertest 3, PR 113)
+        bewaard = set(ZORG_SCHADUW_IDS)
+        markeer_zorgschaduwen(items)
+        ZORG_SCHADUW_IDS.update(bewaard)
+        regels = zorg_whatsapp(items, agenda._toegang())
+        AW.verre_dagen_klaar(verre)
+        return regels, []
     except Exception as e:  # noqa: BLE001
         return [], [{"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})", "wie": "claude"}]
 

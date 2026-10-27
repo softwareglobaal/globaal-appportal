@@ -65,11 +65,6 @@ def _bewerk():
         os.replace(tmp, WACHTRIJ)
 
 
-def bekend(sleutel):
-    """Staat deze versie al in de wachtrij (verstuurd, te versturen of als basislijn)?"""
-    return sleutel in _lees()["meldingen"]
-
-
 def sinds():
     """Wanneer de eerste ronde met deze code begon (ISO), of None."""
     return _lees().get("sinds")
@@ -86,12 +81,48 @@ def basislijn_gezet():
     return bool(_lees().get("basislijn"))
 
 
-def basislijn(sleutels):
-    """Eerste ronde (W8): de bestaande versies zonder botsing worden bekend, zonder melding."""
+def basislijn(versies):
+    """Eerste ronde (W8): de bestaande versies zonder botsing [(id, begin, einde)] worden bekend, zonder melding."""
     with _bewerk() as d:
-        for k in sleutels:
-            d["meldingen"].setdefault(k, {"status": "basis", "gemaakt": _nu().isoformat()})
+        for eid, start, einde in versies:
+            d.setdefault("laatste", {})[eid] = [start, einde]
         d["basislijn"] = _nu().isoformat()
+
+
+def laatste(eid):
+    """[begin, einde] van de laatst gemelde (of in de basislijn opgenomen) versie van dit blok, of None."""
+    return (_lees().get("laatste") or {}).get(eid)
+
+
+def versie_melden(eid, start, einde, tekst, vraag=None):
+    """Een nieuwe versie van een blok in een keer: de oude open vragen voor dit blok sluiten ('vervangen': een code over
+    een vorig uur geldt niet meer), de melding klaarzetten en de versie vastleggen. Ook terug naar een eerder uur is een
+    nieuwe versie (Codex-hertest 3, PR 113). Geeft de code."""
+    with _bewerk() as d:
+        for m in d["meldingen"].values():
+            if (m.get("vraag") or {}).get("id") == eid and not m.get("verwerkt"):
+                m["verwerkt"] = {"tijd": _nu().isoformat(), "uitkomst": "vervangen"}
+        n = sum(1 for k in d["meldingen"] if k.startswith(f"zorg:{eid}:")) + 1
+        code = f"A{int(d.get('volgende') or 1)}"
+        d["volgende"] = int(d.get("volgende") or 1) + 1
+        d["meldingen"][f"zorg:{eid}:{start}:{einde}:{n}"] = {
+            "code": code, "tekst": tekst.replace("{code}", code), "status": "klaar", "gemaakt": _nu().isoformat(),
+            "vraag": vraag, "antwoord": None, "verwerkt": None, "pogingen": 0}
+        d.setdefault("laatste", {})[eid] = [start, einde]
+        return code
+
+
+def verre_dagen(nieuw=()):
+    """De dagen voorbij het leesvenster waarop de zorgroute een blok zette: bewaard tot hun melding klaarstaat, zodat een
+    mislukte meldstap ze niet vergeet (Codex-hertest 3, PR 113). Voegt nieuw toe en geeft de hele lijst."""
+    with _bewerk() as d:
+        d["verre_dagen"] = sorted(set(d.get("verre_dagen") or []) | {x for x in nieuw if x})
+        return list(d["verre_dagen"])
+
+
+def verre_dagen_klaar(dagen):
+    with _bewerk() as d:
+        d["verre_dagen"] = [x for x in d.get("verre_dagen") or [] if x not in set(dagen)]
 
 
 def klaarzetten(sleutel, tekst, vraag=None):
@@ -203,11 +234,13 @@ def antwoord_herkennen(tekst):
     code = "A" + re.sub(r"\D", "", (m.group("c1") or m.group("c2")) if m else c.group("c"))
     with _bewerk() as d:
         vraag = next((v for v in d["meldingen"].values() if v.get("code") == code and v.get("vraag")), None)
-        mislukt = (vraag or {}).get("verwerkt", {}) and (vraag.get("verwerkt") or {}).get("uitkomst") == "mislukt"
-        open_ = vraag is not None and (not vraag.get("antwoord") or mislukt)
+        uitkomst = ((vraag or {}).get("verwerkt") or {}).get("uitkomst")
+        open_ = vraag is not None and (uitkomst == "mislukt" or (not vraag.get("antwoord") and not uitkomst))
         if vraag is None or (not m and not open_):
             return None                             # geen open agendavraag ('A4 papier', 'A3 ja' zonder A3): naar het bord
-        if not m:
+        if uitkomst == "vervangen" and not vraag.get("antwoord"):
+            uit = f"Agendawacht: {code} geldt niet meer: de afspraak is intussen verschoven. Antwoord op mijn nieuwe bericht."
+        elif not m:
             uit = f"Agendawacht: antwoord met '{code} ja' (beide laten staan) of '{code} vervalt'."
         elif not open_:
             uit = f"Agendawacht: {code} is al beantwoord ({vraag['antwoord']})."

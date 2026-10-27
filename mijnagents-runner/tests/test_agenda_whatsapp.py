@@ -85,7 +85,8 @@ m = {k: v for k, v in AW._lees()["meldingen"].items() if v.get("status") != "bas
 ecg_m = next(v for k, v in m.items() if k.startswith("zorg:ecg:"))
 check("eerste ronde: alleen het blok dat nu botst (het ECG) krijgt een melding; de rest wordt stil bekend (W8)",
       len([k for k in d["meldingen"] if d["meldingen"][k].get("status") == "klaar"]) == 1
-      and d["meldingen"].get(f"zorg:rust:{rust['start']}:{rust['einde']}", {}).get("status") == "basis", str(d))
+      and (d.get("laatste") or {}).get("rust") == [rust["start"], rust["einde"]]
+      and not any(k.startswith("zorg:rust:") for k in d["meldingen"]), str(d))
 check("het ECG staat op ?? (na !!), met de botsing bovenaan de omschrijving, en wacht op antwoord (W4)",
       _pat and _pat[0][1]["summary"].startswith("!! ?? [PR] Huisarts") and "ANTWERK" in _pat[0][1]["description"]
       and ecg_m.get("vraag") == {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]}, str(_pat[:1]))
@@ -228,7 +229,7 @@ _r33 = W.zorg_whatsapp([_vers, _oud], "tok")
 _m33 = AW._lees()["meldingen"]
 check("eerste ronde: een zorgblok dat deze ronde gemaakt werd, krijgt toch zijn melding; een oud blok niet (punt 3)",
       any(k.startswith("zorg:vers:") and v.get("status") == "klaar" for k, v in _m33.items())
-      and any(k.startswith("zorg:oud:") and v.get("status") == "basis" for k, v in _m33.items()), str(_m33))
+      and not any(k.startswith("zorg:oud:") for k in _m33) and AW.laatste("oud") == [_oud["start"], _oud["einde"]], str(_m33))
 
 # punt 4: de archiefagenda's tellen mee, en een onleesbaar archief stopt de melding
 _hoofd = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
@@ -394,6 +395,45 @@ _hoofd2 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de eerste ronde legt haar begin vast voor de zorgroute iets zet (main en zorgronde)",
       _hoofd2.split("def main():")[1][:400].count("AW.sinds_zetten(RONDE_START)") == 1
       and _hoofd2.split("def zorgronde():")[1][:600].count("AW.sinds_zetten(RONDE_START)") == 1)
+
+# --- Codex-hertest 3 (PR 113) ---------------------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw12-")) / "agenda-whatsapp.json")
+AW.basislijn([])
+_A = dict(ecg, titel="!! ?? [PR] Huisarts - Praktijk Verpleegkundigen")
+_B = dict(_A, start=f"{d0}T15:00:00+01:00", einde=f"{d0}T15:15:00+01:00")
+_o12 = (W._patch, W._lees_event)
+W._patch = lambda a, body, tok, **kw: None
+W._lees_event = lambda kal, eid, tok: {"summary": _A["titel"], "description": ""}
+try:
+    W.zorg_whatsapp([_A, antwerk], "tok")
+    _code_A = next(v["code"] for k, v in AW._lees()["meldingen"].items() if k.startswith("zorg:ecg:"))
+    W.zorg_whatsapp([_B, antwerk], "tok")
+    W.zorg_whatsapp([_A, antwerk], "tok")
+finally:
+    W._patch, W._lees_event = _o12
+_ecgs = [k for k in AW._lees()["meldingen"] if k.startswith("zorg:ecg:")]
+check("verschuift een afspraak van A naar B en terug naar A, dan krijgt elke verschuiving een melding (hertest 3)",
+      len(_ecgs) == 3, str(_ecgs))
+check("en een code over een vorig uur geldt niet meer", "geldt niet meer" in (AW.antwoord_herkennen(f"{_code_A} ja") or ""))
+# de verre dagen blijven bewaard tot hun melding klaarstaat
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw13-")) / "agenda-whatsapp.json")
+_o13 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: [{"fout": True, "kalender": "x"}]     # de lezing mislukt
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+W.agenda._toegang = lambda: "tok"
+W.ZORG_GEZET[:] = ["2028-03-07"]
+try:
+    W.zorg_whatsapp_stap()
+    W.ZORG_GEZET[:] = []                        # een nieuw proces: het geheugen is leeg
+    _bewaard = AW.verre_dagen()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o13[:3]
+    W.ZORG_GEZET[:] = _o13[3]
+check("mislukt de meldstap, dan blijft een verre dag bewaard voor de volgende ronde (hertest 3)", _bewaard == ["2028-03-07"],
+      str(_bewaard))
+_st = (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def zorg_whatsapp_stap():")[1][:2600]
+check("de meldstap markeert de zorgschaduwen op haar eigen lijst en houdt die van de ronde",
+      "markeer_zorgschaduwen(items)" in _st and "ZORG_SCHADUW_IDS.update(bewaard)" in _st)
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
