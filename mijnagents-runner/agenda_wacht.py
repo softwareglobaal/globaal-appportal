@@ -3711,7 +3711,10 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         zwak = sterk is False or (sterk is None and e.get("_alleen_noemt"))
         if not start or _einde_voorbij(_tijd(e, "end"), nu) or (zwak and start > zwak_grens):
             continue
-        gewenst[k] = (e, sterk, start, _tijd(e, "end"), e.get("_vinger", ""))
+        # een Bezet blok volgt ook de plaats van zijn afspraak: een nieuw adres werkt het blok bij (Codex-hertest 21)
+        vinger = e.get("_vinger") or (hashlib.sha256((e.get("location") or "").encode()).hexdigest()[:12]
+                                      if sterk and (e.get("location") or "") else "")
+        gewenst[k] = (e, sterk, start, _tijd(e, "end"), vinger)
     regels, gewijzigd = [], False
     gelezen = {_firma_sleutel(e) for e in evs or []}
     for k, r in list(reg.items()):

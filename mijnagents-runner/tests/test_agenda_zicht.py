@@ -890,6 +890,24 @@ finally:
     W._insert, W.FIRMA_VRAGEN = _o44
 check("'mehdi' in kleine letters in de omschrijving geeft ook een vraag (hertest 20)", len(_ins44) == 1, str(len(_ins44)))
 
+# --- Codex-hertest 21: een nieuwe plaats werkt het Bezet blok bij ----------------------------------------------------
+_pat45, _ins45 = [], []
+_o45 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma45-")) / "agenda-firma-vragen.json")
+_p45 = dict(ev("p45", "Mehdi: [EL-PB] intake"), location="Bondgenotenlaan 1, 3000 Leuven")
+W._insert = lambda kal, body, tok, toch=False: _ins45.append(body) or {"id": "b45"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "maker": W.WERKAGENDA,
+                                        "_merk": {W.FIRMAMERK: W._firma_sleutel(_p45), W.MAILMERK: "abcdef0123456789"}}
+W._patch = lambda x, body, tok, **kw: _pat45.append(body)
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_p45], [_p45], "tok")
+    _p45b = dict(_p45, location="Tiensestraat 2, 3000 Leuven")            # alleen de plaats verandert
+    met(NepGoogle([]), W.firma_vangnet, [_p45b], [_p45b], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch = _o45
+check("verandert alleen de plaats van de afspraak, dan krijgt het Bezet blok het nieuwe adres (hertest 21)",
+      len(_ins45) == 1 and len(_pat45) == 1 and _pat45[0]["location"] == "Tiensestraat 2, 3000 Leuven", str(_pat45))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
