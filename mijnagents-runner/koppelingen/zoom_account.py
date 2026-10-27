@@ -629,22 +629,48 @@ def _waarde(d, k, reden="veld ontbreekt"):
 
 
 ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
+ARCHIEF_GELDIG = timedelta(hours=26)   # De Zoomarchivaris draait elk uur; een ouder bestand zegt niets meer
+NOOD_WISREGEL_WACHT = "Wacht met de wisregel: niet elke Zoom-opname staat bewezen in je Dropbox"
 
 
-def archief_dekking(pad=None, nu=None):
-    """Driehoeksoverleg Zoomarchief K6 (27-10-2026): staan alle Zoom-opnames bewezen in Mehdi's Dropbox? 'ja' of 'nee'
-    uit het bestand van De Zoomarchivaris (zoom_archief.py), 'onbekend' zonder bestand, onleesbaar of ouder dan twee
-    dagen. Mehdi: eerst een kopie, dan pas wissen."""
+def _archief(sleutel, pad=None, nu=None):
+    """'ja', 'nee' of 'onbekend' voor een veld uit het bestand van De Zoomarchivaris (zoom_archief.py): onbekend
+    zonder bestand, onleesbaar of ouder dan ARCHIEF_GELDIG."""
     try:
         with open(os.path.expanduser(pad or ARCHIEF_DEKKING), encoding="utf-8") as f:
             d = json.load(f)
         ts = datetime.fromisoformat(d["ts"])
-        oud = (nu or datetime.now(timezone.utc)) - ts > timedelta(days=2)
+        oud = (nu or datetime.now(timezone.utc)) - ts > ARCHIEF_GELDIG
     except (OSError, ValueError, KeyError, TypeError):
         return "onbekend"
-    if oud or not isinstance(d.get("dekking"), bool):
+    if oud or not isinstance(d.get(sleutel), bool):
         return "onbekend"
-    return "ja" if d["dekking"] else "nee"
+    return "ja" if d[sleutel] else "nee"
+
+
+def archief_dekking(pad=None, nu=None):
+    """Driehoeksoverleg Zoomarchief K6 (27-10-2026): staat alles wat Zoom nu heeft bewezen in Mehdi's Dropbox? Mehdi:
+    eerst een kopie, dan pas wissen. Hierop opent ZA-01."""
+    return _archief("dekking", pad, nu)
+
+
+def archief_veilig(pad=None, nu=None):
+    """Staat alles wat ouder is dan 30 dagen bewezen in Dropbox, zonder verlies of onvolledige opname? Dat is wat de
+    wisregel van 30 dagen nodig heeft (Codex, Zoomarchief controle 3, punt 12)."""
+    return _archief("wisregel_veilig", pad, nu)
+
+
+def wisregel_wacht(r):
+    """Codex, Zoomarchief controle 3, punt 12: staat er een ZA-01-voorstel open of goedgekeurd terwijl de kopie niet
+    veilig is voor de wisregel, dan een nood voor Mehdi, elke ronde opnieuw tot het weer veilig is. De besluitknop op het
+    bord voert zelf niets uit; dit is de waarschuwing bij het besluit."""
+    try:
+        rijen = voorstellen_lezen()
+    except bord.BordOnbekend:
+        return
+    if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
+            and archief_veilig() != "ja":
+        r.nood(NOOD_WISREGEL_WACHT, "mehdi")
 
 
 def adviezen(d, gesprekken=0, staat_acc=None):
@@ -1264,6 +1290,7 @@ def herhaal_bewaarde_scannoden(r, staat):
     """Herhaal de bekende scannoden bij een Zoom-ronde die de accountscan niet kan bereiken."""
     if not scan_aan(r.werkwijze):
         return
+    wisregel_wacht(r)
     account = staat.get("account") if isinstance(staat, dict) else None
     scannoden = account.get("scannoden") if isinstance(account, dict) else None
     if isinstance(scannoden, dict):
@@ -1274,6 +1301,7 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
     """Een accountdeel binnen de bestaande Zoom-ronde; schrijft staat pas na geslaagde bordstappen."""
     if not scan_aan(r.werkwijze):
         return ""
+    wisregel_wacht(r)
     oud = copy.deepcopy(staat.get("account") or {})
     vorige_noden = oud.get("scannoden") if isinstance(oud.get("scannoden"), dict) else {}
     scannoden = copy.deepcopy(vorige_noden)

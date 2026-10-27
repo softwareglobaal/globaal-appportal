@@ -475,9 +475,9 @@ def test_codex3_een_onvolledige_lijst_is_een_fout_en_geen_dekking():
     m = z.meeting("u2", "2026-10-20T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
     m["bestanden"][0]["link"] = False
     r, uit = ronde(nu=NU + timedelta(days=1))
-    assert "Zoom gaf een onvolledige opname: bestand zonder id of downloadlink" in teksten(r) and not uit["dekking"]
+    assert "Zoom gaf een onvolledige opname: bestand zonder id, downloadlink of bekende status" in teksten(r) and not uit["dekking"]
     r, uit = ronde(nu=NU + timedelta(days=1, hours=1))
-    assert not uit["volledig"] and "Zoom gaf een onvolledige opname: bestand zonder id of downloadlink" in teksten(r), \
+    assert not uit["volledig"] and "Zoom gaf een onvolledige opname: bestand zonder id, downloadlink of bekende status" in teksten(r), \
         "een korte ronde houdt de nood (controle 2, punt 17)"
     z.meetings["u3"] = {"uuid": "u3", "nummer": "1", "onderwerp": "x", "start": "2026-10-21T09:00:00Z", "duur": 1,
                         "bestanden": []}
@@ -698,6 +698,146 @@ def test_codex12_een_oud_open_za01_voorstel_houdt_het_advies_met_kopie_niet_tege
                                                         "zoom_advies": "ZA-01"})}
     gekozen, _ = ZA_ACC.te_versturen([a], [oud, nieuw], datetime(2026, 10, 27, 7, tzinfo=timezone.utc))
     assert not gekozen, "een open voorstel met de kopie in de stand houdt een tweede wel tegen"
+
+
+# ---------------------------------------------------------------------- Codex-controle 3 (27-10-2026) ---
+def _dekking():
+    return json.load(open(os.path.join(ZA.DATA, "dekking.json")))
+
+
+def _tot_ja(z):
+    ronde()
+    _, uit = ronde()
+    assert uit["dekking"], uit
+
+
+def test_codex3_bestand_zonder_id_en_status_houdt_dekking_tegen():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    z.meetings["u1"]["bestanden"].append({"id": "", "soort": "MP4", "status": "", "start": "", "einde": "",
+                                          "grootte": 0, "opnametype": "", "extensie": "", "link": False})
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert not uit["dekking"] and not _dekking()["dekking"]
+    assert "Zoom gaf een onvolledige opname: bestand zonder id, downloadlink of bekende status" in teksten(r)
+
+
+def test_codex3_een_bestand_in_verwerking_houdt_dekking_tegen_tot_het_gekopieerd_is():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    m = z.meeting("u2", "2026-10-27T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    m["bestanden"][0]["status"] = "processing"
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["dekking"] and uit["veilig"], "nieuw en nog in verwerking: geen dekking, wel veilig voor de wisregel"
+
+
+def test_codex5_een_mislukte_ronde_trekt_dekking_meteen_in():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    ZA.mehdi_vastzetten = lambda: ""
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert uit is None and not _dekking()["dekking"] and not ZA.lees_staat()["dekking"]
+    assert ZA_ACC.archief_dekking(os.path.join(ZA.DATA, "dekking.json"), nu=NU + timedelta(hours=1)) == "nee"
+    ZA.mehdi_vastzetten = lambda: "mehdi-id"
+    _, uit = ronde(nu=NU + timedelta(hours=2))
+    assert not uit["volledig"] and not uit["dekking"], "een korte ronde geeft na een intrekking geen ja terug"
+    _, uit = ronde(nu=NU + timedelta(days=1))
+    assert uit["volledig"] and uit["dekking"], "een nieuwe volledige inventaris wel"
+    assert ZA_ACC.archief_dekking(os.path.join(ZA.DATA, "dekking.json"), nu=NU + timedelta(days=1, hours=27)) == "onbekend"
+
+
+def test_codex7_de_tijdsgrens_geldt_ook_voor_de_dropbox_lijst():
+    z, d, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    echt = D.lijst_map
+    tijd = {"nu": 0.0}
+
+    def traag(pad, bewaker=None):
+        tijd["nu"] = 10_000.0
+        return echt(pad, bewaker=bewaker)
+    D.lijst_map = traag
+    try:
+        r, uit = ronde(nu=NU + timedelta(days=1), klok=lambda: tijd["nu"])
+    finally:
+        D.lijst_map = echt
+    assert uit is None and "nakijken niet af" in r.detail and not _dekking()["dekking"], r.detail
+
+
+def test_codex11_een_aanvaard_gemis_dat_terugkomt_en_opnieuw_verdwijnt_vraagt_een_nieuw_besluit():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    fid = m["bestanden"][0]["id"]
+    z.fout[fid] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    del z.meetings["u1"]
+    ronde(nu=NU + timedelta(days=1))
+    VOORSTELLEN[0]["status"] = "goedgekeurd"
+    ronde(nu=NU + timedelta(days=1, hours=1))
+    assert fid in ZA.lees_staat()["gemist"]
+    z.meetings["u1"] = m  # ze komt terug, wordt gekopieerd, en verdwijnt dan uit Zoom en Dropbox
+    del z.fout[fid]
+    ronde(nu=NU + timedelta(days=2))
+    assert fid in ZA.lees_staat()["bestanden"] and fid not in ZA.lees_staat()["gemist"]
+    del z.meetings["u1"]
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    for dag in (3, 4):
+        r, uit = ronde(nu=NU + timedelta(days=dag))
+        assert not uit["dekking"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r), dag
+    assert len(VOORSTELLEN) == 2 and VOORSTELLEN[0]["actie"] != VOORSTELLEN[1]["actie"], "een nieuw besluit per verlies"
+
+
+def test_codex13_geen_voorstel_als_het_bord_niet_te_lezen_is():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    z.fout[m["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    del z.meetings["u1"]
+
+    def onleesbaar(sql, args=()):
+        raise ZA.bord.BordOnbekend("proef")
+    ZA.bord.db_lees = onleesbaar
+    for uur in (0, 1, 2):
+        ronde(nu=NU + timedelta(days=1, hours=uur))
+    assert not VOORSTELLEN, "zonder te kunnen lezen wat er al staat, zet ik niets (geen dubbels elk uur)"
+
+
+def test_codex15_een_onvolledige_meeting_die_verdwijnt_houdt_de_dekking_tegen():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    z.meetings["leeg"] = {"uuid": "leeg", "nummer": "1", "onderwerp": "x", "start": "2026-10-20T09:00:00Z", "duur": 1,
+                          "bestanden": []}
+    ronde()
+    del z.meetings["leeg"]
+    for dag in (1, 2):
+        r, uit = ronde(nu=NU + timedelta(days=dag))
+        assert not uit["dekking"] and "meeting:leeg" in ZA.lees_staat()["verdwenen"], dag
+    assert any("meeting zonder bruikbare bestanden" in v["reden"] for v in VOORSTELLEN), VOORSTELLEN
+
+
+def test_codex12_de_zoomwacht_waarschuwt_bij_een_open_wisregelvoorstel_zonder_veilige_kopie():
+    oud_pad, oud_lezen = ZA_ACC.ARCHIEF_DEKKING, ZA_ACC.voorstellen_lezen
+    ZA_ACC.ARCHIEF_DEKKING = os.path.join(tempfile.mkdtemp(prefix="veilig-", dir=MAP), "dekking.json")
+    rij = {"id": 41, "status": "open", "parameters": json.dumps({"zoom_advies": "ZA-01", "stand": {"kopie": "ja"}})}
+    try:
+        for rijen, veilig, verwacht in (([rij], None, True), ([rij], False, True), ([rij], True, False),
+                                        ([{**rij, "status": "geweigerd"}], False, False), ([], False, False),
+                                        ([{**rij, "status": "goedgekeurd"}], False, True)):
+            if veilig is None:
+                if os.path.exists(ZA_ACC.ARCHIEF_DEKKING):
+                    os.remove(ZA_ACC.ARCHIEF_DEKKING)
+            else:
+                json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": veilig, "wisregel_veilig": veilig},
+                          open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+            ZA_ACC.voorstellen_lezen = lambda: rijen
+            r = Ronde()
+            ZA_ACC.wisregel_wacht(r)
+            assert (ZA_ACC.NOOD_WISREGEL_WACHT in teksten(r)) is verwacht, (rijen, veilig)
+            assert not re.search(r"\d", ZA_ACC.NOOD_WISREGEL_WACHT), "N10"
+    finally:
+        ZA_ACC.ARCHIEF_DEKKING, ZA_ACC.voorstellen_lezen = oud_pad, oud_lezen
 
 if __name__ == "__main__":
     goed = fout = 0

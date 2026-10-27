@@ -70,10 +70,11 @@ van de vaste vergaderruimte en de opnames; mijn telling is dan een ondergrens ("
 12. Het vangnet blijft cloudopname met transcript. Een advies over ruimtegebruik gaat alleen over een wisregel of
     over geluid met transcript. Ik raad niet aan om de cloudopname of het transcript uit te zetten.
 13. Bij ZA-01 lees ik de dekking van De Zoomarchivaris (mijnagents-data/zoom-archief/dekking.json). Zolang die geen
-    "ja" zegt, of ouder is dan twee dagen, is ZA-01 geen open advies maar onbekend, met de reden dat de wisregel
-    wacht op de volledige kopie in Mehdi's eigen Dropbox; er komt dan geen voorstel om ze aan te zetten. De stand
-    van ZA-01 noemt de kopie, zodat een voorstel van voor de kopie het latere advies niet tegenhoudt. Mehdi,
-    27-10-2026: eerst een kopie, dan pas wissen.
+    "ja" zegt, of ouder is dan 26 uur, is ZA-01 geen open advies maar onbekend, met de reden dat de wisregel wacht
+    op de volledige kopie in Mehdi's eigen Dropbox; er komt dan geen voorstel om ze aan te zetten. De stand van
+    ZA-01 noemt de kopie, zodat een voorstel van voor de kopie het latere advies niet tegenhoudt. Staat er een
+    ZA-01-voorstel open of goedgekeurd terwijl niet alles ouder dan 30 dagen bewezen in Dropbox staat, dan meld ik
+    Mehdi elke ronde dat hij met de wisregel moet wachten. Mehdi, 27-10-2026: eerst een kopie, dan pas wissen.
 
 Bij ZA-02 controleer ik de video-opties op account- en gebruikersniveau; of geluid zonder video met transcript werkt,
 moet eerst met een korte proefopname worden bevestigd. Bij ZA-04 werkt de Zoom-schakelaar alleen voor Owner en Admin die

@@ -247,10 +247,13 @@ def upload_bestand(lokaal, extern_pad, bewaker=None):
     return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", "")}
 
 
-def lijst_map(extern_pad):
+def lijst_map(extern_pad, bewaker=None):
     """Alle bestanden onder een map in Dropbox, recursief: {pad in kleine letters: {'grootte', 'content_hash', 'pad'}}.
-    None als de map er niet is. Dropbox vergelijkt paden zonder hoofdletters; wij dus ook."""
+    None als de map er niet is. Dropbox vergelijkt paden zonder hoofdletters; wij dus ook. bewaker() draait voor elke
+    pagina."""
     uit = {}
+    if bewaker:
+        bewaker()
     try:
         d = rpc("files/list_folder", {"path": basis() + extern_pad, "recursive": True, "limit": 2000})
     except urllib.error.HTTPError as e:
@@ -264,6 +267,8 @@ def lijst_map(extern_pad):
                     "grootte": x.get("size"), "content_hash": x.get("content_hash", ""), "pad": x.get("path_display", "")}
         if not d.get("has_more"):
             return uit
+        if bewaker:
+            bewaker()
         d = rpc("files/list_folder/continue", {"cursor": d["cursor"]})
 
 

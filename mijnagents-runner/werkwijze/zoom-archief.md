@@ -37,11 +37,16 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 7. Per gesprek komt er een opname.json bij zodra al zijn bestanden bewezen zijn: uuid, nummer, onderwerp, start, duur
    en per bestand de soort, de grootte en de vingerafdruk.
 8. Ik schrijf de dekking: hoeveel bestanden en GB in Zoom staan, hoeveel bewezen in Dropbox, en of alles ouder dan 30
-   dagen er staat. Dekking "ja" pas als een volledige inventaris niets meer te kopiëren vond, elk bewijs nog klopte en
-   geen opname verdween voor ze bewezen was, tenzij Mehdi die als gemist aanvaardde. Een korte ronde houdt dat oordeel,
-   tenzij ze iets nieuws te kopiëren vindt. De Zoomwacht leest die dekking voor ZA-01.
-9. Verdween een opname voor ze in Dropbox stond, dan zet ik per opname een voorstel op het bord, met alleen de datum,
-   het uur en de grootte. Keurt Mehdi het goed, dan telt die opname niet meer tegen de dekking.
+   dagen er staat. Dekking "ja" pas als alles wat Zoom nu heeft al bewezen was voor de ronde begon, niets nog in
+   verwerking is, elk bewijs deze ronde in Dropbox klopte, niets onvolledig is en geen opname verdween voor ze
+   bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde. Een korte ronde houdt alleen een ja van een
+   volledige inventaris van dezelfde dag. Een ronde die niet alles kon nakijken, trekt een eerdere ja meteen in.
+   Daarnaast schrijf ik of de kopie veilig is voor de wisregel: alles ouder dan 30 dagen bewezen, geen verlies en
+   niets onvolledig. De Zoomwacht leest beide voor ZA-01.
+9. Verdween een opname voor ze in Dropbox stond, of een meeting die Zoom zonder bruikbare bestanden gaf, dan zet ik
+   per verlies een voorstel op het bord, met alleen de datum, het uur en de grootte, en alleen als ik het bord kan
+   lezen. Keurt Mehdi het goed, dan telt dat ene verlies niet meer tegen de dekking. Komt de opname terug en
+   verdwijnt ze opnieuw, dan vraag ik het opnieuw.
 10. Een normale achterstand is geen nood: die staat met aantallen en GB in mijn hartslag. Een nood is een blokkade: geen
     Dropbox-token, een andere Dropbox, een onleesbare of onvolledige opnamelijst, een bestand dat afwijkt, een download
     die Zoom weigert, te weinig schijf op de VM, een tijdelijke fout die drie rondes blijft, of een opname die verdween voor ze
