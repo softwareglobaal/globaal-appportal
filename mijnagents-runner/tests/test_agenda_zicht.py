@@ -827,6 +827,25 @@ _bd = W._firma_vraag_body(_k41, _e41, _e41["start"]["dateTime"], True)
 check("een Bezet blok draagt de plaats van de afspraak (rit en vertrekoproep in plaats van 'online')",
       _bd.get("location") == "Bondgenotenlaan 1, 3000 Leuven")
 
+# --- Codex-hertest 18: een zekere organisatorkopie gaat voor; een gast met onzekere tijd krijgt meteen de vraag -------
+_org18 = ev("u18", "Mehdi: [EL-PO] overleg")
+_gst18 = dict(_org18, kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV", _tijd_onzeker=True)
+_gk18, _onz18, _tw18 = W._firma_kopieen_kiezen([_gst18, _org18])
+check("een gastkopie met onzekere tijd verdringt de zekere kopie van de organisator niet", [e["kalender"] for e in _gk18] == [ELEVAIT]
+      and not _tw18, str((_gk18, _tw18)))
+_ins42 = []
+_o42 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma42-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins42.append(body) or {"id": "q42"}
+try:
+    _g42 = dict(ev("g42", "Mehdi: [EL-PO] overleg"), organizer={"email": "siyan@voorbeeld.test"}, _tijd_onzeker=True,
+                attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+    met(NepGoogle([], zichtbaar=True), W.firma_vangnet, [_g42], [], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o42
+check("een uitgenodigde gast met onbekende tijdzone krijgt meteen de vraag 'uur niet zeker'",
+      len(_ins42) == 1 and "uur niet zeker" in _ins42[0]["summary"], str(_ins42))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

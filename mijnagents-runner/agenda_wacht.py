@@ -3445,11 +3445,12 @@ def _firma_kopieen_kiezen(evs, onleesbaar=()):
     for k, kopieen in groepen.items():
         if {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & eigen:
             continue                    # Mehdi's eigen afspraak met een firma-agenda als gast: staat al bij hem (review 2)
-        org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()]
-        if any(e.get("_tijd_onzeker") for e in kopieen):
+        org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()
+               and not e.get("_tijd_onzeker")]
+        if org:
+            gekozen.append(org[0])      # een zekere kopie van de organisator beslist altijd (Codex-hertest 18)
+        elif any(e.get("_tijd_onzeker") for e in kopieen):
             twijfel[k] = kopieen        # tijdzone onbekend: nooit een blok op een gok (Codex-hertest 17)
-        elif org:
-            gekozen.append(org[0])
         elif {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & stuk:
             onzeker.add(k)
         else:
@@ -3658,8 +3659,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         # zijn werkagenda, dan is er niets te vragen (review 2); een leesfout: onzeker
         if any(_gast_status(e) == "declined" for e in kopieen):
             continue
-        gast = [e for e in kopieen if _gast_status(e) is not None]
-        if gast:
+        gast = [e for e in kopieen if _gast_status(e) is not None and not e.get("_tijd_onzeker")]
+        if gast:                        # met een onzekere tijd kan ik niet zoeken: dan meteen de vraag (hertest 18)
             try:
                 if _op_werkagenda(gast[0], tok):
                     continue
