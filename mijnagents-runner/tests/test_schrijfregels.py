@@ -567,5 +567,33 @@ for b, verwacht in [("verklaring bouwheer, opname 3:45", "verklaring bouwheer"),
 for tekst in ["De goot is nagemeten. (Opname van de bestaande toestand, schaal 1:50.)", "Afspraak om 10:15 op de werf (10:15)."]:
     check(f"geen opnametijdstip, blijft: '{tekst[:35]}'", S.toepassen(tekst) == (tekst, []), S.toepassen(tekst))
 
+# Tweeëndertigste review 27-10-2026: (1) "direct na het woord" laat ook een leesteken, een eenheid of een samengesteld
+# woord toe, zoals productie; (2) een verwijzing op een eigen regel of alinea laat geen ".." of extra lege regel achter
+for tekst, verwacht in [("De dakgoot lekt aan de achterzijde (opname: 3:45). De kilgoot is vervangen.",
+                         "De dakgoot lekt aan de achterzijde. De kilgoot is vervangen."),
+                        ("De barst loopt diagonaal (transcript: 4:05).", "De barst loopt diagonaal."),
+                        ("De dakgoot lekt (opname, 7:12).", "De dakgoot lekt."), ("De dorpel (opname - 3:45) is niet vlak.", "De dorpel is niet vlak."),
+                        ("De dorpel (opname 3:45min) is niet vlak.", "De dorpel is niet vlak."),
+                        ("De dorpel (opname 12:30u) is niet vlak.", "De dorpel is niet vlak."),
+                        ("De dorpel is niet vlak (audio-opname 3:45). Rest.", "De dorpel is niet vlak. Rest."),
+                        ("De goot lekt. Zie opname: 3:45. Rest.", "De goot lekt. Rest."),
+                        ("De dakgoot lekt aan de achterzijde.\n\nZie opname 00:12:05.", "De dakgoot lekt aan de achterzijde."),
+                        ("De dakgoot lekt aan de achterzijde.\n\n(opname 00:12:05).", "De dakgoot lekt aan de achterzijde."),
+                        ("De dakgoot lekt aan de achterzijde.\n\nZie transcript 12:30.", "De dakgoot lekt aan de achterzijde."),
+                        ("De dakgoot lekt aan de achterzijde. \nZie opname 00:12:05.", "De dakgoot lekt aan de achterzijde."),
+                        ("De dakgoot lekt.\n(opname 00:12:30)\nDe kilgoot is vervangen.", "De dakgoot lekt.\nDe kilgoot is vervangen."),
+                        ("De dakgoot lekt.\n\nZie opname 00:12:05.\n\nDe kilgoot is vervangen.", "De dakgoot lekt.\n\nDe kilgoot is vervangen."),
+                        ("De dakgoot lekt.\n\nZie opname 00:12:05. Daarna de kilgoot.", "De dakgoot lekt.\n\nDaarna de kilgoot."),
+                        ("- De dakgoot lekt.\n- Zie opname 00:12:05.\n- De kilgoot is vervangen.", "- De dakgoot lekt.\n- De kilgoot is vervangen."),
+                        ("**3.1 Goot**\nZie opname 00:12.\nDe dakgoot lekt.", "**3.1 Goot**\nDe dakgoot lekt."),
+                        ("Het raam is gebarsten, zie\nopname 00:12:30.\nDe deur klemt.", "Het raam is gebarsten.\nDe deur klemt.")]:
+    for profiel in (None, "aankoopkeuring"):
+        t32, ing32 = S.toepassen(tekst, profiel)
+        check(f"opnameverwijzing netjes weg: {tekst[-40:]!r} {profiel}", t32 == verwacht and ing32 and S.toepassen(t32, profiel)[0] == t32, (t32, ing32))
+check("kort opnametijdstip na een dubbelpunt weg uit de bron", S.bron_zichtbaar("foto 12 (opname: 0:45)") == "foto 12", S.bron_zichtbaar("foto 12 (opname: 0:45)"))
+for tekst in ["De bestaande toestand is opgemeten (opname landmeter Claes, plan 1:100); de gemene muur is 28 cm dik.",
+              "De dakgoot lekt.\n\nDe kilgoot is vervangen.", "- De dakgoot lekt.\n- De kilgoot is vervangen."]:
+    check(f"zonder opnameverwijzing blijft alles: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []), S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -72,31 +72,39 @@ VERBODEN_PROFIEL = {
 # Een opnametijdstip: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
 _OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
 _OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
-# 30e review: alle opnameregels gebruiken die strenge definitie, zodat "(Opname ..., schaal 1:50)" gewone tekst blijft
+# 30e review: los of verder in een haakje telt alleen die strenge vorm, zodat "(Opname ..., schaal 1:50)" gewone tekst blijft
 _TIJDSTIP = _OPNAMETIJD
-# Direct na het woord opname of transcript is elk tijdstip een opnametijdstip, ook 3:45 of 0:45, zoals in productie
-# ("(opname 3:45)", "zie opname 7:12"); alleen een tijdstip verder in de haakjes moet de strenge vorm hebben (31e review).
-_DIRECTTIJD = r"(?:\b\d{1,2}:\d{2}(?::\d{2})?\b|\b\d{1,2}m\d{2}s\b)"
+# Direct na het woord opname, transcript of recording is elk tijdstip een opnametijdstip, zoals in productie: ook 3:45,
+# 0:45, 3:45min of 12:30u, na een spatie, dubbelpunt, komma of streep ("(opname: 3:45)", "zie opname 7:12"), ook na een
+# samengesteld woord ("(audio-opname 3:45)"). Een schaal 1:100 is nooit zo'n tijdstip (31e en 32e review).
+_OPNAMEWOORD = r"(?:(?:audio|video|geluids|spraak)-?)?(?:opname|transcript|audio|recording)"
+_DIRECTTIJD = r"(?:(?<!\d)(?<!\d:)\d{1,2}:\d{2}(?::\d{2})?(?!\d|:\d)(?:min|sec|u|h|s)?\b|\b\d{1,2}m\d{2}s\b)"
 _DIRECTTIJDEN = _DIRECTTIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _DIRECTTIJD + r")?"
-# alleen aan een echt zinsbegin (begin van de tekst, of na . ! ?), niet aan elk regelbegin: 'raam, zie\nopname 00:12.'
-# is het einde van een zin (24e review)
-OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
-                        + _DIRECTTIJDEN + r"\s*[.!?](?=\s|$)", re.I)
-# "(opname 00:22:30)." als eigen zin na een punt: ook weg samen met de punt (26e review)
-# zo streng als OPNAME: alleen "(opname)" zonder meer, of een verwijzing met een tijdstip; "(Opname van de bestaande
-# toestand ...)" of "(Opname visueel en niet-destructief; ...)" is gewone tekst en blijft (27e review)
-OPNAME_LOS_HAAKJES = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*\(\s*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
-                                r"(?:opname|geluidsopname|transcript|audio|recording)(?:\s*|\s+(?:van\s+|at\s+)?" + _DIRECTTIJD
-                                + r"[^)]*|\b[^)]*" + _TIJDSTIP + r"[^)]*)\)\s*[.!?]?(?=\s|$)", re.I)
+_NA_WOORD = r"(?:\s*:\s*|\s+)(?:(?:van|at|om|op)\s+)?"          # buiten haakjes: een spatie of een dubbelpunt
+_NA_WOORD_HAAKJE = r"[\s:,\-–]*(?:(?:van|at|om|op)\s+)?"        # in een haakje ook een komma of een streep
+_ZIE = r"(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
+_VERWIJZING = _ZIE + _OPNAMEWOORD + _NA_WOORD + _DIRECTTIJDEN
+# een haakje met een opnametijdstip; zo streng als productie: "(Opname van de bestaande toestand ...)" of "(Opname visueel
+# en niet-destructief; ...)" is gewone tekst en blijft (27e review)
+_HAAKJE_MET_TIJD = (r"\(\s*" + _ZIE + _OPNAMEWOORD + r"(?:" + _NA_WOORD_HAAKJE + _DIRECTTIJD + r"|[^)]*" + _TIJDSTIP
+                    + r")[^)]*\)")
+_VERWIJZING_HAAKJE = r"(?:" + _HAAKJE_MET_TIJD + r"|\(\s*" + _ZIE + _OPNAMEWOORD + r"\s*\))"
+# Een verwijzing als eigen zin ("Zie opname 00:12:05.", "(opname 00:22:30)."): weg samen met haar punt, zodat er geen ".."
+# of losse punt overblijft (19e en 26e review). Alleen aan een echt zinsbegin: na . ! ? op dezelfde regel, of aan het
+# begin van een regel na een zinseinde of een lege regel; 'raam, zie\nopname 00:12.' is het einde van een zin (24e review).
+# Een regel die alleen uit een verwijzing bestaat, valt al eerder helemaal weg (_verwijzingsregels_weg, 32e review).
+_ZINSBEGIN_REGEL = r"(?:\A|(?<=[.!?]\n)|(?<=[.!?][ \t]\n)|(?<=\n\n)|(?<=\n[ \t]\n))[ \t]*"
+OPNAME_LOS = re.compile(r"(?:(?<=[.!?])[ \t]*" + _VERWIJZING + r"\s*[.!?](?=\s|$)|" + _ZINSBEGIN_REGEL + _VERWIJZING
+                        + r"\s*[.!?](?:[ \t]+|(?=\n)|\Z))", re.I)
+OPNAME_LOS_HAAKJES = re.compile(r"(?:(?<=[.!?])[ \t]*" + _VERWIJZING_HAAKJE + r"\s*[.!?]?(?=\s|$)|" + _ZINSBEGIN_REGEL
+                                + _VERWIJZING_HAAKJE + r"\s*[.!?]?(?:[ \t]+|(?=\n)|\Z))", re.I)
 OPNAME = [
-    re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)(?:\s+(?:van\s+)?" + _DIRECTTIJD + r"|[^)]*" + _OPNAMETIJD
-               + r")[^)]*\)", re.I),
-    re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?" + _DIRECTTIJDEN, re.I),
-    re.compile(r"\s*\((?:opname|transcript)\)", re.I),
-    re.compile(r"\s*\((?:recording|audio)(?:\s+(?:at\s+)?" + _DIRECTTIJD + r"|[^)]*" + _OPNAMETIJD + r")[^)]*\)", re.I),
-    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?" + _DIRECTTIJDEN, re.I),
-    re.compile(r"\s*\(recording\)", re.I),
+    re.compile(r"\s*" + _HAAKJE_MET_TIJD, re.I),
+    # niet midden in een woord: van "momentopname 3:45" of "(audio-opname 3:45)" blijft geen brokstuk over
+    re.compile(r",?\s*(?<![\w-])" + _VERWIJZING, re.I),
+    re.compile(r"\s*\((?:opname|transcript|recording)\)", re.I),
 ]
+_REGEL_VERWIJZING = re.compile(r"(?:" + _VERWIJZING + r"|" + _VERWIJZING_HAAKJE + r")\s*[.!?]?", re.I)
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
 # Zo ook de punt van een afkorting midden in een zin ("€ 3.200 excl. btw").
 # Alleen als de zin daarna echt doorloopt (kleine letter of cijfer, ook onder re.I); "BV." van een firma is een zinseinde.
@@ -152,6 +160,27 @@ _ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*\s*|[.!?]+\s*")
 # Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
 # opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
 _KAAL_TIJDSTIP = re.compile(r"\s*\(\s*" + _OPNAMETIJDEN + r"\s*\)")   # een schaal (1:50) is geen tijdstip (29e review)
+_KAAL_REGEL = re.compile(r"\(\s*" + _OPNAMETIJDEN + r"\s*\)\s*[.!?]?")
+_OPSOMMING = re.compile(r"[ \t]*(?:[-*•]|\d{1,2}[.)])[ \t]+")
+
+
+def _verwijzingsregels_weg(tekst, legende):
+    """Een regel die alleen een opnameverwijzing is, valt helemaal weg met haar regelovergang, en tussen twee alinea's ook
+    met één lege regel: zo blijft er geen losse punt of extra lege regel over (32e review). Alleen na een zinseinde, een
+    kop of een lege regel; na 'raam, zie' loopt de zin door op de volgende regel (24e review). Een opsommingspunt dat
+    alleen een verwijzing is ("- Zie opname 00:12:05."), valt ook helemaal weg, zonder "-." achter te laten."""
+    regels, uit, n = tekst.split("\n"), [], 0
+    for i, regel in enumerate(regels):
+        punt = _OPSOMMING.match(regel)
+        kern = regel[punt.end():].strip() if punt else regel.strip()
+        verwijzing = _REGEL_VERWIJZING.fullmatch(kern) or (legende and _KAAL_REGEL.fullmatch(kern))
+        if not verwijzing or (not punt and re.search(r"[\w,\-–]$", uit[-1].rstrip() if uit else "")):
+            uit.append(regel)
+            continue
+        n += 1
+        if uit and not uit[-1].strip() and (i + 1 == len(regels) or not regels[i + 1].strip()):
+            uit.pop()
+    return "\n".join(uit), n
 
 
 def _is_s4(kern):
@@ -249,7 +278,8 @@ def _opname_weg(tekst):
             delen.append(kop + markering + staart)
             continue
         delen.append(zin)
-    tekst = "".join(delen)
+    tekst, k = _verwijzingsregels_weg("".join(delen), legende)
+    ingrepen += [("S4", "opnameverwijzing")] * k
     for p in [OPNAME_LOS, OPNAME_LOS_HAAKJES] + OPNAME + ([_KAAL_TIJDSTIP] if legende else []):
         tekst, k = p.subn("", tekst)
         ingrepen += [("S4", "opnameverwijzing")] * k
@@ -263,11 +293,9 @@ def bron_zichtbaar(bron):
     een opmeting ('Opname plaatsgesteldheid expert Claes.pdf') en een schaal (1:100) blijven; het volledige veld bron
     blijft in de gegevens ("factuur 2026-114, zie opname 00:12:05" wordt "factuur 2026-114"). 28e review."""
     b = re.sub(r"\s*\n\s*", " / ", str(bron or "").strip())
-    b = re.sub(r"\s*\((?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|transcript|audio|recording)\s+(?:van\s+|at\s+|om\s+)?"
-               + _DIRECTTIJD + r"[^()]*\)", "", b, flags=re.I)
+    b = re.sub(r"\s*\(\s*" + _ZIE + _OPNAMEWOORD + _NA_WOORD_HAAKJE + _DIRECTTIJD + r"[^()]*\)", "", b, flags=re.I)
     b = re.sub(r"\s*\([^()]*" + _OPNAMETIJD + r"[^()]*\)", "", b)
-    b = re.sub(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|transcript|audio|recording)\s+(?:van\s+|at\s+|om\s+)?"
-               + _DIRECTTIJDEN, "", b, flags=re.I)
+    b = re.sub(r",?\s*(?<![\w-])" + _VERWIJZING, "", b, flags=re.I)
     b = re.sub(r"(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio|recording)\s+(?:van\s+|at\s+|om\s+)?)?" + _OPNAMETIJDEN, "", b, flags=re.I)
     b = re.sub(r"\(\s*\)", "", b)
     return re.sub(r"\s{2,}", " ", b).strip(" ,;:-/")
