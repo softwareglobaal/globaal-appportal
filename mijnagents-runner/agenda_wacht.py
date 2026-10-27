@@ -3537,6 +3537,7 @@ def _toekomst(start, nu):
 
 
 ZORG_GEZET = []      # de dagen waarop de zorgroute deze ronde een blok zette, verzette of verhuisde
+WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
 
 
 def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
@@ -6181,12 +6182,12 @@ def zorg_whatsapp_stap():
     lezing: een onleesbare agenda kan een botsing verbergen. Voor de volledige ronde en de zorgronde (--zorg), zodat
     geen route een blok zet zonder melding (Codex-hertest PR 113). Geeft (regels, noden)."""
     try:
+        # een blok dat de zorgroute verder dan het venster zette: die dag ook lezen, meteen melden. De dagen worden eerst
+        # bewaard, voor er gelezen wordt, en pas gewist als hun blokken gemeld staan (PR 113, Codex-hertest 2 tot 4)
+        verre = AW.verre_dagen(ZORG_GEZET)
         items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
         fout = bool(ARCHIEF_FOUT)
-        # een blok dat de zorgroute verder dan het venster zette: die dag ook lezen, meteen melden; de dagen blijven
-        # bewaard tot de melding klaarstaat (PR 113, Codex-hertest 2 en 3)
         vandaag = nu_lokaal().date()
-        verre = AW.verre_dagen(ZORG_GEZET)
         for dag in verre:
             try:
                 off = (datetime.fromisoformat(dag).date() - vandaag).days
@@ -6204,7 +6205,13 @@ def zorg_whatsapp_stap():
         markeer_zorgschaduwen(items)
         ZORG_SCHADUW_IDS.update(bewaard)
         regels = zorg_whatsapp(items, agenda._toegang())
-        AW.verre_dagen_klaar(verre)
+        klaar = []
+        for dag in verre:
+            blokken = [x for x in items if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(ZORGMERK)
+                       and (x.get("start") or "")[:10] == dag]
+            if dag < vandaag.isoformat() or (blokken and all(AW.laatste(x["id"]) == [x["start"], x["einde"]] for x in blokken)):
+                klaar.append(dag)
+        AW.verre_dagen_klaar(klaar)
         return regels, []
     except Exception as e:  # noqa: BLE001
         return [], [{"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})", "wie": "claude"}]
@@ -6452,10 +6459,12 @@ def terugkijkstand(argv):
 
 def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
+    global WACHTRIJ_KLAAR
     try:
         AW.sinds_zetten(RONDE_START)    # voor de zorgroute: zo telt een blok van deze ronde nooit als 'oud' (PR 113)
+        WACHTRIJ_KLAAR = True
     except Exception:  # noqa: BLE001
-        pass
+        WACHTRIJ_KLAAR = False          # dan zet de zorgroute deze ronde niets (Codex-hertest 4, PR 113)
     werkwijze = ag.werkwijze()
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -6578,6 +6587,9 @@ def main():
                     # een onvolledige agenda is geen bewijs dat iets ontbreekt: niets vergelijken, niets zetten (Codex A15)
                     raise _Onvolledig(f"{len(_stuk)} agenda('s) niet gelezen: mail niet met de agenda vergeleken")
                 # zorgafspraken eerst: een bevestigd consult wordt een echt blok, zodat de gewone melding geen vraag zet
+                if not WACHTRIJ_KLAAR:
+                    # zonder bewaard begin geen zorgblok: anders kon het later stil als 'oud' tellen (hertest 4, PR 113)
+                    raise _Onvolledig("WhatsApp-wachtrij niet schrijfbaar: zorgafspraken deze ronde niet gezet")
                 zst = zorg_afspraken_zetten(mres, rit_items, agenda._toegang(), bijwerken_items=True)
                 zorgstap_gedaan = True
                 mail_noden.extend(n for n in zst["noden"] if n["tekst"] not in {m["tekst"] for m in mail_noden})
@@ -6840,8 +6852,9 @@ def zorgronde():
     _slot = slot_nemen()  # noqa: F841
     try:
         AW.sinds_zetten(RONDE_START)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        print(f"  [zorg] WhatsApp-wachtrij niet schrijfbaar ({type(e).__name__}): niets gezet (Codex-hertest 4, PR 113)")
+        return 1
     _alle, _stuk = _agenda_voor_mail()
     mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat(), agenda_onvolledig=_stuk)
     if _stuk:

@@ -99,9 +99,12 @@ def versie_melden(eid, start, einde, tekst, vraag=None):
     een vorig uur geldt niet meer), de melding klaarzetten en de versie vastleggen. Ook terug naar een eerder uur is een
     nieuwe versie (Codex-hertest 3, PR 113). Geeft de code."""
     with _bewerk() as d:
-        for m in d["meldingen"].values():
-            if (m.get("vraag") or {}).get("id") == eid and not m.get("verwerkt"):
-                m["verwerkt"] = {"tijd": _nu().isoformat(), "uitkomst": "vervangen"}
+        for k, m in d["meldingen"].items():
+            uitkomst = (m.get("verwerkt") or {}).get("uitkomst")
+            if (m.get("vraag") or {}).get("id") == eid and (not uitkomst or uitkomst == "mislukt"):
+                m["verwerkt"] = {"tijd": _nu().isoformat(), "uitkomst": "vervangen"}   # ook een mislukte (hertest 4)
+            if k.startswith(f"zorg:{eid}:") and m.get("status") == "klaar":
+                m["status"] = "vervangen"       # een nog niet verstuurd bericht over het oude uur gaat niet meer weg
         n = sum(1 for k in d["meldingen"] if k.startswith(f"zorg:{eid}:")) + 1
         code = f"A{int(d.get('volgende') or 1)}"
         d["volgende"] = int(d.get("volgende") or 1) + 1
@@ -121,6 +124,7 @@ def verre_dagen(nieuw=()):
 
 
 def verre_dagen_klaar(dagen):
+    """Haal deze dagen weg: hun blokken staan gemeld (of de dag is voorbij)."""
     with _bewerk() as d:
         d["verre_dagen"] = [x for x in d.get("verre_dagen") or [] if x not in set(dagen)]
 

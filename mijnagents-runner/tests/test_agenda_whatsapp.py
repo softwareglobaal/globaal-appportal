@@ -435,6 +435,41 @@ _st = (HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def zorg_wha
 check("de meldstap markeert de zorgschaduwen op haar eigen lijst en houdt die van de ronde",
       "markeer_zorgschaduwen(items)" in _st and "ZORG_SCHADUW_IDS.update(bewaard)" in _st)
 
+# --- Codex-hertest 4 (PR 113) ---------------------------------------------------------------------------------
+_h4 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_z4 = _h4[_h4.index("zst = zorg_afspraken_zetten(mres, rit_items"):][:10]
+_voor = _h4[:_h4.index("zst = zorg_afspraken_zetten(mres, rit_items")][-400:]
+check("zonder bewaard begin van de ronde zet de zorgroute niets (hertest 4, punt 1)",
+      "if not WACHTRIJ_KLAAR:" in _voor and "raise _Onvolledig" in _voor
+      and "return 1" in _h4.split("def zorgronde():")[1][:700])
+_stap4 = _h4.split("def zorg_whatsapp_stap():")[1][:900]
+check("de verre dagen worden bewaard voor er gelezen wordt (punt 2)",
+      _stap4.index("AW.verre_dagen(ZORG_GEZET)") < _stap4.index("afspraken(0, ZORG_WHATSAPP_DAGEN)"))
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw14-")) / "agenda-whatsapp.json")
+_o14 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: []          # een lege lezing: het blok is (nog) niet te zien
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+W.agenda._toegang = lambda: "tok"
+W.ZORG_GEZET[:] = ["2028-03-07"]
+try:
+    W.zorg_whatsapp_stap()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o14[:3]
+    W.ZORG_GEZET[:] = _o14[3]
+check("na een lege lezing blijft de verre dag staan tot haar blok gemeld is (punt 2)", AW.verre_dagen() == ["2028-03-07"])
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw15-")) / "agenda-whatsapp.json")
+AW.versie_melden("blk", "s1", "e1", "oud uur {code}", {"id": "blk", "start": "s1", "einde": "e1"})
+_k1 = next(iter(AW._lees()["meldingen"]))
+with AW._bewerk() as _d:
+    _d["meldingen"][_k1]["antwoord"] = "vervalt"
+    _d["meldingen"][_k1]["verwerkt"] = {"uitkomst": "mislukt"}
+AW.versie_melden("blk", "s2", "e2", "nieuw uur {code}", None)
+_m15 = AW._lees()["meldingen"][_k1]
+check("een nog niet verstuurd bericht over het oude uur gaat niet meer weg (punt 3)", _m15["status"] == "vervangen")
+check("ook een mislukte oude vraag geldt niet meer na een verschuiving (punt 4)",
+      _m15["verwerkt"]["uitkomst"] == "vervangen" and not AW.open_antwoorden()
+      and "ontvangen" not in (AW.antwoord_herkennen(f"{_m15['code']} vervalt") or ""))
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",
