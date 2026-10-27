@@ -1436,6 +1436,47 @@ def test_een_oude_groep_in_verwerking_telt_als_niet_veilig():
     _, uit = ronde()
     assert not uit["veilig"] and not uit["dekking"], "een opname van drie maanden die Zoom nog verwerkt, is niet veilig"
 
+
+# --------------------------------------------------------- Codex-controle verwerking 6 (27-10-2026) ---
+def test_codex_verwerking_49_een_bestand_dekt_hoogstens_een_groep():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1", start="2026-10-27T12:01:50Z"), _plaatshouder("A2", start="2026-10-27T12:01:54Z")]
+    ronde()
+    m["bestanden"] = [_definitief(z, "B", start="2026-10-27T12:01:51Z")]
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    assert len(ZA.lees_staat()["verdwenen"]) == 1, "twee plaatshouders, een vervanger: een verlies"
+
+
+def test_codex_verwerking_50_een_plaatshouder_die_onder_haar_id_afrondt_vervangt_geen_andere():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2")]
+    ronde()
+    z.inhoud["A1"] = b"klaar"
+    m["bestanden"] = [{**_plaatshouder("A1"), "status": "completed", "grootte": 5, "soort": "MP4"}]
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    s = ZA.lees_staat()
+    assert "A1" in s["bestanden"] and "A2" in s["verdwenen"], s["verdwenen"]
+
+
+def test_codex_verwerking_51_een_late_vervanger_trekt_het_verlies_in():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A")]
+    ronde()
+    m["bestanden"] = []
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    assert "A" in ZA.lees_staat()["verdwenen"]
+    m["bestanden"] = [_definitief(z, "B")]
+    r, _ = ronde(nu=NU + timedelta(hours=28))
+    s = ZA.lees_staat()
+    assert "B" in s["bestanden"] and "A" not in s["verdwenen"], "het verlies is ingetrokken"
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

@@ -451,54 +451,77 @@ def _groep_sleutel(uuid, start, soort="", opnametype=""):
 def voorlopig_bijwerken(staat, meetings, per_id, moment):
     """Bestanden in verwerking (gemeten op de VM, 27-10-2026): Zoom toont een plaatshouder zonder soort, met grootte 0 en
     een voorlopig id, en vervangt ze na de verwerking door de definitieve bestanden (video, transcript, tijdlijn) met
-    hetzelfde begin en nieuwe ids. Na de controles verwerking 1 tot 5 van Codex houd ik ze bij per groep: dezelfde
-    meeting, hetzelfde begin, en de soort als Zoom die al geeft. Een groep onthoudt welke afgeronde bestanden de meeting al had toen ik haar voor het
-    eerst zag (die tellen nooit als vervanger), en elk nieuw afgerond bestand met hetzelfde begin (op vijf seconden na)
-    als kandidaat, ook als het later uit Zoom verdwijnt. Zijn alle plaatshouders weg, dan is de groep opgelost als er
-    minstens evenveel kandidaten zijn die bewezen in Dropbox staan of nog in Zoom; anders wacht ze een dag, en wat dan
-    nog ontbreekt (of als de meeting weg is) wordt een verlies tot Mehdi beslist. Een opgeloste groep blijft bewaard: komt
-    een plaatshouder terug, dan tellen haar kandidaten nog."""
+    hetzelfde begin en nieuwe ids. Na de controles verwerking 1 tot 6 van Codex houd ik ze bij per groep: dezelfde
+    meeting, hetzelfde begin, en de soort als Zoom die al geeft.
+    - Een groep onthoudt welke afgeronde bestanden de meeting al had toen ik haar voor het eerst zag; die tellen nooit.
+    - Elk nieuw afgerond bestand met hetzelfde begin (vijf seconden speling; bij een bekende soort of opnametype moet die
+      gelijk zijn) wordt kandidaat van hoogstens een groep, die met het dichtste begin (punt 49), ook als het later uit
+      Zoom verdwijnt. Een id dat ooit een plaatshouder was, is nooit kandidaat (punt 50); een plaatshouder die onder
+      hetzelfde id afgerond wordt, is gewoon een bestand.
+    - Zijn alle plaatshouders weg, dan is de groep opgelost als er minstens evenveel kandidaten bewezen in Dropbox of nog
+      in Zoom staan; anders wacht ze een dag, en wat dan ontbreekt (of als de meeting weg is) wordt een verlies tot Mehdi
+      beslist. Komt er later toch een kandidaat, dan trek ik dat verlies in (punt 51).
+    - Een opgeloste groep blijft bewaard: een plaatshouder die terugkomt heropent ze, haar kandidaten tellen nog."""
     groepen = staat["voorlopig"]
+    ooit = set(staat.get("plaatshouders_ooit") or [])
     for m in meetings:
         for f in m["bestanden"]:
             if f.get("id") and f.get("status") == "processing":
+                ooit.add(f["id"])
                 g = groepen.setdefault(_groep_sleutel(m["uuid"], f.get("start"), f.get("soort", ""),
                                                       f.get("opnametype", "")), {
                     "uuid": m["uuid"], "start": f.get("start", ""), "soort": f.get("soort", ""),
-                    "opnametype": f.get("opnametype", ""), "plaatshouders": [], "kandidaten": [],
+                    "opnametype": f.get("opnametype", ""), "plaatshouders": [], "kandidaten": [], "verloren": [],
                     "andere": sorted(x["id"] for x in m["bestanden"] if x.get("id") and x.get("status") == "completed"),
                     "sinds": moment, "opgelost": False})
                 if f["id"] not in g["plaatshouders"]:
                     g["plaatshouders"].append(f["id"])
-                    g["opgelost"] = False
-                elif g["opgelost"]:
-                    g["opgelost"] = False  # een plaatshouder die terugkomt: de groep weegt opnieuw
-    for sleutel, g in list(groepen.items()):
-        m = next((x for x in meetings if x["uuid"] == g["uuid"]), None)
+                g["opgelost"] = False  # nog of opnieuw in verwerking: de groep weegt opnieuw
+    staat["plaatshouders_ooit"] = sorted(ooit)
+    for g in groepen.values():
+        g.setdefault("verloren", [])
         for pid in list(g["plaatshouders"]):
-            f = per_id.get(pid, (None, {}))[1]
-            if f.get("status") == "completed":
+            if per_id.get(pid, (None, {}))[1].get("status") == "completed":
                 g["plaatshouders"].remove(pid)  # hetzelfde id is nu afgerond: een gewoon bestand
-        for f in (m["bestanden"] if m else []):
-            if (f.get("id") and f.get("status") == "completed" and f["id"] not in g["andere"]
-                    and f["id"] not in g["plaatshouders"] and f["id"] not in g["kandidaten"]
-                    and _zelfde_begin(f.get("start"), g["start"])
-                    # een plaatshouder zonder soort (zoals gemeten) aanvaardt elke soort; een bekende moet gelijk zijn
-                    and (not g.get("soort") or f.get("soort") == g["soort"])
-                    and (not g.get("opnametype") or f.get("opnametype") == g["opnametype"])):
-                g["kandidaten"].append(f["id"])
+    toegewezen = {k for g in groepen.values() for k in g["kandidaten"]}
+    for m in meetings:
+        for f in m["bestanden"]:
+            if not f.get("id") or f.get("status") != "completed" or f["id"] in toegewezen or f["id"] in ooit:
+                continue
+            beste = None
+            for sleutel, g in groepen.items():
+                if g["uuid"] != m["uuid"] or f["id"] in g["andere"]:
+                    continue
+                if (g.get("soort") and f.get("soort") != g["soort"]) or \
+                        (g.get("opnametype") and f.get("opnametype") != g["opnametype"]):
+                    continue
+                ta, tb = _utc(f.get("start")), _utc(g["start"])
+                if ta is None or tb is None or abs(ta - tb) > VERVANGER_SPELING:
+                    continue
+                if beste is None or (abs(ta - tb), sleutel) < beste:
+                    beste = (abs(ta - tb), sleutel)
+            if beste:
+                groepen[beste[1]]["kandidaten"].append(f["id"])
+                toegewezen.add(f["id"])
+    for sleutel, g in groepen.items():
+        m = next((x for x in meetings if x["uuid"] == g["uuid"]), None)
+        geldig = [k for k in g["kandidaten"] if k in staat["bestanden"] or k in per_id]
+        tekort = max(0, len(g["plaatshouders"]) - len(geldig))
+        while len(g["verloren"]) > tekort:  # punt 51: een verlies dat nu toch een vervanger heeft, trek ik in
+            staat["verdwenen"].pop(g["verloren"].pop(), None)
         if g["opgelost"]:
             continue
         if any(p in per_id for p in g["plaatshouders"]):
             g["sinds"] = moment  # nog in verwerking: de wachttijd begint pas als alles weg is
             continue
-        geldig = [k for k in g["kandidaten"] if k in staat["bestanden"] or k in per_id]
-        if len(geldig) >= len(g["plaatshouders"]):
+        if not tekort:
             g["opgelost"] = True
             continue
         if m is None or (_utc(moment) - (_utc(g.get("sinds")) or _utc(moment))) > VERVANGING_WACHT:
             for pid in g["plaatshouders"][len(geldig):]:
-                staat["verdwenen"][pid] = {"start": g["start"], "grootte": 0, "uuid": g["uuid"], "sinds": moment}
+                if pid not in g["verloren"]:
+                    staat["verdwenen"][pid] = {"start": g["start"], "grootte": 0, "uuid": g["uuid"], "sinds": moment}
+                    g["verloren"].append(pid)
             g["opgelost"] = True
 
 
