@@ -731,6 +731,25 @@ finally:
     for k, v in _o9.items():
         setattr(W, k, v)
 check("alleen een titelwijziging maakt geen tweede weekvraag (stabiele identiteit)", len(_ins12) == 1, str(len(_ins12)))
+# hertest 18: een ophaling verschuift binnen de week (zelfde id): de bestaande vraag wordt bijgewerkt, geen nieuwe
+_ins13, _pat13 = [], []
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen13-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins13.append(body) or {"id": "q1"}
+    W._patch = lambda a, body, tok, **k: _pat13.append(body)
+    W._prive_item_lezen = lambda eid, tok: None
+    _drie = [lara("2026-11-03", "17:30", "!! Mehdi: Lara ophalen bij oma")]
+    W.lara_meldingen([], W.lara_vakantieweken(_drie, namen, date(2026, 10, 27)), [], "tok", _nu9)
+    _b13 = _ins13[0]
+    _x13 = [{"kalender": W.PRIVE_AGENDA, "id": "q1", "titel": _b13["summary"], "start": _b13["start"]["date"],
+             "_merk": dict(_b13["extendedProperties"]["private"]), "hele_dag": True}]
+    _drie[0]["start"], _drie[0]["einde"] = "2026-11-05T17:30:00+01:00", "2026-11-05T18:00:00+01:00"   # zelfde id, ander uur
+    W.lara_meldingen([], W.lara_vakantieweken(_drie, namen, date(2026, 10, 27)), _x13, "tok", _nu9)
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("een ophaling die binnen de week verschuift, werkt de bestaande vraag bij (nieuw uur), zonder nieuwe vraag",
+      len(_ins13) == 1 and len(_pat13) == 1 and "05/11 17:30" in _pat13[0]["description"], str((len(_ins13), _pat13)))
 check("een eenmalig verjaardagsfeest in Lara's agenda is geen vast ophaalmoment",
       not W.lara_vakantieweken([lara("2026-11-04", "14:00", "Lara verjaardagsfeest bij Noor")], namen, date(2026, 10, 27)))
 _vakophaal = [json.dumps(["!! Mehdi: Lara ophalen voor vakantie", "confirmed", {"dateTime": "2026-10-30T16:00:00+01:00"}, {}, "",

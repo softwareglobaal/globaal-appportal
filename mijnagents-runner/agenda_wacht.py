@@ -2540,16 +2540,18 @@ def lara_vakantieweken(items, namen, vandaag, vooruit=21):
         if not (vandaag <= d <= grens):
             continue
         j, w, _ = d.isocalendar()
-        weken.setdefault(f"{j}-W{w:02d}", {"naam": namen[dag], "dagen": set(), "afspraken": [], "ids": []})
+        weken.setdefault(f"{j}-W{w:02d}", {"naam": namen[dag], "dagen": set(), "afspraken": [], "ids": [], "kenmerk": {}})
         weken[f"{j}-W{w:02d}"]["afspraken"].append((a["start"][:16], a.get("titel") or ""))
-        weken[f"{j}-W{w:02d}"]["ids"].append(a.get("id") or a["start"][:16])
+        _id = a.get("id") or a["start"][:16]
+        weken[f"{j}-W{w:02d}"]["ids"].append(_id)
+        weken[f"{j}-W{w:02d}"]["kenmerk"][_id] = f"{a['start'][:16]}|{a.get('titel') or ''}"
     uit = []
     for wk, v in sorted(weken.items()):
         j, w = int(wk[:4]), int(wk[-2:])
         maandag = date.fromisocalendar(j, w, 1)
         vrij = [maandag + timedelta(days=i) for i in range(7) if (maandag + timedelta(days=i)).isoformat() in namen]
         uit.append({"week": wk, "naam": v["naam"], "van": max(min(vrij), vandaag).isoformat(), "tot": max(vrij).isoformat(),
-                    "afspraken": sorted(v["afspraken"]), "ids": sorted(v["ids"])})
+                    "afspraken": sorted(v["afspraken"]), "ids": sorted(v["ids"]), "kenmerk": v["kenmerk"]})
     return uit
 
 
@@ -2988,6 +2990,7 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
     nu = nu or nu_lokaal()
     gewenst = dict([lara_afwijking_body(b, nu.date()) for b in afwijkingen] + [lara_week_body(w) for w in weken])
     weekinhoud = {f"week:{w['week']}": w.get("ids") or [s_ for s_, _ in w["afspraken"]] for w in weken}
+    weekkenmerk = {f"week:{w['week']}": w.get("kenmerk") or {} for w in weken}
     reg = _lara_vragen_lezen()
     er = {(x.get("_merk") or {}).get(LARAMERK): x for x in bestaande
           if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(LARAMERK)
@@ -3002,20 +3005,26 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
             # gevraagd was; een voorbije afspraak die uit de lijst valt, telt niet (hertest 14 tot 16)
             sleutels = sorted(set(weekinhoud.get(k) or []))      # id van de afspraak: een titelwijziging is niets nieuws
             nieuw_bij = bool(set(sleutels) - set((reg.get(k) or {}).get("afspraken") or []))
+            # een komende afspraak met dezelfde id die van uur of titel veranderde: de vraag bijwerken, niet opnieuw vragen
+            oud_km = (reg.get(k) or {}).get("kenmerk") or {}
+            km = weekkenmerk.get(k) or {}
+            veranderd = any(i in oud_km and oud_km[i] != v_ for i, v_ in km.items())
             heropen = k.startswith("week:") and k in reg and nieuw_bij
             if x is None and (k not in reg or heropen):
                 n = _insert(PRIVE_AGENDA, body, tok) or {}
                 reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud,
-                          "afspraken": sorted(set(sleutels) | set((reg.get(k) or {}).get("afspraken") or []))}
+                          "afspraken": sorted(set(sleutels) | set((reg.get(k) or {}).get("afspraken") or [])),
+                          "kenmerk": {**oud_km, **km}}
                 gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
             elif x is not None and ((x.get("titel") or "") != body["summary"]
-                                    or (k.startswith("week:") and nieuw_bij)
+                                    or (k.startswith("week:") and (nieuw_bij or veranderd))
                                     or (k.startswith("afwijking:") and (x.get("start") or "")[:10] != body["start"]["date"])):
                 _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description", "extendedProperties")}, tok)
                 if k in reg:
                     reg[k] = {**reg[k], "inhoud": inhoud,
-                              "afspraken": sorted(set(sleutels) | set(reg[k].get("afspraken") or []))}
+                              "afspraken": sorted(set(sleutels) | set(reg[k].get("afspraken") or [])),
+                              "kenmerk": {**(reg[k].get("kenmerk") or {}), **km}}
                     gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
         except Exception as e:  # noqa: BLE001
