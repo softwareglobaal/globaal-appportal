@@ -13,8 +13,8 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 ## Wat ik doe
 
 1. Elk uur, onder een eigen slot. Ik kopieer nooit terwijl de gesprekkenketen draait of in de tien minuten ervoor
-   (07:00, 13:00 en 23:30 UTC); draait de keten, dan lees en kijk ik alleen na, zodat De Zoomwacht in de keten een
-   verse dekking leest. Weet ik niet of de keten draait, dan doe ik niets. Een ronde begint na 45 minuten geen nieuw
+   (07:00, 13:00 en 23:30 UTC); draait de keten, dan doe ik niets en trek ik het groene sein in, zodat De Zoomwacht in
+   de keten nooit een oude ja leest. Weet ik niet of de keten draait, dan doe ik ook niets. Een ronde begint na 45 minuten geen nieuw
    bestand meer; tien minuten later, of vijf minuten voor de keten, breekt ze ook een lopend bestand af. Dat krijgt dan geen bewijs en komt de volgende ronde opnieuw.
 2. Ik schrijf alleen in het Dropbox-account dat bij de uitrol is vastgelegd, na een controle van naam en e-mail, en
    waar het Fathom-archief staat, het teken dat het Mehdi's eigen privé-Dropbox is. Wijst de koppeling naar een ander
@@ -41,10 +41,11 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
    dagen er staat. Dekking "ja" pas als alles wat Zoom nu heeft al bewezen was voor de ronde begon, niets nog in
    verwerking is, elk bewijs deze ronde in Dropbox klopte, niets onvolledig is en geen opname verdween voor ze
    bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde, en er geen blokkade openstaat. Een ronde die niet
-   alles kon nakijken, trekt een eerdere ja meteen in; een ja geldt voor De Zoomwacht hoogstens drie uur.
+   alles kon nakijken, trekt een eerdere ja meteen in; een ja geldt voor De Zoomwacht hoogstens drie uur. Voor ik ja
+   zeg, lees ik de lijst een tweede keer; wat er dan bij is en niet bewezen, maakt het nee.
    Daarnaast schrijf ik of de kopie veilig is voor de wisregel: alles ouder dan 30 dagen bewezen, geen verlies en
-   niets onvolledig. De Zoomwacht leest beide voor ZA-01, en vertrouwt een ja alleen als mijn laatste ronde op het
-   bord geslaagd is. Tot Codex de dekkingsregel goedkeurt, staat dat groene sein uit: dan zeg ik altijd nee, en komt
+   niets onvolledig. De Zoomwacht leest beide voor ZA-01, en vertrouwt een ja alleen als mijn laatste echte ronde (geen
+   droge of proefronde) op het bord geslaagd is. Tot Codex de dekkingsregel goedkeurt, staat dat groene sein uit: dan zeg ik altijd nee, en komt
    er geen advies om te wissen. Het kopiëren loopt intussen gewoon.
 9. Verdween een opname voor ze in Dropbox stond, of een meeting die Zoom zonder bruikbare bestanden gaf, dan zet ik
    per verlies een voorstel op het bord, met alleen de datum, het uur en de grootte, en alleen als ik het bord kan

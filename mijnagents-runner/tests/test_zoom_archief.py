@@ -310,9 +310,10 @@ def test_k4_tijdsbudget_keten_en_slot():
     assert ZA.tot_keten(datetime(2026, 10, 27, 23, 31, tzinfo=timezone.utc)) == 7 * 3600 + 29 * 60, "na 23:30 de keten van 07:00"
     z, d, _ = opzet(keten=True)
     z.meeting("k1", "2026-10-20T09:00:00Z", bestanden=[("M4A", "audio_only", b"k")])
+    aantal = len(d.calls)
     r, uit = ronde()
-    assert uit["gedaan"] == 0 and not z.downloads and not d.bestanden, "tijdens de keten niets kopiëren"
-    assert uit["gestopt"].startswith("de gesprekkenketen draait") and uit["rest"] == 1, uit
+    assert uit is None and r.noden_onbekend and not z.gevraagd and len(d.calls) == aantal, \
+        "Codex controle 7, punt 36: tijdens de keten geen enkele vraag aan Zoom of Dropbox"
     opzet(keten=None)
     r, uit = ronde()
     assert uit is None and r.noden_onbekend and "Kan niet nagaan of de gesprekkenketen draait" in teksten(r), \
@@ -897,19 +898,15 @@ def test_codex20_een_bestand_in_verwerking_dat_verdwijnt_en_een_volle_schijf_bli
     assert uit["gedaan"] == 1 and ZA.SCHIJF_VOL not in teksten(r)
 
 
-def test_codex21_33_tijdens_de_keten_telt_het_archief_opnieuw_en_een_ja_geldt_drie_uur():
+def test_codex21_33_36_tijdens_de_keten_wordt_het_sein_ingetrokken_en_een_ja_geldt_drie_uur():
     z, d, _ = opzet()
-    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
     _tot_ja(z)
-    ZA.keten_draait = lambda: True
-    _, uit = ronde(nu=NU + timedelta(hours=1))
     pad = os.path.join(ZA.DATA, "dekking.json")
-    assert uit["dekking"] and _dekking()["ts"] == (NU + timedelta(hours=1)).isoformat(timespec="seconds"), \
-        "De Zoomwacht in de keten leest een dekking van deze ronde, niet een oude"
-    assert ZA_ACC.archief_dekking(pad, nu=NU + timedelta(hours=4, minutes=1)) == "onbekend", "na drie uur: onbekend"
-    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
-    _, uit = ronde(nu=NU + timedelta(hours=2))
-    assert not uit["dekking"] and not z.downloads[1:], "tijdens de keten ziet ze het verlies en kopieert ze niets"
+    assert ZA_ACC.archief_dekking(pad, nu=NU + timedelta(hours=3, minutes=1)) == "onbekend", "na drie uur: onbekend"
+    ZA.keten_draait = lambda: True
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert uit is None and not _dekking()["dekking"], "De Zoomwacht leest in de keten nooit een oude ja"
 
 
 def test_codex22_een_onleesbaar_bord_bij_de_wisregelwaarschuwing_sluit_niets():
@@ -1075,7 +1072,7 @@ def test_codex27_een_ja_telt_alleen_na_een_geslaagde_archiefronde():
         for status, delta, verwacht in (("klaar", 5, "ja"), ("waakt", 5, "ja"), ("actief", 60, "onbekend"),
                                         ("fout", 60, "onbekend"), ("klaar", -60, "onbekend")):
             ZA_ACC.bord.db_lees = lambda sql, args=(), s=status, dt=delta: [
-                {"status": s, "ts": (ts + timedelta(seconds=dt)).isoformat()}]
+                {"status": s, "taak": "opnames naar Dropbox", "ts": (ts + timedelta(seconds=dt)).isoformat()}]
             assert ZA_ACC.archief_dekking(pad) == verwacht, (status, delta)
             assert ZA_ACC.archief_veilig(pad) == verwacht, (status, delta)
 
@@ -1137,6 +1134,44 @@ def test_codex35_een_tijdstip_met_een_andere_tijdzone_telt_juist():
     assert uit["oud_open"] == 1 and not uit["veilig"], "ouder dan 30 dagen, ook met +02:00"
     assert ZA._utc("2026-09-20T23:30:00+02:00") == datetime(2026, 9, 20, 21, 30, tzinfo=timezone.utc)
     assert ZA._utc("geen tijd") is None
+
+
+# ---------------------------------------------------------------------- Codex-controle 7 (27-10-2026) ---
+def test_codex37_een_opname_die_tijdens_de_ronde_opduikt_houdt_groen_tegen():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    echt = z.opnames
+    gezien = {"n": 0}
+
+    def opnames(van, tot, profiel="lees", prullenbak="", streng=False, bewaker=None):
+        uit = echt(van, tot, profiel, prullenbak, streng, bewaker)
+        if prullenbak == "recording_file":
+            gezien["n"] += 1
+            if gezien["n"] == 1:  # het einde van de eerste inventaris: nu duikt een oude opname op
+                z.meeting("laat", "2022-02-02T09:00:00Z", bestanden=[("M4A", "audio_only", b"l")])
+        return uit
+    Z.opnames = opnames
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert gezien["n"] == 2 and not uit["dekking"] and not uit["veilig"], (gezien, uit)
+    assert not _dekking()["dekking"] and not _dekking()["wisregel_veilig"]
+
+
+def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
+    pad = os.path.join(tempfile.mkdtemp(prefix="taak-", dir=MAP), "dekking.json")
+    ts = datetime.now(timezone.utc).replace(microsecond=0)
+    json.dump({"ts": ts.isoformat(), "dekking": True, "wisregel_veilig": True}, open(pad, "w"))
+    oud_lees, oud_geslaagd = ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd
+    ZA_ACC.archief_ronde_geslaagd = ECHT_RONDE_GESLAAGD
+    try:
+        for taak, verwacht in (("opnames naar Dropbox", "ja"), ("opnames naar Dropbox (droog)", "onbekend"),
+                               ("opnames naar Dropbox (proef)", "onbekend"), ("", "onbekend")):
+            ZA_ACC.bord.db_lees = lambda sql, args=(), tk=taak: [
+                {"status": "klaar", "taak": tk, "ts": (ts + timedelta(seconds=5)).isoformat()}]
+            assert ZA_ACC.archief_dekking(pad) == verwacht and ZA_ACC.archief_veilig(pad) == verwacht, taak
+    finally:
+        ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
+    assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
 
 if __name__ == "__main__":
     goed = fout = 0

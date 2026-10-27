@@ -656,13 +656,15 @@ def archief_ronde_geslaagd(ts):
     niet als de ronde erna begon en niet afliep (een volle schijf kan zelfs het intrekken beletten), of brak. Onbekend
     bord: nee."""
     try:
-        rij = bord.db_lees("SELECT status, ts FROM status WHERE naam='zoom-archief'")
+        rij = bord.db_lees("SELECT status, taak, ts FROM status WHERE naam='zoom-archief'")
         sinds = datetime.fromisoformat(str(ts))
         hart = datetime.fromisoformat(str(rij[0]["ts"]).replace("Z", "+00:00")) if rij else None
     except (bord.BordOnbekend, ValueError, KeyError, TypeError):
         return False
     if hart is None or rij[0].get("status") not in ("klaar", "waakt"):
         return False
+    if rij[0].get("taak") != "opnames naar Dropbox":
+        return False  # Codex controle 7, punt 38: alleen een echte ronde, geen droge of proefronde, bevestigt een ja
     hart = hart if hart.tzinfo else hart.replace(tzinfo=timezone.utc)
     return hart >= sinds
 

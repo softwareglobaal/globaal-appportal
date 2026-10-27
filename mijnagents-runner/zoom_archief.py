@@ -58,6 +58,7 @@ import dropbox_prive as D  # noqa: E402
 import zoom as Z  # noqa: E402
 
 NAAM = "zoom-archief"
+TAAK = "opnames naar Dropbox"     # de taak van een echte ronde op het bord; De Zoomwacht koppelt de dekking eraan
 ag = bord.Agent(NAAM)
 DATA = os.path.expanduser("~/appportal/mijnagents-data/zoom-archief")
 DOEL = "/Zoom"
@@ -494,9 +495,11 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
     if keten is None:
         return stop("Kan niet nagaan of de gesprekkenketen draait", "claude-code",
                     "niets gedaan: de stand van de gesprekkenketen is onbekend")
-    # Codex controle 6, punt 33: draait de keten, dan kopieer ik niets (de keten mag niet wachten), maar lees en kijk ik
-    # alles na, zodat de dekking die De Zoomwacht in de keten leest, van deze ronde is en nooit van een oude.
-    alleen_tellen = bool(keten)
+    if keten:
+        # Codex controle 6 en 7 (punten 33 en 36): tijdens de keten geen enkele vraag aan Zoom of Dropbox, en het sein
+        # ingetrokken, zodat De Zoomwacht in de keten nooit een oude ja leest.
+        return stop("", "", "de gesprekkenketen draait: niets gedaan")
+    alleen_tellen = False
     begin = klok()
     hard = min(begin + budget + NA_BUDGET, begin + tot_keten(nu_utc()) - KETEN_HARD)
 
@@ -719,6 +722,23 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     veilig = gaaf and not oud_open
     if not SEIN_AAN:
         dekking = veilig = False
+    if (dekking or veilig) and not droog:
+        # Codex controle 7, punt 37: een opname kan opduiken in een venster dat al gelezen was. Voor groen lees ik de lijst
+        # daarom opnieuw; wat er dan bij is en niet bewezen, of in verwerking, of onvolledig, maakt het nee.
+        try:
+            tweede = opnamelijst(EERSTE_DAG, vandaag + timedelta(days=1), bewaker=bewaker)
+        except Exception:  # noqa: BLE001  geen tweede lezing, geen groen
+            tweede = None
+        if tweede is None:
+            dekking = veilig = False
+        else:
+            nieuw_open = [f for m in tweede for f in m["bestanden"] if f.get("id") not in staat["bestanden"]]
+            if any(problemen(m) for m in tweede) or nieuw_open:
+                dekking = False
+                if any(problemen(m) for m in tweede) or any((_utc(f.get("start")) or grens) <= grens for f in nieuw_open):
+                    veilig = False
+        binnen = klok() <= hard
+        dekking, veilig = dekking and binnen, veilig and binnen
     if not droog:
         staat["dekking"] = dekking
         staat["inventaris"] = moment
@@ -766,7 +786,7 @@ def main(argv=None):
         for naam in os.listdir(werkmap):  # resten van een ronde die hard stopte
             if naam.endswith(".deel"):
                 os.remove(os.path.join(werkmap, naam))
-    taak = "opnames naar Dropbox" + (" (droog)" if a.droog else "") + (" (proef)" if a.proef else "")
+    taak = TAAK + (" (droog)" if a.droog else "") + (" (proef)" if a.proef else "")
     with ag.ronde(taak) as r:
         werk(r, droog=a.droog, budget=a.budget, proef=a.proef)
     return 0
