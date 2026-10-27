@@ -1349,6 +1349,29 @@ def test_codex_verwerking_46_een_bewezen_vervanger_die_eerst_uit_zoom_verdwijnt_
     s = ZA.lees_staat()
     assert "B" in s["bestanden"] and "A" not in s["verdwenen"] and "A" not in s["vervanging"], (s["verdwenen"], s["vervanging"])
 
+
+def test_gemeten_een_plaatshouder_zonder_soort_wordt_vervangen_door_de_bestanden_met_hetzelfde_begin():
+    """Gemeten op de VM, 27-10-2026: een bestand in verwerking heeft file_type, file_extension en recording_type leeg,
+    recording_end leeg, grootte 0. Het wordt vervangen door video, transcript en tijdlijn met hetzelfde begin."""
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T14:22:16Z", bestanden=[])
+    m["bestanden"] = [{"id": "plaatshouder", "soort": "", "status": "processing", "start": "2026-10-27T14:22:17Z",
+                       "einde": "", "grootte": 0, "opnametype": "", "extensie": "", "link": True}]
+    r, _ = ronde()
+    assert not r.noden
+    m["bestanden"] = []
+    for i, (soort, opnametype, data) in enumerate([("MP4", "shared_screen_with_speaker_view", b"video"),
+                                                    ("TIMELINE", "timeline", b"{}"), ("TRANSCRIPT", "audio_transcript", b"W")]):
+        z.inhoud[f"def{i}"] = data
+        m["bestanden"].append({"id": f"def{i}", "soort": soort, "status": "completed", "start": "2026-10-27T14:22:17Z",
+                               "einde": "", "grootte": len(data), "opnametype": opnametype, "extensie": soort,
+                               "link": True})
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    r, uit = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert not s["verdwenen"] and not s["vervanging"] and len(s["bestanden"]) == 3, (s["verdwenen"], s["vervanging"])
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r) and not VOORSTELLEN
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

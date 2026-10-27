@@ -451,7 +451,11 @@ def _vervanger(oud, m, fid, gebruikt):
     return next((f["id"] for f in (m["bestanden"] if m else [])
                  if f.get("id") and f["id"] != fid and f["id"] not in set(oud.get("andere") or [])
                  and f["id"] not in gebruikt and f.get("status") == "completed"
-                 and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
+                 # gemeten op de VM, 27-10-2026: een voorlopig bestand heeft geen soort en geen opnametype (een plaats-
+                 # houder voor de hele opname); dan telt elk nieuw afgerond bestand met hetzelfde begin. Een bekende
+                 # soort of een bekend opnametype moet wel gelijk zijn.
+                 and (not oud.get("soort") or f.get("soort") == oud.get("soort"))
+                 and (not oud.get("opnametype") or f.get("opnametype") == oud.get("opnametype"))
                  and _zelfde_begin(f.get("start"), oud.get("start"))), None)
 
 
