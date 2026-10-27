@@ -1,7 +1,7 @@
 {
  "naam": "Foutenregister van de Agendawacht",
- "versie": "3.45",
- "datum": "22-10-2026",
+ "versie": "3.46",
+ "datum": "27-10-2026",
  "doel": "Elke fout die Mehdi, de zelfcontrole of Claude vindt, komt hier in, met waarom ze niet eerder gezien werd, de oorzaak en de grendel die haar voortaan tegenhoudt. Zo leert het systeem, niet alleen de sessie die de fout toevallig oploste.",
  "hoe_het_leert": [
   "Eerst registreren, dan oplossen: een nieuwe fout krijgt hier een nummer met oorzaak en grendel, voor de oplossing gepusht wordt.",
@@ -4136,6 +4136,24 @@
    "soort_oorzaak": "code",
    "oplossing": "Laat bestaande herinneringen die Mehdi of Claude zette naast de vertrekmelding staan in _patch en reistijd_zetten, en schrijf nooit een pop-up van 0 minuten.",
    "grendel": {"soort": "test", "waar": "tests/test_planregels.py", "tekst": "test_patch_laat_bestaande_herinneringen_staan"},
+   "controle": [],
+   "status": "opgelost"
+  },
+  {
+   "id": "FR-210",
+   "datum": "27-10-2026",
+   "gevonden_door": "Mehdi (plakbrief Lara-vakanties), Claude 2 en driehoeksoverleg 27-10-2026",
+   "fout": "Een fout hele-dag-blok 'Herfstvakantie Lara' (26/10 tot 1/11, gezet op 26-05-2026; officieel is het 2 tot 8/11) telde als schoolvakantie. Een assistent buiten Claude Code wiste daarop op 22-10 tussen 01:11 en 02:08 alle vaste Lara-afspraken en ritten van die week.",
+   "gevolg": "Om 06:00 belde de agent zes keer 'afgezegd, niet vertrekken' voor ophaalmomenten die gewoon doorgingen; de Lara-ritten van die week vielen weg; op 23-10 boekte Calendly een klant op 27/10 19:00, tijdens de rit van de zwemles naar huis.",
+   "waarom_niet_gezien": "lara_vakantiedagen() las elk blok in de Lara-agenda met 'vakanti' als waarheid; de werkwijze zei 'geen ophaalafspraak tijdens een vakantie', wat als wissen gelezen werd; niets blokkeerde het wissen van reeksinstanties en het agendasignaal behandelde een gewiste Lara-afspraak als een afzegging.",
+   "oorzaak": "Twee bronnen voor schoolvakanties zonder controle, en wissen in plaats van markeren.",
+   "soort_oorzaak": "code",
+   "oplossing": "De officiële kalender in werkwijze/schoolvakanties.json is de enige bron; een afwijkend Lara-blok is een vraag in de privé-agenda; per vakantieweek een vraag, de afspraken blijven Bezet; 'vervalt (vakantie)' vooraan markeert in plaats van wissen; een gewiste vaste Lara-afspraak op een schooldag is een vraag en nooit een oproep 'niet vertrekken'; een ritblok ook niet. Wisgrendel voor Claude Code in PR 104.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_lara_vakanties.py",
+    "tekst": "het foute herfstblok is een afwijking met de vijf schooldagen 26 tot 30/10"
+   },
    "controle": [],
    "status": "opgelost"
   }

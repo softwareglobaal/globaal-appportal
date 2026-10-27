@@ -144,9 +144,15 @@ def main():
     projecten = W.projectadressen.index()
     reistijden = [x for x in items if W.lees_titel(x["titel"])["reistijd"]]
     gemeld, gebeld = [], []
+    vrij = W.lara_vakantiedagen()
+    lara = {k for k, n in W.KALENDERS.items() if n == "Lara"}
 
     for a in sorted(items, key=lambda x: x.get("start", "")):
         if a.get("fout") or a.get("hele_dag") or "T" not in (a.get("start") or ""):
+            continue
+        # een vervallen afspraak, of een Lara-ophaling op een officiële vakantiedag (of bij een onleesbare bron), krijgt
+        # geen rit en dus ook geen 'vertrek nu' (reviewronde 27-10-2026, FR-210)
+        if W.lara_zonder_rit(a, vrij) or (vrij is None and a.get("kalender") in lara):
             continue
         info = W.lees_titel(a["titel"])
         if not is_buiten(info):

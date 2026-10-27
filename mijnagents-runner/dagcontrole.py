@@ -52,7 +52,8 @@ def dagcontrole(items, dag):
     lara = {k for k, n in W.KALENDERS.items() if n == "Lara"}
     dagitems = [x for x in items if (x.get("start") or "")[:10] == dag and "T" in (x.get("start") or "")
                 and not x.get("hele_dag") and not (x.get("kalender") or "").startswith("en.be#")
-                and not (x.get("titel") or "").lower().startswith("canceled")]
+                and not (x.get("titel") or "").lower().startswith("canceled")
+                and not W.lara_vervalt(x)]          # een vervallen Lara-afspraak (L4, FR-210) telt nergens meer mee
     ritten = [x for x in dagitems if W.lees_titel(x["titel"])["reistijd"]]
     afspraken = [x for x in dagitems if x not in ritten]
 
