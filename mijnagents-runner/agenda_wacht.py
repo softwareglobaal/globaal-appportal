@@ -3008,13 +3008,18 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
             # een komende afspraak met dezelfde id die van uur of titel veranderde: de vraag bijwerken, niet opnieuw vragen
             oud_km = (reg.get(k) or {}).get("kenmerk") or {}
             km = weekkenmerk.get(k) or {}
-            veranderd = any(i in oud_km and oud_km[i] != v_ for i, v_ in km.items())
+            vandaag_s = nu.date().isoformat()
+            # ook bijwerken als een nog komend moment verdwijnt (vervalt of weg) of terugkomt; het gewone verstrijken van
+            # een afspraak telt niet (hertest 19)
+            veranderd = (any(i in oud_km and oud_km[i] != v_ for i, v_ in km.items())
+                         or any(i not in km and v_[:10] >= vandaag_s for i, v_ in oud_km.items())
+                         or any(i not in oud_km for i in km if i in set((reg.get(k) or {}).get("afspraken") or [])))
             heropen = k.startswith("week:") and k in reg and nieuw_bij
             if x is None and (k not in reg or heropen):
                 n = _insert(PRIVE_AGENDA, body, tok) or {}
                 reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud,
                           "afspraken": sorted(set(sleutels) | set((reg.get(k) or {}).get("afspraken") or [])),
-                          "kenmerk": {**oud_km, **km}}
+                          "kenmerk": dict(km)}
                 gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
             elif x is not None and ((x.get("titel") or "") != body["summary"]
@@ -3024,7 +3029,7 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
                 if k in reg:
                     reg[k] = {**reg[k], "inhoud": inhoud,
                               "afspraken": sorted(set(sleutels) | set(reg[k].get("afspraken") or [])),
-                              "kenmerk": {**(reg[k].get("kenmerk") or {}), **km}}
+                              "kenmerk": dict(km)}
                     gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
         except Exception as e:  # noqa: BLE001

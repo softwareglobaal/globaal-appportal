@@ -750,6 +750,30 @@ finally:
         setattr(W, k, v)
 check("een ophaling die binnen de week verschuift, werkt de bestaande vraag bij (nieuw uur), zonder nieuwe vraag",
       len(_ins13) == 1 and len(_pat13) == 1 and "05/11 17:30" in _pat13[0]["description"], str((len(_ins13), _pat13)))
+# hertest 19: één van twee ophaalmomenten vervalt: de vraag wordt bijgewerkt; daarna het gewone verstrijken: niets
+_ins14, _pat14 = [], []
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen14-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins14.append(body) or {"id": "r1"}
+    W._patch = lambda a, body, tok, **k: _pat14.append(body)
+    W._prive_item_lezen = lambda eid, tok: None
+    _paar = [lara("2026-11-03", "17:30", "!! Mehdi: Lara ophalen bij oma"), lara("2026-11-06")]
+    W.lara_meldingen([], W.lara_vakantieweken(_paar, namen, date(2026, 10, 27)), [], "tok", _nu9)
+    _b14 = _ins14[0]
+    _x14 = [{"kalender": W.PRIVE_AGENDA, "id": "r1", "titel": _b14["summary"], "start": _b14["start"]["date"],
+             "_merk": dict(_b14["extendedProperties"]["private"]), "hele_dag": True}]
+    _paar[0]["titel"] = "vervalt (vakantie) " + _paar[0]["titel"]
+    W.lara_meldingen([], W.lara_vakantieweken(_paar, namen, date(2026, 10, 27)), _x14, "tok", _nu9)
+    _np14 = len(_pat14)
+    # 4/11: de ophaling van 3/11 is voorbij (en vervallen), die van 6/11 blijft: geen bijwerking meer
+    W.lara_meldingen([], W.lara_vakantieweken(_paar, namen, date(2026, 11, 4)), _x14, "tok",
+                     datetime(2026, 11, 4, 9, 0, tzinfo=W.TIJDZONE))
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("een ophaalmoment dat vervalt, verdwijnt uit de weekvraag (bijgewerkt), zonder nieuwe vraag",
+      len(_ins14) == 1 and _np14 == 1 and "03/11" not in _pat14[0]["description"], str((len(_ins14), _np14)))
+check("het gewone verstrijken van een afspraak werkt de weekvraag niet bij", len(_pat14) == _np14, str(len(_pat14)))
 check("een eenmalig verjaardagsfeest in Lara's agenda is geen vast ophaalmoment",
       not W.lara_vakantieweken([lara("2026-11-04", "14:00", "Lara verjaardagsfeest bij Noor")], namen, date(2026, 10, 27)))
 _vakophaal = [json.dumps(["!! Mehdi: Lara ophalen voor vakantie", "confirmed", {"dateTime": "2026-10-30T16:00:00+01:00"}, {}, "",
