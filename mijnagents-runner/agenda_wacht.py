@@ -3578,6 +3578,8 @@ def _zorg_gezet(dag, eid):
     ZORG_GEZET.append((dag, eid))
     try:
         AW.gezet_onthouden(dag, eid)
+        if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
+            AW.verre_dagen([(dag, eid)])        # dag en id samen, meteen (Codex-hertest 11, PR 113)
     except Exception:  # noqa: BLE001
         pass                            # de meldstap probeert het ook nog, met ZORG_GEZET
 WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
@@ -3644,6 +3646,15 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                                                          f"volgens mail {a['start'][:16].replace('T', ' ')}: welk uur klopt?")
                 st["open"] += 1
                 st["prive"].append(f"{wat}: blok ({bestaand}) staat op een ander uur dan de mail; open punt, niet verzet")
+                try:
+                    # meteen zichtbaar voor Mehdi, op WhatsApp, een keer per afwijking: de gewone mailvraag komt pas
+                    # binnen veertien dagen (Codex-hertest 11, PR 113). Soort en praktijk, geen adres.
+                    AW.klaarzetten(f"afwijkend:{a.get('sleutel')}:{a['start']}:{x.get('start')}",
+                                   f"Agendawacht: een zorgafspraak uit mail klopt niet ({_kale_titel(x.get('titel') or a.get('titel'))}). "
+                                   f"In je agenda: {_wanneer(x)}. Volgens de mail: {_wanneer(a)}. Welk uur klopt? Pas het "
+                                   "zelf aan in je privé-agenda; ik verzet het niet.")
+                except Exception:  # noqa: BLE001
+                    st["prive"].append(f"{wat}: WhatsApp over de afwijking niet klaargezet")
                 continue
             body = _zorg_body(a, z, profiel)
             try:

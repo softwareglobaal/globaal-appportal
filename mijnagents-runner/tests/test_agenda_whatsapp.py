@@ -527,6 +527,9 @@ finally:
 check("een zorgblok voorbij dag 120 op een ander uur dan de mail: niet zelf verzet (misschien met de hand gecorrigeerd), "
       "maar een open punt (hertest 10)",
       not _pat17 and not _gezet17 and any("open punt, niet verzet" in r for r in _rz17["prive"]), str((_pat17[:1], _gezet17, _rz17["prive"])))
+_afw = [v for k, v in AW._lees()["meldingen"].items() if k.startswith("afwijkend:")]
+check("en dat open punt gaat meteen als WhatsApp naar Mehdi, een keer, zonder adres (hertest 11)",
+      len(_afw) == 1 and "Welk uur klopt?" in _afw[0]["tekst"] and "Bondgenoten" not in _afw[0]["tekst"], str(_afw))
 # een verre dag blijft tot elk nieuw blok gemeld is, ook als een ander blok van die dag al gemeld was
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw17-")) / "agenda-whatsapp.json")
 AW.basislijn([("oud18", "2028-03-07T08:00:00+01:00", "2028-03-07T08:30:00+01:00")])
@@ -589,6 +592,13 @@ check("'vervalt' gaat weg in elke herkende vorm (punt 3)",
       W._niet_meer_vervallen({"titel": "!! vervalt [PR] Kine - X"})["summary"] == "!! [PR] Kine - X"
       and W._niet_meer_vervallen({"titel": "VR vervalt !! [PR] Kine - X"})["summary"] == "VR !! [PR] Kine - X"
       and W._niet_meer_vervallen({"titel": "VR !! vervalt [PR] Kine - X"})["summary"] == "VR !! [PR] Kine - X")
+
+# --- Codex-hertest 11 (PR 113): de verre dag gaat samen met het id meteen in de wachtrij ---------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw21-")) / "agenda-whatsapp.json")
+W._zorg_gezet("2028-06-01", "ver21")
+W.ZORG_GEZET[:] = []
+check("een blok voorbij het venster wordt bij het zetten meteen met dag en id bewaard (hertest 11)",
+      AW.verre_dagen() == {"2028-06-01": ["ver21"]}, str(AW.verre_dagen()))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
