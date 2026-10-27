@@ -158,6 +158,11 @@ def dagcontrole(items, dag):
         m = W.markering_tegen(a["titel"], dag, markers, locatie=a.get("locatie") or "")
         if not m:
             continue
+        if "lara" in m.lower() and (a.get("kalender") in lara or W.bellen.is_lara_titel(a.get("titel"))):
+            # 'Geen buiten afspraken Lara ophalen' staat er voor de ophaling zelf: een Lara-afspraak van die dag botst
+            # er nooit mee. Tot 27-10-2026 belde De Bode elke week over de eigen ophaling en de zwemles ('Zeg wat ik
+            # doe'). Een andere markering, zoals 'geen auto', blijft wel gelden voor een Lara-rit.
+            continue
         alles = any(t == m and wat == "alles" for t, wat in markers)
         if alles and W._van_mehdi(a):
             meld("eigen_op_vrije_dag", a, f"{a['start'][11:16]} {a['titel'][:45]}: jouw eigen afspraak op een dag met '{m}'; "

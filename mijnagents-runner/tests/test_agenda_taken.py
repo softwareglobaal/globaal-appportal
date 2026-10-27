@@ -1294,6 +1294,27 @@ check("een hele-dag-markering is een stop: een buitenafspraak die dag kan niet z
       and _r83 == ["geweigerd", "gezet", "gezet", "gezet", "verzet geweigerd"] and _b83 == {("k", "tegen_dagmarker")}
       and "tegen_dagmarker" in _D83.VRAGEN, str((_mk83, _r83, _b83)))
 
+# De Lara-markering staat er voor de ophaling zelf: de Lara-afspraken van die dag botsen er niet mee (27-10-2026: elke
+# week belde De Bode over 'Lara ophalen bij oma' en 'Zwemles Lara'). 'Geen auto' blijft wel gelden voor een Lara-rit.
+_lara_kal = next(k for k, n in W.KALENDERS.items() if n == "Lara")
+_mk_lara = {"id": "m", "hele_dag": True, "titel": "!! Mehdi: Geen buiten afspraken Lara ophalen", "start": "2026-11-03",
+            "einde": "2026-11-04", "kalender": _lara_kal}
+_lara_items = [
+    {"id": "oma", "titel": "!! Mehdi: Lara ophalen bij oma", "start": "2026-11-03T17:30:00+01:00",
+     "einde": "2026-11-03T18:00:00+01:00", "kalender": _lara_kal},
+    {"id": "zwem", "titel": "!! Mehdi: Zwemles Lara", "start": "2026-11-03T18:00:00+01:00",
+     "einde": "2026-11-03T19:00:00+01:00", "kalender": _lara_kal},
+    {"id": "werf", "titel": "!! Mehdi: [HA-KB] 2145 - werfbezoek, Kerkstraat 1, 3000 Leuven", "start": "2026-11-03T10:00:00+01:00",
+     "einde": "2026-11-03T11:00:00+01:00", "kalender": W.WERKAGENDA, "omschrijving": "Tel. 016 00 00 00"}]
+_bl = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_lara] + _lara_items, "2026-11-03")
+       if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+check("de Lara-ophaling en de zwemles botsen niet met 'Geen buiten afspraken Lara ophalen'; een werfbezoek die dag wel",
+      _bl == {("werf", "tegen_dagmarker")}, str(_bl))
+_mk_auto = dict(_mk_lara, titel="Mehdi: geen auto - geen werfbezoeken/buiten", kalender=W.WERKAGENDA)
+_ba = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_auto] + _lara_items[:1], "2026-11-03")
+       if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+check("op een dag 'geen auto' blijft de Lara-ophaling wel een vraag", _ba == {("oma", "tegen_dagmarker")}, str(_ba))
+
 # Een afspraak op een afgesloten dag (audit A13, FR-92): van een klant of Calendly is het een vraag; een eigen afspraak
 # plande Mehdi zelf (zichtbaar, geen vraag); een ja van Mehdi staat op de afspraak en wordt niet opnieuw gevraagd.
 _b92 = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([
