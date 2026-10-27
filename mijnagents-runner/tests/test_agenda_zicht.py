@@ -85,9 +85,10 @@ class NepGoogle:
     """Nagemaakte Google: GET van een afspraak (vers, met etag), PATCH met If-Match, de lijst van de werkagenda op
     iCalUID (zichtbaar of niet), de privé-agenda op firmamerk, en firma-agenda's over twee pagina's."""
 
-    def __init__(self, items, zichtbaar=True, botsing=(), bestaande_vraag=False):
+    def __init__(self, items, zichtbaar=True, botsing=(), bestaande_vraag=False, vers=None, ander_uur=False):
         self.items = {e["id"]: e for e in items}
         self.patches, self.zichtbaar, self.botsing, self.bestaande_vraag = [], zichtbaar, set(botsing), bestaande_vraag
+        self.vers, self.ander_uur = vers or {}, ander_uur
 
     def __call__(self, req, timeout=None, *a, **k):
         url = getattr(req, "full_url", req)
@@ -102,12 +103,20 @@ class NepGoogle:
             self.patches.append((url, body, req.get_header("If-match")))
             return io.BytesIO(json.dumps({**self.items[eid], "attendees": body["attendees"]}).encode())
         if "iCalUID" in q:
-            return io.BytesIO(json.dumps({"items": [{"id": "x", "status": "confirmed"}] if self.zichtbaar else []}).encode())
+            e = next((x for x in self.items.values() if x.get("iCalUID") == q["iCalUID"]), {})
+            st = dict(e.get("start") or {})
+            if self.ander_uur:
+                st = {"dateTime": f"{_morgen}T15:00:00+01:00"}        # een andere keer van dezelfde reeks
+            return io.BytesIO(json.dumps({"items": [{"id": "x", "status": "confirmed", "start": st}] if self.zichtbaar else []}).encode())
         if "privateExtendedProperty" in q:
+            if self.bestaande_vraag == "pagina2":
+                if q.get("pageToken") == "2":
+                    return io.BytesIO(json.dumps({"items": [{"id": "v"}]}).encode())
+                return io.BytesIO(json.dumps({"items": [], "nextPageToken": "2"}).encode())
             return io.BytesIO(json.dumps({"items": [{"id": "v"}] if self.bestaande_vraag else []}).encode())
         if "/events/" in u.path:
             eid = urllib.parse.unquote(u.path.rsplit("/", 1)[1])
-            return io.BytesIO(json.dumps(self.items[eid]).encode())
+            return io.BytesIO(json.dumps({**self.items[eid], **self.vers.get(eid, {})}).encode())
         if u.path.endswith("/events"):
             kal = urllib.parse.unquote(u.path.split("/calendars/")[1].split("/events")[0])
             alle = [e for e in self.items.values() if e.get("kalender") == kal and not e.get("_moeder")]
@@ -155,6 +164,20 @@ g3 = NepGoogle([ev("c9", "Mehdi: [EL-IN] overleg")], botsing={"c9"})
 r3, _ = met(g3, W.firma_gasten, list(g3.items.values()), "tok")
 check("veranderde een collega de afspraak intussen (412), dan wordt niets overschreven en volgt de volgende ronde",
       not g3.patches and any("intussen veranderd" in r for r in r3), str(r3))
+
+g7 = NepGoogle([ev("d1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA}])], ander_uur=True)
+_, niet7 = met(g7, W.firma_gasten, list(g7.items.values()), "tok")
+check("staat alleen een andere keer van dezelfde reeks op de werkagenda, dan telt deze keer als niet zichtbaar",
+      len(niet7) == 1, str(niet7))
+g8 = NepGoogle([ev("e1", "Mehdi: [EL-IN] overleg")], vers={"e1": {"summary": "Siyan: [EL-IN] overleg"}})
+r8, _ = met(g8, W.firma_gasten, list(g8.items.values()), "tok")
+check("veranderde de collega de titel intussen naar zichzelf, dan wordt Mehdi niet toegevoegd",
+      not g8.patches and any("niet meer voor Mehdi" in r for r in r8), str((g8.patches, r8)))
+g8b = NepGoogle([ev("e2", "Mehdi: [EL-IN] overleg")], vers={"e2": {"status": "cancelled"}})
+met(g8b, W.firma_gasten, list(g8b.items.values()), "tok")
+check("een intussen geschrapte afspraak krijgt geen gast", not g8b.patches)
+check("een bestaande vraag wordt ook op een volgende zoekpagina gevonden",
+      met(NepGoogle([], bestaande_vraag="pagina2"), W._prive_vraag_bestaat, "elevait|x", "tok") is True)
 
 _moeder = {"id": "reeks1", "summary": "Mehdi: [EL-IN] wekelijkse meeting", "etag": '"e-reeks1"', "attendees": [],
            "kalender": ELEVAIT, "_moeder": True}

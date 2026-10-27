@@ -3184,6 +3184,19 @@ def firma_afspraken(tok, nu=None, dagen=FIRMA_VOORUIT_DAGEN):
 GASTVELDEN = ("email", "displayName", "optional", "responseStatus", "comment", "additionalGuests", "resource")
 
 
+def _lijst_alles(kal, q, tok):
+    """Alle items van een events-lijst, over alle pagina's: Google kan een lege pagina met een volgende token geven."""
+    import urllib.parse  # noqa: PLC0415
+    uit, pagina = [], None
+    while True:
+        qq = dict(q, **({"pageToken": pagina} if pagina else {}))
+        d = _google(f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(qq), tok)
+        uit += d.get("items", [])
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return uit
+
+
 def _gast_erbij(kal, eid, tok):
     """Zet alleen Mehdi erbij als gast, zonder mail (sendUpdates=none). Ik lees de afspraak vlak ervoor opnieuw, behoud
     alle schrijfbare velden van de bestaande gasten (Google vervangt de hele lijst) en schrijf met If-Match op de etag,
@@ -3195,6 +3208,8 @@ def _gast_erbij(kal, eid, tok):
     vers = _google(url, tok)
     if _gast_mehdi(vers):
         return vers
+    if vers.get("status") == "cancelled" or not MEHDI_VOORAAN.match(vers.get("summary") or ""):
+        return None                     # intussen geschrapt of niet meer voor Mehdi: niets doen (Codex-hertest, punt 8)
     gasten = [{k: v for k, v in g.items() if k in GASTVELDEN} for g in vers.get("attendees") or []]
     body = {"attendees": gasten + [{"email": WERKAGENDA, "responseStatus": "needsAction"}]}
     try:
@@ -3209,13 +3224,20 @@ def _op_werkagenda(ev, tok):
     """Staat de afspraak zichtbaar op Mehdi's werkagenda? Ik zoek ze in de gewone lijst van zijn werkagenda op haar
     iCalUID: een verborgen uitnodiging staat daar niet in (showHiddenInvitations staat standaard uit), een geslaagde
     get op het id bewijst dat niet (Codex, punt 3)."""
-    import urllib.parse  # noqa: PLC0415
     uid = ev.get("iCalUID")
-    if not uid:
+    start = (ev.get("start") or {}).get("dateTime") or (ev.get("start") or {}).get("date") or ""
+    if not uid or not start:
         return False
-    q = {"iCalUID": uid, "showDeleted": "false", "maxResults": "50"}
-    d = _google(f"{agenda.API}/calendars/{urllib.parse.quote(WERKAGENDA, safe='')}/events?" + urllib.parse.urlencode(q), tok)
-    return any(x.get("status") != "cancelled" for x in d.get("items", []))
+    # alle keren van een reeks delen de iCalUID: ik zoek deze ene keer, op haar eigen begin (Codex-hertest, punt 7)
+    van = datetime.fromisoformat(start if "T" in start else start + "T00:00:00+00:00")
+    q = {"iCalUID": uid, "singleEvents": "true", "showDeleted": "false", "maxResults": "250",
+         "timeMin": (van - timedelta(minutes=1)).isoformat(), "timeMax": (van + timedelta(minutes=1)).isoformat()}
+    for x in _lijst_alles(WERKAGENDA, q, tok):
+        xs = (x.get("start") or {}).get("dateTime") or (x.get("start") or {}).get("date") or ""
+        if x.get("status") != "cancelled" and xs and datetime.fromisoformat(
+                xs if "T" in xs else xs + "T00:00:00+00:00") == van:
+            return True
+    return False
 
 
 def firma_gasten(evs, tok):
@@ -3238,7 +3260,7 @@ def firma_gasten(evs, tok):
                         reeksen[r] = bool(MEHDI_VOORAAN.match(moeder.get("summary") or ""))
                         if reeksen[r]:
                             if _gast_erbij(ev["kalender"], r, tok) is None:
-                                regels.append(f"reeks op {ev['_agendanaam']} intussen veranderd, volgende ronde opnieuw")
+                                regels.append(f"reeks op {ev['_agendanaam']} intussen veranderd of niet meer voor Mehdi")
                                 continue
                             regels.append(f"gast gezet op de reeks op {ev['_agendanaam']}")
                     if reeksen[r]:
@@ -3246,7 +3268,7 @@ def firma_gasten(evs, tok):
                 if doel:
                     terug = _gast_erbij(ev["kalender"], doel, tok)
                     if terug is None:
-                        regels.append(f"afspraak op {ev['_agendanaam']} intussen veranderd, volgende ronde opnieuw")
+                        regels.append(f"afspraak op {ev['_agendanaam']} intussen veranderd of niet meer voor Mehdi")
                         continue
                     if not _gast_mehdi(terug):
                         raise RuntimeError("gast niet teruggelezen")
@@ -3261,10 +3283,8 @@ def firma_gasten(evs, tok):
 
 def _prive_vraag_bestaat(k, tok):
     """Staat er al een vraag met dit firmamerk in de privé-agenda? Zo zet een ronde na een time-out geen tweede (punt 5)."""
-    import urllib.parse  # noqa: PLC0415
-    q = {"privateExtendedProperty": f"{FIRMAMERK}={k}", "showDeleted": "false", "maxResults": "5"}
-    d = _google(f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events?" + urllib.parse.urlencode(q), tok)
-    return bool(d.get("items"))
+    q = {"privateExtendedProperty": f"{FIRMAMERK}={k}", "showDeleted": "false", "maxResults": "50"}
+    return bool(_lijst_alles(PRIVE_AGENDA, q, tok))        # alle pagina's (Codex-hertest, punt 9)
 
 
 def _firma_vragen_lezen():
