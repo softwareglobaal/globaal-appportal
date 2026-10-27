@@ -3441,7 +3441,10 @@ def _firma_kopieen_kiezen(evs, onleesbaar=()):
     for e in evs or []:
         groepen.setdefault(_firma_sleutel(e), []).append(e)
     gekozen, onzeker, twijfel = [], set(), {}
+    eigen = {a.lower() for a in KALENDERS} | _eigen_accounts()
     for k, kopieen in groepen.items():
+        if {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & eigen:
+            continue                    # Mehdi's eigen afspraak met een firma-agenda als gast: staat al bij hem (review 2)
         org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()]
         if any(e.get("_tijd_onzeker") for e in kopieen):
             twijfel[k] = kopieen        # tijdzone onbekend: nooit een blok op een gok (Codex-hertest 17)
@@ -3584,7 +3587,7 @@ def _firma_vraag_body(k, e, start, sterk):
                 "opgelost is." if sterk else "lijkt jou aan te gaan, maar ze staat niet op je werkagenda. Moet jij erbij zijn? "
                 "Zeg het, dan komt ze erop; anders laat je deze vraag weg."))
     if sterk and "T" in start and "T" in eind:
-        tijd = {"start": {"dateTime": start}, "end": {"dateTime": eind}}
+        tijd = {"start": {"dateTime": start}, "end": {"dateTime": eind}, "location": e.get("location") or ""}
     elif sterk:
         tijd = {"start": {"date": dag}, "end": {"date": eind[:10] if eind[:10] > dag else volgende}}
     else:
@@ -3614,17 +3617,22 @@ def _tijd_patch(t):
 
 
 def _firma_blok_open(x, k):
-    """Is dit privé-item mijn open vraag voor deze firma-afspraak?"""
+    """Is dit privé-item mijn open vraag voor deze firma-afspraak? Herkend aan merk en maker, niet aan de titel: Mehdi
+    mag het blok hernoemen, het blijft het blok van die afspraak (review 2)."""
     mk = (x or {}).get("_merk") or {}
     return (x is not None and mk.get(FIRMAMERK) == k and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
-            and (x.get("titel") or "").startswith("VR Agendawacht:"))
+            and (x.get("maker") or WERKAGENDA).strip().lower() in _eigen_accounts())
 
 
 def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
-    """Zet mijn eigen blok op de huidige tijd en soort van zijn afspraak (zelfde item, zelfde merk)."""
+    """Zet mijn eigen blok op de huidige tijd, soort en plaats van zijn afspraak (zelfde item, zelfde merk). Hernoemde
+    Mehdi het, dan blijven zijn titel en tekst staan en verandert alleen de tijd, de status en de plaats."""
     body = _firma_vraag_body(k, e, start, sterk)
-    _patch(x, {"summary": body["summary"], "description": body["description"], "transparency": body["transparency"],
-               "start": _tijd_patch(body["start"]), "end": _tijd_patch(body["end"])}, tok)
+    nieuw = {"transparency": body["transparency"], "start": _tijd_patch(body["start"]), "end": _tijd_patch(body["end"]),
+             "location": body.get("location", "")}
+    if (x.get("titel") or "").startswith("VR Agendawacht:"):
+        nieuw.update(summary=body["summary"], description=body["description"])
+    _patch(x, nieuw, tok)
 
 
 def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
@@ -3645,7 +3653,19 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
     gekozen, onz2, twijfel = _firma_kopieen_kiezen(evs, onleesbaar)
     onzeker = (set(onzeker) | onz2) - set(twijfel)
     for k, kopieen in twijfel.items():
-        # geen kopie van de organisator: een zichtbare vraag, nooit een blok op een uur dat niet zeker is (hertest 13)
+        # geen kopie van de organisator: een zichtbare vraag, nooit een blok op een uur dat niet zeker is (hertest 13).
+        # Afgewezen: niets. Is Mehdi gast en staat zijn eigen uitnodiging (met het uur van de organisator) zichtbaar op
+        # zijn werkagenda, dan is er niets te vragen (review 2); een leesfout: onzeker
+        if any(_gast_status(e) == "declined" for e in kopieen):
+            continue
+        gast = [e for e in kopieen if _gast_status(e) is not None]
+        if gast:
+            try:
+                if _op_werkagenda(gast[0], tok):
+                    continue
+            except Exception:  # noqa: BLE001
+                onzeker.add(k)
+                continue
         voor = any(MEHDI_VOORAAN.match(e.get("summary") or "") or _gast_status(e) not in (None, "declined") for e in kopieen)
         noemt = any(re.search(r"\bMehdi\b", f"{e.get('summary') or ''} {e.get('description') or ''}") for e in kopieen)
         if voor or noemt:
@@ -3696,7 +3716,15 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                           "vinger": vinger}
                 regels.append(f"{start[:10]} vraag over een firma-afspraak mee verschoven met de afspraak")
             else:
-                if open_:
+                if open_ and not (x.get("titel") or "").startswith("VR Agendawacht:"):
+                    # hernoemd door Mehdi: zijn titel blijft, het blok wordt opgelost, Beschikbaar en een hele dag
+                    d0 = (x.get("start") or "")[:10]
+                    d1 = (datetime.fromisoformat(d0) + timedelta(days=1)).date().isoformat() if d0 else d0
+                    _patch(x, {"extendedProperties": {"private": {**mk, MAILMERK: f"opgelost:{mk.get(MAILMERK)}"}},
+                               "transparency": "transparent",
+                               **({"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})} if d0 else {})}, tok)
+                    regels.append(f"{r.get('dag')} hernoemd blok voor een firma-afspraak opgelost en Beschikbaar gezet")
+                elif open_:
                     _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
                                             "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True)
                     if not x.get("hele_dag") and "T" in (x.get("start") or ""):

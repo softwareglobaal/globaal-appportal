@@ -777,6 +777,56 @@ check("is ook die onbekend, dan is de tijd onzeker", _nb3.get("_tijd_onzeker") i
 _gk5, _, _tw5 = W._firma_kopieen_kiezen([dict(ev("tz1", "Mehdi: [EL-IN] overleg"), _tijd_onzeker=True)])
 check("en dan geen blok maar de vraag 'uur niet zeker'", not _gk5 and len(_tw5) == 1)
 
+# --- tweede review met meerdere agents --------------------------------------------------------------------------
+_eig = dict(ev("eig1", "Mehdi: [EL-IN] weekoverleg"), organizer={"email": W.WERKAGENDA},
+            attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+_gk6, _onz6, _tw6 = W._firma_kopieen_kiezen([_eig])
+check("een afspraak die Mehdi zelf organiseert met een firma-agenda als gast: geen gast, geen blok, geen vraag",
+      not _gk6 and not _onz6 and not _tw6)
+_ins40 = []
+_o40 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma40-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins40.append(body) or {"id": "q40"}
+try:
+    _col = dict(ev("col1", "SAIS26 | Panel"), organizer={"email": "siyan@voorbeeld.test"},
+                attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+    met(NepGoogle([_col], zichtbaar=True), W.firma_vangnet, [_col], [], "tok")
+    _n40a = len(_ins40)
+    met(NepGoogle([_col], zichtbaar=False), W.firma_vangnet, [_col], [], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o40
+check("een collega-afspraak waar Mehdi gast is en die zichtbaar op zijn werkagenda staat: geen vraag 'uur niet zeker'",
+      _n40a == 0, str(_n40a))
+check("staat ze niet zichtbaar, dan wel de vraag", len(_ins40) == 1 and "uur niet zeker" in _ins40[0]["summary"])
+
+_pat41 = []
+_o41 = (W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._eigen_melding_opgelost)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma41-")) / "agenda-firma-vragen.json")
+_e41 = dict(ev("r41", "Mehdi: [EL-IN] overleg minister"), location="Bondgenotenlaan 1, 3000 Leuven")
+_k41 = W._firma_sleutel(_e41)
+Path(W.FIRMA_VRAGEN).write_text(json.dumps({_k41: {"gevraagd": _morgen, "dag": _morgen, "start": f"{_morgen}T08:00:00+01:00",
+                                                   "einde": f"{_morgen}T09:00:00+01:00", "sterk": True, "id": "b41",
+                                                   "kalender": ELEVAIT, "vinger": ""}}), encoding="utf-8")
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "Elevait: overleg minister", "maker": W.WERKAGENDA,
+                                        "start": f"{_morgen}T08:00:00+01:00", "hele_dag": False,
+                                        "_merk": {W.FIRMAMERK: _k41, W.MAILMERK: "abcdef0123456789"}}
+W._patch = lambda x, body, tok, **kw: _pat41.append(body)
+W._eigen_melding_opgelost = lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen titelwijziging"))
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_e41], [_e41], "tok")      # de afspraak schoof van 08:00 naar 10:00
+    met(NepGoogle([]), W.firma_vangnet, [], [], "tok")              # en verdwijnt
+finally:
+    W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch, W._eigen_melding_opgelost = _o41
+check("een blok dat Mehdi hernoemde, schuift mee zonder dat zijn titel verandert, met de plaats van de afspraak",
+      _pat41 and "summary" not in _pat41[0] and _pat41[0]["start"]["dateTime"].endswith("10:00:00+01:00")
+      and _pat41[0]["location"] == "Bondgenotenlaan 1, 3000 Leuven", str(_pat41[:1]))
+check("en verdwijnt de afspraak, dan wordt het opgelost en Beschikbaar, zijn titel blijft",
+      len(_pat41) == 2 and "summary" not in _pat41[1] and _pat41[1]["transparency"] == "transparent"
+      and _pat41[1]["extendedProperties"]["private"][W.MAILMERK].startswith("opgelost:"), str(_pat41[1:]))
+_bd = W._firma_vraag_body(_k41, _e41, _e41["start"]["dateTime"], True)
+check("een Bezet blok draagt de plaats van de afspraak (rit en vertrekoproep in plaats van 'online')",
+      _bd.get("location") == "Bondgenotenlaan 1, 3000 Leuven")
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
