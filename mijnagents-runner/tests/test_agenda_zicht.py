@@ -330,6 +330,48 @@ _, niet14 = met(g14, W.firma_gasten, _gast, "tok")
 check("Mehdi als gast zonder zijn naam vooraan, niet zichtbaar (verborgen uitnodiging): naar het vangnet (punt 14)",
       [e["id"] for e in niet14] == ["k1"] and not g14.patches, str([e["id"] for e in niet14]))
 
+# --- Codex-hertest 4: de teruggelezen tijd beslist; een meerdaagse afspraak blijft gevolgd tot ze voorbij is -------
+class _Nep15(NepGoogle):
+    """Een collega verzet de reeks van 10:00 naar 14:00 terwijl de agent de gast zet: de PATCH geeft het nieuwe uur."""
+
+    def __call__(self, req, timeout=None, *a, **k):
+        if (req.get_method() if hasattr(req, "get_method") else "GET") == "PATCH":
+            r = json.loads(super().__call__(req, timeout, *a, **k).read())
+            r["start"], r["end"] = {"dateTime": f"{_morgen}T14:00:00+01:00"}, {"dateTime": f"{_morgen}T15:00:00+01:00"}
+            return io.BytesIO(json.dumps(r).encode())
+        url = getattr(req, "full_url", req)
+        if "iCalUID" in url:
+            self.gezocht = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["timeMin"][0]
+            return io.BytesIO(json.dumps({"items": []}).encode())
+        return super().__call__(req, timeout, *a, **k)
+
+
+_e15 = ev("m1_20261102", "Mehdi: [EL-IN] meeting", reeks="m1")
+g15 = _Nep15([_e15])
+_, niet15 = met(g15, W.firma_gasten, [_e15], "tok")
+check("verzet een collega het uur terwijl de gast gezet wordt, dan gelden voor controle en vangnet het nieuwe uur",
+      len(niet15) == 1 and niet15[0]["start"]["dateTime"].endswith("14:00:00+01:00")
+      and "13:59" in getattr(g15, "gezocht", ""), str((niet15, getattr(g15, "gezocht", ""))))
+
+_gist = (_nu - timedelta(days=1)).date().isoformat()
+_overmorgen = (_nu + timedelta(days=2)).date().isoformat()
+_opg16, _ins16 = [], []
+_o16 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma16-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins16.append(body) or {"id": "r1"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
+    W.FIRMAMERK: f"{ELEVAIT}|n1", W.MAILMERK: "abcdef0123456789"}}
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg16.append((x["id"], vrij)) or True
+try:
+    _n1 = dict(ev("n1", "Mehdi: [EL-IN] beurs"), start={"date": _gist}, end={"date": _overmorgen})
+    met(NepGoogle([_n1]), W.firma_vangnet, [_n1], [_n1], "tok")          # begon gisteren, loopt nog
+    met(NepGoogle([]), W.firma_vangnet, [], [], "tok")                   # en verdwijnt vandaag
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost = _o16
+check("een meerdaagse afspraak die gisteren begon en nog loopt, krijgt haar Bezet blok", len(_ins16) == 1, str(len(_ins16)))
+check("verdwijnt ze voor haar einde, dan Opgelost en Beschikbaar, ook al is de begindag voorbij (punt 2)",
+      _opg16 == [("r1", True)], str(_opg16))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

@@ -3313,6 +3313,9 @@ def firma_gasten(evs, tok):
                     raise RuntimeError("gast niet teruggelezen")
                 if _gast_status(terug) == "declined":
                     continue            # intussen door Mehdi zelf afgewezen: niets te tonen
+                # de teruggelezen afspraak beslist: een collega kan intussen het uur verzet hebben (Codex-hertest 4, punt 1)
+                ev = {**ev, **{k: terug[k] for k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID")
+                               if k in terug}}
                 regels.append(f"{_tijd(ev, 'start')[:16]} gast gezet op {ev['_agendanaam']}")
             if not _op_werkagenda(ev, tok):
                 niet_zichtbaar.append(ev)
@@ -3370,6 +3373,18 @@ def _firma_vraag_body(k, e, start, sterk):
             "reminders": {"useDefault": False, "overrides": []}, "description": tekst, "extendedProperties": merk}
 
 
+def _voorbij(t, nu):
+    """Is dit einde voorbij? Een datum (hele dag) telt exclusief, zoals bij Google."""
+    if not t:
+        return False
+    if "T" not in t:
+        return t[:10] <= nu.date().isoformat()
+    try:
+        return datetime.fromisoformat(t) <= nu
+    except (TypeError, ValueError):
+        return False
+
+
 def _tijd_patch(t):
     """Een begin of einde voor een PATCH: Google voegt velden samen, dus het andere soort tijd wordt expliciet leeg."""
     return {"date": t["date"], "dateTime": None} if "date" in t else {"dateTime": t["dateTime"], "date": None}
@@ -3393,15 +3408,16 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=()):
     gewenst = {}
     for k, (e, sterk) in kand.items():
         start = _tijd(e, "start")
-        if not start or start[:10] < vandaag or (not sterk and start > zwak_grens):
+        # een afspraak die al begon maar nog loopt (meerdaags), telt nog mee (Codex-hertest 4, punt 2)
+        if not start or _voorbij(_tijd(e, "end"), nu) or (not sterk and start > zwak_grens):
             continue
         gewenst[k] = (e, sterk, start, _tijd(e, "end"))
     regels, gewijzigd = [], False
     for k, r in list(reg.items()):
         if any(k.startswith(f"{a}|") for a in onleesbaar):
             continue                    # een halve lezing rondt niets af en verschuift niets (Codex-hertest 3, punt 17)
-        if r.get("dag", "") < vandaag:
-            reg.pop(k)                  # voorbij: alleen uit het register, het blok blijft zoals het was
+        if _voorbij(r.get("einde"), nu) or (not r.get("einde") and r.get("dag", "") < vandaag):
+            reg.pop(k)                  # de afspraak is helemaal voorbij: alleen uit het register (Codex-hertest 4, punt 2)
             gewijzigd = True
             continue
         g = gewenst.get(k)
