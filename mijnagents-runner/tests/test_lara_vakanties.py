@@ -172,6 +172,11 @@ try:
     _n = len(_ins)
     W.lara_meldingen([_ids["fout"]], _wk, _er + [_gewist], "tok", _nu)
     check("tweede ronde: geen dubbele vraag", len(_ins) == _n and not _pat, str(_ins[_n:]))
+    _wk_meer = [dict(_wk[0], afspraken=_wk[0]["afspraken"] + [("2026-11-05T17:45", "!! Mehdi: [LA] Lara ophalen bij oma (optioneel)")])]
+    W.lara_meldingen([_ids["fout"]], _wk_meer, _er + [_gewist], "tok", _nu)
+    check("de weekvraag wordt aangevuld als er een ophaalmoment bij komt (inhoudsmerk)",
+          len(_ins) == _n and len(_pat) == 1 and "05/11" in _pat[0][1]["description"], str(_pat))
+    _pat.clear()
     # het foute blok is weg (Mehdi of Claude haalde het weg): de vraag wordt opgelost, de weekvraag blijft
     # Mehdi haalt de afwijkingsvraag weg (of beantwoordt ze) terwijl het blok blijft: een echte reis, niet opnieuw vragen
     W.lara_meldingen([_ids["fout"]], _wk, _er[1:], "tok", _nu)
@@ -346,6 +351,9 @@ _lapvorig = [json.dumps(["Mehdi: [LA] Halloween met Lara", "confirmed", {"dateTi
                          False]), "2026-10-31"]
 check("een Lara-afspraak ([LA]) op een andere agenda geeft ook nooit 'niet vertrekken'",
       S.annulering_kandidaat(W.PRIVE_AGENDA, _lap, _lapvorig, _nu) is None)
+for _t in ("Mehdi: [LARA] Lara bij mij", "Mehdi: [la] Lara bij mij", "Mehdi: [LA-PR] Lara bij mij"):
+    _vt = [json.dumps([_t, "confirmed", {"dateTime": "2026-10-31T17:00:00+01:00"}, {}, "", [], False]), "2026-10-31"]
+    check(f"ook '{_t[7:16]}' telt als Lara: geen 'niet vertrekken'", S.annulering_kandidaat(W.PRIVE_AGENDA, _lap, _vt, _nu) is None)
 # een geschrapt item met een nieuwe, algemene titel: de oude titel telt ook (Codex-hertest 12)
 _nieuw = {"id": "p2", "status": "cancelled", "summary": "Afspraak"}
 check("een geschrapte [LA]-afspraak met een nieuwe algemene titel geeft geen 'niet vertrekken'",
@@ -565,17 +573,84 @@ check("tegenproef: een gewone Lara-afspraak die samenvalt met een klant is een b
       any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lg], "2026-11-10")))
 check("een vervallen Lara-afspraak die samenvalt met een klant is geen botsing meer",
       not any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lv2], "2026-11-10")))
+# het belrooster: een [LA]-afspraak buiten de Lara-agenda krijgt een Lara-merk, ook als de titel gemaskeerd is (hertest 13)
+_morgen = (W.nu_lokaal() + timedelta(days=1)).date().isoformat()
+_la_online = {"kalender": W.PRIVE_AGENDA, "id": "la1", "titel": "Mehdi: [LA] Lara bij mij", "start": f"{_morgen}T10:00:00+01:00",
+              "einde": f"{_morgen}T11:00:00+01:00", "hele_dag": False, "locatie": "", "omschrijving": "", "deelnemers": []}
+_rr = [r for r in W.belrooster([_la_online], W.nu_lokaal().date().isoformat()) if r["sleutel"].endswith(_la_online["start"])]
+check("een roosterregel voor een [LA]-afspraak draagt het Lara-merk, met gemaskeerde titel",
+      bool(_rr) and _rr[0].get("lara") is True and "Lara" not in _rr[0]["titel"], str(_rr))
 check("een vervallen Lara-afspraak geeft geen botsingssignaal op het bord meer (hertest 12)",
       not W.botsingen([_kl, _lv2]) and W.botsingen([_kl, _lg]), str((W.botsingen([_kl, _lv2]), W.botsingen([_kl, _lg]))))
 check("de belregel in werkwijze en agenda-taken zegt: nooit 'niet vertrekken' voor Lara of een rit",
       all("nooit voor een afspraak van lara" in _teksten[n].lower()
           for n in ("werkwijze/agenda-taken.json", "werkwijze/agenda-wacht.md")))
 
+# de Filewacht belt geen 'vertrek nu' voor een vervallen Lara-afspraak of een Lara-ophaling op een vakantiedag (sweep)
+import file_wacht as FW  # noqa: E402
+_fw_o = {k: getattr(W, k) for k in ("afspraken", "coord", "rijtijd_min", "_cache_laden", "geplande_start", "lara_vakantiedagen")}
+_fw_o2 = (W.projectadressen.index, W.ag.log, W.ag.prive, FW.stand, FW.bewaar, FW.bellen.bel_afspraak, FW.bellen.gelukt)
+_fw_bel = []
+
+
+def _fw_ronde(titel, vrij):
+    _fw_bel.clear()
+    st = datetime.now().astimezone() + timedelta(minutes=12)
+    item = {"kalender": LARA, "id": "fw1", "titel": titel, "start": st.isoformat(timespec="seconds"),
+            "einde": (st + timedelta(hours=1)).isoformat(timespec="seconds"), "hele_dag": False,
+            "locatie": "De Speelkriebel, Jozef Pierrestraat 104, 3010 Kessel-Lo", "omschrijving": "", "deelnemers": []}
+    W.afspraken = lambda van_dagen=0, tot_dagen=1, **k: [item]
+    W.lara_vakantiedagen = lambda: vrij
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        FW.main()
+    return list(_fw_bel)
+
+
+try:
+    W.coord = lambda adres, cache: (50.88, 4.72) if adres == W.THUIS else (50.89, 4.73)
+    W.rijtijd_min = lambda van, naar, vertrek: (18, "proef")
+    W._cache_laden = lambda: {}
+    W.geplande_start = lambda: True
+    W.projectadressen.index = lambda: {}
+    W.ag.log = lambda *a, **k: None
+    W.ag.prive = lambda *a, **k: None
+    FW.stand = lambda: {}
+    FW.bewaar = lambda d: None
+    FW.bellen.bel_afspraak = lambda tekst, slot=None: _fw_bel.append(tekst) or [("twilio", "CAproef")]
+    FW.bellen.gelukt = lambda uit: True
+    _vandaag = datetime.now().astimezone().date().isoformat()
+    _fw_school = _fw_ronde("!! Mehdi: [LA] Lara ophalen en thuis afzetten", frozenset())
+    _fw_vak = _fw_ronde("!! Mehdi: [LA] Lara ophalen en thuis afzetten", frozenset({_vandaag}))
+    _fw_verv = _fw_ronde("vervalt (vakantie) !! Mehdi: [LA] Lara ophalen en thuis afzetten", frozenset())
+finally:
+    for k, v in _fw_o.items():
+        setattr(W, k, v)
+    (W.projectadressen.index, W.ag.log, W.ag.prive, FW.stand, FW.bewaar, FW.bellen.bel_afspraak, FW.bellen.gelukt) = _fw_o2
+check("tegenproef: de Filewacht belt wel voor een Lara-ophaling op een schooldag als het te krap wordt", len(_fw_school) == 1,
+      str(_fw_school))
+check("de Filewacht belt niet voor een Lara-ophaling op een officiële vakantiedag", not _fw_vak, str(_fw_vak))
+check("de Filewacht belt niet voor een vervallen Lara-afspraak", not _fw_verv, str(_fw_verv))
+check("'vervalt' geldt op elke agenda: geen rit en geen vertrekoproep in het belrooster",
+      W.lara_zonder_rit({"kalender": W.PRIVE_AGENDA, "titel": "vervalt (vakantie) Mehdi: [LA] Lara bij mij"}, frozenset())
+      and not W.belrooster([dict(_la_online, titel="vervalt (vakantie) " + _la_online["titel"])], W.nu_lokaal().date().isoformat()))
+
+# een afgeronde vraag over een gewiste reeks wordt niet meer aangevuld: dan komt er een nieuwe (sweep)
+_o8 = (W._prive_item_lezen, W._patch)
+try:
+    W._patch = lambda a, body, tok, **k: None
+    W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "Opgelost: vaste Lara-afspraak gewist",
+                                            "_merk": {W.LARAMERK: "gewist:r:2026-11-10", W.MAILMERK: "opgelost:abc"}}
+    _afg = W.lara_gewist_bijwerken("v1", "16:00", "x", "r:2026-11-10", "tok", ["2026-11-10"])
+finally:
+    W._prive_item_lezen, W._patch = _o8
+check("een afgeronde vraag wordt niet aangevuld (dan een nieuwe vraag)", _afg is False)
+
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []
 try:
     W._patch = lambda a, body, tok, **k: _pat6.append(body)
-    W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "_merk": {W.LARAMERK: "gewist:r:2026-11-10"}}
+    W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "VR Agendawacht: vaste Lara-afspraak",
+                                            "_merk": {W.LARAMERK: "gewist:r:2026-11-10"}}
     _ja = W.lara_gewist_bijwerken("v1", "16:00", "x", "r:2026-11-10", "tok", ["2026-11-10", "2026-11-13"])
     _nee = W.lara_gewist_bijwerken("v1", "16:00", "x", "andere:2026-11-10", "tok", ["2026-11-10"])
     W._prive_item_lezen = lambda eid, tok: None

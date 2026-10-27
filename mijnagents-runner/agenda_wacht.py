@@ -2446,8 +2446,9 @@ def lara_vervalt(a):
 def lara_zonder_rit(a, vrij):
     """Een Lara-afspraak die geen rit (meer) vraagt: op een officiële vakantiedag of met 'vervalt' vooraan. Die houdt
     ook geen eigen rit vast: een rit die er nog aan hing, ruimt de agent op (reviewronde 27-10-2026, FR-79 en FR-210)."""
-    return (a.get("kalender") in AGENDA_VASTE_KLEUR and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"
-            and ((vrij is not None and (a.get("start") or "")[:10] in vrij) or lara_vervalt(a)))
+    return lara_vervalt(a) or (a.get("kalender") in AGENDA_VASTE_KLEUR
+                               and AGENDA_VASTE_KLEUR[a["kalender"]].get("naam") == "Lara"
+                               and vrij is not None and (a.get("start") or "")[:10] in vrij)
 
 
 def lara_vakantieblokken():
@@ -2872,6 +2873,7 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
 # eigen Lara-sleutel. De agent wist nooit een Lara-afspraak en past geen reeks aan: wat vervalt, markeert Claude 1 na
 # Mehdi's ja met 'vervalt (vakantie)' vooraan en Beschikbaar.
 LARAMERK = "agendawacht_lara"
+LARA_INHOUD = "agendawacht_lara_inhoud"     # vingerafdruk van de tekst: een vraag volgt haar inhoud (reviewronde)
 LARA_VRAAG_VOORUIT = 120          # dagen vooruit voor een afwijkend blok; een vakantieweek: 21 dagen
 LARA_MARKEREN = ("Vervalt een ophaalmoment, laat het dan markeren met 'vervalt (vakantie)' vooraan en Beschikbaar. "
                  "Wissen doe ik nooit.")
@@ -2888,7 +2890,8 @@ def _lara_body(k, titel, van, tot, tekst):
             "end": {"date": (_d.fromisoformat(tot) + timedelta(days=1)).isoformat()},
             "transparency": "transparent", "reminders": {"useDefault": False, "overrides": []},
             "description": tekst[:1900],
-            "extendedProperties": {"private": {MAILMERK: _lara_mailk(k), LARAMERK: k}}}
+            "extendedProperties": {"private": {MAILMERK: _lara_mailk(k), LARAMERK: k,
+                                               LARA_INHOUD: hashlib.sha256(tekst.encode()).hexdigest()[:12]}}}
 
 
 def _ddmm(dag):
@@ -2986,8 +2989,10 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
                 gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
             elif x is not None and ((x.get("start") or "")[:10] != body["start"]["date"]
-                                    or (x.get("titel") or "") != body["summary"]):
-                _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
+                                    or (x.get("titel") or "") != body["summary"]
+                                    or (x.get("_merk") or {}).get(LARA_INHOUD)
+                                    != body["extendedProperties"]["private"][LARA_INHOUD]):
+                _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description", "extendedProperties")}, tok)
                 regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{body['start']['date']} Lara-vraag niet gezet ({soort}, {type(e).__name__})")
@@ -3074,8 +3079,10 @@ def lara_gewist_bijwerken(eid, uur, titel, sleutel, tok, dagen):
     """Vult de bestaande vraag over een gewiste reeks aan met dagen die in een latere ronde geschrapt werden, in plaats
     van een tweede vraag (Codex-hertest 27-10-2026, punt 1). False als de vraag er niet meer is of niet van de agent."""
     x = _prive_item_lezen(eid, tok) if eid else None
-    if x is None or (x.get("_merk") or {}).get(LARAMERK) != f"gewist:{sleutel}":
-        return False
+    if x is None or (x.get("_merk") or {}).get(LARAMERK) != f"gewist:{sleutel}" \
+            or str((x.get("_merk") or {}).get(MAILMERK, "")).startswith("opgelost:") \
+            or not (x.get("titel") or "").startswith("VR Agendawacht:"):
+        return False          # weg, niet van mij, of al afgerond: dan een nieuwe vraag (reviewronde)
     body = _lara_gewist_body(min(dagen), uur, titel, sleutel, dagen)
     _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
     return True
@@ -4830,10 +4837,15 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         s0, e0 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
         # een heenrit hangt aan zijn einde (begin van de afspraak of van een geparkeerd gesprek), een terugrit aan
         # zijn begin; een heenrit die toevallig na een gesprek vertrekt, hangt nergens aan (FR-79, Lara 02-10)
+        # een rit van een afspraak die geen rit meer vraagt (vervallen, of Lara op een officiële vakantiedag) hangt niet
+        # meer aan een toevallig gesprek dat op zijn einde begint (reviewronde 27-10-2026, FR-210)
+        _mr = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
+        _van_zonder_rit = bool(_mr) and any(lara_zonder_rit(y, vrij) and y.get("start", "")[:10] == x["start"][:10]
+                                            and titel_sleutel(y["titel"]) == titel_sleutel(_mr.group(1)) for y in items)
         if "Reistijd voor:" in (x.get("omschrijving") or ""):
-            vast = (x["kalender"], e0) in grenzen or e0 in begins_alle
+            vast = (x["kalender"], e0) in grenzen or (e0 in begins_alle and not _van_zonder_rit)
         else:
-            vast = (x["kalender"], s0) in grenzen or s0 in eindes_alle or (x["kalender"], e0) in grenzen
+            vast = (x["kalender"], s0) in grenzen or (s0 in eindes_alle and not _van_zonder_rit) or (x["kalender"], e0) in grenzen
         if vast and s0 >= nu and _rit_tekst(x) and not (x.get("_merk") or {}).get(RITMERK) and gemerkt < RIT_MERKEN_PER_RONDE \
                 and sum(1 for y in reistijden if y.get("kalender") == x["kalender"] and y.get("start") == x["start"]
                         and y.get("einde") == x["einde"]) == 1 and len(_afspraak_van_rit(x, items, s0, e0)) == 1:
@@ -4928,7 +4940,7 @@ def belrooster(items, vandaag):
             continue
         kal = KALENDERS.get(a["kalender"], "")
         info = lees_titel(a["titel"])
-        if info["reistijd"] or info["soort"] == "IN" or kal == "Lara":
+        if info["reistijd"] or info["soort"] == "IN" or kal == "Lara" or lara_vervalt(a):
             continue
         start = datetime.fromisoformat(a["start"])
         adres = a.get("locatie") or ""
@@ -4959,7 +4971,10 @@ def belrooster(items, vandaag):
         klant = "je privé-afspraak" if prive else (info["klant"] or a["titel"][:60])
         tekst = f"Mehdi, {hoe}: {klant}, om {start.strftime('%H:%M')}." + (" De link staat in je agenda." if not buiten else " Adres staat in je agenda.")
         regels.append({"sleutel": f"{a['kalender']}:{a['id']}:{a['start']}", "tijd": beltijd.isoformat(), "tekst": tekst,
-                       "titel": "privé-afspraak" if prive else a["titel"][:80]})
+                       "titel": "privé-afspraak" if prive else a["titel"][:80],
+                       # de titel kan gemaskeerd zijn: het Lara-merk blijft, zodat een afzegging nooit 'niet vertrekken'
+                       # wordt (Codex-hertest 13)
+                       "lara": bellen.is_lara_titel(a["titel"])})
     regels.sort(key=lambda r: r["tijd"])
     return regels
 

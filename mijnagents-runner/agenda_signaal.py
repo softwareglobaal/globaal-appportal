@@ -144,7 +144,7 @@ def _is_rit(ev, vorig):
 
 
 def _is_lara_titel(ev, vorig):
-    return any("[LA]" in t for t in _titels(ev, vorig))
+    return any(W.bellen.is_lara_titel(t) for t in _titels(ev, vorig))
 
 
 def _is_lara(kal):
@@ -452,6 +452,8 @@ def ronde(tijd):
             if lk and lk["sleutel"] not in lara_gemeld:
                 lara_open[lk["sleutel"]] = lk
         lara_wacht = {}
+    vandaag_l = nu.astimezone(W.TIJDZONE).date().isoformat()
+    lara_open = {s_: k for s_, k in lara_open.items() if k.get("dag", "") >= vandaag_l}     # voorbij: niet eindeloos herhalen
     per_reeks = {}
     for sleutel, k in lara_open.items():
         per_reeks.setdefault(sleutel.rsplit(":", 1)[0], []).append((sleutel, k))
@@ -482,7 +484,7 @@ def ronde(tijd):
                   file=sys.stderr)
     for sleutel, kandidaat in list(annuleringen.items()):
         if any(sleutel.startswith(k + ":") for k, n in W.KALENDERS.items() if n == "Lara") \
-                or W.lees_titel(kandidaat.get("titel") or "")["reistijd"] or "[LA]" in (kandidaat.get("titel") or "") \
+                or W.lees_titel(kandidaat.get("titel") or "")["reistijd"] or W.bellen.is_lara_titel(kandidaat.get("titel")) \
                 or (not kandidaat.get("soort") and kandidaat.get("titel") == "(privé)"):
             # een oud record zonder soort met een gemaskeerde titel kan een Lara-afspraak of rit zijn: niet bellen
             # (Codex-hertest 12); nieuwe records dragen hun soort en zijn al zonder Lara en ritten
