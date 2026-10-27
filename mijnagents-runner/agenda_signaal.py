@@ -149,8 +149,8 @@ def annulering_kandidaat(kal, ev, vorig, nu):
     (FR-210). Een gewiste Lara-afspraak op een schooldag wordt een vraag (lara_wissing_kandidaat)."""
     if not (ev.get("status") == "cancelled" or W.bellen.afzegging_tekst(ev)):
         return None
-    if _is_lara(kal) or _is_rit(ev, vorig):
-        return None
+    if _is_lara(kal) or _is_rit(ev, vorig) or re.search(r"\[LA\]", ev.get("summary") or _oude_titel(vorig) or ""):
+        return None          # ook een Lara-afspraak ([LA]) op een andere agenda (Codex-hertest 11)
     oud = []
     if vorig:
         try:
@@ -471,7 +471,8 @@ def ronde(tijd):
             print(f"{tijd} gewiste Lara-afspraak op {eerste.get('dag')}: vraag niet gezet ({type(e).__name__}), blijft open",
                   file=sys.stderr)
     for sleutel, kandidaat in list(annuleringen.items()):
-        if any(sleutel.startswith(k + ":") for k, n in W.KALENDERS.items() if n == "Lara"):
+        if any(sleutel.startswith(k + ":") for k, n in W.KALENDERS.items() if n == "Lara") \
+                or W.lees_titel(kandidaat.get("titel") or "")["reistijd"] or "[LA]" in (kandidaat.get("titel") or ""):
             annuleringen.pop(sleutel, None)        # een opgeslagen Lara-afzegging van voor FR-210: nooit meer bellen
             continue
         try:

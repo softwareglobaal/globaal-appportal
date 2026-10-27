@@ -60,7 +60,8 @@ Aanvulling v8.16 (18-10-2026): E1b laat mij oude dagen op vraag alleen lezend te
 Ik zet het agendabewijs op het bord; oude afspraken, ritten, kleuren en gasten blijven onaangeraakt.
 
 Aanvulling v8.15 (17-10-2026): een expliciete annulering krijgt een eigen melding vanaf het vaste agentnummer
-met "afgezegd, niet vertrekken". De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
+met "afgezegd, niet vertrekken", nooit voor een afspraak van Lara (de agenda van Lara of `[LA]`) of een rit (FR-210):
+een gewiste Lara-afspraak op een schooldag wordt een vraag in de privé-agenda. De vijfminutenoproep leest het Google-item vlak voor het bellen opnieuw; kan
 dat niet, dan klinkt geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Mislukte
 afzegmeldingen blijven open. Een annuleerlink of voorwaardelijke zin is geen annulering; een latere expliciete
 bevestiging herroept de afzegzin.

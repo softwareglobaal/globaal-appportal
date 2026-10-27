@@ -4350,7 +4350,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         uit = []
         for x in items:
             if (x is doel or is_zorgschaduw(x) or x.get("hele_dag") or is_eigen_rit(x) or bellen.afgezegd(x)
-                    or "T" not in x.get("start", "") or "T" not in x.get("einde", "")
+                    or lara_vervalt(x) or "T" not in x.get("start", "") or "T" not in x.get("einde", "")
                     or (rijdend_vrij and rijdend_toegestaan(x))):
                 continue
             try:

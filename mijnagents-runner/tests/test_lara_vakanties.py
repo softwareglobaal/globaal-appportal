@@ -341,6 +341,11 @@ _rit = {"id": "rit0123", "status": "cancelled"}
 _ritvorig = [json.dumps(["🚗 Reistijd: thuis → Wilselsesteenweg 57", "confirmed",
                          {"dateTime": "2026-10-27T17:10:00+01:00"}, {}, "", [], False]), "2026-10-27"]
 check("een gewist ritblok geeft nooit een oproep 'niet vertrekken'", S.annulering_kandidaat(LARA, _rit, _ritvorig, _nu) is None)
+_lap = {"id": "p1", "status": "cancelled"}
+_lapvorig = [json.dumps(["Mehdi: [LA] Halloween met Lara", "confirmed", {"dateTime": "2026-10-31T17:00:00+01:00"}, {}, "", [],
+                         False]), "2026-10-31"]
+check("een Lara-afspraak ([LA]) op een andere agenda geeft ook nooit 'niet vertrekken'",
+      S.annulering_kandidaat(W.PRIVE_AGENDA, _lap, _lapvorig, _nu) is None)
 _werk = {"id": "w1", "status": "cancelled"}
 _werkvorig = [json.dumps(["Mehdi: [HARC-KB] 2505 - klant", "confirmed",
                           {"dateTime": "2026-10-26T10:00:00+01:00"}, {}, "", [], False]), "2026-10-26"]
@@ -538,6 +543,22 @@ check("de Lara-regels in agenda-taken noemen de officiële bron en 'nooit wissen
       and "nooit wissen" in json.dumps(_taken, ensure_ascii=False).lower())
 check("de werkwijze en de PDF zeggen 'nooit wissen' en noemen de officiële bron",
       all("schoolvakanties.json" in _teksten[n] for n in ("werkwijze/agenda-wacht.md", "werkwijze/pdf/afspraken_pdf.py")))
+
+# een vervallen Lara-afspraak telt in de dagcontrole nergens meer mee: geen botsing en dus geen oproep (hertest 11)
+import dagcontrole as _DC  # noqa: E402
+_kl = {"kalender": WERK, "id": "k1", "titel": "!! Mehdi: [HARC-KB] 2505 - klant, Straat 1, 3000 Leuven",
+       "start": "2026-11-10T16:15:00+01:00", "einde": "2026-11-10T16:45:00+01:00", "hele_dag": False, "locatie": "Straat 1, 3000 Leuven"}
+_lv2 = lara("2026-11-10", titel="vervalt (vakantie) !! Mehdi: [LA] Lara ophalen en thuis afzetten")
+_lv2["einde"] = "2026-11-10T17:00:00+01:00"
+_lg = lara("2026-11-10")
+_lg["einde"] = "2026-11-10T17:00:00+01:00"
+check("tegenproef: een gewone Lara-afspraak die samenvalt met een klant is een botsing",
+      any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lg], "2026-11-10")))
+check("een vervallen Lara-afspraak die samenvalt met een klant is geen botsing meer",
+      not any(b["soort"] == "lara_botsing" for b in _DC.dagcontrole([_kl, _lv2], "2026-11-10")))
+check("de belregel in werkwijze en agenda-taken zegt: nooit 'niet vertrekken' voor Lara of een rit",
+      all("nooit voor een afspraak van lara" in _teksten[n].lower()
+          for n in ("werkwijze/agenda-taken.json", "werkwijze/agenda-wacht.md")))
 
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []
