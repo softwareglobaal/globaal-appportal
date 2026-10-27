@@ -75,7 +75,7 @@ def ev(eid, titel, gasten=None, beschrijving="", reeks=None):
     e = {"id": eid, "summary": titel, "status": "confirmed", "description": beschrijving, "iCalUID": f"{eid}@google.com",
          "etag": f'"e-{eid}"', "start": {"dateTime": f"{_morgen}T10:00:00+01:00"},
          "end": {"dateTime": f"{_morgen}T11:00:00+01:00"}, "attendees": gasten or [], "kalender": ELEVAIT,
-         "_agendanaam": "Elevait N.V."}
+         "_agendanaam": "Elevait N.V.", "organizer": {"email": ELEVAIT}}
     if reeks:
         e["recurringEventId"] = reeks
     return e
@@ -619,7 +619,8 @@ W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x",
 W._patch = lambda x, body, tok, **kw: _pat29.append((x["id"], body))
 try:
     _hds = dict(ev("dup1", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV")
-    met(NepGoogle([]), W.firma_vangnet, [_hds], [_hds], "tok")                        # het blok komt via de HDS-kopie
+    _org = ev("dup1", "Mehdi: [EL-PO] overleg")                                       # de kopie van de organisator
+    met(NepGoogle([]), W.firma_vangnet, [_hds, _org], [_org], "tok")
     _el = dict(ev("dup1", "Mehdi: [EL-PO] overleg"), start={"dateTime": f"{_morgen}T14:00:00+01:00"},
                end={"dateTime": f"{_morgen}T15:00:00+01:00"})
     met(NepGoogle([]), W.firma_vangnet, [_el], [_el], "tok", None, ["hdssuriname@gmail.com"])   # HDS onleesbaar, verzet
@@ -659,12 +660,12 @@ _c1 = dict(ev("o1", "Mehdi: [EL-PO] overleg"), iCalUID="tw@google.com", kalender
            organizer={"email": ELEVAIT})
 _c2 = dict(ev("o2", "Mehdi: [EL-PO] overleg"), iCalUID="tw@google.com", organizer={"email": ELEVAIT},
            start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
-_gk, _onz = W._firma_kopieen_kiezen([_c1, _c2])
+_gk, _onz, _ = W._firma_kopieen_kiezen([_c1, _c2])
 check("verschillen twee kopieën in tijd, dan beslist de kopie op de agenda van de organisator",
       [e["id"] for e in _gk] == ["o2"] and not _onz, str(([e["id"] for e in _gk], _onz)))
-_gk2, _onz2 = W._firma_kopieen_kiezen([_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"})])
-check("zonder kopie van de organisator is zo'n afspraak onzeker: geen blok, geen verschuiving",
-      not _gk2 and _onz2 == {W._firma_sleutel(_c1)}, str((_gk2, _onz2)))
+_gk2, _onz2, _tw2 = W._firma_kopieen_kiezen([_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"})])
+check("zonder kopie van de organisator geen keuze: alleen een vraag dat het uur niet zeker is (twijfel)",
+      not _gk2 and not _onz2 and set(_tw2) == {W._firma_sleutel(_c1)}, str((_gk2, _onz2, _tw2)))
 _, niet31, onz31, _ = met(NepGoogle([], zichtbaar=False), W.firma_gasten,
                           [_c1, dict(_c2, organizer={"email": "siyan@voorbeeld.test"},
                                      attendees=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])], "tok")
@@ -672,11 +673,12 @@ check("en firma_gasten geeft ze als onzeker door, zonder blok", not niet31 and W
 
 # --- Codex-hertest 12: is de agenda van de organisator onleesbaar, dan beslist een gastkopie niet ------------------
 _g1k = dict(ev("p9", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com", organizer={"email": ELEVAIT})
-_gk3, _onz3 = W._firma_kopieen_kiezen([_g1k], [ELEVAIT])
+_gk3, _onz3, _ = W._firma_kopieen_kiezen([_g1k], [ELEVAIT])
 check("een gastkopie alleen, terwijl de firma-agenda van de organisator onleesbaar is: onzeker (geen blok, niets verzet)",
       not _gk3 and _onz3 == {W._firma_sleutel(_g1k)}, str((_gk3, _onz3)))
-_gk4, _onz4 = W._firma_kopieen_kiezen([_g1k], [])
-check("is de organisator wel leesbaar (of geen firma-agenda), dan telt die ene kopie gewoon", len(_gk4) == 1 and not _onz4)
+_gk4, _onz4, _tw4 = W._firma_kopieen_kiezen([_g1k], [])
+check("een gastkopie alleen (de kopie van de organisator ontbreekt): geen keuze, alleen een twijfelvraag (hertest 13)",
+      not _gk4 and not _onz4 and len(_tw4) == 1)
 _opg32 = []
 _o32 = (W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch, W._insert)
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma32-")) / "agenda-firma-vragen.json")
@@ -694,6 +696,24 @@ try:
 finally:
     W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch, W._insert = _o32
 check("en het vangnet verzet of rondt het bestaande blok dan niet af", not _pat32 and not _opg32, str((_pat32, _opg32)))
+
+# --- Codex-hertest 13: alleen gastkopieën: een zichtbare vraag, nooit een blok op een onzeker uur ------------------------
+_ins33 = []
+_o33 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma33-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins33.append(body) or {"id": "t33"}
+try:
+    _g33 = dict(ev("g33", "Mehdi: [EL-PO] overleg"), organizer={"email": "siyan@voorbeeld.test"})
+    _g33b = dict(_g33, kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV",
+                 start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
+    _, niet33, onz33, _ = met(NepGoogle([], zichtbaar=False), W.firma_gasten, [_g33, _g33b], "tok")
+    _r33 = met(NepGoogle([]), W.firma_vangnet, [_g33, _g33b], niet33, "tok", None, [], onz33)
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o33
+check("alleen gastkopieën met een verschillend uur: geen gast en geen blok, wel een vraag 'uur niet zeker' op Beschikbaar",
+      not niet33 and len(_ins33) == 1 and "uur niet zeker" in _ins33[0]["summary"]
+      and _ins33[0]["transparency"] == "transparent" and "date" in _ins33[0]["start"]
+      and "10:00" in _ins33[0]["description"] and "14:00" in _ins33[0]["description"], str((_r33, _ins33)))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
