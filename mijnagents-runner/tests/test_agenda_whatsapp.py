@@ -786,6 +786,18 @@ AW.afronden(_k32, "ja", f"{_k32}:bevestiging:x", "vastgelegd")
 check("en lukt het wel, dan staan uitkomst en bevestiging samen in de wachtrij",
       not AW.open_antwoorden() and AW._lees()["meldingen"].get(f"{_k32}:bevestiging:x", {}).get("status") == "klaar")
 
+# --- Codex-hertest 17 (PR 113): antwoord binnen, afspraak verschoven voor de verwerking -------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw33-")) / "agenda-whatsapp.json")
+AW.versie_melden("b33", "s1", "e1", "oud {code}", {"id": "b33", "start": "s1", "einde": "e1"})
+_c33 = next(v["code"] for v in AW._lees()["meldingen"].values() if v.get("vraag"))
+AW.antwoord_herkennen(f"{_c33} vervalt")
+AW.versie_melden("b33", "s2", "e2", "nieuw {code}", {"id": "b33", "start": "s2", "einde": "e2"})
+_m33 = AW._lees()["meldingen"]
+check("verschuift de afspraak nadat Mehdi antwoordde maar voor de verwerking, dan krijgt hij een expliciet eindbericht "
+      "en vervalt de oude ontvangstmelding (hertest 17)",
+      any("je antwoord kwam binnen" in v.get("tekst", "") and v["status"] == "klaar" for v in _m33.values())
+      and all(v["status"] == "vervangen" for k, v in _m33.items() if k.startswith(f"ontvangst:{_c33}:")), str(_m33))
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

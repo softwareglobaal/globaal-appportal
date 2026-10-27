@@ -131,12 +131,24 @@ def versie_melden(eid, start, einde, tekst, vraag=None):
     een vorig uur geldt niet meer), de melding klaarzetten en de versie vastleggen. Ook terug naar een eerder uur is een
     nieuwe versie (Codex-hertest 3, PR 113). Geeft de code."""
     with _bewerk() as d:
-        for k, m in d["meldingen"].items():
+        eind = []
+        for k, m in list(d["meldingen"].items()):
             uitkomst = (m.get("verwerkt") or {}).get("uitkomst")
             if (m.get("vraag") or {}).get("id") == eid and (not uitkomst or uitkomst == "mislukt"):
                 m["verwerkt"] = {"tijd": _nu().isoformat(), "uitkomst": "vervangen"}   # ook een mislukte (hertest 4)
+                if m.get("antwoord") and uitkomst != "mislukt":
+                    # Mehdi antwoordde al, maar de afspraak verschoof voor de verwerking: een expliciet eindbericht, en
+                    # een nog niet verstuurde ontvangst gaat niet meer weg (Codex-hertest 17, PR 113)
+                    eind.append((f"{k}:bevestiging:{m.get('antwoord_tijd') or ''}",
+                                 f"Agendawacht: {m.get('code')}: je antwoord kwam binnen, maar de afspraak is intussen "
+                                 "verschoven. Ik heb niets veranderd; je krijgt een nieuw bericht over het nieuwe uur."))
+                    for k2, m2 in d["meldingen"].items():
+                        if k2.startswith(f"ontvangst:{m.get('code')}:") and m2.get("status") == "klaar":
+                            m2["status"] = "vervangen"
             if k.startswith(f"zorg:{eid}:") and m.get("status") == "klaar":
                 m["status"] = "vervangen"       # een nog niet verstuurd bericht over het oude uur gaat niet meer weg
+        for sleutel_e, tekst_e in eind:
+            _zet(d, sleutel_e, tekst_e)
         n = sum(1 for k in d["meldingen"] if k.startswith(f"zorg:{eid}:")) + 1
         code = f"A{int(d.get('volgende') or 1)}"
         d["volgende"] = int(d.get("volgende") or 1) + 1
