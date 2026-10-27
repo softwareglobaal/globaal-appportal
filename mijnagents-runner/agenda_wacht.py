@@ -3536,6 +3536,9 @@ def _toekomst(start, nu):
         return False
 
 
+ZORG_GEZET = []      # de dagen waarop de zorgroute deze ronde een blok zette, verzette of verhuisde
+
+
 def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
     """Zet, koppelt, volgt of verhuist zorgafspraken (zie hierboven). Werkt de status en het Google-ID in res bij, zodat
     het register ze bewaart en de gewone mailmelding geen tweede vraag zet. Geeft tellingen, 'bord' (zonder namen,
@@ -3585,6 +3588,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             else:
                 a["status"] = "gezet"
                 st["gezet"] += 1
+                ZORG_GEZET.append(a["start"][:10])      # de meldstap kijkt die dag na, hoe ver ook (PR 113)
                 st["prive"].append(f"{wat}: blok gezet in de privé-agenda ({e.get('id')}), teruggelezen")
                 if bijwerken_items and z.get("mehdi") is True and (PRIVE_AGENDA, e.get("id")) not in per_id:
                     # De hoofdronde gebruikte al een agenda-momentopname. Geef het teruggelezen nieuwe blok
@@ -3695,6 +3699,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     else:
                         a["status"] = "gezet"
                         st["verzet"] += 1
+                        ZORG_GEZET.append(a["start"][:10])
                         st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid}), teruggelezen{notitie}")
                 except Exception as ex:  # noqa: BLE001
                     st["fout"] += 1
@@ -3757,6 +3762,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["prive"].append(f"{x['start'][:16]} verhuisd maar het teruglezen klopt niet ({probleem})")
                 continue
             st["verhuisd"] += 1
+            ZORG_GEZET.append((x.get("start") or "")[:10])
             if bijwerken_items:
                 # De volledige ronde gebruikt dezelfde itemlijst voor reistijd; het doel is pas na teruglezen zeker.
                 x["kalender"], x["titel"], x["omschrijving"] = PRIVE_AGENDA, body["summary"], body["description"]
@@ -6126,7 +6132,9 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
     ANTWERK), en ook een blok dat deze ronde gemaakt werd (Google 'created'; Codex-controle PR 113, punt 3); de rest wordt
     stil bekend. items: alle agenda's, ook de archiefagenda's (punt 4). Geeft regels zonder titels."""
     nu = nu or nu_lokaal()
-    sinds = sinds or RONDE_START or nu
+    vast = AW.sinds()
+    # de basislijn telt vanaf de eerste ronde met deze code, ook als die meldstap toen mislukte (Codex-hertest 2, PR 113)
+    sinds = sinds or (datetime.fromisoformat(vast) if vast else None) or RONDE_START or nu
     zorg = [x for x in items if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(ZORGMERK)
             and "T" in x.get("start", "") and not _voorbij(x["start"], nu) and not lara_vervalt(x)]
     eerste = not AW.basislijn_gezet()
@@ -6175,7 +6183,18 @@ def zorg_whatsapp_stap():
     geen route een blok zet zonder melding (Codex-hertest PR 113). Geeft (regels, noden)."""
     try:
         items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
-        if any(x.get("fout") for x in items) or ARCHIEF_FOUT:
+        fout = bool(ARCHIEF_FOUT)
+        # een blok dat de zorgroute deze ronde verder dan het venster zette: die dag ook lezen, meteen melden (PR 113)
+        vandaag = nu_lokaal().date()
+        for dag in sorted({d for d in ZORG_GEZET if d}):
+            try:
+                off = (datetime.fromisoformat(dag).date() - vandaag).days
+            except ValueError:
+                continue
+            if off >= ZORG_WHATSAPP_DAGEN:
+                items += afspraken(off - 1, off + 2, alleen_lezen=True) + archief_afspraken(off - 1, off + 2, alleen_lezen=True)
+                fout = fout or bool(ARCHIEF_FOUT)
+        if any(x.get("fout") for x in items) or fout:
             return [], [{"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, volgende ronde opnieuw",
                          "wie": "claude"}]
         return zorg_whatsapp(items, agenda._toegang()), []
@@ -6425,6 +6444,10 @@ def terugkijkstand(argv):
 
 def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
+    try:
+        AW.sinds_zetten(RONDE_START)    # voor de zorgroute: zo telt een blok van deze ronde nooit als 'oud' (PR 113)
+    except Exception:  # noqa: BLE001
+        pass
     werkwijze = ag.werkwijze()
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -6807,6 +6830,10 @@ def zorgronde():
     server, nooit het bord). Voor de inhaalcontrole en het bewijs; belt niet en raakt verder niets."""
     import mail_afspraken as MA  # noqa: PLC0415
     _slot = slot_nemen()  # noqa: F841
+    try:
+        AW.sinds_zetten(RONDE_START)
+    except Exception:  # noqa: BLE001
+        pass
     _alle, _stuk = _agenda_voor_mail()
     mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat(), agenda_onvolledig=_stuk)
     if _stuk:

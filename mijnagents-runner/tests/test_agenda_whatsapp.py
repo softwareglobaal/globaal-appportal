@@ -361,6 +361,40 @@ _sch = item("sch", "Mehdi: kine Praktijk X", ecg["start"], ecg["einde"], kal=W.W
 _sch["_zorg_schaduw"] = True
 check("de schaduw van dezelfde zorgafspraak op de werkagenda telt niet als botsing", not W.botst_met(ecg, [ecg, _sch]))
 
+# --- Codex-hertest 2 (PR 113) ---------------------------------------------------------------------------------
+# een mislukte eerste meldstap: de volgende ronde ziet het blok van toen nog als nieuw
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw10-")) / "agenda-whatsapp.json")
+_t0 = W.nu_lokaal() - timedelta(hours=2)
+AW.sinds_zetten(_t0)                                         # de eerste ronde begon twee uur geleden
+AW.sinds_zetten(W.nu_lokaal())                               # een latere ronde verandert dat niet
+_toen = dict(item("toen", "!! [PR] Kine - Praktijk T", f"{d2}T13:00:00+01:00", f"{d2}T13:30:00+01:00", merk={W.ZORGMERK: "zt"}),
+             _gemaakt=(_t0 + timedelta(minutes=1)).astimezone(W.ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+W.zorg_whatsapp([_toen], "tok", sinds=None)
+check("een blok uit de eerste ronde waarvan de meldstap mislukte, krijgt de volgende ronde toch zijn melding",
+      AW.sinds() == _t0.isoformat() and any(k.startswith("zorg:toen:") and v.get("status") == "klaar"
+                                            for k, v in AW._lees()["meldingen"].items()), str(AW._lees()))
+# een blok verder dan het venster dat deze ronde gezet werd: die dag wordt gelezen en gemeld
+_o11 = (W.afspraken, W.archief_afspraken, W.agenda._toegang, list(W.ZORG_GEZET))
+_heel_ver = item("hv", "!! [PR] Tandarts - Praktijk H", "2028-03-07T09:00:00+01:00", "2028-03-07T09:30:00+01:00",
+                 merk={W.ZORGMERK: "zh"})
+_lezingen = []
+W.afspraken = lambda van=-1, tot=8, alleen_lezen=False: _lezingen.append((van, tot)) or ([_heel_ver] if van > 400 else [])
+W.archief_afspraken = lambda van=-1, tot=8, alleen_lezen=False: []
+W.agenda._toegang = lambda: "tok"
+W.ZORG_GEZET[:] = ["2028-03-07"]
+try:
+    _r11, _n11 = W.zorg_whatsapp_stap()
+finally:
+    W.afspraken, W.archief_afspraken, W.agenda._toegang = _o11[:3]
+    W.ZORG_GEZET[:] = _o11[3]
+check("een zorgblok dat deze ronde ver voorbij het venster gezet werd, wordt meteen gemeld (die dag gelezen)",
+      any(k.startswith("zorg:hv:") for k in AW._lees()["meldingen"]) and any(v > 400 for v, _ in _lezingen),
+      str((_r11, _n11, _lezingen)))
+_hoofd2 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("de eerste ronde legt haar begin vast voor de zorgroute iets zet (main en zorgronde)",
+      _hoofd2.split("def main():")[1][:400].count("AW.sinds_zetten(RONDE_START)") == 1
+      and _hoofd2.split("def zorgronde():")[1][:600].count("AW.sinds_zetten(RONDE_START)") == 1)
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

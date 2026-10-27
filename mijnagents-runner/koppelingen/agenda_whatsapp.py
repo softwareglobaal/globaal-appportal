@@ -70,6 +70,18 @@ def bekend(sleutel):
     return sleutel in _lees()["meldingen"]
 
 
+def sinds():
+    """Wanneer de eerste ronde met deze code begon (ISO), of None."""
+    return _lees().get("sinds")
+
+
+def sinds_zetten(t):
+    """Eenmalig: het begin van de eerste ronde, voor de zorgroute iets zet. Een blok dat daarna gemaakt werd, is nieuw
+    en krijgt zijn melding, ook als de eerste meldstap mislukte (Codex-hertest 2, PR 113)."""
+    with _bewerk() as d:
+        d.setdefault("sinds", t.isoformat())
+
+
 def basislijn_gezet():
     return bool(_lees().get("basislijn"))
 
