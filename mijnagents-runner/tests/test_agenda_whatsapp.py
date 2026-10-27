@@ -766,6 +766,26 @@ check("kan De Bode de wachtrij niet lezen, dan houdt hij een agendaantwoord vast
       _staat31["wa_laatste_id"] == 4 and not _bord31 and _nood31, str((_staat31, _bord31, _nood31)))
 check("een gewoon bericht ('hoi') lijkt geen agendaantwoord", not AW.lijkt_antwoord("Zoomwacht, hoi") and AW.lijkt_antwoord("A3 vervalt"))
 
+# --- Codex-hertest 16 (PR 113): uitkomst en bevestiging in een bewerking ---------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw32-")) / "agenda-whatsapp.json")
+AW.versie_melden("b32", "s", "e", "x {code}", {"id": "b32", "start": "s", "einde": "e"})
+_c32 = next(v["code"] for v in AW._lees()["meldingen"].values() if v.get("vraag"))
+AW.antwoord_herkennen(f"{_c32} ja")
+_k32 = next(k for k, v in AW._lees()["meldingen"].items() if v.get("vraag"))
+_o32 = AW._zet
+AW._zet = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("onderbroken"))
+try:
+    AW.afronden(_k32, "ja", f"{_k32}:bevestiging:x", "vastgelegd")
+except RuntimeError:
+    pass
+finally:
+    AW._zet = _o32
+check("valt de ronde weg tussen uitkomst en bevestiging, dan is er niets vastgelegd en wordt het antwoord opnieuw verwerkt",
+      AW.open_antwoorden() and not AW._lees()["meldingen"][_k32].get("verwerkt"), str(AW._lees()["meldingen"][_k32]))
+AW.afronden(_k32, "ja", f"{_k32}:bevestiging:x", "vastgelegd")
+check("en lukt het wel, dan staan uitkomst en bevestiging samen in de wachtrij",
+      not AW.open_antwoorden() and AW._lees()["meldingen"].get(f"{_k32}:bevestiging:x", {}).get("status") == "klaar")
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

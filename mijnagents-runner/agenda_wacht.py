@@ -6383,16 +6383,14 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
         tok = tok or agenda._toegang()
         x = _prive_item_lezen((m.get("vraag") or {}).get("id") or "", tok)
         if x is None or not (x.get("_merk") or {}).get(ZORGMERK):
-            AW.verwerkt(sleutel, "weg")
-            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
+            AW.afronden(sleutel, "weg", _bev(sleutel, m), f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
                                                      "ik heb niets veranderd.")
             regels.append(f"{code}: afspraak niet meer gevonden, niets veranderd")
             continue
         v = m.get("vraag") or {}
         if (v.get("start"), v.get("einde")) != (x.get("start"), x.get("einde")):
             # intussen verschoven: het antwoord ging over het oude uur (Codex-controle PR 113, punt 1)
-            AW.verwerkt(sleutel, "verschoven")
-            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
+            AW.afronden(sleutel, "verschoven", _bev(sleutel, m), f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
                                                      "niets veranderd. Je krijgt een nieuwe melding over het nieuwe uur.")
             regels.append(f"{code}: afspraak intussen verschoven, niets veranderd")
             continue
@@ -6418,16 +6416,14 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
             # een blijvende weigering, mislukt met een bericht aan Mehdi en een nood (review PR 113)
             if not blijvend and AW.poging_verwerken(sleutel) < 3:
                 continue
-            AW.verwerkt(sleutel, "mislukt")
-            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
+            AW.afronden(sleutel, "mislukt", _bev(sleutel, m), f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
                                                      "Ik kijk het na; de afspraak staat nog op ??.")
             continue
         wat = f"{_kale_titel(x['titel'])} op {_wanneer(x)}"
         tekst = (f"Agendawacht: {code} vastgelegd. {wat} blijft staan; ?? is weg." if keuze == "ja" else
                  f"Agendawacht: {code} vastgelegd. {wat} staat nu als vervallen en Beschikbaar (niet gewist). "
                  "Bel zelf de praktijk om af te zeggen.")
-        AW.verwerkt(sleutel, keuze)
-        AW.klaarzetten(_bev(sleutel, m), tekst)
+        AW.afronden(sleutel, keuze, _bev(sleutel, m), tekst)
         regels.append(f"{code}: {keuze} vastgelegd en teruggelezen")
     return regels
 

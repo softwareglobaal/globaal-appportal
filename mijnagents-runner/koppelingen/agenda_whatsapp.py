@@ -168,18 +168,31 @@ def verre_dagen_klaar(dagen):
         d["verre_dagen"] = {k: v for k, v in (d.get("verre_dagen") or {}).items() if k not in set(dagen)}
 
 
+def _zet(d, sleutel, tekst, vraag=None):
+    if sleutel in d["meldingen"] and d["meldingen"][sleutel].get("status") != "basis":
+        return d["meldingen"][sleutel].get("code")
+    code = f"A{int(d.get('volgende') or 1)}"
+    d["volgende"] = int(d.get("volgende") or 1) + 1
+    d["meldingen"][sleutel] = {"code": code, "tekst": tekst.replace("{code}", code), "status": "klaar",
+                               "gemaakt": _nu().isoformat(), "vraag": vraag, "antwoord": None, "verwerkt": None,
+                               "pogingen": 0}
+    return code
+
+
 def klaarzetten(sleutel, tekst, vraag=None):
     """Zet een melding klaar voor De Bode, eenmaal per sleutel (afspraak en versie). '{code}' in de tekst wordt de code
     van de melding. vraag: {'id': ...} van de afspraak die op antwoord wacht. Geeft de code."""
     with _bewerk() as d:
-        if sleutel in d["meldingen"] and d["meldingen"][sleutel].get("status") != "basis":
-            return d["meldingen"][sleutel].get("code")
-        code = f"A{int(d.get('volgende') or 1)}"
-        d["volgende"] = int(d.get("volgende") or 1) + 1
-        d["meldingen"][sleutel] = {"code": code, "tekst": tekst.replace("{code}", code), "status": "klaar",
-                                   "gemaakt": _nu().isoformat(), "vraag": vraag, "antwoord": None, "verwerkt": None,
-                                   "pogingen": 0}
-        return code
+        return _zet(d, sleutel, tekst, vraag)
+
+
+def afronden(sleutel, uitkomst, bev_sleutel, tekst):
+    """De uitkomst van Mehdi's antwoord en de bevestiging erover in een bewerking: een onderbreking ertussen kan de
+    bevestiging niet meer laten wegvallen (Codex-hertest 16, PR 113)."""
+    with _bewerk() as d:
+        if sleutel in d["meldingen"]:
+            d["meldingen"][sleutel]["verwerkt"] = {"tijd": _nu().isoformat(), "uitkomst": uitkomst}
+        _zet(d, bev_sleutel, tekst)
 
 
 def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
