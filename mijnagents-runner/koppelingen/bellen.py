@@ -648,7 +648,8 @@ def afspraken_bellen(staat, log=None, bewaar=None, nood=None, spoor=None):
         actueel, reden = belafspraak_actueel(r)
         if not actueel:
             if reden == "afgezegd-lara" or (reden == "afgezegd" and (r.get("lara") or r.get("rit") or is_lara_titel(titel)
-                                                                     or _is_rit_titel(titel))):
+                                                                     or _is_rit_titel(titel)
+                                                                     or ("lara" not in r and titel == "privé-afspraak"))):
                 # Nooit 'niet vertrekken' voor een afspraak van Lara of een rit: een gewiste Lara-afspraak was op
                 # 22-10-2026 een fout, en wie dan niet vertrekt, laat Lara staan (FR-210). Afgerond zonder oproep.
                 gebeld[r["sleutel"]] = nu.isoformat()

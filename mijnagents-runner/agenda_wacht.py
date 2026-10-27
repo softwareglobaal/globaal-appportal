@@ -648,7 +648,7 @@ def markering_tegen(titel, dag, markers=None, locatie=""):
     """De markering die een afspraak met deze titel op deze dag tegenhoudt, of None. Een rit, een hele-dag-item en Lara
     zelf (de reden van de markering) tellen niet."""
     t = (titel or "").strip()
-    if not t or not dag or t.startswith("\U0001F697") or "[LARA]" in t.upper() or "[LA]" in t.upper():
+    if not t or not dag or t.startswith("\U0001F697") or bellen.is_lara_titel(t):
         return None
     info = lees_titel(t)
     if info["reistijd"]:
@@ -2443,6 +2443,11 @@ def lara_vervalt(a):
     return bool(re.match(r"\s*(?:VR\s+)?(?:!!\s*)?vervalt\b", a.get("titel") or "", re.I))
 
 
+def zonder_vervalt(titel):
+    """De titel zonder de markering 'vervalt (...)' vooraan: zo blijft een rit gekoppeld aan zijn afspraak (hertest 14)."""
+    return re.sub(r"^\s*(?:VR\s+)?(?:!!\s*)?vervalt\b\s*(?:\([^)]*\))?\s*", "", titel or "", flags=re.I)
+
+
 def lara_zonder_rit(a, vrij):
     """Een Lara-afspraak die geen rit (meer) vraagt: op een officiële vakantiedag of met 'vervalt' vooraan. Die houdt
     ook geen eigen rit vast: een rit die er nog aan hing, ruimt de agent op (reviewronde 27-10-2026, FR-79 en FR-210)."""
@@ -2983,9 +2988,12 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
         x = er.get(k)
         soort = k.split(":", 1)[0]
         try:
-            if x is None and k not in reg:
+            inhoud = body["extendedProperties"]["private"][LARA_INHOUD]
+            heropen = (k.startswith("week:") and k in reg and not reg[k].get("open")
+                       and reg[k].get("inhoud") != inhoud)        # nieuw ophaalmoment in een afgeronde week (hertest 14)
+            if x is None and (k not in reg or heropen):
                 n = _insert(PRIVE_AGENDA, body, tok) or {}
-                reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True}
+                reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud}
                 gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag gezet ({soort})")
             elif x is not None and ((x.get("start") or "")[:10] != body["start"]["date"]
@@ -4841,7 +4849,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # meer aan een toevallig gesprek dat op zijn einde begint (reviewronde 27-10-2026, FR-210)
         _mr = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
         _van_zonder_rit = bool(_mr) and any(lara_zonder_rit(y, vrij) and y.get("start", "")[:10] == x["start"][:10]
-                                            and titel_sleutel(y["titel"]) == titel_sleutel(_mr.group(1)) for y in items)
+                                            and y.get("kalender") == x.get("kalender")
+                                            and titel_sleutel(zonder_vervalt(y["titel"])) == titel_sleutel(zonder_vervalt(_mr.group(1)))
+                                            for y in items)
         if "Reistijd voor:" in (x.get("omschrijving") or ""):
             vast = (x["kalender"], e0) in grenzen or (e0 in begins_alle and not _van_zonder_rit)
         else:
@@ -5034,7 +5044,8 @@ def _nakijken(regels, tok=None, ritten=(), noden=None):
         except Exception:  # noqa: BLE001
             vers = []
         if vers:
-            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"], "tijd": vers[0]["tijd"]})
+            goed.append({**r, "tekst": vers[0]["tekst"], "titel": vers[0]["titel"], "tijd": vers[0]["tijd"],
+                         "lara": vers[0].get("lara", False)})
         else:
             weg += 1
     return goed, weg

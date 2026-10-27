@@ -125,7 +125,7 @@ class Incident(unittest.TestCase):
     def test_masked_lara_line_from_rooster_never_niet_vertrekken(self):
         # Codex-hertest 13: de roosterregel van belrooster() maskeert de titel ('privé-afspraak'); het Lara-merk blijft
         now = datetime.now().astimezone()
-        for regel_extra, reden in (({"lara": True}, "afgezegd"), ({}, "afgezegd-lara")):
+        for regel_extra, reden in (({"lara": True}, "afgezegd"), ({}, "afgezegd-lara"), ({}, "afgezegd")):
             regel = {"sleutel": f"{W.PRIVE_AGENDA}:fake:{(now + timedelta(minutes=5)).isoformat()}",
                      "tijd": (now - timedelta(seconds=1)).isoformat(), "tekst": "vertrek", "titel": "privé-afspraak", **regel_extra}
             calls = []

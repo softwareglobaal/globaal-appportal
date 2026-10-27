@@ -645,6 +645,35 @@ finally:
     W._prive_item_lezen, W._patch = _o8
 check("een afgeronde vraag wordt niet aangevuld (dan een nieuwe vraag)", _afg is False)
 
+# hertest 14: rit blijft gekoppeld na 'vervalt', [LA-PR] botst niet met de dagmarker, afgeronde week heropent
+check("een rit blijft gekoppeld aan zijn afspraak als die 'vervalt' vooraan kreeg",
+      W.titel_sleutel(W.zonder_vervalt("vervalt (vakantie) !! Mehdi: [LA] Lara ophalen en thuis afzetten"))
+      == W.titel_sleutel("!! Mehdi: [LA] Lara ophalen en thuis afzetten"))
+check("een Lara-afspraak met [LA-PR] of [lara] botst niet met de dagmarker 'Geen buiten afspraken'",
+      all(W.markering_tegen(t, "2026-11-10", markers=[("!! Mehdi: Geen buiten afspraken Lara ophalen", "buiten")]) is None
+          for t in ("!! Mehdi: [LA-PR] Lara ophalen", "!! Mehdi: [lara] Lara ophalen"))
+      and W.markering_tegen("!! Mehdi: [HARC-KB] 2505 - klant", "2026-11-10",
+                            markers=[("!! Mehdi: Geen buiten afspraken Lara ophalen", "buiten")]) is not None)
+_o9 = {k: getattr(W, k) for k in ("_insert", "_patch", "_eigen_melding_opgelost", "_prive_item_lezen", "LARA_VRAGEN")}
+_ins9 = []
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen9-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins9.append(body) or {"id": f"w{len(_ins9)}"}
+    W._patch = lambda a, body, tok, **k: None
+    W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="": True
+    W._prive_item_lezen = lambda eid, tok: None
+    _nu9 = datetime(2026, 10, 27, 9, 0, tzinfo=W.TIJDZONE)
+    W.lara_meldingen([], _wk, [], "tok", _nu9)                 # gevraagd
+    W.lara_meldingen([], [], [], "tok", _nu9)                  # afgerond (geen open ophaalmoment meer)
+    W.lara_meldingen([], _wk, [], "tok", _nu9)                 # dezelfde inhoud: niet opnieuw
+    _n9 = len(_ins9)
+    W.lara_meldingen([], _wk_meer, [], "tok", _nu9)            # een nieuw ophaalmoment in die week: opnieuw vragen
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("een afgeronde weekvraag komt niet terug met dezelfde inhoud, wel bij een nieuw ophaalmoment",
+      _n9 == 1 and len(_ins9) == 2, str((_n9, len(_ins9))))
+
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []
 try:
