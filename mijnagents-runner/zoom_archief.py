@@ -434,10 +434,25 @@ def _utc(iso):
     return d.astimezone(timezone.utc) if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
-def _zelfde_begin(a, b, speling=timedelta(minutes=2)):
-    """Hetzelfde begin van een opnamedeel, op twee minuten na (een voorlopig en een definitief bestand)."""
+VERVANGER_SPELING = timedelta(seconds=5)  # gemeten: voorlopig en definitief begonnen op dezelfde seconde
+
+
+def _zelfde_begin(a, b, speling=VERVANGER_SPELING):
+    """Hetzelfde begin van een opnamedeel, op enkele seconden na. Codex controle verwerking 4, punt 45: na stoppen en
+    herstarten maakt Zoom een apart deel met een later begin; dat is geen vervanger."""
     ta, tb = _utc(a), _utc(b)
     return ta is not None and tb is not None and abs(ta - tb) <= speling
+
+
+def _vervanger(oud, m, fid, gebruikt):
+    """Het definitieve bestand voor een voorlopig id in meeting m, of None: een NIEUW bestand (niet in de meeting toen het
+    voorlopige id voor het eerst gezien werd), afgerond, met dezelfde soort, hetzelfde opnametype en hetzelfde begin op
+    enkele seconden na, en nog voor geen ander voorlopig id gebruikt (Codex controle verwerking 2 tot 4)."""
+    return next((f["id"] for f in (m["bestanden"] if m else [])
+                 if f.get("id") and f["id"] != fid and f["id"] not in set(oud.get("andere") or [])
+                 and f["id"] not in gebruikt and f.get("status") == "completed"
+                 and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
+                 and _zelfde_begin(f.get("start"), oud.get("start"))), None)
 
 
 def gb(bestanden):
@@ -622,6 +637,12 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         if fid not in per_id and fid not in staat["bestanden"]:
             del staat["gezien"][fid]
             staat["fouten"].pop(fid, None)
+            k = oud.get("kandidaat")
+            if oud.get("bezig") and k and (k in staat["bestanden"] or k in per_id) and k not in staat["vervangers"]:
+                # Codex controle verwerking 4, punt 46: de vervanger verscheen al toen het voorlopige id nog zichtbaar
+                # was, en staat bewezen in Dropbox of nog in Zoom: niets verdwenen
+                staat["vervangers"][k] = fid
+                continue
             if oud.get("bezig") and oud.get("uuid") in uuids:
                 # Gemeten op de VM, 27-10-2026: Zoom geeft een bestand in verwerking een voorlopig id (grootte 0) en
                 # vervangt het door een definitief id zodra het klaar is. Het voorlopige wacht op zijn vervanger
@@ -636,13 +657,9 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             del staat["vervanging"][fid]  # Codex controle verwerking 2, punt 42: het id is terug, het volgt de gewone weg
             continue
         m = next((x for x in meetings if x["uuid"] == oud.get("uuid")), None)
-        # Codex controle verwerking 2, punt 41: alleen een NIEUW bestand telt, een dat er niet was toen het voorlopige
-        # id gezien werd, en elk bestand vervangt hoogstens een voorlopig id
-        vervanger = next((f["id"] for f in (m["bestanden"] if m else [])
-                          if f.get("id") and f["id"] != fid and f["id"] not in set(oud.get("andere") or [])
-                          and f["id"] not in gebruikt and f.get("status") == "completed"
-                          and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
-                          and _zelfde_begin(f.get("start"), oud.get("start"))), None)
+        k = oud.get("kandidaat")
+        vervanger = k if k and (k in staat["bestanden"] or k in per_id) and k not in gebruikt else \
+            _vervanger(oud, m, fid, gebruikt)
         if vervanger:
             gebruikt.add(vervanger)
             staat["vervangers"][vervanger] = fid
@@ -662,6 +679,9 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0), "uuid": m["uuid"],
                                     "bezig": True, "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
                                     "andere": andere}
+        # punt 46: een vervanger die verschijnt terwijl het voorlopige id nog zichtbaar is, onthoud ik meteen
+        staat["gezien"][f["id"]]["kandidaat"] = vorige.get("kandidaat") or \
+            _vervanger(staat["gezien"][f["id"]], m, f["id"], set(staat["vervangers"]))
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:

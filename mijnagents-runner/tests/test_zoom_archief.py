@@ -1310,6 +1310,45 @@ def test_codex_verwerking_44_een_vervanger_die_verschijnt_terwijl_het_voorlopige
     assert "A" not in s["verdwenen"] and "A" not in s["vervanging"] and "B" in s["bestanden"], s["verdwenen"]
     assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
 
+
+def test_codex_verwerking_45_een_apart_deel_een_minuut_later_is_geen_vervanger():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:00:00Z", bestanden=[])
+    A = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:00:00Z", "einde": "", "grootte": 0,
+         "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    B = {**A, "id": "B", "status": "completed", "start": "2026-10-27T12:01:00Z", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    m["bestanden"] = [dict(A)]
+    ronde()
+    m["bestanden"] = [dict(A), dict(B)]
+    ronde(nu=NU + timedelta(hours=1))
+    m["bestanden"] = [dict(B)]
+    ronde(nu=NU + timedelta(hours=2))
+    r, _ = ronde(nu=NU + timedelta(hours=27))
+    assert "A" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r), \
+        "een deel dat een minuut later begint, is een ander deel: A blijft een verlies"
+
+
+def test_codex_verwerking_46_een_bewezen_vervanger_die_eerst_uit_zoom_verdwijnt_telt_nog():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("M4A", "audio_only", b"g")])
+    A = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z", "einde": "", "grootte": 0,
+         "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    B = {**A, "id": "B", "status": "completed", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    geluid = m["bestanden"][0]
+    m["bestanden"] = [geluid, dict(A)]
+    ronde()
+    m["bestanden"] = [geluid, dict(A), dict(B)]
+    ronde(nu=NU + timedelta(hours=1))                       # B wordt gekopieerd en bewezen
+    m["bestanden"] = [geluid, dict(A)]
+    ronde(nu=NU + timedelta(hours=2))                       # B verdwijnt uit Zoom voor A
+    m["bestanden"] = [geluid]
+    r, _ = ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert "B" in s["bestanden"] and "A" not in s["verdwenen"] and "A" not in s["vervanging"], (s["verdwenen"], s["vervanging"])
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
