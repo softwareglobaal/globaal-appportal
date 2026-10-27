@@ -525,6 +525,8 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False):
         raise ZoomFout("opnamelijst niet gevonden")
     uit = []
     for m in lijst:
+        if streng and not isinstance(m.get("recording_files"), list):
+            raise ZoomFout("onvolledig antwoord van Zoom (meeting zonder lijst van bestanden)")
         bestanden = []
         for f in m.get("recording_files") or []:
             bid = str(f.get("id") or "")

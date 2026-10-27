@@ -35,7 +35,8 @@ import zoom_archief as ZA  # noqa: E402
 from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
-os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t")
+os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
+                  DROPBOX_PRIVE_ACCOUNT_ID="dbid:proef-eigen")
 
 WERKWIJZE = open(os.path.join(RUNNER, "werkwijze", "zoom-archief.md"), encoding="utf-8").read()
 NU = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
@@ -474,7 +475,14 @@ def test_codex3_een_onvolledige_lijst_is_een_fout_en_geen_dekking():
     m = z.meeting("u2", "2026-10-20T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
     m["bestanden"][0]["link"] = False
     r, uit = ronde(nu=NU + timedelta(days=1))
-    assert "Zoom gaf een opnamebestand zonder id of downloadlink" in teksten(r) and not uit["dekking"]
+    assert "Zoom gaf een onvolledige opname: bestand zonder id of downloadlink" in teksten(r) and not uit["dekking"]
+    r, uit = ronde(nu=NU + timedelta(days=1, hours=1))
+    assert not uit["volledig"] and "Zoom gaf een onvolledige opname: bestand zonder id of downloadlink" in teksten(r), \
+        "een korte ronde houdt de nood (controle 2, punt 17)"
+    z.meetings["u3"] = {"uuid": "u3", "nummer": "1", "onderwerp": "x", "start": "2026-10-21T09:00:00Z", "duur": 1,
+                        "bestanden": []}
+    r, uit = ronde(nu=NU + timedelta(days=2))
+    assert "Zoom gaf een onvolledige opname: meeting zonder opnamebestanden" in teksten(r) and not uit["dekking"]
 
 
 def test_codex4_een_bewijs_dat_uit_dropbox_verdween_wordt_nagekeken_en_opnieuw_gekopieerd():
@@ -533,19 +541,26 @@ def test_vroege_stops_sluiten_geen_noden():
         os.environ["DROPBOX_PRIVE_REFRESH_TOKEN"] = oud
 
 
-def test_codex6_alleen_naar_mehdis_eigen_dropbox():
+def test_codex6_alleen_naar_het_vastgelegde_dropbox_account():
     z, d, _ = opzet()
     z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
-    d.mappen.clear()  # geen Fathom-archief: niet zijn privé-Dropbox
-    r, uit = ronde()
-    assert uit is None and not z.downloads and "Dropbox niet gebruikt: gekoppelde Dropbox is niet Mehdi's privé-archief" in teksten(r)
-    d.mappen.add("/Fathom data")
+    for account, mappen, verwacht in (
+            ("dbid:proef-eigen", set(), "Dropbox niet gebruikt: gekoppelde Dropbox is niet Mehdi's privé-archief"),
+            ("dbid:iemand-anders", {"/Fathom data"}, "Dropbox niet gebruikt: andere Dropbox gekoppeld dan vastgelegd")):
+        d.account, d.mappen = account, mappen
+        r, uit = ronde()
+        assert uit is None and not z.downloads and verwacht in teksten(r) and r.noden_onbekend, teksten(r)
+        assert next(n for n in r.noden if n["tekst"] == verwacht)["wie"] == "mehdi"
+    oud = os.environ.pop("DROPBOX_PRIVE_ACCOUNT_ID")
+    try:
+        d.account, d.mappen = "dbid:proef-eigen", {"/Fathom data"}
+        r, uit = ronde()
+        assert uit is None and "Dropbox niet gebruikt: Dropbox-account voor de kopie niet vastgelegd" in teksten(r), \
+            "zonder vastgelegd account kopieert de eerste ronde niets, ook niet met een map Fathom data"
+    finally:
+        os.environ["DROPBOX_PRIVE_ACCOUNT_ID"] = oud
     _, uit = ronde()
-    assert uit["gedaan"] == 1 and ZA.lees_staat()["dropbox"] == "dbid:proef-eigen"
-    d.account = "dbid:iemand-anders"
-    r, uit = ronde(nu=NU + timedelta(days=1))
-    assert uit is None and "Dropbox niet gebruikt: andere Dropbox gekoppeld dan bij de eerste ronde" in teksten(r)
-    assert next(n for n in r.noden if n["tekst"].startswith("Dropbox niet gebruikt"))["wie"] == "mehdi"
+    assert uit["gedaan"] == 1
 
 
 def test_codex8_verdwenen_komt_terug_of_mehdi_aanvaardt_het_gemis():
@@ -610,6 +625,79 @@ def test_zonder_grootte_van_zoom_geen_bewijs():
     r, _ = ronde()
     assert "Zoom-opname niet naar Dropbox gekopieerd: Zoom geeft geen grootte op" in teksten(r)
     assert not d.bestanden and not ZA.lees_staat()["bestanden"]
+
+
+# ---------------------------------------------------------------------- Codex-controle 2 (27-10-2026) ---
+def test_codex11_kopie_weg_uit_dropbox_en_zoom_wordt_verdwenen_en_nooit_stil_dekking():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    _, uit = ronde()
+    assert uit["dekking"]
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    del z.meetings["u1"]
+    for dag in (1, 2):
+        r, uit = ronde(nu=NU + timedelta(days=dag))
+        assert not uit["dekking"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r), (dag, uit)
+    assert m["bestanden"][0]["id"] in ZA.lees_staat()["verdwenen"]
+
+
+def test_codex11_een_korte_ronde_kijkt_de_bewijzen_ook_na():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    _, uit = ronde()
+    assert uit["dekking"]
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["volledig"] and not uit["dekking"], "een korte ronde bevestigt geen dekking op een verdwenen kopie"
+    assert not json.load(open(os.path.join(ZA.DATA, "dekking.json")))["dekking"]
+
+
+def test_codex13_een_voorstel_dat_niet_op_het_bord_kwam_wordt_opnieuw_geprobeerd():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    z.fout[m["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    del z.meetings["u1"]
+    ZA.ag.hartslag = lambda *a, **k: None  # het bord slikte de fout in
+    ronde(nu=NU + timedelta(days=1))
+    assert not ZA.lees_staat()["voorstellen"], "niet teruggelezen, dus niet als verstuurd gemarkeerd"
+    ZA.ag.hartslag = lambda status, taak="", detail="", voorstel=None, **k: VOORSTELLEN.append(
+        {"actie": voorstel["actie"], "status": "open", "reden": voorstel["reden"]}) if voorstel else None
+    ronde(nu=NU + timedelta(days=1, hours=1))
+    assert len(VOORSTELLEN) == 1 and len(ZA.lees_staat()["voorstellen"]) == 1
+
+
+def test_codex14_twee_opnames_met_dezelfde_sleutel_krijgen_geen_voorstel():
+    z, _, _ = opzet()
+    for u in ("u1", "u2"):
+        m = z.meeting(u, "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+        z.fout[m["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    z.meetings.clear()
+    echt = ZA.kort
+    ZA.kort = lambda tekst, n=8: "0" * n if n == 16 else echt(tekst, n)
+    try:
+        r, uit = ronde(nu=NU + timedelta(days=1))
+    finally:
+        ZA.kort = echt
+    assert not VOORSTELLEN and not uit["dekking"], "bij een botsing geen voorstel, en de dekking blijft nee"
+    assert len(ZA.lees_staat()["verdwenen"]) == 2
+
+
+def test_codex12_een_oud_open_za01_voorstel_houdt_het_advies_met_kopie_niet_tegen():
+    a = {"code": "ZA-01", "ernst": "hoog", "toestand": "open", "stand": {"wisregel": False, "band": 90, "kopie": "ja"},
+         "reden": "x", "doel": "y"}
+    oud = {"id": 40, "status": "open", "ts": "2026-10-26T13:04:57+00:00",
+           "parameters": json.dumps({"cyclus": 0, "regelversie": 1, "stand": {"band": 90, "wisregel": False},
+                                     "zoom_advies": "ZA-01"})}
+    gekozen, _ = ZA_ACC.te_versturen([a], [oud], datetime(2026, 10, 27, 7, tzinfo=timezone.utc))
+    assert [x["code"] for x in gekozen] == ["ZA-01"]
+    nieuw = {**oud, "id": 41, "parameters": json.dumps({"cyclus": 0, "regelversie": 1, "stand": a["stand"],
+                                                        "zoom_advies": "ZA-01"})}
+    gekozen, _ = ZA_ACC.te_versturen([a], [oud, nieuw], datetime(2026, 10, 27, 7, tzinfo=timezone.utc))
+    assert not gekozen, "een open voorstel met de kopie in de stand houdt een tweede wel tegen"
 
 if __name__ == "__main__":
     goed = fout = 0

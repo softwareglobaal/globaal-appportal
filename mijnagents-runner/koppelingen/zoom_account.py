@@ -856,6 +856,13 @@ def _zelfde(a, r):
         p.get("stand") == a["stand"] and r.get("status") != "vervallen"
 
 
+def _verouderd(a, r):
+    """Een open ZA-01-voorstel van voor De Zoomarchivaris: zijn stand kent de kopie niet. Het houdt het advies met een
+    bewezen kopie niet tegen (Codex, Zoomarchief controle 2); Mehdi weigert het oude zelf."""
+    stand = _params(r).get("stand")
+    return a["code"] == "ZA-01" and isinstance(stand, dict) and "kopie" not in stand
+
+
 def te_versturen(adviezen_lijst, voorstellen, klok, max_nieuw=3):
     week = week_van(klok)
     deze_week = sum(1 for r in voorstellen if _week_ts(r.get("ts")) == week and _params(r).get("zoom_advies"))
@@ -864,7 +871,8 @@ def te_versturen(adviezen_lijst, voorstellen, klok, max_nieuw=3):
         if a["toestand"] != "open":
             continue
         bij_regel = [r for r in voorstellen if _params(r).get("zoom_advies") == a["code"]]
-        if any(_zelfde(a, r) for r in bij_regel) or any(r.get("status") == "open" for r in bij_regel):
+        if any(_zelfde(a, r) for r in bij_regel) or any(r.get("status") == "open" and not _verouderd(a, r)
+                                                         for r in bij_regel):
             continue
         kandidaten.append(a)
     kandidaten.sort(key=lambda a: (ERNST[a["ernst"]], a["code"]))

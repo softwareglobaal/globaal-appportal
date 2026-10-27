@@ -329,6 +329,32 @@ def test_lijst_map_leest_alle_paginas():
     assert D.lijst_map("/Bestaat niet") is None
 
 
+
+def test_opnames_streng_weigert_een_onvolledig_antwoord():
+    Z._VAST["id"] = "mehdi-id"
+    echt = Z.lees_alles
+    try:
+        for antwoord in ([{"uuid": "u", "start_time": "2026-10-20T09:00:00Z"}],):
+            Z.lees_alles = lambda *a, **k: antwoord
+            try:
+                Z.opnames("2026-10-01", "2026-10-30", streng=True)
+                raise AssertionError("een meeting zonder lijst van bestanden hoort een fout te zijn")
+            except Z.ZoomFout:
+                pass
+            assert Z.opnames("2026-10-01", "2026-10-30")[0]["bestanden"] == [], "zonder streng zoals vroeger"
+        gevraagd = []
+        Z.lees_alles = lambda pad, params, sleutel, profiel="lees", streng=False: gevraagd.append(params) or []
+        Z.opnames(None, None, prullenbak="recording_file", streng=True)
+        assert gevraagd[-1] == {"page_size": 300, "trash": "true", "trash_type": "recording_file"}, gevraagd
+    finally:
+        Z.lees_alles = echt
+    Z.lees = lambda pad, params=None, profiel="lees": {"total_records": 1}
+    try:
+        Z.lees_alles("/users/mehdi-id/recordings", {}, "meetings", streng=True)
+        raise AssertionError("een pagina zonder lijst hoort een fout te zijn")
+    except Z.ZoomFout:
+        pass
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

@@ -98,7 +98,7 @@ class Stop(RuntimeError):
 
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
-              "voorstellen": {}, "inventaris": "", "gekopieerd": 0, "dekking": False, "dropbox": ""}
+              "voorstellen": {}, "onvolledig": {}, "inventaris": "", "gekopieerd": 0, "dekking": False, "dropbox": ""}
 
 
 def staat_pad():
@@ -216,13 +216,18 @@ def mehdi_vastzetten():
 
 
 def dropbox_controle(staat):
-    """'' als de koppeling naar hetzelfde Dropbox-account wijst als bij de eerste ronde, anders de reden. Bij de
-    eerste ronde moet daar het Fathom-archief staan: het teken dat het Mehdi's eigen privé-Dropbox is (Codex 6)."""
+    """'' als de koppeling naar het vastgelegde Dropbox-account wijst, anders de reden (Codex 6 en controle 2, 16). Het
+    account-id staat in ~/appportal/.env als DROPBOX_PRIVE_ACCOUNT_ID, vastgelegd bij de uitrol na een controle van
+    het account (naam en e-mail), nooit door de agent zelf. Daar moet ook het Fathom-archief staan, het teken dat het
+    Mehdi's eigen privé-Dropbox is."""
+    vast = os.environ.get("DROPBOX_PRIVE_ACCOUNT_ID", "").strip()
+    if not vast:
+        return "Dropbox-account voor de kopie niet vastgelegd"
     acc = D.account()
     if not acc.get("id"):
         return "Dropbox-account niet te lezen"
-    if staat["dropbox"]:
-        return "" if staat["dropbox"] == acc["id"] else "andere Dropbox gekoppeld dan bij de eerste ronde"
+    if acc["id"] != vast:
+        return "andere Dropbox gekoppeld dan vastgelegd"
     teken = D.metadata(EIGEN_TEKEN)
     if not teken or teken.get("soort") != "folder":
         return "gekoppelde Dropbox is niet Mehdi's privé-archief"
@@ -259,7 +264,8 @@ def kopieer(f, pad, werkmap, bewaker=None):
                     raise
         if not m or m.get("grootte") != n or m.get("content_hash") != h:
             raise Afwijking("ander bestand op dat pad in Dropbox")
-        return {"pad": pad, "grootte": n, "hash": h, "ts": nu().isoformat(timespec="seconds")}
+        return {"pad": pad, "grootte": n, "hash": h, "start": f.get("start", ""),
+                "ts": nu().isoformat(timespec="seconds")}
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -289,17 +295,22 @@ def schrijf_opname_json(m, bewezen, werkmap):
         os.remove(tmp)
 
 
-def bewijzen_nakijken(staat):
-    """Codex 4: klopt elk eerder bewijs nog met wat nu in Dropbox staat? Een bestand dat weg is of anders is, gaat uit de
-    bewezen bestanden (en komt in de volgende ronden opnieuw, of als afwijking). Geeft het aantal dat niet meer klopte."""
+def bewijzen_nakijken(staat, bewaker=None):
+    """Codex 4 en controle 2, punt 11: klopt elk eerder bewijs nog met wat nu in Dropbox staat? Een bestand dat weg is
+    of anders is, gaat uit de bewezen bestanden en terug naar 'gezien': staat het nog in Zoom, dan kopieer ik het
+    opnieuw; is het ook uit Zoom weg, dan maakt de volgende volledige inventaris het 'verdwenen', tot Mehdi beslist.
+    Zo kan een verlies nooit stil uit de telling vallen. Geeft het aantal dat niet meer klopte."""
     in_dropbox = D.lijst_map(DOEL) or {}
     weg = 0
     for fid, b in list(staat["bestanden"].items()):
         x = in_dropbox.get((D.basis() + b["pad"]).lower())
         if x is None:
+            if bewaker:
+                bewaker()
             x = D.metadata(b["pad"])  # Dropbox maakt paden anders klein dan Python: eerst rechtstreeks kijken
         if not x or x.get("grootte") != b["grootte"] or x.get("content_hash") != b["hash"]:
             del staat["bestanden"][fid]
+            staat["gezien"][fid] = {"start": b.get("start", ""), "grootte": b.get("grootte", 0), "was_bewezen": True}
             weg += 1
     return weg
 
@@ -314,8 +325,13 @@ def gemist_voorstellen(staat):
     except bord.BordOnbekend:
         rijen = None
     uit = []
+    sleutels = {}
+    for fid in staat["verdwenen"]:
+        sleutels.setdefault(kort(fid, 16), []).append(fid)
     for fid, v in list(staat["verdwenen"].items()):
-        sleutel = kort(fid)
+        sleutel = kort(fid, 16)
+        if len(sleutels[sleutel]) > 1:
+            continue  # twee opnames met dezelfde sleutel: geen voorstel, de dekking blijft nee (Codex controle 2, 14)
         actie = f"{GEMIST_ACTIE} ({sleutel})"
         if rijen is not None and any(r["actie"] == actie and r["status"] in AANVAARD for r in rijen):
             staat["gemist"][fid] = {**v, "aanvaard": nu().isoformat(timespec="seconds")}
@@ -447,16 +463,24 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         return None
 
     alle = [(m, f) for m in meetings for f in m["bestanden"]]
-    zonder_id = [f for _, f in alle if f.get("status") == "completed" and (not f.get("id") or not f.get("link"))]
+    onvolledig = {m["uuid"]: "meeting zonder opnamebestanden" for m in meetings if not m["bestanden"]}
+    onvolledig.update({m["uuid"]: "bestand zonder id of downloadlink" for m, f in alle
+                       if f.get("status") == "completed" and (not f.get("id") or not f.get("link"))})
+    # Codex controle 2, punt 17: een volledige inventaris zet de lijst opnieuw, een korte voegt alleen toe
+    staat["onvolledig"] = onvolledig if volledig else {**staat.get("onvolledig", {}), **onvolledig}
     per_id = {f["id"]: (m, f) for m, f in alle if f.get("id")}
     klaar = [f for _, f in per_id.values() if f.get("status") == "completed" and f.get("link")]
     for fid in list(staat["verdwenen"]):  # Codex 8: wat terugkwam, is niet meer verdwenen
         if fid in per_id or fid in staat["bestanden"]:
             del staat["verdwenen"][fid]
     nagekeken_weg = 0
-    if volledig and not droog:
+    if not droog:  # elke ronde, ook een korte: een dekking ja steunt nooit op een bewijs dat niet nagekeken is
         try:
-            nagekeken_weg = bewijzen_nakijken(staat)
+            nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker)
+        except Stop as e:
+            r.noden_onbekend = True
+            r.detail = f"nakijken niet af: {e}"
+            return None
         except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja
             nagekeken_weg = -1
             r.nood(f"Dropbox niet nagekeken ({type(e).__name__})", wie="claude-code")
@@ -505,6 +529,13 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
                     gestopt = "Zoom vraagt rust"
                     break
         for m in meetings:
+            if gestopt:
+                break
+            try:
+                bewaker()
+            except Stop as e:
+                gestopt = str(e)
+                break
             ids = [f.get("id") for f in m["bestanden"]]
             if (ids and all(ids) and m["uuid"] not in staat["meetings"]
                     and all(f.get("status") == "completed" for f in m["bestanden"])
@@ -514,12 +545,15 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
                     staat["meetings"][m["uuid"]] = staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
                 except Exception as e:  # noqa: BLE001
                     r.nood(soort_fout(e)[0], wie="claude-code")
-        for v in gemist_voorstellen(staat):
+        for sleutel, v in gemist_voorstellen(staat):
+            # Codex controle 2, punt 13: hartslag slikt een bordfout in; pas als het bord het voorstel teruggeeft,
+            # geldt het als verstuurd, anders probeert de volgende ronde het opnieuw
+            ag.hartslag("actief", taak="Zoom-opname zonder kopie", voorstel=v)
             try:
-                ag.hartslag("actief", taak="Zoom-opname zonder kopie", voorstel=v[1])
-                staat["voorstellen"][v[0]] = nu_utc().isoformat(timespec="seconds")
-            except Exception as e:  # noqa: BLE001
-                print(f"voorstel niet verstuurd: {type(e).__name__}", file=sys.stderr)
+                if bord.db_lees("SELECT id FROM voorstel WHERE naam=? AND actie=?", (NAAM, v["actie"])):
+                    staat["voorstellen"][sleutel] = nu_utc().isoformat(timespec="seconds")
+            except bord.BordOnbekend:
+                pass
 
     rest = [f for f in klaar if f["id"] not in staat["bestanden"]]
     for fid in list(staat["fouten"]):
@@ -528,11 +562,11 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         if fid in staat["bestanden"] or (volledig and fid not in per_id):
             del staat["fouten"][fid]
     _meld_blijvend(r, staat)
-    if zonder_id:
-        r.nood("Zoom gaf een opnamebestand zonder id of downloadlink", wie="claude-code")
+    for reden in sorted(set(staat["onvolledig"].values())):
+        r.nood(f"Zoom gaf een onvolledige opname: {reden}", wie="claude-code")
     grens = (nu_utc() - timedelta(days=WISREGEL_DAGEN)).strftime("%Y-%m-%dT%H:%M:%SZ")
     oud_open = [f for f in rest if (f.get("start") or "") < grens]
-    blokkade = bool(staat["verdwenen"] or zonder_id or nagekeken_weg)
+    blokkade = bool(staat["verdwenen"] or staat["onvolledig"] or nagekeken_weg)
     # Dekking ja: een volledige inventaris vond niets meer te kopiëren, elk bewijs klopte nog, niets verdween (K6). Een
     # korte ronde houdt het oordeel van de laatste volledige, tenzij ze nieuw werk of een blokkade vindt.
     if volledig:
@@ -551,7 +585,7 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
             "ts": nu_utc().isoformat(timespec="seconds"), "dekking": dekking, "inventaris": staat["inventaris"],
             "volledig_gelezen": volledig, "bestanden": len(klaar), "bewezen": len(klaar) - len(rest), "open": len(rest),
             "open_ouder_dan_30_dagen": len(oud_open), "verdwenen": len(staat["verdwenen"]),
-            "gemist_aanvaard": len(staat["gemist"]), "zonder_id": len(zonder_id)})
+            "gemist_aanvaard": len(staat["gemist"]), "onvolledig": len(staat["onvolledig"])})
     else:
         dekking = False
     r.detail = (f"{'droog: ' if droog else ''}{'proef: ' if proef else ''}{len(klaar)} bestanden ({gb(klaar):.1f} GB) "
