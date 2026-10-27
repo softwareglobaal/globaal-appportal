@@ -1,5 +1,11 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.26 (27-10-2026): driehoeksoverleg, punten L5 en M6, goedgekeurd door Mehdi. Een afspraak op de agenda
+van Lara en een afspraak uit een reeks worden nooit gewist, ook niet door Claude: de hook claude-hooks/wisgrendel.py
+weigert het voor het gebeurt (master 5.18). Alleen mijn eigen ritten (ID rit en 32 hexadecimale tekens) mogen weg.
+Wat niet doorgaat, wordt gemarkeerd: 'vervalt (vakantie)' vooraan en Beschikbaar, na Mehdi's ja. Aanzetten staat bij
+het leren in lagen. Grendel: `test_wisgrendel.py`.
+
 Aanvulling v8.25 (22-10-2026): beslissing van Mehdi. Een dubbele zorgafspraak die een collega op de werkagenda zette,
 en een eigen melding van de agent die op Opgelost staat, mogen weg, telkens na Mehdi's akkoord voor dat geval
 (master 5.17). Ik leg het voor; Claude verwijdert na de ja. Zonder ja blijft alles staan.
@@ -785,8 +791,37 @@ voor mij op het moment van handelen, en niets keek naar de dag zoals hij hem zie
    Data uit Mehdi/Agendawacht/weekconsolidatie. Het model stelt voor; een sessie legt vast, met een test.
 
 Laag 1 en 3 zet Mehdi een keer aan in ~/.claude/settings.json (de beveiligingslaag laat Claude dat niet doen):
-UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en regels_vooraf.py.
-De grendel is tests/test_leren_in_lagen.py.
+UserPromptSubmit met correctie.py en regels_vooraf.py, PreToolUse met matcher "Bash|mcp__.*" en twee opdrachten:
+regels_vooraf.py en de wisgrendel. De opdracht voor de wisgrendel is precies deze (met omhulsel, zie hieronder):
+
+`sh -c '[ -f "$HOME/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py" ] && exec python3 "$HOME/dev/globaal-appportal/mijnagents-runner/claude-hooks/wisgrendel.py"; exit 0'`
+
+De grendels zijn tests/test_leren_in_lagen.py en tests/test_wisgrendel.py.
+
+De wisgrendel (27-10-2026, L5 en M6) weigert echt; regels_vooraf.py zet alleen tekst. Hij houdt tegen: wissen op de
+agenda van Lara (behalve een eigen rit), wissen of annuleren van een afspraak uit een reeks (ID eindigt op
+_JJJJMMDD of _JJJJMMDDTUUMMSSZ) op elke agenda, en een Bash-opdracht die zo wist of recurringEventId noemt. In Bash
+moeten agenda en ID letterlijk in de opdracht staan: een variabele, $(...) of een onbekende agenda weigert hij, ook
+op de werkagenda (Codex-controle 27-10-2026, punt 5). Wissen op de werkagenda met een letterlijk gewoon ID laat hij
+door; daar blijft de ja van Mehdi de regel. Mijn eigen ritopruiming draait in Python op de VM en valt er niet onder.
+Wissen telt ook als "method": "DELETE", .delete( op een agenda-object, status 'cancelled', /batch/calendar of
+events/<id>/move. Draait de opdracht een eigen script (python3, node, bash of sh met een bestand, ook via
+bash < wis.sh, cat wis.sh | sh, source of . en ./script.sh) of stuurt ze een bestand mee (-d @body.json), dan kijkt hij
+dat bestand mee na als het bestaat en kleiner is dan 200 kB; een script dat ongewijzigd in deze repo staat
+(agenda_wacht.py, de tests) is nagekeken code en telt niet. Een wisopdracht met een ondoorzichtig doel ("$URL",
+$(cat url.txt), in code een variabele als URL) weigert hij als de opdracht ergens een agenda of Google noemt. Elk
+wisdoel telt apart: een veilige letterlijke URL elders in de opdracht (een echo na de ;) dekt niets af. Een geneste
+opdracht (na bash, sh of zsh -c, na eval, of een shellscript dat zelf iets draait) krijgt dezelfde controle, tot drie
+lagen diep; dieper weigert hij zodra er nog iets in staat dat wist, een agenda noemt of iets draait.
+Voert de opdracht iets als code in een shell of tolk (een pijp of omleiding naar sh, bash, zsh, dash, python of node
+zonder eigen script of -c, source, ., eval, of <(...) daarin), dan leest hij elk bestaand bestand in die opdracht en
+kijkt alles samen na (cat < wis.sh | sh, tee x < wis.sh | bash). cat wis.sh zonder shell erachter blijft vrij.
+Het ID van Lara leest hij uit agenda-taken.json, nergens anders.
+Waarom het omhulsel: met een kaal python3-pad naar een script dat ontbreekt (een andere branch, een verplaatst
+bestand) stopt python met exitcode 2, en exitcode 2 blokkeert in Claude Code elke opdracht onder de matcher (elke
+Bash- en MCP-opdracht). Het omhulsel eindigt dan met exitcode 0 en laat de weigering van de hook gewoon door als het
+script er wel is. Ontbreekt het script, dan staat de grendel stil uit: zet hem pas aan als ~/dev/globaal-appportal de
+main met wisgrendel.py heeft (git pull --ff-only), en kijk het na met ls op dat pad.
 
 ## Wat ik nooit doe
 
