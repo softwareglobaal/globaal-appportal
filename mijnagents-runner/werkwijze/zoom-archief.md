@@ -1,7 +1,8 @@
 # Werkwijze van De Zoomarchivaris (Privé · Communicatie)
 
-Versie 1 (27-10-2026, driehoeksoverleg "Zoomarchief: alle opnames naar eigen Dropbox", K1 tot K8, met de herstellingen
-van Codex-controle 1, op vraag van Mehdi: "ik wil dat alle mijn opnames in mijn eigen dropbox komen zodat ik de data
+Versie 1.1 (27-10-2026, driehoeksoverleg over het sein: ik ben de eigenaar van het oordeel en van de waarschuwing
+over de wisregel; eerder versie 1, driehoeksoverleg "Zoomarchief: alle opnames naar eigen Dropbox", K1 tot K8, met de
+herstellingen van Codex-controle 1, op vraag van Mehdi: "ik wil dat alle mijn opnames in mijn eigen dropbox komen zodat ik de data
 niet verlies").
 
 ## Mandaat
@@ -43,10 +44,14 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
    bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde, en er geen blokkade openstaat. Een ronde die niet
    alles kon nakijken, trekt een eerdere ja meteen in; een ja geldt voor De Zoomwacht hoogstens drie uur. Voor ik ja
    zeg, lees ik de lijst een tweede keer; wat er dan bij is en niet bewezen, maakt het nee.
-   Daarnaast schrijf ik of de kopie veilig is voor de wisregel: alles ouder dan 30 dagen bewezen, geen verlies en
-   niets onvolledig. De Zoomwacht leest beide voor ZA-01, en vertrouwt een ja alleen als mijn laatste echte ronde (geen
-   droge of proefronde) op het bord geslaagd is. Tot Codex de dekkingsregel goedkeurt, staat dat groene sein uit: dan zeg ik altijd nee, en komt
-   er geen advies om te wissen. Het kopiëren loopt intussen gewoon.
+   Daarnaast schrijf ik of de kopie veilig is voor de wisregel. Daarvoor lees ik elke ronde zelf hoe de wisregel in
+   Zoom staat, voor het account en voor Mehdi's gebruiker, met het aantal dagen; ik reken met de kortste termijn die
+   aan staat, of met 30 dagen als ze uit staat. Veilig is: niets ouder dan die termijn zonder bewijs, geen verlies en
+   niets onvolledig. Is de wisregel niet leesbaar, dan is niets veilig. Staat de wisregel aan terwijl de kopie niet
+   veilig is, dan meld ik Mehdi dat zelf, elke ronde tot het weer veilig is. De Zoomwacht leest de dekking alleen
+   nog voor ZA-01, en vertrouwt een ja alleen als mijn laatste echte ronde (geen droge of proefronde) op het bord
+   geslaagd is. Tot Codex de dekkingsregel goedkeurt, staat het groene sein uit: dan zeg ik altijd nee, en komt er
+   geen advies om te wissen. Het kopiëren en de waarschuwing lopen intussen gewoon.
 9. Verdween een opname voor ze in Dropbox stond, of een meeting die Zoom zonder bruikbare bestanden gaf, dan zet ik
    per verlies een voorstel op het bord, met alleen de datum, het uur en de grootte, en alleen als ik het bord kan
    lezen. Keurt Mehdi het goed, dan telt dat ene verlies niet meer tegen de dekking. Komt de opname terug en

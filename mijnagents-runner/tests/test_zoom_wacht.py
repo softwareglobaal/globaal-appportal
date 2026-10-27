@@ -1181,7 +1181,7 @@ def test_t25_bron_en_zaad():
     assert any("ander Fathom-account" in p for p in beslist), "13.1: de opnames van een ander account staan bij Wat Mehdi beslist"
     assert "\N{EM DASH}" not in ZAAD and "\N{EN DASH}" not in ZAAD and not bord.HTML.search(ZAAD), "N9 en NA44"
     assert "```" not in ZAAD and "~~~" not in ZAAD and len(ZAAD) >= 500
-    assert ZAAD.splitlines()[2].startswith("Versie 2.5 ("), ZAAD.splitlines()[2]
+    assert ZAAD.splitlines()[2].startswith("Versie 2.6 ("), ZAAD.splitlines()[2]
     # RZ4-02 en RZ4-04 (22-10-2026): het zaad zegt wat de code doet bij een vreemde Zoom-gebruiker, wanneer de leesapp
     # sleutels bewaart, en dat De Dagbundelaar de laatste stap van de ochtendketen is (geen eigen wachttijd meer)
     zaad = " ".join(ZAAD.split())
