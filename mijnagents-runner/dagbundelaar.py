@@ -316,7 +316,7 @@ def main():
             for week in weken_voor_de_nacht(nu):
                 try:
                     delen.append(met_tijdslimiet(weekoverzicht_maken, WEEK_TIJDSLIMIET, week, nu))
-                except Exception as e:  # noqa: BLE001
+                except (Exception, WeekTijdOp) as e:  # noqa: BLE001
                     ag.log("week", "fout", f"weekoverzicht {week} mislukt: {type(e).__name__}: {str(e)[:200]}")
                     mislukt.append(week)
             if mislukt:
@@ -651,21 +651,22 @@ WEEKNOOD = "Weekoverzicht niet gemaakt, zie dagbundelaar.log"
 WEEK_TIJDSLIMIET = 300
 
 
-class WeekTijdOp(Exception):
-    pass
+class WeekTijdOp(BaseException):
+    """Geen Exception: een gewone foutafhandeling onderweg (except Exception, zoals bij de firmanamen) mag de
+    tijdslimiet niet inslikken (Codex-controle fase 2, ronde 4)."""
 
 
 def met_tijdslimiet(f, seconden, *args):
     """f(*args) met een eigen tijdslimiet (SIGALRM, alleen in de hoofddraad). Is de tijd op, dan WeekTijdOp; de vorige
-    alarmafhandeling komt altijd terug."""
+    alarmafhandeling komt altijd terug, ook als het aanzetten zelf faalt."""
     import signal
 
     def op(_signum, _frame):
         raise WeekTijdOp(f"tijdslimiet van {seconden} s")
 
     oud = signal.signal(signal.SIGALRM, op)
-    signal.setitimer(signal.ITIMER_REAL, seconden)
     try:
+        signal.setitimer(signal.ITIMER_REAL, seconden)
         return f(*args)
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)

@@ -1303,6 +1303,31 @@ def test_fase2_weken_voor_de_nacht():
             D.DAGBOEK = oud
 
 
+def test_fase2_tijdslimiet_gaat_door_een_gewone_foutafhandeling():
+    """Codex-controle fase 2, ronde 4 (K3): loopt de weekstap vast in een stuk met een gewone foutafhandeling (de
+    firmanamen uit kern), dan stopt ze toch op haar grens en keert ze nooit terug als geslaagd."""
+    import organisatie
+    import signal
+    import time
+    with tempfile.TemporaryDirectory() as m:
+        w, gevangen = Wereld(m), {}
+        oud = _week_wereld(m, w, gevangen)
+        organisatie.firmas = lambda *a, **k: time.sleep(3) or []
+        vorige = signal.getsignal(signal.SIGALRM)
+        begin = time.monotonic()
+        try:
+            D.met_tijdslimiet(D.weekoverzicht_maken, 0.2, "2026-W43", datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
+            raise AssertionError("de tijdslimiet werd ingeslikt: de week keerde terug als geslaagd")
+        except D.WeekTijdOp:
+            pass
+        finally:
+            D.DAGBOEK, D.lees_agenda, organisatie.firmas, bord.call = oud
+            D.ag.__dict__.pop("klaarzet", None)
+        assert time.monotonic() - begin < 2, "de grens hield de week niet tegen"
+        assert signal.getsignal(signal.SIGALRM) == vorige and signal.getitimer(signal.ITIMER_REAL)[0] == 0
+        assert "weekoverzicht:2026-W43" not in gevangen, "een week die op haar grens stopte, staat niet op het bord"
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0
