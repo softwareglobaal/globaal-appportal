@@ -1,4 +1,4 @@
-# Grendels op het portaal (portal.globaal.be): een app met status archived is niet zichtbaar.
+# Grendels op het portaal (portal.globaal.be): een app met status archived staat apart onder Archive.
 name: portal-grendels
 
 on:
