@@ -928,6 +928,84 @@ def test_codex23_een_mislukte_opname_json_blijft_gemeld_tot_ze_lukt():
     r, uit = ronde(nu=NU + timedelta(hours=2))
     assert ZA.OPNAME_JSON not in teksten(r) and ZA.mapnaam(m) + "/opname.json" in d.bestanden
 
+
+# ------------------------------------------------- de twee aanvallers op 8075c96 (27-10-2026), wat nog gold ---
+def test_aanval_een_harde_stop_of_een_kapotte_staat_laat_geen_oude_ja_staan():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    z.fout[m["bestanden"][0]["id"]] = SystemExit(143)  # de ronde begint te herkopiëren en krijgt een stopsignaal
+    try:
+        ronde(nu=NU + timedelta(hours=1))
+        raise AssertionError("SystemExit verwacht")
+    except SystemExit:
+        pass
+    assert not _dekking()["dekking"], "na een harde stop staat er geen ja"
+    del z.fout[m["bestanden"][0]["id"]]
+    _tot_ja(z)
+    open(ZA.staat_pad(), "w").write("")
+    try:
+        ronde(nu=NU + timedelta(hours=3))
+        raise AssertionError("een kapotte staat hoort de ronde te breken")
+    except ValueError:
+        pass
+    assert not _dekking()["dekking"], "met een kapotte staat staat er geen ja"
+
+
+def test_aanval_een_droge_ronde_sluit_geen_nood():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2025-03-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    d.bestanden[ZA.pad_van(m, m["bestanden"][0])] = b"iets anders"
+    r, _ = ronde()
+    assert r.noden
+    r, _ = ronde(droog=True)
+    assert r.noden_onbekend, "een droge ronde laat het bord niets sluiten"
+
+
+def test_aanval_een_mislukte_controle_van_dropbox_blijft_gemeld_tot_ze_lukt():
+    z, d, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    echt = D.lijst_map
+
+    def kapot(pad, bewaker=None):
+        raise OSError("weg")
+    D.lijst_map = kapot
+    try:
+        for uur in (1, 2):
+            r, uit = ronde(nu=NU + timedelta(hours=uur))
+            assert "Dropbox niet nagekeken (OSError)" in teksten(r) and not uit["dekking"] and not uit["veilig"], uur
+    finally:
+        D.lijst_map = echt
+    r, uit = ronde(nu=NU + timedelta(hours=3))
+    assert "Dropbox niet nagekeken (OSError)" not in teksten(r) and uit["dekking"]
+
+
+def test_aanval_een_blijvende_fout_wordt_niet_verdrongen_door_een_tijdelijke():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2025-03-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    d.bestanden[ZA.pad_van(m, m["bestanden"][0])] = b"iets anders"
+    tekst = "Zoom-opname niet naar Dropbox gekopieerd: ander bestand op dat pad in Dropbox"
+    r, _ = ronde()
+    assert tekst in teksten(r)
+    z.fout[m["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    r, _ = ronde(nu=NU + timedelta(hours=1))
+    assert tekst in teksten(r), "de afwijking blijft gemeld, ook als Zoom die ronde even niets gaf"
+
+
+def test_aanval_een_bestand_dat_alsnog_een_link_krijgt_is_geen_verlies():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    m["bestanden"][0]["link"] = False
+    r, uit = ronde()
+    assert not uit["dekking"] and any("onvolledige opname" in x for x in teksten(r))
+    m["bestanden"][0]["link"] = True
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not ZA.lees_staat()["verdwenen"] and uit["gedaan"] == 1, (ZA.lees_staat()["verdwenen"], uit)
+    _, uit = ronde(nu=NU + timedelta(hours=2))
+    assert uit["dekking"]
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

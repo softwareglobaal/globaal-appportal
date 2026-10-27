@@ -316,17 +316,18 @@ def bewijzen_nakijken(staat, bewaker=None):
 
 
 def problemen(m):
-    """Wat aan een meeting niet te kopiëren of niet te bewijzen is: {sleutel: reden}. Een sleutel per geval, ook per
+    """Wat aan een meeting niet te kopiëren of niet te bewijzen is: {sleutel: (reden, bestandsid of leeg)}. Een sleutel per geval, ook per
     bestand zonder id, zodat een geval nooit stil opgaat in een meeting die verder goed is (Codex controle 4, punt 18).
     Een bestand dat Zoom nog verwerkt, is geen probleem; het houdt alleen de dekking tegen tot het gekopieerd is."""
     if not m["bestanden"]:
-        return {f"meeting:{m['uuid']}": "meeting zonder opnamebestanden"}
+        return {f"meeting:{m['uuid']}": ("meeting zonder opnamebestanden", "")}
     uit = {}
     for f in m["bestanden"]:
         if not f.get("id") or f.get("status") not in ("completed", "processing") or \
                 (f.get("status") == "completed" and not f.get("link")):
             kenmerk = json.dumps([f.get("id", ""), f.get("soort", ""), f.get("opnametype", ""), f.get("start", "")])
-            uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}"] = "bestand zonder id, downloadlink of bekende status"
+            uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}"] = ("bestand zonder id, downloadlink of bekende status",
+                                                              f.get("id", ""))
     return uit
 
 
@@ -479,6 +480,12 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         if klok() > hard:
             raise Stop("tijd op of de gesprekkenketen begint")
 
+    if not droog:
+        # Een ronde die hard stopt (stopsignaal, onleesbare staat, een fout buiten stop()) laat zo nooit een oude ja
+        # staan: alleen het slot van een geslaagde ronde schrijft ja (aanval op 8075c96, punt 3).
+        intrekken("ronde bezig", nu_utc)
+    else:
+        r.noden_onbekend = True  # een droge ronde kijkt niet alles na: ze sluit geen nood
     staat = lees_staat()
     r.bron("zoom-archief staat", {"bewezen": len(staat["bestanden"]), "inventaris": staat["inventaris"],
                                   "dekking": staat["dekking"]})
@@ -526,14 +533,16 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     # weg, of het kreeg een id waarvan ik niet kan bewijzen dat het hetzelfde bestand is) is een verlies tot Mehdi beslist.
     nu_problemen = {}
     for m in meetings:
-        for sleutel, reden in problemen(m).items():
-            nu_problemen[sleutel] = {"reden": reden, "start": m.get("start", "")}
+        for sleutel, (reden, fid) in problemen(m).items():
+            nu_problemen[sleutel] = {"reden": reden, "start": m.get("start", ""), "fid": fid}
     for sleutel, o in list(staat["onvolledig"].items()):
         if sleutel in nu_problemen:
             continue
         del staat["onvolledig"][sleutel]
         if sleutel.startswith("meeting:") and sleutel[8:] in uuids:
-            continue
+            continue  # de meeting heeft nu bestanden: die volgen de gewone weg
+        if o.get("fid") and o["fid"] in per_id:
+            continue  # hetzelfde bestand (zelfde id) is er nog en nu in orde: het volgt de gewone weg
         staat["verdwenen"][sleutel] = {"start": o.get("start", ""), "grootte": 0, "sinds": moment}
     staat["onvolledig"].update(nu_problemen)
     for fid in list(staat["verdwenen"]):  # Codex 8: wat terugkwam, is niet meer verdwenen
@@ -549,9 +558,11 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker)
         except (Stop, D.TijdOp) as e:
             return stop("", "", f"nakijken niet af: {e}", staat)
-        except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja
+        except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja, en de nood blijft tot het lukt
             nagekeken_weg = -1
-            r.nood(f"Dropbox niet nagekeken ({type(e).__name__})", wie="claude-code")
+            staat["blokkades"]["nakijken"] = f"Dropbox niet nagekeken ({type(e).__name__})"
+        else:
+            staat["blokkades"].pop("nakijken", None)
     te_doen = [f for f in klaar if f["id"] not in staat["bestanden"]]
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
     for fid, oud in list(staat["gezien"].items()):
@@ -593,8 +604,12 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             except Exception as e:  # noqa: BLE001
                 tekst, tijdelijk = soort_fout(e)
                 oud = staat["fouten"].get(f["id"], {})
-                staat["fouten"][f["id"]] = {"tekst": tekst, "tijdelijk": tijdelijk,
-                                            "pogingen": oud.get("pogingen", 0) + 1}
+                if oud and not oud.get("tijdelijk") and tijdelijk:
+                    oud["pogingen"] = oud.get("pogingen", 0) + 1  # de blijvende fout blijft staan en gemeld
+                else:
+                    zelfde = oud.get("tekst") == tekst
+                    staat["fouten"][f["id"]] = {"tekst": tekst, "tijdelijk": tijdelijk,
+                                                "pogingen": (oud.get("pogingen", 0) if zelfde else 0) + 1}
                 if "HTTP 429" in str(e):
                     gestopt = "Zoom vraagt rust"
                     break
