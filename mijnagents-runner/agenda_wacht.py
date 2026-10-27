@@ -3617,7 +3617,10 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 # binnen het venster van de mailvergelijking zag die het blok al; daarbuiten niet: dan op het merk zoeken
                 ver = (datetime.fromisoformat(a["start"]).astimezone(TIJDZONE).date() - nu.astimezone(TIJDZONE).date()).days \
                     >= MAIL_VENSTER_DAGEN - 1
-                bestaand = _zorg_blok_met_merk(a.get("sleutel"), tok) if ver else ""
+                # een verschuiving kan van voorbij het venster naar binnen het venster gaan: dan staat het oude blok er nog
+                # buiten de vergelijking, en zoek ik het ook op zijn merk (review 2, PR 113)
+                verzet = any(h.get("van") for h in (z.get("historie") or []))
+                bestaand = _zorg_blok_met_merk(a.get("sleutel"), tok) if (ver or verzet) else ""
             except Exception as ex:  # noqa: BLE001
                 st["fout"] += 1
                 st["prive"].append(f"{wat}: niet gezet, bestaand blok niet na te gaan ({type(ex).__name__})")
@@ -6250,7 +6253,7 @@ def _niet_meer_te_valideren(x, tok):
 
 def zorg_whatsapp(items, tok, nu=None, sinds=None):
     """W1 tot W4 en W8: een WhatsApp-melding per nieuwe of verschoven versie van een zorgblok uit mail, nooit twee keer.
-    De eerste keer (basislijn) krijgt een toekomstig blok dat nu botst een melding (zoals het ECG op 5/11 tegen
+    De eerste keer (basislijn) krijgt een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een
     ANTWERK), en ook een blok dat deze ronde gemaakt werd (Google 'created'; Codex-controle PR 113, punt 3); de rest wordt
     stil bekend. items: alle agenda's, ook de archiefagenda's (punt 4). Geeft regels zonder titels."""
     nu = nu or nu_lokaal()
@@ -6352,6 +6355,12 @@ def zorg_whatsapp_stap():
         return [], [{"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})", "wie": "claude"}]
 
 
+def _bev(sleutel, m):
+    """De sleutel van de bevestiging voor dit ene antwoord: een nieuw antwoord na een mislukte verwerking krijgt zijn eigen
+    bevestiging, een nieuwe poging voor hetzelfde antwoord niet (review 2, PR 113)."""
+    return f"{sleutel}:bevestiging:{m.get('antwoord_tijd') or ''}"
+
+
 def whatsapp_antwoorden_verwerken(tok=None, nu=None):
     """W5: Mehdi's antwoord met code ('A3 ja', 'A3 vervalt'), door De Bode in de wachtrij gezet. ja: '??' weg; vervalt:
     'vervalt' vooraan en Beschikbaar, nooit wissen. Teruggelezen, dan pas bevestigd op WhatsApp. Geeft regels."""
@@ -6363,7 +6372,7 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
         x = _prive_item_lezen((m.get("vraag") or {}).get("id") or "", tok)
         if x is None or not (x.get("_merk") or {}).get(ZORGMERK):
             AW.verwerkt(sleutel, "weg")
-            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
+            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
                                                      "ik heb niets veranderd.")
             regels.append(f"{code}: afspraak niet meer gevonden, niets veranderd")
             continue
@@ -6371,7 +6380,7 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
         if (v.get("start"), v.get("einde")) != (x.get("start"), x.get("einde")):
             # intussen verschoven: het antwoord ging over het oude uur (Codex-controle PR 113, punt 1)
             AW.verwerkt(sleutel, "verschoven")
-            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
+            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
                                                      "niets veranderd. Je krijgt een nieuwe melding over het nieuwe uur.")
             regels.append(f"{code}: afspraak intussen verschoven, niets veranderd")
             continue
@@ -6398,7 +6407,7 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
             if not blijvend and AW.poging_verwerken(sleutel) < 3:
                 continue
             AW.verwerkt(sleutel, "mislukt")
-            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
+            AW.klaarzetten(_bev(sleutel, m), f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
                                                      "Ik kijk het na; de afspraak staat nog op ??.")
             continue
         wat = f"{_kale_titel(x['titel'])} op {_wanneer(x)}"
@@ -6406,7 +6415,7 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
                  f"Agendawacht: {code} vastgelegd. {wat} staat nu als vervallen en Beschikbaar (niet gewist). "
                  "Bel zelf de praktijk om af te zeggen.")
         AW.verwerkt(sleutel, keuze)
-        AW.klaarzetten(f"{sleutel}:bevestiging", tekst)
+        AW.klaarzetten(_bev(sleutel, m), tekst)
         regels.append(f"{code}: {keuze} vastgelegd en teruggelezen")
     return regels
 

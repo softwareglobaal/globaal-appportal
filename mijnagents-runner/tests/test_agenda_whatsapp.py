@@ -687,6 +687,59 @@ check("een nieuw blok voorbij dag 400 wordt gemeld en daarna gaat zijn dag uit d
       any(k.startswith("zorg:v26:") for k in AW._lees()["meldingen"]) and "2028-04-04" not in _na1, str((_na1, list(AW._lees()["meldingen"]))))
 check("een gekoppeld blok wordt ook in de meldstap niet als nieuw vastgelegd (punt 1)", "gekoppeld26" not in AW.eerste_ids())
 
+# --- tweede review met meerdere agents (PR 113) ---------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw27-")) / "agenda-whatsapp.json")
+AW.versie_melden("ecg", ecg["start"], ecg["einde"], "x {code}", {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]})
+_c27 = next(v["code"] for v in AW._lees()["meldingen"].values() if v.get("vraag"))
+AW.antwoord_herkennen(f"{_c27} ja")
+_st27 = {"summary": "!! ?? [PR] Huisarts - Praktijk Verpleegkundigen"}
+_weiger = {"aan": True}
+_o27 = (W._patch, W._lees_event, W._prive_item_lezen)
+W._prive_item_lezen = lambda eid, tok: dict(ecg, titel=_st27["summary"])
+W._patch = lambda a, body, tok, **kw: (_ for _ in ()).throw(W.GeenSchrijfrecht("x")) if _weiger["aan"] else _st27.update(body)
+W._lees_event = lambda kal, eid, tok: dict(_st27)
+try:
+    W.whatsapp_antwoorden_verwerken("tok")                       # blijvend geweigerd: mislukt, met een bericht
+    AW.antwoord_herkennen(f"{_c27} ja")                          # Mehdi antwoordt opnieuw
+    _weiger["aan"] = False
+    _r27 = W.whatsapp_antwoorden_verwerken("tok")
+finally:
+    W._patch, W._lees_event, W._prive_item_lezen = _o27
+_bevs = [v for k, v in AW._lees()["meldingen"].items() if ":bevestiging" in k]
+check("antwoordt Mehdi opnieuw na een mislukte verwerking, dan krijgt hij de bevestiging van dat nieuwe antwoord (review 2)",
+      any("vastgelegd" in v.get("tekst", "") and v["status"] == "klaar" for v in _bevs)
+      and not any("kon je antwoord niet vastleggen" in v.get("tekst", "") and v["status"] == "klaar" for v in _bevs),
+      str([(v["status"], v["tekst"][:40]) for v in _bevs]))
+# een verschuiving van voorbij het venster naar binnen het venster neemt het bestaande blok mee
+_ver_oud = (W.nu_lokaal() + timedelta(days=130)).replace(hour=9, minute=0, second=0, microsecond=0)
+_dicht = (W.nu_lokaal() + timedelta(days=20)).replace(hour=9, minute=0, second=0, microsecond=0)
+_pat28, _ins28 = [], []
+_o28 = (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen,
+        list(W.ZORG_GEZET), W._lees_event)
+W._insert = lambda *a, **k: _ins28.append(1) or {"id": "nee"}
+W._zorg_blok_met_merk = lambda sleutel, tok: "b28"
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "!! [PR] Tandarts - Proef",
+                                        "start": _ver_oud.isoformat(), "einde": (_ver_oud + timedelta(minutes=30)).isoformat(),
+                                        "hele_dag": False, "omschrijving": "", "deelnemers": [], "maker": W.WERKAGENDA, "_merk": {}}
+W._lees_event = lambda kal, eid, tok: {"description": "praktijk"}
+W._patch = lambda x, body, tok, **kw: _pat28.append(body)
+W._zorg_nalezen = lambda *a, **k: ""
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+try:
+    _m28 = _mail16()
+    _m28[0].update(start=_dicht.isoformat(), einde=(_dicht + timedelta(minutes=30)).isoformat())
+    _m28[0]["zorg"] = dict(_m28[0]["zorg"], historie=[{"van": _ver_oud.isoformat(), "naar": _dicht.isoformat(), "bron": "mail 2"}])
+    _rz28 = W.zorg_afspraken_zetten(_m28, [], "tok")
+finally:
+    (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen) = _o28[:7]
+    W.ZORG_GEZET[:] = _o28[7]
+    W._lees_event = _o28[8]
+check("verschuift een zorgafspraak van voorbij dag 120 naar binnen het venster, dan schuift het bestaande blok mee, geen tweede",
+      not _ins28 and len(_pat28) == 1 and _pat28[0]["start"]["dateTime"] == _dicht.isoformat(), str((_ins28, _pat28, _rz28["prive"])))
+check("de werkwijze (op het bord) noemt geen medische afspraak",
+      "ECG" not in (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8"))
+
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
 check("De Bode verstuurt de agendameldingen met whatsapp.stuur zelf, dus nooit via Telegram (W6)",

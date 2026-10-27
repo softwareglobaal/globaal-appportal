@@ -262,7 +262,7 @@ def antwoord_herkennen(tekst):
         return None
     code = "A" + re.sub(r"\D", "", (m.group("c1") or m.group("c2")) if m else c.group("c"))
     with _bewerk() as d:
-        vraag = next((v for v in d["meldingen"].values() if v.get("code") == code and v.get("vraag")), None)
+        vk, vraag = next(((k, v) for k, v in d["meldingen"].items() if v.get("code") == code and v.get("vraag")), (None, None))
         uitkomst = ((vraag or {}).get("verwerkt") or {}).get("uitkomst")
         open_ = vraag is not None and (uitkomst == "mislukt" or (not vraag.get("antwoord") and not uitkomst))
         if vraag is None or (not m and not open_):
@@ -275,6 +275,10 @@ def antwoord_herkennen(tekst):
             uit = f"Agendawacht: {code} is al beantwoord ({vraag['antwoord']})."
         else:
             vraag["verwerkt"], vraag["pogingen_verwerken"] = None, 0   # na een mislukte verwerking mag het opnieuw
+            vraag.pop("nagekeken", None)                              # mislukt het weer, dan weer een nood (review 2)
+            for k2, m2 in d["meldingen"].items():
+                if k2.startswith(f"{vk}:bevestiging") and m2.get("status") == "klaar":
+                    m2["status"] = "vervangen"      # een nog niet verstuurde oude 'kon niet vastleggen' gaat niet meer weg
             keuze = (m.group("k1") or m.group("k2")).lower()
             vraag["antwoord"], vraag["antwoord_tijd"] = keuze, _nu().isoformat()
             uit = f"Agendawacht: {code} {keuze} ontvangen. Ik zet het in je agenda en bevestig binnen een kwartier."

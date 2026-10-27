@@ -368,7 +368,7 @@ Nooit een adres of mailinhoud; op het bord en in het werkverslag geen titels.
 - Alleen De Bode verstuurt, alleen via WhatsApp, nooit in de stille uren en nooit via Telegram (de regel van 25-09-2026
   blijft). De wachtrij (`mijnagents-data/agenda-whatsapp.json`) heeft een verzendspoor: een onderbroken verzending
   gaat niet blind opnieuw. Het dagplafond van de betaalde sjablonen blijft.
-- De eerste keer krijgt alleen een toekomstig blok dat nu botst een melding (zoals het ECG van 5/11 tegen ANTWERK).
+- De eerste keer krijgt alleen een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een hele-dag-blokkade).
 
 De grendel is `tests/test_agenda_whatsapp.py`.
 
