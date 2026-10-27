@@ -355,6 +355,29 @@ def test_opnames_streng_weigert_een_onvolledig_antwoord():
     except Z.ZoomFout:
         pass
 
+
+def test_dropbox_tijdsgrens_begrenst_elke_call_en_elke_herkansing():
+    h = _http()
+    pad = os.path.join(MAP, "grens.bin")
+    open(pad, "wb").write(b"x")
+    D.GRENS["tot"] = D.time.monotonic() - 1
+    try:
+        try:
+            D.upload_bestand(pad, "/Zoom/g/klein.bin")
+            raise AssertionError("voorbij de grens hoort geen call meer te beginnen")
+        except D.TijdOp:
+            pass
+        assert not h.bestanden and h.n == 0
+        D.GRENS["tot"] = D.time.monotonic() + 3  # een 500 met Retry-After van 5 s past niet meer in de grens
+        D.urllib.request.urlopen = lambda req, timeout=None: (_ for _ in ()).throw(_fout(req.full_url, 500, b""))
+        try:
+            D.upload_bestand(pad, "/Zoom/g/klein.bin")
+            raise AssertionError("de herkansing hoort niet voorbij de grens te wachten")
+        except D.TijdOp:
+            pass
+    finally:
+        D.GRENS["tot"] = None
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

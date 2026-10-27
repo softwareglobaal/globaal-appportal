@@ -629,7 +629,8 @@ def _waarde(d, k, reden="veld ontbreekt"):
 
 
 ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
-ARCHIEF_GELDIG = timedelta(hours=26)   # De Zoomarchivaris draait elk uur; een ouder bestand zegt niets meer
+ARCHIEF_GELDIG = timedelta(hours=3)    # De Zoomarchivaris draait elk uur en slaat hoogstens een ronde over voor de
+                                       # keten; een ouder bestand zegt niets meer (Codex, Zoomarchief controle 4)
 NOOD_WISREGEL_WACHT = "Wacht met de wisregel: niet elke Zoom-opname staat bewezen in je Dropbox"
 
 
@@ -667,6 +668,9 @@ def wisregel_wacht(r):
     try:
         rijen = voorstellen_lezen()
     except bord.BordOnbekend:
+        # Codex controle 4, punt 22: zonder de voorstellen weet ik niet of de waarschuwing nog geldt; niets sluiten
+        r.nood("Zoom-advies niet terug te lezen op het bord", "claude-code")
+        r.noden_onbekend = True
         return
     if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
             and archief_veilig() != "ja":

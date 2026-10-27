@@ -19,9 +19,9 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
    waar het Fathom-archief staat, het teken dat het Mehdi's eigen privé-Dropbox is. Wijst de koppeling naar een ander
    account, of is er niets vastgelegd, dan kopieer ik niets.
 3. Ik lees de opnamelijst van Mehdi's Zoom met de alleen-lezende app "Zoomwacht lezen", en de prullenbak van Zoom in
-   haar twee soorten: een hele gewiste meeting en een los gewist bestand. Een volledige inventaris, vanaf 2018, een keer
-   per dag en na elke ronde die iets kopieerde; anders de laatste 90 dagen. Ik lees alleen als bewezen is dat de app
-   Mehdi's Zoom-gebruiker leest. Een antwoord van Zoom zonder lijst is een fout, nooit een lege lijst.
+   haar twee soorten: een hele gewiste meeting en een los gewist bestand. Elke ronde leest alles vanaf 2018, zodat
+   niets buiten een venster valt. Ik lees alleen als bewezen is dat de app Mehdi's Zoom-gebruiker leest. Een antwoord
+   van Zoom zonder lijst is een fout, nooit een lege lijst.
 4. Elk afgerond bestand dat nog niet bewezen in Dropbox staat, kopieer ik, een voor een: eerst wat in de prullenbak van
    Zoom zit, want die wist Zoom na 30 dagen, dan de oudste. Ik download het naar een tijdelijk bestand op de VM,
    vergelijk de grootte met wat Zoom opgeeft en met wat de download zelf aankondigde, en bereken de vingerafdruk
@@ -39,8 +39,8 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 8. Ik schrijf de dekking: hoeveel bestanden en GB in Zoom staan, hoeveel bewezen in Dropbox, en of alles ouder dan 30
    dagen er staat. Dekking "ja" pas als alles wat Zoom nu heeft al bewezen was voor de ronde begon, niets nog in
    verwerking is, elk bewijs deze ronde in Dropbox klopte, niets onvolledig is en geen opname verdween voor ze
-   bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde. Een korte ronde houdt alleen een ja van een
-   volledige inventaris van dezelfde dag. Een ronde die niet alles kon nakijken, trekt een eerdere ja meteen in.
+   bewezen was, tenzij Mehdi dat ene verlies als gemist aanvaardde, en er geen blokkade openstaat. Een ronde die niet
+   alles kon nakijken, trekt een eerdere ja meteen in; een ja geldt voor De Zoomwacht hoogstens drie uur.
    Daarnaast schrijf ik of de kopie veilig is voor de wisregel: alles ouder dan 30 dagen bewezen, geen verlies en
    niets onvolledig. De Zoomwacht leest beide voor ZA-01.
 9. Verdween een opname voor ze in Dropbox stond, of een meeting die Zoom zonder bruikbare bestanden gaf, dan zet ik
@@ -50,8 +50,9 @@ Zoom geeft maar 20 GB cloudopslag. Pas als alles bewezen in Dropbox staat, kan M
 10. Een normale achterstand is geen nood: die staat met aantallen en GB in mijn hartslag. Een nood is een blokkade: geen
     Dropbox-token, een andere Dropbox, een onleesbare of onvolledige opnamelijst, een bestand dat afwijkt, een download
     die Zoom weigert, te weinig schijf op de VM, een tijdelijke fout die drie rondes blijft, of een opname die verdween voor ze
-    in Dropbox stond. De fouten per bestand bewaar ik, zodat de nood blijft tot het opgelost is, ook in een ronde die
-    dat bestand niet las. Stopt een ronde vroeg, dan sluit ze geen enkele nood.
+    in Dropbox stond. De fouten per bestand, een volle schijf en een beschrijving die niet in Dropbox kwam, bewaar ik,
+    zodat de nood blijft tot het opgelost is. Een onvolledig geval houd ik per bestand bij. Stopt een ronde vroeg, dan
+    sluit ze geen enkele nood.
 
 ## Wat ik nooit doe
 

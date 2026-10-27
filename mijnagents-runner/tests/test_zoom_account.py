@@ -580,7 +580,7 @@ def test_a16_a45_a52_herpoging_en_nood_na_twee_foute_wijzigingen():
     fouten = iter((({}, [("apps", "apps", "HTTP 400")], 1), ({}, [("apps", "apps", "HTTP 400")], 1), (d, [], 5)))
     with patch.object(Z, "leesapp", return_value=True), patch.object(Z, "leesapp_fout", return_value=""), \
          patch.object(Z, "leesapp_verboden", return_value=[]), patch.object(ZA, "lees_wijziging", side_effect=lambda *a: next(fouten)), \
-         patch.object(ZA.bord, "Agent", Agent):
+         patch.object(ZA, "voorstellen_lezen", return_value=[]), patch.object(ZA.bord, "Agent", Agent):
         r1, r2, r3 = R(), R(), R()
         ZA.ronde(r1, w, staat, KLOK.replace(hour=14))
         ZA.ronde(r2, w, staat, KLOK.replace(hour=15))

@@ -33,6 +33,19 @@ class Bestaat(RuntimeError):
     """Op dat pad staat al iets in Dropbox; upload_bestand overschrijft nooit."""
 
 
+class TijdOp(RuntimeError):
+    """De tijdsgrens van de ronde (GRENS) is bereikt: er begint geen nieuwe call meer, en geen herkansing."""
+
+
+# De tijdsgrens van een ronde in time.monotonic(), of None. De Zoomarchivaris zet ze per ronde, zodat ook een call en
+# zijn herkansingen niet voorbij haar grens lopen (Codex, Zoomarchief controle 4, punt 24).
+GRENS = {"tot": None}
+
+
+def _rest():
+    return None if GRENS["tot"] is None else GRENS["tot"] - time.monotonic()
+
+
 def _env(pad):
     try:
         for regel in open(os.path.expanduser(pad)):
@@ -98,9 +111,12 @@ def _verzoek(url, data, koppen, pogingen=5):
     """POST met herkansing bij 429 (Retry-After) en 5xx."""
     wacht = 5
     for poging in range(pogingen):
+        rest = _rest()
+        if rest is not None and rest <= 0:
+            raise TijdOp("tijdsgrens van de ronde")
         req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **_path_root(), **koppen})
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=120 if rest is None else max(1.0, min(120.0, rest))) as r:
                 inhoud = r.read()
             # upload_session/append_v2 geeft bij succes een lege body (Codex, Zoomarchief controle 1)
             return json.loads(inhoud) if inhoud.strip() else None
@@ -112,6 +128,9 @@ def _verzoek(url, data, koppen, pogingen=5):
                     pauze = max(int(e.headers.get("Retry-After", "0")), wacht)
                 except ValueError:
                     pauze = wacht
+                rest = _rest()
+                if rest is not None and rest <= pauze:
+                    raise TijdOp("tijdsgrens van de ronde") from None
                 time.sleep(min(pauze, 120))
                 wacht *= 2
                 continue

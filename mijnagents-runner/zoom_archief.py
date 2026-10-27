@@ -10,9 +10,9 @@ Elke ronde (cron elk uur, onder een eigen slot, nooit tijdens de gesprekkenketen
 1. nagaan dat de Dropbox-koppeling nog naar hetzelfde account wijst als bij de eerste ronde (toen moest daar het
    Fathom-archief staan, het teken dat het Mehdi's eigen privé-Dropbox is);
 2. de opnamelijst van Mehdi's Zoom lezen met de leesapp (koppelingen/zoom.py, grendels L1 en L5), in vensters van 30
-   dagen, en de prullenbak van Zoom in haar twee soorten (een hele gewiste meeting, een los gewist bestand). Een
-   volledige inventaris (vanaf EERSTE_DAG) een keer per Brusselse dag en na elke ronde die iets kopieerde; anders de
-   laatste KORT dagen. Een antwoord zonder lijst is een fout, geen lege lijst. Downloadlinks gaan nooit in de staat;
+   dagen, en de prullenbak van Zoom in haar twee soorten (een hele gewiste meeting, een los gewist bestand). Elke
+   ronde leest alles vanaf EERSTE_DAG, zodat niets buiten een venster valt. Een antwoord zonder lijst is een fout, geen
+   lege lijst. Downloadlinks gaan nooit in de staat;
 3. elk afgerond bestand dat nog niet bewezen in Dropbox staat, een voor een: eerst de prullenbak (die wist Zoom na 30
    dagen), dan de oudste. Downloaden in brokken naar een tijdelijk bestand op de VM, de grootte vergelijken met wat Zoom
    opgeeft en met Content-Length, de content_hash van Dropbox berekenen. Staat er al iets op het pad: met dezelfde
@@ -20,11 +20,12 @@ Elke ronde (cron elk uur, onder een eigen slot, nooit tijdens de gesprekkenketen
    (koppelingen/dropbox_prive.py). Na een onduidelijk antwoord van Dropbox meteen terugkijken wat er staat;
 4. bewezen is een bestand pas als Dropbox dezelfde grootte en content_hash geeft; dan pas komt het in de staat
    (mijnagents-data/zoom-archief/staat.json, atomisch geschreven). Het tijdelijke bestand gaat altijd weg, ook bij een
-   stopsignaal. Een volledige inventaris kijkt ook alle eerdere bewijzen na tegen wat nu in Dropbox staat;
+   stopsignaal. Elke ronde kijkt ook alle eerdere bewijzen na tegen wat nu in Dropbox staat;
 5. per meeting een opname.json zodra al haar bestanden bewezen zijn;
-6. de dekking in mijnagents-data/zoom-archief/dekking.json: ja pas als een volledige inventaris niets meer te
-   kopiëren vond, elk eerder bewijs nog klopt, en geen opname verdween voor ze bewezen was (tenzij Mehdi die als gemist
-   aanvaardde). Een korte ronde houdt dat oordeel, tenzij ze iets nieuws te kopiëren vindt. De Zoomwacht leest het
+6. de dekking in mijnagents-data/zoom-archief/dekking.json, elke ronde opnieuw uit wat die ronde zelf zag: ja pas als
+   alles wat Zoom heeft al bewezen was voor de ronde begon, niets in verwerking is, elk bewijs klopte, en niets
+   verdwenen (tenzij Mehdi dat ene verlies aanvaardde), onvolledig of geblokkeerd is. Daarnaast wisregel_veilig: niets
+   ouder dan 30 dagen zonder bewijs. Een ronde die niet alles kon nakijken, trekt ja in. De Zoomwacht leest beide
    voor ZA-01.
 Op het bord en in het werkverslag alleen aantallen, GB en datums, nooit een onderwerp, naam of pad. Een normale
 achterstand is geen nood; een nood is een blokkade en blijft staan tot ze opgelost is, ook in een ronde die het
@@ -62,13 +63,12 @@ DOEL = "/Zoom"
 EIGEN_TEKEN = "/Fathom data"      # bij de eerste ronde moet dit in de gekoppelde Dropbox staan (Mehdi's privé-archief)
 BRUSSEL = ZoneInfo("Europe/Brussels")
 VENSTER = 30                      # dagen per vraag aan Zoom
-KORT = 90                         # dagen die een gewone ronde leest
-EERSTE_DAG = date(2018, 1, 1)     # de volledige inventaris begint hier; Mehdi's oudste opname is van 10-08-2021
+EERSTE_DAG = date(2018, 1, 1)     # elke ronde leest alles vanaf hier (Codex controle 4); oudste opname: 10-08-2021
 BUDGET = 45 * 60                  # na zoveel seconden begint de ronde geen nieuw bestand meer
 NA_BUDGET = 10 * 60               # zoveel later breekt ze ook een lopend bestand af (geen bewijs, volgende ronde opnieuw)
 KETEN_UTC = ((7, 0), (13, 0), (23, 30))   # de gesprekkenketen (planning/gesprekken.cron)
 KETEN_MARGE = 10 * 60             # zoveel seconden voor de keten begint er geen nieuw bestand meer
-KETEN_HARD = 2 * 60               # zoveel seconden voor de keten breekt alles af, ook de inventaris
+KETEN_HARD = 5 * 60               # zoveel seconden voor de keten breekt alles af, ook de inventaris
 VRIJ_MARGE = 2 * 1024 ** 3        # zoveel schijf moet er naast het bestand vrij blijven op de VM
 POGINGEN = 3                      # een tijdelijke fout wordt pas een nood na zoveel rondes op hetzelfde bestand
 WISREGEL_DAGEN = 30               # de wisregel van ZA-01: wat ouder is, moet bewezen in Dropbox staan
@@ -98,7 +98,7 @@ class Stop(RuntimeError):
 
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
-              "voorstellen": {}, "onvolledig": {}, "inventaris": "", "gekopieerd": 0, "dekking": False, "dropbox": ""}
+              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "inventaris": "", "dekking": False, "dropbox": ""}
 
 
 def staat_pad():
@@ -255,7 +255,7 @@ def kopieer(f, pad, werkmap, bewaker=None):
                 m = D.upload_bestand(tmp, pad, bewaker=bewaker)
             except D.Bestaat:
                 m = D.metadata(pad)
-            except Stop:
+            except (Stop, D.TijdOp):
                 raise
             except Exception:
                 # Codex 10: na een onduidelijk antwoord (finish zonder antwoord, verlopen sessie, 401) meteen kijken
@@ -281,14 +281,14 @@ def opname_json(m, bewezen):
                            "naam": bewezen[f["id"]]["pad"].rsplit("/", 1)[-1]} for f in m["bestanden"]]}
 
 
-def schrijf_opname_json(m, bewezen, werkmap):
+def schrijf_opname_json(m, bewezen, werkmap, bewaker=None):
     os.makedirs(werkmap, exist_ok=True)
     tmp = os.path.join(werkmap, kort(m["uuid"], 16) + ".json.deel")
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(opname_json(m, bewezen), fh, ensure_ascii=False, indent=1)
     try:
         try:
-            D.upload_bestand(tmp, f"{mapnaam(m)}/opname.json")
+            D.upload_bestand(tmp, f"{mapnaam(m)}/opname.json", bewaker=bewaker)
         except D.Bestaat:
             pass  # er staat er al een: een opname.json overschrijven we nooit
     finally:
@@ -315,16 +315,19 @@ def bewijzen_nakijken(staat, bewaker=None):
     return weg
 
 
-def probleem(m):
-    """Wat aan een meeting niet te kopiëren of niet te bewijzen is, of leeg (Codex controle 3, punten 3 en 15). Een
-    bestand dat Zoom nog verwerkt, is geen probleem; het houdt alleen de dekking tegen tot het gekopieerd is."""
+def problemen(m):
+    """Wat aan een meeting niet te kopiëren of niet te bewijzen is: {sleutel: reden}. Een sleutel per geval, ook per
+    bestand zonder id, zodat een geval nooit stil opgaat in een meeting die verder goed is (Codex controle 4, punt 18).
+    Een bestand dat Zoom nog verwerkt, is geen probleem; het houdt alleen de dekking tegen tot het gekopieerd is."""
     if not m["bestanden"]:
-        return "meeting zonder opnamebestanden"
+        return {f"meeting:{m['uuid']}": "meeting zonder opnamebestanden"}
+    uit = {}
     for f in m["bestanden"]:
         if not f.get("id") or f.get("status") not in ("completed", "processing") or \
                 (f.get("status") == "completed" and not f.get("link")):
-            return "bestand zonder id, downloadlink of bekende status"
-    return ""
+            kenmerk = json.dumps([f.get("id", ""), f.get("soort", ""), f.get("opnametype", ""), f.get("start", "")])
+            uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}"] = "bestand zonder id, downloadlink of bekende status"
+    return uit
 
 
 # ------------------------------------------------------------ Mehdi beslist ---
@@ -408,8 +411,7 @@ def gb(bestanden):
 
 
 def _meld_blijvend(r, staat):
-    """De noden die uit de staat volgen, elke ronde opnieuw, ook als deze ronde het bestand niet probeerde of niet
-    las (een korte ronde leest alleen de laatste KORT dagen) (K5)."""
+    """De noden die uit de staat volgen, elke ronde opnieuw, tot ze opgelost zijn (K5, Codex controle 4, punt 23)."""
     for fout in staat["fouten"].values():
         if not fout.get("tijdelijk") or fout.get("pogingen", 0) >= POGINGEN:
             r.nood(fout["tekst"], wie="claude-code")
@@ -417,11 +419,13 @@ def _meld_blijvend(r, staat):
         r.nood("Zoom-opname verdwenen voor ze in Dropbox stond", wie="mehdi")
     for o in sorted({v["reden"] for v in staat["onvolledig"].values()}):
         r.nood(f"Zoom gaf een onvolledige opname: {o}", wie="claude-code")
+    for tekst in sorted(set(staat["blokkades"].values())):
+        r.nood(tekst, wie="claude-code")
 
 
 def intrekken(reden, nu_utc=nu, staat=None):
     """Codex controle 3, punt 5: een ronde die niet alles kon nakijken, trekt een eerdere dekking ja meteen in, in het
-    bestand voor De Zoomwacht en in de staat; alleen een nieuwe volledige inventaris geeft weer ja."""
+    bestand voor De Zoomwacht en in de staat; alleen een nieuwe, volledige ronde geeft weer ja."""
     try:
         if staat is None:
             staat = lees_staat()
@@ -436,10 +440,18 @@ def intrekken(reden, nu_utc=nu, staat=None):
         pass
 
 
+SCHIJF_VOL = "Te weinig vrije schijf op de VM voor de kopie van de Zoom-opnames"
+OPNAME_JSON = "Beschrijving van een Zoom-opname niet in Dropbox gezet"
+
+
 def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu):
+    """Een ronde. Elke ronde leest de hele opnamelijst (Codex controle 4, punt 19: een korte ronde ziet niet wat buiten
+    haar venster opduikt), kijkt elk bewijs na, kopieert wat ontbreekt, en berekent de dekking uit wat ze zelf zag."""
     def stop(tekst, wie, detail, staat=None):
         if tekst:
             r.nood(tekst, wie=wie)
+        if staat is not None:
+            _meld_blijvend(r, staat)
         r.noden_onbekend = True  # deze ronde keek niet alles na: het bord sluit niets, wat open stond blijft open
         r.detail = detail
         if not droog:
@@ -455,7 +467,9 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
             r.nood(n["tekst"], wie=n["wie"])
         return stop("", "", "geen privé-Dropbox-token, niets gekopieerd")
     if keten_draait():
-        r.noden_onbekend = True  # een gewone pauze, geen fout: de dekking blijft wat ze was
+        # Een gewone pauze. De dekking blijft zoals de vorige ronde (hoogstens een uur oud) haar schreef; De Zoomwacht
+        # leest ze in de keten en vertrouwt ze maar ARCHIEF_GELDIG (drie uur). Intrekken zou ZA-01 nooit laten openen.
+        r.noden_onbekend = True
         r.detail = "de gesprekkenketen draait, deze ronde overgeslagen"
         return None
     begin = klok()
@@ -468,6 +482,14 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
     staat = lees_staat()
     r.bron("zoom-archief staat", {"bewezen": len(staat["bestanden"]), "inventaris": staat["inventaris"],
                                   "dekking": staat["dekking"]})
+    D.GRENS["tot"] = time.monotonic() + max(0.0, hard - klok())
+    try:
+        return _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop)
+    finally:
+        D.GRENS["tot"] = None
+
+
+def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, stop):
     vroeg = None
     try:
         reden = dropbox_controle(staat)
@@ -483,11 +505,9 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         return stop(vroeg[0], vroeg[1], "niets gelezen of gekopieerd: " + vroeg[0], staat)
 
     vandaag = nu_utc().astimezone(BRUSSEL).date()
-    volledig = staat["inventaris"] != vandaag.isoformat() or staat["gekopieerd"] > 0
     try:
-        meetings = opnamelijst(EERSTE_DAG if volledig else vandaag - timedelta(days=KORT), vandaag + timedelta(days=1),
-                               bewaker=bewaker)
-    except Stop as e:
+        meetings = opnamelijst(EERSTE_DAG, vandaag + timedelta(days=1), bewaker=bewaker)
+    except (Stop, D.TijdOp) as e:
         return stop("", "", f"inventaris niet af: {e}", staat)
     except Z.GeenRecht as e:
         recht = e.scope if RECHT.fullmatch(e.scope or "") else "onbekend recht"
@@ -495,49 +515,51 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
     except Z.ZoomFout as e:
         return stop("Zoom-opnamelijst niet leesbaar", "claude-code", f"opnamelijst niet leesbaar ({str(e)[:60]})", staat)
 
+    moment = nu_utc().isoformat(timespec="seconds")
     alle = [(m, f) for m in meetings for f in m["bestanden"]]
     per_id = {f["id"]: (m, f) for m, f in alle if f.get("id")}
     klaar = [f for _, f in per_id.values() if f.get("status") == "completed" and f.get("link")]
-    bezig = [f for _, f in alle if f.get("status") == "processing"]
+    bezig = [f for _, f in per_id.values() if f.get("status") == "processing"]
     uuids = {m["uuid"] for m in meetings}
-    # Onvolledig (Codex controle 3, punten 15 en 17): wat ik zie, komt erbij; wat een volledige inventaris goed ziet,
-    # is opgelost; wat ze niet meer ziet, is verdwenen tot Mehdi beslist. Een korte ronde voegt alleen toe.
+    # Onvolledig, per geval (Codex controle 4, punt 18): wat ik zie, komt erbij of blijft. Een meeting zonder bestanden
+    # die nu wel bestanden heeft, volgt de gewone weg. Elk ander geval dat ik niet meer zie (de meeting of het bestand is
+    # weg, of het kreeg een id waarvan ik niet kan bewijzen dat het hetzelfde bestand is) is een verlies tot Mehdi beslist.
+    nu_problemen = {}
     for m in meetings:
-        p = probleem(m)
-        if p:
-            staat["onvolledig"][m["uuid"]] = {"reden": p, "start": m.get("start", "")}
-        elif volledig:
-            staat["onvolledig"].pop(m["uuid"], None)
-    if volledig:
-        for uuid, o in list(staat["onvolledig"].items()):
-            if uuid not in uuids:
-                staat["verdwenen"][f"meeting:{uuid}"] = {"start": o.get("start", ""), "grootte": 0,
-                                                         "sinds": nu_utc().isoformat(timespec="seconds")}
-                del staat["onvolledig"][uuid]
+        for sleutel, reden in problemen(m).items():
+            nu_problemen[sleutel] = {"reden": reden, "start": m.get("start", "")}
+    for sleutel, o in list(staat["onvolledig"].items()):
+        if sleutel in nu_problemen:
+            continue
+        del staat["onvolledig"][sleutel]
+        if sleutel.startswith("meeting:") and sleutel[8:] in uuids:
+            continue
+        staat["verdwenen"][sleutel] = {"start": o.get("start", ""), "grootte": 0, "sinds": moment}
+    staat["onvolledig"].update(nu_problemen)
     for fid in list(staat["verdwenen"]):  # Codex 8: wat terugkwam, is niet meer verdwenen
-        if fid in per_id or fid in staat["bestanden"] or (fid.startswith("meeting:") and fid[8:] in uuids):
+        if fid in per_id or fid in staat["bestanden"] or fid in nu_problemen or \
+                (fid.startswith("meeting:") and fid[8:] in uuids):
             del staat["verdwenen"][fid]
     for fid in list(staat["gemist"]):  # een aanvaard gemis dat terugkomt, volgt weer de gewone weg
         if fid in per_id:
             del staat["gemist"][fid]
     nagekeken_weg = 0
-    if not droog:  # elke ronde, ook een korte: een dekking ja steunt nooit op een bewijs dat niet nagekeken is
+    if not droog:  # elke ronde: een dekking ja steunt nooit op een bewijs dat niet nagekeken is
         try:
             nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker)
-        except Stop as e:
+        except (Stop, D.TijdOp) as e:
             return stop("", "", f"nakijken niet af: {e}", staat)
         except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja
             nagekeken_weg = -1
             r.nood(f"Dropbox niet nagekeken ({type(e).__name__})", wie="claude-code")
     te_doen = [f for f in klaar if f["id"] not in staat["bestanden"]]
-    if volledig:
-        # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
-        for fid, oud in list(staat["gezien"].items()):
-            if fid not in per_id and fid not in staat["bestanden"]:
-                staat["verdwenen"][fid] = {**oud, "sinds": nu_utc().isoformat(timespec="seconds")}
-                del staat["gezien"][fid]
-                staat["fouten"].pop(fid, None)
-    for f in te_doen:
+    # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
+    for fid, oud in list(staat["gezien"].items()):
+        if fid not in per_id and fid not in staat["bestanden"]:
+            staat["verdwenen"][fid] = {**oud, "sinds": moment}
+            del staat["gezien"][fid]
+            staat["fouten"].pop(fid, None)
+    for f in te_doen + bezig:  # Codex controle 4, punt 20: elk onbewezen bestand, ook in verwerking, wordt bijgehouden
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), f.get("start") or ""))
     if proef:
@@ -546,6 +568,8 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
     gedaan, gestopt = [], ""
     werkmap = os.path.join(DATA, "werk")
     if not droog:
+        if not te_doen:
+            staat["blokkades"].pop("schijf", None)  # niets meer te kopiëren: de schijf houdt niets tegen
         for f in volgorde:
             if klok() - begin > budget:
                 gestopt = "tijdsbudget op"
@@ -558,12 +582,13 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
                 staat["bestanden"][f["id"]] = kopieer(f, pad_van(m, f), werkmap, bewaker=bewaker)
                 for k in ("gezien", "fouten"):
                     staat[k].pop(f["id"], None)
+                staat["blokkades"].pop("schijf", None)
                 gedaan.append(f)
                 schrijf_staat(staat)
-            except Stop as e:
+            except (Stop, D.TijdOp) as e:
                 gestopt = str(e)
                 if "schijf" in gestopt:
-                    r.nood("Te weinig vrije schijf op de VM voor de kopie van de Zoom-opnames", wie="claude-code")
+                    staat["blokkades"]["schijf"] = SCHIJF_VOL
                 break
             except Exception as e:  # noqa: BLE001
                 tekst, tijdelijk = soort_fout(e)
@@ -576,77 +601,71 @@ def werk(r, droog=False, budget=BUDGET, proef=0, klok=time.monotonic, nu_utc=nu)
         for m in meetings:
             if gestopt:
                 break
-            try:
-                bewaker()
-            except Stop as e:
-                gestopt = str(e)
-                break
             ids = [f.get("id") for f in m["bestanden"]]
             if (ids and all(ids) and m["uuid"] not in staat["meetings"]
                     and all(f.get("status") == "completed" for f in m["bestanden"])
                     and all(i in staat["bestanden"] for i in ids)):
                 try:
-                    schrijf_opname_json(m, staat["bestanden"], werkmap)
+                    bewaker()
+                    schrijf_opname_json(m, staat["bestanden"], werkmap, bewaker=bewaker)
                     staat["meetings"][m["uuid"]] = staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
-                except Exception as e:  # noqa: BLE001
-                    r.nood(soort_fout(e)[0], wie="claude-code")
+                    staat["blokkades"].pop(f"opname:{m['uuid']}", None)
+                except (Stop, D.TijdOp) as e:
+                    gestopt = str(e)
+                except Exception:  # noqa: BLE001  blijft gemeld tot het lukt (Codex controle 4, punt 23)
+                    staat["blokkades"][f"opname:{m['uuid']}"] = OPNAME_JSON
+        for uuid in [k[7:] for k in staat["blokkades"] if k.startswith("opname:")]:
+            if uuid not in uuids:  # de meeting is niet meer in Zoom: haar beschrijving kan niet meer, dat zegt verdwenen
+                staat["blokkades"].pop(f"opname:{uuid}", None)
         for sleutel, fid, v in gemist_voorstellen(staat):
             # Codex controle 2, punt 13: hartslag slikt een bordfout in; pas als het bord het voorstel teruggeeft,
             # geldt het als verstuurd, anders probeert de volgende ronde het opnieuw
             ag.hartslag("actief", taak="Zoom-opname zonder kopie", voorstel=v)
             try:
                 if bord.db_lees("SELECT id FROM voorstel WHERE naam=? AND actie=?", (NAAM, v["actie"])):
-                    staat["voorstellen"][sleutel] = {"fid": fid, "ts": nu_utc().isoformat(timespec="seconds")}
+                    staat["voorstellen"][sleutel] = {"fid": fid, "ts": moment}
             except bord.BordOnbekend:
                 pass
 
     rest = [f for f in klaar if f["id"] not in staat["bestanden"]]
+    onbewezen = rest + bezig
     for fid in list(staat["fouten"]):
-        # een fout geldt niet meer als het bestand bewezen is, of als een volledige inventaris het niet meer zag; een
-        # korte ronde die het bestand niet las, weet dat niet en laat de fout staan
-        if fid in staat["bestanden"] or (volledig and fid not in per_id):
+        if fid in staat["bestanden"] or fid not in per_id:
             del staat["fouten"][fid]
     _meld_blijvend(r, staat)
     grens = (nu_utc() - timedelta(days=WISREGEL_DAGEN)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    oud_open = [f for f in rest if (f.get("start") or "") < grens]
-    # Dekking ja (K6, Codex controle 3): elke ronde opnieuw berekend uit wat ze zelf zag en nakeek, nooit uit
-    # een geheugen dat ouder is dan de inventaris van vandaag. Alles wat Zoom nu heeft, was al bewezen voor de ronde
-    # begon (dus een tweede inventaris), niets wordt nog verwerkt, elk bewijs klopte in Dropbox, niets is verdwenen of
-    # onvolledig, en de ronde bleef binnen haar tijd. Een korte ronde houdt alleen een ja van een volledige van vandaag.
-    zuiver = (not droog and not te_doen and not bezig and nagekeken_weg == 0 and not staat["verdwenen"]
-              and not staat["onvolledig"] and klok() <= hard)
-    dekking = zuiver and (volledig or (staat["dekking"] and staat["inventaris"] == vandaag.isoformat()))
-    # Veilig voor de wisregel: niets ouder dan WISREGEL_DAGEN zonder bewijs, geen verlies, niets onvolledig. De
-    # Zoomwacht meldt zo dat Mehdi met een open ZA-01 moet wachten.
-    veilig = (not droog and not oud_open and nagekeken_weg == 0 and not staat["verdwenen"] and not staat["onvolledig"]
-              and klok() <= hard and (volledig or staat["inventaris"] == vandaag.isoformat()))
+    oud_open = [f for f in onbewezen if (f.get("start") or "") < grens]
+    binnen = klok() <= hard
+    gaaf = (not droog and nagekeken_weg == 0 and not staat["verdwenen"] and not staat["onvolledig"]
+            and not staat["blokkades"] and binnen)
+    # Dekking ja (K6, Codex controle 3 en 4): uit wat deze ronde zelf zag en nakeek. Alles wat Zoom nu heeft, was al
+    # bewezen voor de ronde begon (dus een tweede inventaris), niets wordt nog verwerkt, elk bewijs klopte, niets is
+    # verdwenen, onvolledig of geblokkeerd, en de ronde bleef binnen haar tijd.
+    dekking = gaaf and not te_doen and not bezig
+    # Veilig voor de wisregel: niets ouder dan WISREGEL_DAGEN zonder bewijs, ook niet in verwerking.
+    veilig = gaaf and not oud_open
     if not droog:
         staat["dekking"] = dekking
-        if volledig:
-            staat["inventaris"] = vandaag.isoformat()
-            staat["gekopieerd"] = len(gedaan)
-        else:
-            staat["gekopieerd"] += len(gedaan)
+        staat["inventaris"] = moment
         schrijf_staat(staat)
         _schrijf_json(os.path.join(DATA, "dekking.json"), {
-            "ts": nu_utc().isoformat(timespec="seconds"), "dekking": dekking, "wisregel_veilig": veilig,
-            "inventaris": staat["inventaris"], "volledig_gelezen": volledig, "bestanden": len(klaar),
+            "ts": moment, "dekking": dekking, "wisregel_veilig": veilig, "bestanden": len(klaar),
             "bewezen": len(klaar) - len(rest), "open": len(rest), "in_verwerking": len(bezig),
             "open_ouder_dan_30_dagen": len(oud_open), "verdwenen": len(staat["verdwenen"]),
-            "gemist_aanvaard": len(staat["gemist"]), "onvolledig": len(staat["onvolledig"])})
+            "gemist_aanvaard": len(staat["gemist"]), "onvolledig": len(staat["onvolledig"]),
+            "blokkades": len(staat["blokkades"])})
     else:
-        dekking = False
+        dekking = veilig = False
     r.detail = (f"{'droog: ' if droog else ''}{'proef: ' if proef else ''}{len(klaar)} bestanden ({gb(klaar):.1f} GB) "
-                f"in Zoom {'(alles gelezen)' if volledig else f'(laatste {KORT} dagen)'}; {len(gedaan)} gekopieerd "
-                f"({gb(gedaan):.1f} GB); nog {len(rest)} ({gb(rest):.1f} GB); ouder dan {WISREGEL_DAGEN} dagen allemaal "
-                f"in Dropbox: {'ja' if not oud_open else 'nee'}; dekking: {'ja' if dekking else 'nee'}"
+                f"in Zoom; {len(gedaan)} gekopieerd ({gb(gedaan):.1f} GB); nog {len(rest)} ({gb(rest):.1f} GB); ouder "
+                f"dan {WISREGEL_DAGEN} dagen allemaal in Dropbox: {'ja' if not oud_open else 'nee'}; dekking: "
+                f"{'ja' if dekking else 'nee'}"
                 + (f"; verdwenen {len(staat['verdwenen'])}" if staat["verdwenen"] else "")
                 + (f"; bewijs niet meer in Dropbox {nagekeken_weg}" if nagekeken_weg > 0 else "")
                 + (f"; fouten {len(staat['fouten'])}" if staat["fouten"] else "") + (f"; gestopt: {gestopt}" if gestopt else ""))
     ag.log("archief", "ronde", r.detail)
     return {"klaar": len(klaar), "gedaan": len(gedaan), "rest": len(rest), "oud_open": len(oud_open),
-            "fouten": dict(staat["fouten"]), "gestopt": gestopt, "dekking": dekking, "veilig": veilig,
-            "volledig": volledig}
+            "fouten": dict(staat["fouten"]), "gestopt": gestopt, "dekking": dekking, "veilig": veilig, "volledig": True}
 
 
 def _stopsignaal(nummer, _frame):
