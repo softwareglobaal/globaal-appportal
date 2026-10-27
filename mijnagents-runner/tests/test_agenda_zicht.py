@@ -214,13 +214,62 @@ check("het vangnet zet een vraag voor de afspraak die Mehdi noemt en voor de afs
       _n == 2 and all(k == W.PRIVE_AGENDA for k, _ in _ins[:2]), str([b["description"][:60] for _, b in _ins]))
 check("de tweede ronde zet geen tweede vraag", not any("vraag gezet" in r for r in r2), str(r2))
 check("staat de vraag er al (na een time-out), dan geen tweede vraag", len(_ins) == _n, str(len(_ins)))
-check("de vraag is een eigen melding: Beschikbaar, zonder herinnering, met mailmerk en firmamerk",
-      all(b["transparency"] == "transparent" and b["reminders"]["overrides"] == []
-          and len(b["extendedProperties"]["private"][W.MAILMERK]) == 16 and b["extendedProperties"]["private"][W.FIRMAMERK]
-          for _, b in _ins))
-check("de vraag sluit geen dag af",
-      all(not W.markeringen_uit([{"titel": b["summary"], "start": b["start"]["date"], "einde": b["end"]["date"],
-                                  "hele_dag": True}], b["start"]["date"]) for _, b in _ins))
+_zwak = [b for _, b in _ins if "date" in b["start"]]
+_sterk = [b for _, b in _ins if "dateTime" in b["start"]]
+check("elke vraag is een eigen melding zonder herinnering, met mailmerk en firmamerk",
+      all(b["reminders"]["overrides"] == [] and len(b["extendedProperties"]["private"][W.MAILMERK]) == 16
+          and b["extendedProperties"]["private"][W.FIRMAMERK] for _, b in _ins))
+check("een afspraak die Mehdi alleen noemt: een dagvraag op Beschikbaar die geen dag afsluit",
+      len(_zwak) == 1 and _zwak[0]["transparency"] == "transparent"
+      and not W.markeringen_uit([{"titel": _zwak[0]["summary"], "start": _zwak[0]["start"]["date"],
+                                  "einde": _zwak[0]["end"]["date"], "hele_dag": True}], _zwak[0]["start"]["date"]))
+check("een 'Mehdi: ...'-afspraak die niet doorkwam: een Bezet blok op haar eigen uur (Calendly boekt er niet over)",
+      len(_sterk) == 1 and "transparency" not in _sterk[0] and _sterk[0]["start"]["dateTime"].endswith("10:00:00+01:00"))
+
+# --- Codex-hertest 2: oorspronkelijke tijd, gemengde reeks, H-Architects en UNABO, vraag volgt de afspraak ---------
+_e7 = ev("f1_20261102T090000Z", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA}], reeks="f1")
+_e7["originalStartTime"] = {"dateTime": "2026-11-02T10:00:00+01:00"}
+
+
+class _Nep7(NepGoogle):
+    def __call__(self, req, timeout=None, *a, **k):
+        url = getattr(req, "full_url", req)
+        if "iCalUID" in url:        # een andere verplaatste keer van dezelfde reeks op hetzelfde uur
+            return io.BytesIO(json.dumps({"items": [{"id": "y", "status": "confirmed", "start": _e7["start"],
+                                                     "originalStartTime": {"dateTime": "2026-11-09T10:00:00+01:00"}}]}).encode())
+        return super().__call__(req, timeout, *a, **k)
+
+
+_, niet7b = met(_Nep7([_e7]), W.firma_gasten, [_e7], "tok")
+check("twee verplaatste keren op hetzelfde uur: de oorspronkelijke tijd beslist (niet zichtbaar)", len(niet7b) == 1)
+_moeder2 = {"id": "reeks2", "summary": "Mehdi: [EL-IN] meeting", "etag": '"e-reeks2"', "attendees": [], "kalender": ELEVAIT,
+            "_moeder": True}
+_gem = [ev("reeks2_20261102", "Mehdi: [EL-IN] meeting", reeks="reeks2"), ev("reeks2_20261109", "Siyan: [EL-IN] meeting", reeks="reeks2")]
+g11 = NepGoogle([_moeder2] + _gem)
+met(g11, W.firma_gasten, _gem, "tok")
+check("een gemengde reeks (een keer voor een collega): alleen de keer voor Mehdi krijgt de gast, niet de hele reeks",
+      [u.split("/events/")[1].split("?")[0] for u, _, _ in g11.patches] == ["reeks2_20261102"], str([u for u, _, _ in g11.patches]))
+check("H-Architects en UNABO worden ook gescand voor de stille gast (Mehdi verbergt ze ook)",
+      {"73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com",
+       "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com"}
+      <= {a for a, _ in W.firma_scan()})
+_ins13, _opg13 = [], []
+_o13 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma13-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins13.append(body) or {"id": f"q{len(_ins13)}"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {W.FIRMAMERK: f"{ELEVAIT}|g1",
+                                                                                          W.MAILMERK: "abcdef0123456789"}}
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="": _opg13.append(x["id"]) or True
+try:
+    _g1 = ev("g1", "Overleg KDS", beschrijving="Mehdi beslist mee")
+    met(NepGoogle([_g1]), W.firma_vangnet, [_g1], [], "tok")
+    _g1b = dict(_g1, start={"dateTime": f"{(_nu + timedelta(days=2)).date().isoformat()}T10:00:00+01:00"})
+    met(NepGoogle([_g1b]), W.firma_vangnet, [_g1b], [], "tok")
+    met(NepGoogle([]), W.firma_vangnet, [], [], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost = _o13
+check("verschuift de afspraak, dan krijgt de oude vraag 'Opgelost' en komt er een op de nieuwe dag; verdwijnt ze, dan opgelost",
+      len(_ins13) == 2 and _opg13 == ["q1", "q2"], str((len(_ins13), _opg13)))
 
 # --- Z4: de zichtbaarheid teruglezen -------------------------------------------------------------------------
 _ur.urlopen = lambda req, timeout=None, *a, **k: io.BytesIO(json.dumps({"items": [
