@@ -440,6 +440,11 @@ def t_p3_chats_tellen_niet():
 def t_p9_teruglezen_van_de_mac():
     """Codex P9 (fase 2): wat De WhatsApp-wacht en De Belwacht schrijven, leest bordstand.py exact terug: dezelfde
     vingerafdruk als de Mac over zijn rij rekent, ook na een tweede upsert, en dubbel_van wordt leeg of buiten:."""
+    if os.environ.get("P9_OVERSLAAN_IN_BORDIMAGE") == "1":
+        # De bordimage bevat alleen mijnagents/ (Dockerfile, COPY . .), dus geen bordstand.py; de CI (regie-grendels)
+        # draait P9 in de hele repo. Alleen de Dockerfile zet deze vlag: elders faalt een ontbrekende bordstand luid.
+        print("  --   P9 overgeslagen: mijnagents-runner zit niet in de bordimage")
+        return
     db = verse_db("p9")
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mijnagents-runner",
                                     "koppelingen"))
