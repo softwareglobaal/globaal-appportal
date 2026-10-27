@@ -69,7 +69,11 @@ VERBODEN_PROFIEL = {
 # Verwijzingen naar de opname: "(opname 00:22:30)", "(opname 00:22:30-00:23:16)", "opname 00:11:49 tot 00:12:10",
 # "(transcript 12:30)", "volgens de opname", "sprak zijn vaststellingen in".
 # "Zie opname 00:12:05." als eigen zin: weg samen met de punt, zodat er geen ".." of losse punt overblijft
-_TIJDSTIP = r"\d{1,2}:\d{2}(?::\d{2})?"
+# Een opnametijdstip: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
+_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
+_OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
+# 30e review: alle opnameregels gebruiken die strenge definitie, zodat "(Opname ..., schaal 1:50)" gewone tekst blijft
+_TIJDSTIP = _OPNAMETIJD
 # alleen aan een echt zinsbegin (begin van de tekst, of na . ! ?), niet aan elk regelbegin: 'raam, zie\nopname 00:12.'
 # is het einde van een zin (24e review)
 OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
@@ -80,11 +84,11 @@ OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?
 OPNAME_LOS_HAAKJES = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*\(\s*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
                                 r"(?:opname|geluidsopname|transcript|audio|recording)(?:\s*|\b[^)]*" + _TIJDSTIP + r"[^)]*)\)\s*[.!?]?(?=\s|$)", re.I)
 OPNAME = [
-    re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
-    re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|tot)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
+    re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*" + _OPNAMETIJD + r"[^)]*\)", re.I),
+    re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?" + _OPNAMETIJDEN, re.I),
     re.compile(r"\s*\((?:opname|transcript)\)", re.I),
-    re.compile(r"\s*\((?:recording|audio)[^)]*\d{1,2}:\d{2}[^)]*\)", re.I),
-    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-|to)\s*\d{1,2}:\d{2}(?::\d{2})?)?", re.I),
+    re.compile(r"\s*\((?:recording|audio)[^)]*" + _OPNAMETIJD + r"[^)]*\)", re.I),
+    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?" + _OPNAMETIJDEN, re.I),
     re.compile(r"\s*\(recording\)", re.I),
 ]
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
@@ -139,9 +143,6 @@ OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _
 _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
 # losse leestekens ("...", "??", een punt vooraan) zijn een eigen stuk: zo gaan ze bij het heropbouwen niet verloren
 _ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*\s*|[.!?]+\s*")
-# Een opnametijdstip: 00:12, 00:12:30, 0:12:30 of 12m30s (een schaal 1:100 of 1:50 is geen tijdstip).
-_OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}s\b)"
-_OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
 # Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
 # opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
 _KAAL_TIJDSTIP = re.compile(r"\s*\(\s*" + _OPNAMETIJDEN + r"\s*\)")   # een schaal (1:50) is geen tijdstip (29e review)

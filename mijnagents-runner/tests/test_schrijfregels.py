@@ -544,5 +544,14 @@ t29, _ = S.toepassen("Nagekeken werden het gevelplan (1:50) en de doorsnede (1:2
                      "De dorpel ligt te laag (00:12:30).")
 check("schaal blijft na een legende, opnametijdstip niet", "(1:50)" in t29 and "(1:20)" in t29 and "00:12" not in t29, t29)
 
+# Dertigste review 26-10-2026: een schaal in een opname-haakje is geen opnametijdstip
+for tekst in ["Haarscheur in de gemene muur boven de trap. (Opname van de bestaande toestand door landmeter Claes, schaal 1:50.)",
+              "De bestaande toestand is opgemeten (opname landmeter Claes, plan 1:100); de gemene muur is 28 cm dik."]:
+    t30, ing30 = S.toepassen(tekst)
+    check(f"schaal in een opname-haakje blijft: '{tekst[:35]}'", t30 == tekst and not ing30, (t30, ing30))
+for tekst, verwacht in [("De goot lekt (opname 00:12:30).", "De goot lekt."), ("De goot lekt (opname 0:12:30).", "De goot lekt."),
+                        ("De goot lekt, zie opname 12:30.", "De goot lekt."), ("The gutter leaks (recording 00:12:30).", "The gutter leaks.")]:
+    check(f"opnametijdstip blijft weg: '{tekst}'", S.toepassen(tekst)[0] == verwacht, S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
