@@ -948,7 +948,7 @@
     "19:00-19:30 Mehdi: Lara naar huis brengen, dat is zelf de terugrit, dus geen tweede"
    ],
    "hoe": "de twee afspraken zijn reeksen die op 22-09-2026 beginnen; aangepast in de reeks zelf, er is geen verleden dat verandert. De ritten maakt de agent elke week zelf",
-   "vakantie": "vervalt tijdens schoolvakanties en feestdagen"
+   "vakantie": "tijdens officiële schoolvakanties en feestdagen geen rit; de dinsdagafspraken blijven staan en Bezet tot Mehdi zegt dat ze vervallen, dan 'vervalt (vakantie)' vooraan en Beschikbaar, nooit wissen (FR-210)"
   },
   "thuisrit_telt": "Staat er na een buitenafspraak al een rit naar huis in de agenda, dan gaat Mehdi naar huis en vertrekt de volgende rit van thuis. Gezien 21-09-2026: op vrijdag vertrok de rit naar Lara van de griffie, terwijl er om 11:00 al een rit naar huis stond",
   "lara_maandag_vrijdag": {
@@ -979,7 +979,7 @@
    "optioneel": "de donderdag bij oma is optioneel (zo afgesproken met Leen): als Mehdi kan gaat hij, anders niet. Daarom draagt de titel '(optioneel)'; dat blijft staan"
   },
   "schoolvakantie": {
-   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit. De vaste Lara-afspraken en de marker 'Geen buiten afspraken Lara ophalen' blijven staan en Bezet tot Mehdi zegt welke vervallen; wat vervalt krijgt 'vervalt (vakantie)' vooraan en Beschikbaar. Nooit wissen, ook geen instantie van een reeks (driehoeksoverleg 27-10-2026, L4; FR-210)",
+   "regel": "tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op: geen rit. De vaste Lara-ophaalafspraken blijven staan en Bezet, de dagmarker 'Geen buiten afspraken Lara ophalen' blijft staan en Beschikbaar (online boeken mag), tot Mehdi zegt welke vervallen; wat vervalt krijgt 'vervalt (vakantie)' vooraan en Beschikbaar. Nooit wissen, ook geen instantie van een reeks (driehoeksoverleg 27-10-2026, L4; FR-210)",
    "bron": "alleen de officiële Vlaamse kalender in werkwijze/schoolvakanties.json (vlaanderen.be). Een blok in de Lara-agenda telt niet; wijkt het af, dan een vraag in de privé-agenda (L2)",
    "grendel": "lara_vakantiedagen(), lara_vakantie_afwijkingen(), lara_vakantieweken(), lara_vervalt() en in agenda_signaal lara_wissing_kandidaat(); tests/test_lara_vakanties.py",
    "per_schooljaar": "deze Lara-regelingen (ophalen, oma, zwemles, vakanties) gelden per schooljaar en moeten elk jaar opnieuw bijgesteld worden; ze staan niet voor altijd vast",

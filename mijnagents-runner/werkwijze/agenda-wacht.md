@@ -351,8 +351,9 @@ niets buiten plannen.
 Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan:
 
 - maak ik geen Lara-rit op zo'n dag;
-- blijven de vaste Lara-afspraken en de marker `Geen buiten afspraken Lara ophalen`
-  **staan en Bezet** tot Mehdi zegt welke vervallen. Ik zet per vakantieweek één vraag
+- blijven de vaste Lara-ophaalafspraken **staan en Bezet**, en blijft de marker
+  `Geen buiten afspraken Lara ophalen` **staan en Beschikbaar** (online boeken mag), tot
+  Mehdi zegt welke vervallen. Ik zet per vakantieweek één vraag
   in de privé-agenda. Wat vervalt, krijgt `vervalt (vakantie)` vooraan en Beschikbaar
   (Claude 1, na Mehdi's ja). Een afspraak met `vervalt` vooraan krijgt geen rit en een
   marker met `vervalt` vooraan sluit de dag niet meer af. **Nooit wissen**, ook niet
