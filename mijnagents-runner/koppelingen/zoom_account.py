@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import math
+import os
 import re
 import time
 from collections import Counter
@@ -627,6 +628,25 @@ def _waarde(d, k, reden="veld ontbreekt"):
     return v if v is not None else "onbekend: " + reden
 
 
+ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
+
+
+def archief_dekking(pad=ARCHIEF_DEKKING, nu=None):
+    """Driehoeksoverleg Zoomarchief K6 (27-10-2026): staan alle Zoom-opnames bewezen in Mehdi's Dropbox? 'ja' of 'nee'
+    uit het bestand van De Zoomarchivaris (zoom_archief.py), 'onbekend' zonder bestand, onleesbaar of ouder dan twee
+    dagen. Mehdi: eerst een kopie, dan pas wissen."""
+    try:
+        with open(os.path.expanduser(pad), encoding="utf-8") as f:
+            d = json.load(f)
+        ts = datetime.fromisoformat(d["ts"])
+        oud = (nu or datetime.now(timezone.utc)) - ts > timedelta(days=2)
+    except (OSError, ValueError, KeyError, TypeError):
+        return "onbekend"
+    if oud or not isinstance(d.get("dekking"), bool):
+        return "onbekend"
+    return "ja" if d["dekking"] else "nee"
+
+
 def adviezen(d, gesprekken=0, staat_acc=None):
     """Elke regel is open, goed of onbekend. Ontbrekende invoer opent niets."""
     uit = []
@@ -668,9 +688,15 @@ def adviezen(d, gesprekken=0, staat_acc=None):
     reden01 = f"Opslag {pct}% gebruikt"
     if store and store.get("vol_rond"):
         reden01 += f"; vermoedelijk vol rond {store['vol_rond']}"
+    dekking = archief_dekking()
+    reden01 += ("; alle opnames staan bewezen in je Dropbox" if dekking == "ja" else
+                "; nog niet alle opnames staan bewezen in je Dropbox" if dekking == "nee" else
+                "; onbekend of alle opnames in je Dropbox staan")
     voeg("ZA-01", "hoog" if hoog01 else "middel", open01, {"wisregel": False, "band": band},
          reden01 + "." if open01 else "",
-         "Zet een wisregel van 30 dagen aan; houd transcript en cloudopname aan.")
+         "Zet een wisregel van 30 dagen aan; houd transcript en cloudopname aan." if dekking == "ja" else
+         "Wacht met de wisregel tot De Zoomarchivaris meldt dat alle opnames bewezen in je Dropbox staan (dekking ja);"
+         " zet hem dan op 30 dagen en houd transcript en cloudopname aan.")
 
     uop = gebruiker.get("recording.auto_recording") if gebruiker else None
     utr = gebruiker.get("recording.recording_audio_transcript") if gebruiker else None

@@ -28,6 +28,8 @@ jobs:
   # het echte bord (T05 tot T30, T95, T96, T101, T102, T104, T106), De Dagbundelaar (T31 tot T33), de gesprekkenketen
   # (X3), De Regisseur (T34 tot T60, T97, T98, T100, T103) en De Bode (T61 tot T77, T99, H1). Zonder Flask falen
   # test_zoom_wacht, test_regisseur en test_bode_regie hier met opzet: ze horen het schema uit init_db te gebruiken.
+  # Sinds 27-10-2026 De Zoomarchivaris (driehoeksoverleg Zoomarchief, K7): de download in brokken en de upload naar
+  # Mehdi's eigen Dropbox, en de kopie met bewijs.
   # Sinds RZ4-07 (22-10-2026) ook de uitrol: werkwijze_naar_bord.py zet de drie regie-werkwijzen alleen als voorstel,
   # en mijnagents/deploy.sh markeert het bord pas als gebouwd na de routetoets (test_uitrol_regie.py, onder /bin/sh).
   # Eerst de privacygrendel (22-10-2026): geen echte namen, gevoelige onderwerpen of echte adressen in de testbestanden
@@ -44,6 +46,8 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_bord_lees.py
       - run: python3 mijnagents-runner/tests/test_zoom_wacht.py
       - run: python3 mijnagents-runner/tests/test_zoom_account.py
+      - run: python3 mijnagents-runner/tests/test_zoom_archief_bouwstenen.py
+      - run: python3 mijnagents-runner/tests/test_zoom_archief.py
       - run: python3 mijnagents-runner/tests/test_uitvoerder_signaal.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar.py
       - run: python3 mijnagents-runner/tests/test_communicatie_bundelaar.py

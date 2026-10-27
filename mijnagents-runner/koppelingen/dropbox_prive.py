@@ -9,7 +9,11 @@ DROPBOX_PRIVE_BASIS: de map waaronder alles landt; leeg bij een app met
 Eén taak: een lokale map (archief op de VM) spiegelen naar Dropbox. Alleen
 schrijven, nooit verwijderen; wat lokaal weg is, blijft in Dropbox staan. Welke
 bestanden al geüpload zijn staat in <lokale map>/.dropbox_gespiegeld.json
-(pad -> grootte + mtime), zodat een ronde alleen het nieuwe verstuurt."""
+(pad -> grootte + mtime), zodat een ronde alleen het nieuwe verstuurt.
+
+Daarnaast, voor De Zoomarchivaris: upload_bestand zet een lokaal bestand van elke grootte in Dropbox zonder ooit te
+overschrijven, en inhoud_hash en metadata bewijzen dat wat er staat hetzelfde is als wat we stuurden."""
+import hashlib
 import json
 import os
 import time
@@ -21,6 +25,12 @@ API = "https://api.dropboxapi.com"
 INHOUD = "https://content.dropboxapi.com"
 STAAT = ".dropbox_gespiegeld.json"
 MAX_BESTAND = 140 * 1024 * 1024  # enkele upload-call; groter slaan we over met melding
+BLOK = 4 * 1024 * 1024    # de blokgrootte van de content_hash van Dropbox
+BROK = 32 * 1024 * 1024   # een stuk van een upload-sessie: een veelvoud van BLOK, ruim onder 150 MB per call
+
+
+class Bestaat(RuntimeError):
+    """Op dat pad staat al iets in Dropbox; upload_bestand overschrijft nooit."""
 
 
 def _env(pad):
@@ -122,6 +132,68 @@ def upload(inhoud, extern_pad, overschrijf=True):
     arg = {"path": basis() + extern_pad, "mode": "overwrite" if overschrijf else "add", "mute": True, "autorename": False}
     return _verzoek(f"{INHOUD}/2/files/upload", inhoud,
                     {"Content-Type": "application/octet-stream", "Dropbox-API-Arg": json.dumps(arg)})
+
+
+def inhoud_hash(pad):
+    """De content_hash van Dropbox voor een lokaal bestand: sha256 over de sha256 van elk blok van 4 MB."""
+    totaal = hashlib.sha256()
+    with open(pad, "rb") as f:
+        while True:
+            blok = f.read(BLOK)
+            if not blok:
+                return totaal.hexdigest()
+            totaal.update(hashlib.sha256(blok).digest())
+
+
+def _fouttag(e):
+    """De error_summary van een 409 van Dropbox (bv. 'path/not_found/..'), of leeg."""
+    try:
+        return json.loads(e.read(4096) or b"{}").get("error_summary", "")
+    except (ValueError, OSError, AttributeError):
+        return ""
+
+
+def metadata(extern_pad):
+    """Wat er in Dropbox op extern_pad staat ({'grootte', 'content_hash', 'pad'}), of None als er niets staat."""
+    try:
+        m = rpc("files/get_metadata", {"path": basis() + extern_pad})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "not_found" in _fouttag(e):
+            return None
+        raise
+    return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", ""),
+            "soort": m.get(".tag", "")}
+
+
+def _stuur(pad, inhoud, arg):
+    try:
+        return _verzoek(f"{INHOUD}/2/{pad}", inhoud,
+                        {"Content-Type": "application/octet-stream", "Dropbox-API-Arg": json.dumps(arg)})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "conflict" in (tag := _fouttag(e)):
+            raise Bestaat(tag[:120]) from None
+        raise
+
+
+def upload_bestand(lokaal, extern_pad):
+    """Een lokaal bestand naar Dropbox, ook boven 150 MB (upload-sessie in stukken van BROK). Nooit overschrijven: mode
+    add zonder autorename, dus staat er al iets op dat pad, dan Bestaat. Geeft {'grootte', 'content_hash', 'pad'} zoals
+    Dropbox het na de upload teruggeeft; dat is het bewijs, niet het feit dat de call slaagde."""
+    commit = {"path": basis() + extern_pad, "mode": "add", "autorename": False, "mute": True}
+    grootte = os.path.getsize(lokaal)
+    with open(lokaal, "rb") as f:
+        if grootte <= BROK:
+            m = _stuur("files/upload", f.read(), commit)
+        else:
+            sessie = _stuur("files/upload_session/start", f.read(BROK), {"close": False})["session_id"]
+            plek = BROK
+            while grootte - plek > BROK:
+                _stuur("files/upload_session/append_v2", f.read(BROK),
+                       {"cursor": {"session_id": sessie, "offset": plek}, "close": False})
+                plek += BROK
+            m = _stuur("files/upload_session/finish", f.read(),
+                       {"cursor": {"session_id": sessie, "offset": plek}, "commit": commit})
+    return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", "")}
 
 
 def _staat_pad(lokaal):
