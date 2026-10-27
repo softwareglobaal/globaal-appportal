@@ -3541,7 +3541,8 @@ def _niet_meer_vervallen(x):
     gewone afspraak: 'vervalt' weg en Bezet, zodat de meldstap het als nieuwe versie meldt (Codex-hertest 7, PR 113)."""
     if not lara_vervalt(x):
         return {}
-    return {"summary": re.sub(r"^\s*vervalt\s+", "", x.get("titel") or "", flags=re.I), "transparency": "opaque"}
+    return {"summary": re.sub(r"^(\s*(?:VR\s+)?(?:!!\s*)?)vervalt\s+", r"\1", x.get("titel") or "", flags=re.I).strip(),
+            "transparency": "opaque"}
 
 
 def _zorg_blok_met_merk(sleutel, tok):
@@ -3567,6 +3568,17 @@ def _zorg_blok_met_merk(sleutel, tok):
 
 
 ZORG_GEZET = []      # (dag, id) van elk blok dat de zorgroute deze ronde zette, verzette of verhuisde
+
+
+def _zorg_gezet(dag, eid):
+    """Een blok dat de zorgroute zette, verzette of verhuisde: in het geheugen voor deze ronde, en meteen duurzaam in de
+    WhatsApp-wachtrij, zodat de meldstap het ook na een onderbreking of in de eerste ronde als nieuw ziet (Codex-hertest 8,
+    PR 113)."""
+    ZORG_GEZET.append((dag, eid))
+    try:
+        AW.gezet_onthouden(dag, eid)
+    except Exception:  # noqa: BLE001
+        pass                            # de meldstap probeert het ook nog, met ZORG_GEZET
 WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
 
 
@@ -3621,13 +3633,16 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     a["status"] = "gekoppeld"
                     st["gekoppeld"] += 1
                     # ook na een herstart tussen zetten en melden kijkt de meldstap dit blok na (Codex-hertest 7, PR 113)
-                    ZORG_GEZET.append((a["start"][:10], bestaand))
+                    _zorg_gezet(a["start"][:10], bestaand)
                     st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
                     continue
                 try:
+                    volledig = _lees_event(PRIVE_AGENDA, bestaand, tok)
+                    if volledig is None:
+                        raise RuntimeError("omschrijving niet te lezen")     # nooit een afgekapte omschrijving terug
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
-                               "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van "
+                               "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van "
                                                f"{(x.get('start') or '')[:16].replace('T', ' ')} naar "
                                                f"{a['start'][:16].replace('T', ' ')} volgens mail.").strip(),
                                **_niet_meer_vervallen(x)}, tok)
@@ -3640,7 +3655,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 else:
                     a["status"] = "gezet"
                     st["verzet"] += 1
-                    ZORG_GEZET.append((a["start"][:10], bestaand))
+                    _zorg_gezet(a["start"][:10], bestaand)
                     st["prive"].append(f"{wat}: verzet (zelfde item {bestaand}, buiten het mailvenster), teruggelezen")
                 continue
             body = _zorg_body(a, z, profiel)
@@ -3664,7 +3679,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             else:
                 a["status"] = "gezet"
                 st["gezet"] += 1
-                ZORG_GEZET.append((a["start"][:10], e.get("id")))   # de meldstap kijkt dit blok na, hoe ver ook (PR 113)
+                _zorg_gezet(a["start"][:10], e.get("id"))
                 st["prive"].append(f"{wat}: blok gezet in de privé-agenda ({e.get('id')}), teruggelezen")
                 if bijwerken_items and z.get("mehdi") is True and (PRIVE_AGENDA, e.get("id")) not in per_id:
                     # De hoofdronde gebruikte al een agenda-momentopname. Geef het teruggelezen nieuwe blok
@@ -3776,7 +3791,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     else:
                         a["status"] = "gezet"
                         st["verzet"] += 1
-                        ZORG_GEZET.append((a["start"][:10], eid))
+                        _zorg_gezet(a["start"][:10], eid)
                         st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid}), teruggelezen{notitie}")
                 except Exception as ex:  # noqa: BLE001
                     st["fout"] += 1
@@ -3839,7 +3854,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["prive"].append(f"{x['start'][:16]} verhuisd maar het teruglezen klopt niet ({probleem})")
                 continue
             st["verhuisd"] += 1
-            ZORG_GEZET.append(((x.get("start") or "")[:10], x.get("id")))
+            _zorg_gezet((x.get("start") or "")[:10], x.get("id"))
             if bijwerken_items:
                 # De volledige ronde gebruikt dezelfde itemlijst voor reistijd; het doel is pas na teruglezen zeker.
                 x["kalender"], x["titel"], x["omschrijving"] = PRIVE_AGENDA, body["summary"], body["description"]
@@ -6220,7 +6235,8 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
         if AW.laatste(x["id"]) == [x["start"], x["einde"]]:
             continue                    # deze versie is al gemeld (of stond er al voor deze code)
         botsing = botst_met(x, items)
-        van_nu = (x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
+        van_nu = ((x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
+                  or x["id"] in AW.eerste_ids())     # ook een blok dat deze ronde verschoven werd (Codex-hertest 8)
         if eerste and not botsing and not van_nu:
             stil.append((x["id"], x["start"], x["einde"]))
             continue
@@ -6267,6 +6283,8 @@ def zorg_whatsapp_stap():
                 return (datetime.fromisoformat(dag).date() - vandaag).days >= ZORG_WHATSAPP_DAGEN - 1
             except (TypeError, ValueError):
                 return False
+        for d_, i_ in ZORG_GEZET:
+            AW.gezet_onthouden(d_, i_)
         verre = AW.verre_dagen([(d, i) for d, i in ZORG_GEZET if d and i and _ver(d)])   # {dag: [id, ...]}
         items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
         fout = bool(ARCHIEF_FOUT)

@@ -87,6 +87,20 @@ def basislijn(versies):
         for eid, start, einde in versies:
             d.setdefault("laatste", {})[eid] = [start, einde]
         d["basislijn"] = _nu().isoformat()
+        d.pop("eerste_ids", None)       # na de basislijn telt elke versie gewoon als nieuw
+
+
+def gezet_onthouden(dag, eid):
+    """Een blok dat de zorgroute zette of verzette. Voor de basislijn: zijn id telt in de eerste ronde als nieuw."""
+    if not eid:
+        return
+    with _bewerk() as d:
+        if not d.get("basislijn"):
+            d["eerste_ids"] = sorted(set(d.get("eerste_ids") or []) | {eid})
+
+
+def eerste_ids():
+    return set(_lees().get("eerste_ids") or [])
 
 
 def laatste(eid):

@@ -504,7 +504,8 @@ check("een zorgafspraak voorbij dag 120: de tweede ronde koppelt het bestaande b
 # een blok voorbij dag 120 op een ander uur: het verschuift mee
 _pat17 = []
 _o17 = (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen,
-        list(W.ZORG_GEZET))
+        list(W.ZORG_GEZET), W._lees_event)
+W._lees_event = lambda kal, eid, tok: {"description": "praktijk, volledig"}
 W._insert = lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen nieuw blok"))
 W._zorg_blok_met_merk = lambda sleutel, tok: "bestaand17"
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "!! [PR] Tandarts - Proef",
@@ -522,8 +523,9 @@ try:
 finally:
     (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen) = _o17[:7]
     W.ZORG_GEZET[:] = _o17[7]
+    W._lees_event = _o17[8]
 check("een zorgblok voorbij dag 120 dat de praktijk verzette, schuift mee (zelfde item) en de meldstap kijkt het na",
-      _pat17 and _pat17[0]["start"]["dateTime"] == _ver_start.isoformat() and _gezet17 == [(_ver_start.date().isoformat(), "bestaand17")]
+      _pat17 and _pat17[0]["start"]["dateTime"] == _ver_start.isoformat() and _pat17[0]["description"].startswith("praktijk, volledig") and _gezet17 == [(_ver_start.date().isoformat(), "bestaand17")]
       and any("verzet (zelfde item" in r for r in _rz17["prive"]), str((_pat17[:1], _gezet17, _rz17["prive"])))
 # een verre dag blijft tot elk nieuw blok gemeld is, ook als een ander blok van die dag al gemeld was
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw17-")) / "agenda-whatsapp.json")
@@ -566,6 +568,21 @@ check("een vervallen zorgblok dat de praktijk verzet, wordt weer een gewone afsp
       and W._niet_meer_vervallen({"titel": "!! [PR] Tandarts - Proef"}) == {})
 _h7 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("en beide verschuifroutes van de zorgstap gebruiken dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 2)
+
+# --- Codex-hertest 8 (PR 113) ---------------------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw20-")) / "agenda-whatsapp.json")
+AW.sinds_zetten(W.nu_lokaal())
+_mv = dict(item("mv20", "!! [PR] Kine - Praktijk M", f"{d2}T17:00:00+01:00", f"{d2}T17:30:00+01:00", merk={W.ZORGMERK: "m"}),
+           _gemaakt="2026-01-01T00:00:00.000Z")          # een oud blok, deze ronde verschoven
+W._zorg_gezet(_mv["start"][:10], "mv20")
+W.ZORG_GEZET[:] = []
+W.zorg_whatsapp([_mv], "tok")
+check("eerste ronde: een oud blok dat deze ronde verschoven werd, krijgt toch zijn melding (hertest 8, punt 1)",
+      any(k.startswith("zorg:mv20:") for k in AW._lees()["meldingen"]) and not AW.eerste_ids(), str(AW._lees()))
+check("'vervalt' gaat weg in elke herkende vorm (punt 3)",
+      W._niet_meer_vervallen({"titel": "!! vervalt [PR] Kine - X"})["summary"] == "!! [PR] Kine - X"
+      and W._niet_meer_vervallen({"titel": "VR vervalt !! [PR] Kine - X"})["summary"] == "VR !! [PR] Kine - X"
+      and W._niet_meer_vervallen({"titel": "VR !! vervalt [PR] Kine - X"})["summary"] == "VR !! [PR] Kine - X")
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
