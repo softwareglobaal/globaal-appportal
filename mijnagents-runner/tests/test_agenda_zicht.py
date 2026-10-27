@@ -715,6 +715,34 @@ check("alleen gastkopieën met een verschillend uur: geen gast en geen blok, wel
       and _ins33[0]["transparency"] == "transparent" and "date" in _ins33[0]["start"]
       and "10:00" in _ins33[0]["description"] and "14:00" in _ins33[0]["description"], str((_r33, _ins33)))
 
+# --- Codex-hertest 14: de twijfelvraag dekt elke mogelijke datum en volgt elke kopie ---------------------------------
+_ins34, _pat34 = [], []
+_o34 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma34-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins34.append(body) or {"id": "t34"}
+_d34a = (_nu + timedelta(days=2)).date().isoformat()
+_d34b = (_nu + timedelta(days=10)).date().isoformat()
+_k34a = dict(ev("g34", "Mehdi: [EL-PO] overleg"), organizer={"email": "siyan@voorbeeld.test"},
+             start={"dateTime": f"{_d34b}T10:00:00+01:00"}, end={"dateTime": f"{_d34b}T11:00:00+01:00"})
+_k34b = dict(_k34a, kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV",
+             start={"dateTime": f"{_d34a}T14:00:00+01:00"}, end={"dateTime": f"{_d34a}T15:00:00+01:00"})
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
+    W.FIRMAMERK: W._firma_sleutel(_k34a), W.MAILMERK: "abcdef0123456789"}}
+W._patch = lambda x, body, tok, **kw: _pat34.append(body)
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_k34a, _k34b], [], "tok")
+    _k34c = dict(_k34b, start={"dateTime": f"{_d34a}T16:00:00+01:00"}, end={"dateTime": f"{_d34a}T17:00:00+01:00"})
+    met(NepGoogle([]), W.firma_vangnet, [_k34a, _k34c], [], "tok")        # alleen de tweede kopie verschuift
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch = _o34
+_q = _ins34[0] if _ins34 else {}
+check("de twijfelvraag loopt van de vroegste tot de laatste kopie en noemt per kopie datum en uur (hertest 14)",
+      _q.get("start") == {"date": _d34a} and _q.get("end", {}).get("date", "") > _d34b
+      and W._ddmm(_d34a) in _q.get("description", "") and W._ddmm(_d34b) in _q.get("description", "")
+      and "14:00" in _q.get("description", "") and "10:00" in _q.get("description", ""), str(_q))
+check("verschuift alleen een andere kopie, dan wordt de vraag bijgewerkt", len(_pat34) == 1 and "16:00" in _pat34[0]["description"],
+      str(_pat34))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

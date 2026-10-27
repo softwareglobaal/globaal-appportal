@@ -3527,13 +3527,17 @@ def _firma_vraag_body(k, e, start, sterk):
     merk = {"private": {MAILMERK: hashlib.sha256(f"firma:{k}".encode()).hexdigest()[:16], FIRMAMERK: k}}
     if sterk is None:
         # twijfel: alleen gastkopieën, het uur van de organisator is niet te lezen (Codex-hertest 13)
-        waar = "; ".join(f"op {n} {(' om ' + t[11:16]) if 'T' in (t or '') else '(hele dag)'}" for n, t in e.get("_kopieen") or [])
+        waar = "; ".join(f"op {n}: {_ddmm((t or '')[:10])}" + (f" om {t[11:16]}" if "T" in (t or "") else " (hele dag)")
+                         for n, t, _ in e.get("_kopieen") or [])
         org = (e.get("organizer") or {}).get("email") or "de organisator"
         tekst = (f"Agendawacht vraagt: '{(e.get('summary') or '')[:80]}' staat {waar}, maar de agenda van de organisator "
                  f"({org}) kan ik niet lezen. Het uur is dus niet zeker; ik zet er geen blok voor. Kijk het na bij de "
                  "organisator.")
+        laatste = (eind or start)[:10]
+        tot = laatste if "T" not in eind and laatste > dag else \
+            (datetime.fromisoformat(laatste) + timedelta(days=1)).date().isoformat()
         return {"summary": f"VR Agendawacht: firma-afspraak voor jou, uur niet zeker ({_ddmm(dag)})"[:200],
-                "start": {"date": dag}, "end": {"date": volgende}, "transparency": "transparent",
+                "start": {"date": dag}, "end": {"date": max(tot, volgende)}, "transparency": "transparent",
                 "reminders": {"useDefault": False, "overrides": []}, "description": tekst, "extendedProperties": merk}
     tekst = (f"Agendawacht vraagt: op de agenda {e.get('_agendanaam')} staat '{(e.get('summary') or '')[:80]}' op "
              f"{_ddmm(dag)}{(' om ' + start[11:16]) if 'T' in start else ''}, en die "
@@ -3606,8 +3610,13 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         voor = any(MEHDI_VOORAAN.match(e.get("summary") or "") or _gast_status(e) not in (None, "declined") for e in kopieen)
         noemt = any(re.search(r"\bMehdi\b", f"{e.get('summary') or ''} {e.get('description') or ''}") for e in kopieen)
         if voor or noemt:
-            e = dict(kopieen[0], _kopieen=[(c.get("_agendanaam"), _tijd(c, "start")) for c in kopieen],
-                     _alleen_noemt=not voor)
+            # de vraag dekt elke mogelijke datum, van de vroegste tot de laatste kopie, en noemt per kopie datum en uur;
+            # verandert een kopie, dan verandert haar vingerafdruk en wordt de vraag bijgewerkt (Codex-hertest 14)
+            kop = sorted(kopieen, key=lambda c: _utc(_tijd(c, "start")))
+            laatste = max(kopieen, key=lambda c: _utc(_tijd(c, "end")) or _tijd(c, "end"))
+            lijst = [(c.get("_agendanaam"), _tijd(c, "start"), _tijd(c, "end")) for c in kop]
+            e = dict(kop[0], start=kop[0].get("start"), end=laatste.get("end"), _kopieen=lijst, _alleen_noemt=not voor,
+                     _vinger=hashlib.sha256(json.dumps(lijst).encode()).hexdigest()[:12])
             kand[k] = (e, None)
     for e in gekozen:
         tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
@@ -3622,7 +3631,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
         zwak = sterk is False or (sterk is None and e.get("_alleen_noemt"))
         if not start or _einde_voorbij(_tijd(e, "end"), nu) or (zwak and start > zwak_grens):
             continue
-        gewenst[k] = (e, sterk, start, _tijd(e, "end"))
+        gewenst[k] = (e, sterk, start, _tijd(e, "end"), e.get("_vinger", ""))
     regels, gewijzigd = [], False
     gelezen = {_firma_sleutel(e) for e in evs or []}
     for k, r in list(reg.items()):
@@ -3635,16 +3644,17 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             reg.pop(k)                  # de afspraak is helemaal voorbij: alleen uit het register (Codex-hertest 4, punt 2)
             gewijzigd = True
             continue
-        if g and (g[1], g[2], g[3]) == (r.get("sterk"), r.get("start"), r.get("einde")):
+        if g and (g[1], g[2], g[3], g[4]) == (r.get("sterk"), r.get("start"), r.get("einde"), r.get("vinger", "")):
             continue
         try:
             x = _prive_item_lezen(r["id"], tok) if r.get("id") else None
             mk = (x or {}).get("_merk") or {}
             open_ = _firma_blok_open(x, k)
             if g and open_:
-                e, sterk, start, einde = g
+                e, sterk, start, einde, vinger = g
                 _firma_blok_bijzetten(x, k, e, start, sterk, tok)
-                reg[k] = {**r, "dag": start[:10], "start": start, "einde": einde, "sterk": sterk, "kalender": e["kalender"]}
+                reg[k] = {**r, "dag": start[:10], "start": start, "einde": einde, "sterk": sterk, "kalender": e["kalender"],
+                          "vinger": vinger}
                 regels.append(f"{start[:10]} vraag over een firma-afspraak mee verschoven met de afspraak")
             else:
                 if open_:
@@ -3660,7 +3670,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             gewijzigd = True
         except Exception as ex:  # noqa: BLE001
             regels.append(f"{r.get('dag')} vraag niet bijgewerkt ({type(ex).__name__})")
-    for k, (e, sterk, start, einde) in gewenst.items():
+    for k, (e, sterk, start, einde, vinger) in gewenst.items():
         if k in reg or k in onzeker:
             continue
         dag = start[:10]
@@ -3671,7 +3681,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                 # de vraag stond er al (na een time-out of een opgeruimd register): meteen op de juiste tijd (hertest 5, 2)
                 _firma_blok_bijzetten(x, k, e, start, sterk, tok)
                 reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk, "id": bestaand,
-                          "kalender": e["kalender"]}
+                          "kalender": e["kalender"], "vinger": vinger}
                 regels.append(f"{dag} bestaande vraag over een firma-afspraak op de juiste tijd gezet")
             elif bestaand:
                 # niet terug te lezen: opnemen zonder tijd, zodat de volgende ronde het blok bijzet en er geen tweede komt
@@ -3680,7 +3690,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             else:
                 n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
                 reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk,
-                          "id": n.get("id", ""), "kalender": e["kalender"]}
+                          "id": n.get("id", ""), "kalender": e["kalender"], "vinger": vinger}
                 regels.append(f"{dag} vraag gezet: firma-afspraak " + ("voor Mehdi die niet doorkwam" if sterk else
                                                                      "met een uur dat niet zeker is" if sterk is None
                                                                      else "die Mehdi noemt"))
