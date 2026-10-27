@@ -439,6 +439,64 @@ def test_een_stand_die_niet_te_bewaren_is_houdt_de_bouwnood_niet_tegen(repo):
 
 
 @proef
+def test_zonder_reflog_en_zonder_bewaarbare_stand_telt_het_verschil_als_oud(repo):
+    """Codex-resultaattoets 2.1: anders begint de klok elke ronde opnieuw en komt er nooit een bouwnood."""
+    repo.git("config", "core.logAllRefUpdates", "false")
+    shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
+    with open(os.path.join(repo.map, "bestand"), "w") as f:
+        f.write("geen map")
+    B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
+    repo.zet("b", T0)
+    uit, b = ronde(T0 + MIN)
+    assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None
+    assert uit["agents"]["stand"] == "gelijk"
+    assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
+                        "Bouwwacht kan zijn stand niet bewaren": "claude-code"}
+
+
+def main_met(b, nu):
+    echt, bord.call = bord.call, b.call
+    echte_tijd, B.time = B.time, types.SimpleNamespace(time=lambda: nu)
+    fout = io.StringIO()
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(fout):
+            code = B.main([])
+    finally:
+        bord.call, B.time = echt, echte_tijd
+    return code, fout.getvalue()
+
+
+@proef
+def test_geen_slotbestand_geen_ronde_en_exit_1(repo):
+    """Codex-resultaattoets 2.2: zonder slot draait er geen ronde die met een andere kan botsen."""
+    with open(os.path.join(repo.map, "bestand"), "w") as f:
+        f.write("geen map")
+    B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
+    repo.zet("b", T0)
+    b = Bord()
+    code, fout = main_met(b, T0 + 12 * MIN)
+    assert code == 1 and b.gestuurd == []
+    assert "geen slot voor de ronde" in fout and "mijnagents loopt achter, 12 min" in fout, fout
+
+
+@proef
+def test_een_andere_slotfout_is_geen_bezette_ronde(repo):
+    repo.zet("b", T0)
+    b = Bord()
+
+    def kapot(f, wijze):
+        raise OSError(9, "Bad file descriptor")
+
+    echt = B.fcntl
+    B.fcntl = types.SimpleNamespace(flock=kapot, LOCK_EX=echt.LOCK_EX, LOCK_NB=echt.LOCK_NB)
+    try:
+        code, fout = main_met(b, T0 + 12 * MIN)
+    finally:
+        B.fcntl = echt
+    assert code == 1 and b.gestuurd == [] and "geen slot voor de ronde (OSError" in fout, fout
+
+
+@proef
 def test_een_onleesbare_markering_is_onbekend_geen_vals_alarm(repo):
     pad = os.path.join(repo.map, "mijnagents-data", ".built")
     os.remove(pad)

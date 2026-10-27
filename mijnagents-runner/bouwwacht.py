@@ -159,17 +159,18 @@ def bewaar_stand(stand):
 def neem_slot():
     """Een ronde tegelijk (Codex-resultaattoets 3): anders kan een oude ronde na herstel nog haar verouderde alarm zetten,
     of een nieuw alarm sluiten met een lege lijst. Het slot geldt voor de hele ronde, tot en met de eindhartslag.
-    Geeft het open slotbestand, False als een andere ronde het heeft, of None als er geen slotbestand kan komen."""
-    try:
-        os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
-        f = open(f"{STAND}.slot", "a", encoding="utf-8")
-    except OSError:
-        return None
+    Geeft het open slotbestand, of None als een andere ronde het heeft. Elke andere fout (geen slotbestand, een andere
+    flock-fout) gaat door als OSError: dan draait er geen ronde zonder slot (Codex-resultaattoets 2.2)."""
+    os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
+    f = open(f"{STAND}.slot", "a", encoding="utf-8")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        return None
     except OSError:
         f.close()
-        return False
+        raise
     return f
 
 
@@ -183,17 +184,19 @@ def meet_dienst(dienst, stand, nu):
         return {"dienst": dienst, "stand": "gelijk"}
     if not gebouwd:
         stand.pop(dienst, None)
-        sinds = OUD
+        sinds, bron = OUD, "markering"
     else:
         anker = stand.get(dienst)
         if not (isinstance(anker, dict) and anker.get("gebouwd") == gebouwd and isinstance(anker.get("sinds"), int)):
             anker = stand[dienst] = {"gebouwd": gebouwd, "sinds": int(nu)}
         sinds = begin_volgens_reflog(dienst, gebouwd)
+        bron = "anker" if sinds is None else "reflog"
         sinds = anker["sinds"] if sinds is None else sinds if sinds == OUD else min(sinds, anker["sinds"])
     minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
     achter = minuten is None or minuten >= DREMPEL_MIN
     return {"dienst": dienst, "stand": "achter" if achter else "bezig", "minuten": minuten,
-            "gebouwd": gebouwd[:7] or "geen", "nieuw": nu_boom[:7], "log": laatste_logregel(dienst) if achter else ""}
+            "gebouwd": gebouwd[:7] or "geen", "nieuw": nu_boom[:7], "log": laatste_logregel(dienst) if achter else "",
+            "bron": bron}
 
 
 def meet(stand, nu=None):
@@ -232,6 +235,19 @@ def werk(r, nu=None):
     stand = lees_stand()
     vorig = json.dumps(stand, sort_keys=True)
     uitslag = meet(stand, nu)
+    # Een stand die niet te bewaren is, houdt geen bouwnood tegen (Codex-resultaattoets 1). Zonder reflog is die stand
+    # wel de enige klok: dan begint ze elke ronde opnieuw, dus een verschil dat alleen daarop steunt, telt als ouder
+    # dan de drempel (Codex-resultaattoets 2.1).
+    niet_bewaard = None
+    if json.dumps(stand, sort_keys=True) != vorig:
+        try:
+            bewaar_stand(stand)
+        except OSError as e:
+            niet_bewaard = type(e).__name__
+    if niet_bewaard:
+        for m in uitslag:
+            if m["stand"] == "bezig" and m.get("bron") == "anker":
+                m.update(stand="achter", minuten=None, log=laatste_logregel(m["dienst"]))
     noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
              for m in uitslag if m["stand"] in ("achter", "onbekend")]
     open_ = ag.open_noden() if noden else None
@@ -242,18 +258,14 @@ def werk(r, nu=None):
         if open_ is not None and tekst not in {n["tekst"] for n in open_}:
             ag.log(m["dienst"], "fout", regel(m))
     r.detail = "; ".join(regel(m) for m in uitslag)
-    # pas na de meting en haar noden: een stand die niet te bewaren is, houdt geen bouwnood tegen (Codex-resultaattoets 1)
-    if json.dumps(stand, sort_keys=True) != vorig:
-        try:
-            bewaar_stand(stand)
-        except OSError as e:
-            r.nood(STANDNOOD, wie="claude-code")
-            r.detail += f"; stand niet bewaard ({type(e).__name__})"
+    if niet_bewaard:
+        r.nood(STANDNOOD, wie="claude-code")
+        r.detail += f"; stand niet bewaard ({niet_bewaard})"
     return uitslag
 
 
-def zonder_bord(reden):
-    """V8: kan ik het bord niet bereiken, dan staat het hier, in het cronlog, met de meting erbij, en is de exitcode 1."""
+def in_cronlog(reden):
+    """V8: wat niet op het bord kan, staat hier, in het cronlog, met de meting erbij, en de exitcode is 1."""
     print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} {reden}", file=sys.stderr)
     for m in meet(lees_stand()):
         print(f"  {regel(m)}", file=sys.stderr)
@@ -268,8 +280,11 @@ def main(argv=None):
         for m in uitslag:
             print(regel(m))
         return 1 if any(m["stand"] in ("achter", "onbekend") for m in uitslag) else 0
-    slot = neem_slot()
-    if slot is False:
+    try:
+        slot = neem_slot()
+    except OSError as e:
+        return in_cronlog(f"geen slot voor de ronde ({type(e).__name__}: {e}); ronde niet gedraaid")
+    if slot is None:
         print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} een vorige ronde loopt nog; deze slaat over",
               file=sys.stderr)
         return 0
@@ -278,14 +293,13 @@ def main(argv=None):
             with ag.ronde("bouw van de diensten nakijken") as r:
                 werk(r)
         except bord.RondeGestopt as e:
-            return zonder_bord(f"ronde gestopt: {e}")
+            return in_cronlog(f"ronde gestopt: {e}")
         if not ag.hartslag_ok:
             # Codex-resultaattoets 4: het bord gaf de werkwijze, maar de eindhartslag met de noden kwam niet aan
-            return zonder_bord("eindhartslag niet aangekomen; de noden staan niet op het bord")
+            return in_cronlog("eindhartslag niet aangekomen; de noden staan niet op het bord")
         return 0
     finally:
-        if slot:
-            slot.close()
+        slot.close()
 
 
 if __name__ == "__main__":
