@@ -62,5 +62,16 @@ h = verslag_pdf.md_naar_html("Vaststellingen:\nspouwhaken ontbreken\nisolatie ni
 check("regels van een alinea blijven aparte regels, zoals in Word",
       "<p>Vaststellingen:<br>spouwhaken ontbreken<br>isolatie niet aansluitend</p>" in h and "<p>Volgende alinea.</p>" in h, h)
 
+# 33e review: een Engelse tekst over meer regels (tweetalig verslag) is in de PDF cursief per regel, zonder losse sterretjes
+h = verslag_pdf.md_naar_html("*Shell works ongoing.\nRoof works start next week.*")
+check("cursief over twee regels", h.strip() == "<p><em>Shell works ongoing.</em><br><em>Roof works start next week.</em></p>", h)
+h = verslag_pdf.md_naar_html("*The sewer follows the plan:\n- rainwater and foul water separated\n- slopes 2 cm per metre*")
+check("cursief met een opsomming", "*" not in h and "<li><em>slopes 2 cm per metre</em></li>" in h and "<em>The sewer follows the plan:</em>" in h, h)
+h = verslag_pdf.md_naar_html("*a*\n\nTekst met *nadruk* hier.")
+check("cursief over een lege regel heen verandert niets", "<p><em>a</em></p>" in h and "Tekst met <em>nadruk</em> hier." in h, h)
+pdf = PdfReader(io.BytesIO(verslag_pdf.naar_pdf("# Werfverslag\n\n*Shell works ongoing.\nRoof works start next week.*\n", "9999 | Werfverslag 3", [])))
+tekst = pdf.pages[0].extract_text()
+check("geen sterretje in de PDF-tekst", "*" not in tekst and "Roof works start next week." in tekst, tekst)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

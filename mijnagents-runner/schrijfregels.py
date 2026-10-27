@@ -80,7 +80,9 @@ _TIJDSTIP = _OPNAMETIJD
 _OPNAMEWOORD = r"(?:(?:audio|video|geluids|spraak)-?)?(?:opname|transcript|audio|recording)"
 _DIRECTTIJD = r"(?:(?<!\d)(?<!\d:)\d{1,2}:\d{2}(?::\d{2})?(?!\d|:\d)(?:min|sec|u|h|s)?\b|\b\d{1,2}m\d{2}s\b)"
 _DIRECTTIJDEN = _DIRECTTIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _DIRECTTIJD + r")?"
-_NA_WOORD = r"(?:\s*:\s*|\s+)(?:(?:van|at|om|op)\s+)?"          # buiten haakjes: een spatie of een dubbelpunt
+# buiten haakjes: een spatie of een dubbelpunt, en alleen "van" of "at" ertussen zoals productie; "de opname op 1:50" of
+# "de opname om 9:30" is gewone tekst over een opmeting of plaatsbeschrijving en blijft (33e review)
+_NA_WOORD = r"(?:\s*:\s*|\s+)(?:(?:van|at)\s+)?"
 _NA_WOORD_HAAKJE = r"[\s:,\-–]*(?:(?:van|at|om|op)\s+)?"        # in een haakje ook een komma of een streep
 _ZIE = r"(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
 _VERWIJZING = _ZIE + _OPNAMEWOORD + _NA_WOORD + _DIRECTTIJDEN

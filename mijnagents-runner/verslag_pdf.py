@@ -50,10 +50,30 @@ def _inline(t):
     return t
 
 
+# Een cursieve tekst over meer regels ("*Shell works ongoing.\nRoof works start next week.*", de Engelse tekst van een
+# tweetalig verslag): elke regel apart cursief, een lijstteken blijft vooraan. Anders kreeg de PDF losse sterretjes,
+# omdat _inline per regel werkt (33e review). Alleen binnen één alinea, nooit over een lege regel heen.
+_CURSIEF_BLOK = re.compile(r"(?m)^\*(?!\*)(\S(?:[^\n]|\n(?!\s*\n))*?\S)\*[ \t]*$")
+_LIJSTTEKEN = re.compile(r"(\s*(?:[-*]|\d+[.)])\s+)(.*)")
+
+
+def _cursief_per_regel(m):
+    regels = m.group(1).split("\n")
+    if len(regels) == 1:
+        return m.group(0)
+    uit = []
+    for rg in regels:
+        lt = _LIJSTTEKEN.fullmatch(rg)
+        voor, rest = (lt.group(1), lt.group(2)) if lt else ("", rg)
+        uit.append(f"{voor}*{rest.strip()}*" if rest.strip() else rg)
+    return "\n".join(uit)
+
+
 def md_naar_html(md):
     """Onze eigen markdown (uit sjabloon_werfverslag en sjabloon_bevindingen) naar HTML."""
     uit, lijst, tabel, alinea = [], [], [], []
     md = re.sub(r"[ \t]*<!--.*?-->", "", md or "", flags=re.S)   # de bron achter "Herkomst: V" hoort niet in de PDF
+    md = _CURSIEF_BLOK.sub(_cursief_per_regel, md)
 
     def sluit_alinea():
         if alinea:

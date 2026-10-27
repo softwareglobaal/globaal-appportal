@@ -595,5 +595,18 @@ for tekst in ["De bestaande toestand is opgemeten (opname landmeter Claes, plan 
               "De dakgoot lekt.\n\nDe kilgoot is vervangen.", "- De dakgoot lekt.\n- De kilgoot is vervangen."]:
     check(f"zonder opnameverwijzing blijft alles: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []), S.toepassen(tekst))
 
+# Drieëndertigste review 27-10-2026: buiten haakjes mag alleen "van" (of "at") tussen opname en tijdstip, zoals productie;
+# "de opname op 1:50" of "de opname om 9:30" is gewone tekst over een opmeting of plaatsbeschrijving
+for tekst in ["De opname op 1:50 toont een gemene muur van 28 cm.", "De landmeter bezorgt de opname op 1:50 van de bestaande toestand.",
+              "Tijdens de opname om 9:30 werd een nieuwe barst vastgesteld in de keuken.",
+              "Bij de tegensprekelijke opname om 14:00 waren de buren aanwezig.", "Plannen:\n- De opname op 1:50.\n- Het grondplan op 1:100."]:
+    for profiel in (None, "aankoopkeuring"):
+        check(f"opname om/op blijft: {tekst[:40]!r} {profiel}", S.toepassen(tekst, profiel) == (tekst, []), S.toepassen(tekst, profiel))
+    check(f"opname om/op geeft geen S4: {tekst[:40]!r}", S.controleer(tekst) == [], S.controleer(tekst))
+check("opname op 1:50 in een bestandsnaam blijft", S.bron_zichtbaar("Opname op 1:50 gevel Claes.pdf") == "Opname op 1:50 gevel Claes.pdf",
+      S.bron_zichtbaar("Opname op 1:50 gevel Claes.pdf"))
+for tekst, verwacht in [("De goot lekt, zie opname van 7:12.", "De goot lekt."), ("The gutter leaks, see recording at 3:45.", "The gutter leaks.")]:
+    check(f"van/at blijft een verwijzing: {tekst!r}", S.toepassen(tekst)[0] == verwacht, S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
