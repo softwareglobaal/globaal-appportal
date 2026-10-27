@@ -72,6 +72,10 @@ services:
       DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
       DROPBOX_REFRESH_TOKEN: ${DROPBOX_REFRESH_TOKEN:-}
       DROPBOX_PATH_ROOT_NS: ${DROPBOX_PATH_ROOT_NS:-}
+      # Projecten uit H-A Projecten (overleg 27-10-2026, X2; globaal-werfverslag PR 8): over het
+      # interne netwerk, met zijn eigen AGENTS_TOKEN (in .env als HA_PROJECTEN_TOKEN), zoals app-locatie.
+      HA_PROJECTEN_URL: http://app-ha-projecten:3140
+      HA_PROJECTEN_TOKEN: ${HA_PROJECTEN_TOKEN:-}
     volumes:
       - ./werfverslag-data:/data
     healthcheck:
