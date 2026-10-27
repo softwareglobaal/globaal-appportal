@@ -611,11 +611,19 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
     for fid, oud in list(staat["gezien"].items()):
         if fid not in per_id and fid not in staat["bestanden"]:
-            staat["verdwenen"][fid] = {**oud, "sinds": moment}
             del staat["gezien"][fid]
             staat["fouten"].pop(fid, None)
-    for f in te_doen + bezig:  # Codex controle 4, punt 20: elk onbewezen bestand, ook in verwerking, wordt bijgehouden
+            if oud.get("bezig") and oud.get("uuid") in uuids:
+                # Gemeten op de VM, 27-10-2026: Zoom geeft een bestand in verwerking een voorlopig id (grootte 0) en
+                # vervangt het door een definitief id zodra het klaar is. Staat de meeting er nog, dan is er niets
+                # verdwenen: haar definitieve bestanden volgen de gewone weg. Is de meeting weg, dan is het een verlies.
+                continue
+            staat["verdwenen"][fid] = {**oud, "sinds": moment}
+    for f in te_doen:  # Codex controle 4, punt 20: elk onbewezen bestand wordt bijgehouden, ook in verwerking
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
+    for f in bezig:
+        staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0),
+                                    "uuid": per_id[f["id"]][0]["uuid"], "bezig": True}
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:

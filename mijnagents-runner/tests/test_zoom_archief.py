@@ -1173,6 +1173,36 @@ def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
         ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
     assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
 
+
+# ---------------------------------------------------------- gemeten op de VM (27-10-2026): voorlopige ids ---
+def test_een_voorlopig_id_in_verwerking_dat_vervangen_wordt_is_geen_verlies():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "shared_screen_with_speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    r, uit = ronde()
+    assert not uit["dekking"] and not r.noden
+    # Zoom vervangt het voorlopige bestand door de definitieve bestanden, met nieuwe ids
+    m["bestanden"] = []
+    for i, (soort, opnametype, data) in enumerate([("MP4", "shared_screen_with_speaker_view", b"video"),
+                                                    ("TRANSCRIPT", "audio_transcript", b"WEBVTT\n")]):
+        z.inhoud[f"definitief{i}"] = data
+        m["bestanden"].append({"id": f"definitief{i}", "soort": soort, "status": "completed", "start": m["start"],
+                               "einde": m["start"], "grootte": len(data), "opnametype": opnametype, "extensie": soort,
+                               "link": True})
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+    assert uit["gedaan"] == 2 and not VOORSTELLEN, "geen vals verlies en geen voorstel voor Mehdi"
+
+
+def test_een_bestand_in_verwerking_waarvan_de_meeting_verdwijnt_is_wel_een_verlies():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    ronde()
+    del z.meetings["u1"]
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
