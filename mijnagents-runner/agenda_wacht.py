@@ -3179,7 +3179,33 @@ def _firma_buitenblok(a, fysiek):
                 and not a.get("_vrij") and "T" in (a.get("start") or "") and a.get("kalender") == PRIVE_AGENDA)
 
 
-FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette of verzette: daar meteen de dagroute
+FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette, verzette of afrondde: daar meteen de dagroute
+FIRMA_DAGEN_WACHT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-dagen.json")
+
+
+def firma_dagen_afwerken():
+    """De dagroute voor elke dag met een gewijzigd Bezet blok, uit deze ronde en eerdere die niet lukten. Een dag blijft
+    bewaard tot zijn dagroute lukt (Codex-hertest 26); een voorbije dag valt weg. Draait na het rondeslot: in de
+    kleurronde en na de volledige ronde. Geeft de dagen die nog wachten."""
+    try:
+        with open(FIRMA_DAGEN_WACHT, encoding="utf-8") as f:
+            wacht = set(json.load(f))
+    except (OSError, ValueError):
+        wacht = set()
+    wacht |= FIRMA_DAGEN
+    FIRMA_DAGEN.clear()
+    vandaag = nu_lokaal().date().isoformat()
+    over = set()
+    for dag in sorted(d for d in wacht if d >= vandaag):
+        gelukt, _ = _dagroute(dag)
+        if gelukt is not True:
+            over.add(dag)               # slot bezet of mislukt: de volgende ronde opnieuw
+    os.makedirs(os.path.dirname(FIRMA_DAGEN_WACHT), exist_ok=True)
+    tmp = f"{FIRMA_DAGEN_WACHT}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(sorted(over), f)
+    os.replace(tmp, FIRMA_DAGEN_WACHT)
+    return sorted(over)
 
 
 def _dagroute(dag):
@@ -3198,13 +3224,11 @@ def firma_kleurronde(vandaag):
     """De firmacontrole in de kleurronde. De noden gaan daar niet naar het bord (dat zet de volledige ronde, declaratief);
     verandert wat er mis is, dan komt het in het werkverslag, zodat Mehdi het ook in het weekend ziet (overleg P8)."""
     teksten = sorted(n["tekst"] for n in firma_stap(vandaag))
-    for dag in sorted(FIRMA_DAGEN):
-        # een nieuw of verzet Bezet blok, ook in het weekend of 's nachts: meteen de gewone dagroute voor die dag, met
-        # ritten en het belrooster (zoals het agendasignaal dat doet), niet pas in de volgende volledige ronde
-        # (Codex-hertest 24 en 25)
-        gelukt, uitleg = _dagroute(dag)
-        if gelukt is False:
-            teksten.append("Dagroute na een nieuw firmablok mislukt; de volgende ronde zet de rit en de oproep")
+    # een nieuw, verzet of afgerond Bezet blok, ook in het weekend of 's nachts: meteen de gewone dagroute voor die dag,
+    # met ritten en het belrooster (zoals het agendasignaal dat doet); wat niet lukt, wacht op de volgende ronde
+    # (Codex-hertest 24 tot 26)
+    if firma_dagen_afwerken():
+        teksten.append("Dagroute na een gewijzigd firmablok nog niet gelukt; de volgende ronde opnieuw")
     try:
         with open(FIRMA_NODEN, encoding="utf-8") as f:
             vorige = json.load(f)
@@ -3716,6 +3740,7 @@ def _firma_blok_nakijken(k, r, g, tok):
             return _firma_tweede_afwijking(k, r, e, start, tok)
         n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
         r.update(id=n.get("id", ""), hersteld=True)
+        FIRMA_DAGEN.add(start[:10])
         return f"{start[:10]} Bezet blok voor een firma-afspraak was weg: een keer opnieuw gezet"
     mk = x.get("_merk") or {}
     if mk.get(FIRMAMERK) != k or str(mk.get(MAILMERK, "")).startswith("opgelost:") or not _firma_blok_open(x, k):
@@ -3729,6 +3754,7 @@ def _firma_blok_nakijken(k, r, g, tok):
     if r.get("hersteld"):
         return _firma_tweede_afwijking(k, r, e, start, tok)
     _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+    FIRMA_DAGEN.add(start[:10])
     r["hersteld"] = True
     return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven of Beschikbaar: een keer hersteld"
 
@@ -3827,6 +3853,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             if g and open_:
                 e, sterk, start, einde, vinger = g
                 _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+                if sterk or r.get("sterk"):
+                    FIRMA_DAGEN.update({(r.get("start") or r.get("dag") or "")[:10], start[:10]} - {""})   # oude en nieuwe dag
                 reg[k] = {**r, "dag": start[:10], "start": start, "einde": einde, "sterk": sterk, "kalender": e["kalender"],
                           "vinger": vinger}
                 regels.append(f"{start[:10]} vraag over een firma-afspraak mee verschoven met de afspraak")
@@ -3842,6 +3870,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                 elif open_:
                     _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
                                             "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True)
+                    if r.get("sterk"):
+                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
                     if not x.get("hele_dag") and "T" in (x.get("start") or ""):
                         # een opgelost blok met een uur kreeg anders nog een oproep (belrooster) en telde als botsing
                         d0 = x["start"][:10]
@@ -3873,6 +3903,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                 n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
                 reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk,
                           "id": n.get("id", ""), "kalender": e["kalender"], "vinger": vinger}
+                if sterk:
+                    FIRMA_DAGEN.add(dag)
                 regels.append(f"{dag} vraag gezet: firma-afspraak " + ("voor Mehdi die niet doorkwam" if sterk else
                                                                      "met een uur dat niet zeker is" if sterk is None
                                                                      else "die Mehdi noemt"))
@@ -3918,9 +3950,7 @@ def firma_stap(vandaag):
             g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok, onleesbaar)
             gregels += g2
         vregels = firma_vangnet(evs, niet_zichtbaar, tok, onleesbaar=onleesbaar, onzeker=onzeker)
-    FIRMA_DAGEN.clear()
-    FIRMA_DAGEN.update(r[:10] for r in vregels if re.match(r"\d{4}-\d{2}-\d{2} ", r) and any(
-        m in r for m in ("voor Mehdi die niet doorkwam", "mee verschoven", "opnieuw gezet", "een keer hersteld")))
+
     if gregels or vregels:
         ag.log(f"dag {vandaag}", "schrijf", "firma-agenda's: Mehdi als stille gast waar het hem aangaat",
                "\n".join(gregels + vregels))
@@ -5672,8 +5702,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
         # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
         # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
-        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
-                and not lara_zonder_rit(x, vrij):
+        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN
+                                            or _firma_buitenblok(x, _bruikbare_locatie(x.get("locatie") or ""))) \
+                and not lara_zonder_rit(x, vrij):         # ook een Bezet blok van een firma-afspraak (Codex-hertest 26)
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
         if "T" in x.get("start", "") and not _lx["reistijd"]:
@@ -7402,4 +7433,10 @@ if __name__ == "__main__":
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
     # zodat niet na te gaan was wanneer iets gebeurde.
     print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · " + (f"dag {DAG_ARG}" if DAG_ARG else "volledige ronde"), flush=True)
-    sys.exit(main() or 0)
+    _rc = main() or 0
+    if not DAG_ARG and not ALLEEN_VANDAAG:
+        try:                            # het rondeslot is nu vrij: de dagroute voor een nieuw of verzet firmablok (hertest 26)
+            firma_dagen_afwerken()
+        except Exception as _e:  # noqa: BLE001
+            print(f"firma-dagen niet afgewerkt ({type(_e).__name__})", file=sys.stderr, flush=True)
+    sys.exit(_rc)

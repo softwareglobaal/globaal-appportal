@@ -20,6 +20,8 @@ HIER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HIER))
 sys.path.insert(0, str(HIER / "koppelingen"))
 import agenda_wacht as W          # noqa: E402
+W._dagroute = lambda dag: (True, "test")        # een test start nooit een echte dagroute
+W.FIRMA_DAGEN_WACHT = str(Path(tempfile.mkdtemp(prefix="firmadagen-")) / "agenda-firma-dagen.json")
 
 ok = fout = 0
 
@@ -967,7 +969,7 @@ check("een open Bezet blok voor een firma-afspraak op een echt adres telt voor d
 _src = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de rittenroute gebruikt dat, en de kleurronde werkt het belrooster meteen bij na een nieuw of verzet blok",
       "_firma_buitenblok(a, fysiek)" in _src.split("def reistijd_zetten(")[1][:60000]
-      and "_dagroute(dag)" in _src.split("def firma_kleurronde(")[1][:1500])
+      and "firma_dagen_afwerken()" in _src.split("def firma_kleurronde(")[1][:1500])
 _pat49 = []
 _o49 = (W._patch,)
 W._patch = lambda x, body, tok, **kw: _pat49.append(body)
@@ -978,8 +980,32 @@ finally:
     W._patch = _o49[0]
 check("wordt een vraag een Bezet blok met een uur, dan krijgt ze ook de herinnering van 15 minuten (hertest 25)",
       _pat49 and _pat49[0]["reminders"] == {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]}, str(_pat49))
-_dr = W._dagroute.__code__.co_consts
+_dr = W.__dict__["_dagroute"].__code__.co_consts if False else Path(HIER / "agenda_wacht.py").read_text(encoding="utf-8").split("def _dagroute(")[1][:900]
 check("de dagroute na een nieuw firmablok wacht op het rondeslot (zoals het agendasignaal)", "--slot-wacht" in _dr and "--dag" in _dr)
+
+# --- Codex-hertest 26: de dag van een gewijzigd blok wacht tot de dagroute lukt; ook de oude dag -------------------
+_gestart = []
+_o50 = (W._dagroute, W.FIRMA_DAGEN_WACHT)
+W.FIRMA_DAGEN_WACHT = str(Path(tempfile.mkdtemp(prefix="firmadagen50-")) / "agenda-firma-dagen.json")
+_uitkomst = {"ok": None}
+W._dagroute = lambda dag: _gestart.append(dag) or (_uitkomst["ok"], "x")
+try:
+    W.FIRMA_DAGEN.clear()
+    W.FIRMA_DAGEN.update({_morgen})
+    _over1 = W.firma_dagen_afwerken()                 # het rondeslot was bezet
+    _uitkomst["ok"] = True
+    _over2 = W.firma_dagen_afwerken()                 # de volgende ronde lukt het
+finally:
+    W._dagroute, W.FIRMA_DAGEN_WACHT = _o50
+check("lukt de dagroute niet (slot bezet), dan wacht de dag op de volgende ronde; daarna is ze afgewerkt (hertest 26)",
+      _over1 == [_morgen] and _over2 == [] and _gestart == [_morgen, _morgen], str((_over1, _over2, _gestart)))
+_src26 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("na de volledige ronde worden de wachtende dagen ook afgewerkt (niet in de dagroute zelf)",
+      "if not DAG_ARG and not ALLEEN_VANDAAG:\n        try:" in _src26 and "firma_dagen_afwerken()" in _src26.split('if __name__ == "__main__":')[1])
+check("bij een verschuiving naar een andere dag komen de oude en de nieuwe dag in de lijst",
+      "oude en nieuwe dag" in _src26.split("def firma_vangnet(")[1][:9000])
+check("een Bezet blok van een firma-afspraak houdt zijn ritten vast bij de opruimcontrole",
+      "_firma_buitenblok(x, _bruikbare_locatie(" in _src26.split("def reistijd_zetten(")[1])
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
