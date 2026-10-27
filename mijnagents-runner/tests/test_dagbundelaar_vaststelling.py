@@ -594,6 +594,9 @@ def test_f9_nachtketen_noden():
     D.KETENBESTAND = "/bestaat/niet/keten.json"
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
     D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    # Een leeg bord: zonder dit las de test op de VM de echte open noden (behoud in main) en faalde hij daar, terwijl hij
+    # op de Mac en in CI slaagde omdat het bord er niet bereikbaar is (gezien 27-10-2026, sinds PR 103).
+    D.ag.open_noden = lambda: []
     try:
         for nacht, nachtbestand, nood_deel, ok in (
                 (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}, None, True),
@@ -616,6 +619,7 @@ def test_f9_nachtketen_noden():
     finally:
         D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND = oud
         D.ag.__dict__.pop("ronde", None)
+        D.ag.__dict__.pop("open_noden", None)
     assert ochtend.NACHTTAAK == "dagvaststelling"
 
 
@@ -1085,6 +1089,268 @@ def test_lens4_8_oude_kopie_geeft_geen_nieuwe_versies_en_dekking_geen_nood():
     assert ("mail", "bron", f"{hot} ontvangen onvolledig: kopie ouder dan 3 uur (kopie 174 uur oud)") in log, log
     assert "kopie dekt deze dag niet" in tekst, tekst
     assert not [n for n in r3.noden if n.startswith("Mail")], r3.noden
+
+
+def test_fase2_telling_naast_het_dagbestand():
+    """Fase 2 (driehoeksoverleg 27-10-2026, Q2, X2, K5): naast het dagbestand de telling van de dag, met dezelfde versie
+    en zonder naam; een tweede ronde laat ze staan; een dag waarvan het bestand niet veranderde maar de telling ontbreekt
+    (van voor fase 2), krijgt ze alsnog."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        tpad = os.path.join(m, "dagboek", "2026", f"{DAG}.json")
+        ronde(w)
+        t1 = lees(tpad)
+        x = json.loads(t1)
+        assert x["dag"] == DAG and x["vastgesteld"] is True and x["dagversie"] == 1, x
+        assert x["afspraken"]["totaal"] == 1 and x["gesprekken"]["aantal"] == 1, x
+        for naam in ("Pieter", "Claes", "Geheime", "Ruben", "Proefdorp"):
+            assert naam not in t1, f"K5: {naam} in de telling"
+        _, detail = ronde(w)
+        assert lees(tpad) == t1 and "0 nieuw of herzien" in detail, detail
+        os.remove(tpad)
+        _, detail = ronde(w)
+        assert lees(tpad) == t1 and "0 nieuw of herzien" in detail, "zonder nieuwe versie toch de telling"
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
+        ronde(w)
+        assert json.loads(lees(tpad))["dagversie"] == 2, "de telling volgt de versie van het dagbestand"
+
+
+def test_fase2_telling_niet_teruggelezen():
+    """X2: de dag komt pas op het bord als de telling teruggelezen is; anders faalt de ronde."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        echt = D._lees
+        D._lees = lambda pad: "kapot" if str(pad).endswith(".json") and "/dagboek/" in str(pad) else echt(pad)
+        try:
+            ronde(w)
+            raise AssertionError("een telling die niet terug te lezen is, moet de ronde laten falen")
+        except RuntimeError as e:
+            assert "niet teruggelezen" in str(e) and "telling" in str(e), e
+        finally:
+            D._lees = echt
+        assert f"vaststelling:{DAG}" not in w.items, "geen item op het bord zonder teruggelezen telling"
+
+
+def _week_wereld(m, w, gevangen, vervals=None):
+    """De bronnen van weekoverzicht_maken: de telling van DAG uit een echte ronde, de agenda van de wereld, kern met een
+    firmanaam, en een bord dat het weekitem bewaart."""
+    import organisatie
+    ronde(w)
+    oud = (D.DAGBOEK, D.lees_agenda, organisatie.firmas, bord.call)
+    D.DAGBOEK = os.path.join(m, "dagboek")
+    D.lees_agenda = lambda dagen_: ({DAG: list(w.afspraken)}, set(), lambda a: "[LA]" in a["titel"])
+    organisatie.firmas = lambda *a, **k: [{"code": "UNAB", "naam": "UNABO"}]
+
+    def klaarzet(items):
+        for it in items:
+            assert it["voor"] == "mehdi" and it["soort"] == "weekoverzicht" and it.get("revisie") is True, it
+            gevangen[it["uniek"]] = dict(it)
+        return {"nieuw": len(items)}
+
+    def call(pad, payload=None, method=None):
+        assert pad.startswith("/api/klaarzet?uniek=weekoverzicht"), pad
+        it = gevangen.get("weekoverzicht:2026-W43")
+        return {"items": [dict(it, inhoud=vervals) if (it and vervals) else it] if it else []}
+
+    D.ag.klaarzet = klaarzet
+    bord.call = call
+    return oud
+
+
+def test_fase2_weekoverzicht_maken():
+    """Q3, K2, K5: het weekoverzicht telt de dagtellingen op, zet bestand en item klaar met dezelfde inhoud, zonder naam;
+    een tweede keer zonder verandering geeft geen nieuw tijdstip; een bord dat iets anders toont, laat het falen."""
+    import organisatie
+    with tempfile.TemporaryDirectory() as m:
+        w, gevangen = Wereld(m), {}
+        oud = _week_wereld(m, w, gevangen)
+        try:
+            detail = D.weekoverzicht_maken("2026-W43", datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
+            jpad = os.path.join(m, "dagboek", "2026", "week", "2026-W43.json")
+            inhoud = lees(jpad)
+            x = json.loads(inhoud)
+            assert detail == "week 2026-W43: 1 van 7 dagen vastgesteld", detail
+            assert gevangen["weekoverzicht:2026-W43"]["inhoud"] == inhoud and x["week"] == "2026-W43", "bord = bestand"
+            assert [d["dag"] for d in x["dagen"] if d["vastgesteld"]] == [DAG], x["dagen"]
+            assert x["planning"]["afspraken"] == 1 and x["planning"]["minuten"] == 60, x["planning"]
+            assert "datum" not in x and "start" not in x, "de dagenpagina leest dit niet als een dag"
+            md = lees(os.path.join(m, "dagboek", "2026", "week", "2026-W43.md"))
+            for naam in ("Pieter", "Claes", "Geheime", "Ruben", "Proefdorp"):
+                assert naam not in inhoud and naam not in md, f"K5: {naam} in het weekoverzicht"
+            D.weekoverzicht_maken("2026-W43", datetime(2026, 10, 28, 0, 30, tzinfo=timezone.utc))
+            assert lees(jpad) == inhoud, "niets veranderd: geen nieuw tijdstip"
+        finally:
+            D.DAGBOEK, D.lees_agenda, organisatie.firmas, bord.call = oud
+            D.ag.__dict__.pop("klaarzet", None)
+    with tempfile.TemporaryDirectory() as m:
+        w, gevangen = Wereld(m), {}
+        oud = _week_wereld(m, w, gevangen, vervals="{}")
+        try:
+            D.weekoverzicht_maken("2026-W43", datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
+            raise AssertionError("een bord dat iets anders toont, moet het weekoverzicht laten falen")
+        except RuntimeError as e:
+            assert "niet teruggelezen: bord" in str(e), e
+        finally:
+            D.DAGBOEK, D.lees_agenda, organisatie.firmas, bord.call = oud
+            D.ag.__dict__.pop("klaarzet", None)
+
+
+def test_fase2_weeknood_per_ronde():
+    """K3: de nacht maakt de week in een eigen blok; lukt het, dan sluit de weeknood, mislukt het, dan staat ze open en
+    breekt de nacht niet. De ochtend laat de weeknood open (ze kijkt de week niet na). Met de hand (--week) maakt alleen
+    die week, zonder vaststelling, en sluit niets."""
+    gemeld, gemaakt, vastgelegd = [], [], []
+
+    class R:
+        detail = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def nood(self, t, wie="mehdi"):
+            gemeld.append(t)
+
+    def faal(week, nu=None):
+        gemaakt.append(week)
+        raise RuntimeError("kapot")
+
+    oud = (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
+           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET)
+    D.KETENBESTAND = "/bestaat/niet/keten.json"
+    D.weken_voor_de_nacht = lambda nu: ["2026-W43"]
+    D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}
+    D.vastleggen = lambda r, dagen, zoom_gelezen=None: vastgelegd.append(len(dagen)) or ""
+    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.inhaaldagen = lambda nu, dagen: []
+    D.ag.ronde = lambda taak, **k: R()
+    D.ag.log = lambda *a, **k: None
+    D.ag.open_noden = lambda: [{"tekst": D.WEEKNOOD, "wie": "claude-code"}]
+    try:
+        D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG = True, False, None, None, False
+        D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or f"week {week}"
+        D.main()
+        assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, (gemaakt, gemeld)
+        del gemeld[:], gemaakt[:]
+        D.weekoverzicht_maken = faal
+        D.main()
+        assert gemaakt and gemeld.count(D.WEEKNOOD) == 1, ("mislukt: de weeknood staat open", gemeld)
+        del gemeld[:], gemaakt[:]
+        # Codex-controle fase 2, ronde 3 (K3): een vastgelopen weekstap stopt op haar eigen grens, de nacht loopt door
+        import time
+        D.WEEK_TIJDSLIMIET = 0.2
+        D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or time.sleep(3) or "te laat"
+        begin = time.monotonic()
+        D.main()
+        assert time.monotonic() - begin < 2 and gemeld.count(D.WEEKNOOD) == 1, ("vastgelopen week: nood, nacht loopt door", gemeld)
+        D.WEEK_TIJDSLIMIET = oud[-1]
+        del gemeld[:], gemaakt[:]
+        D.NACHT = False
+        D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": NU.isoformat(),
+                                "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}
+        D.main()
+        assert not gemaakt and D.WEEKNOOD in gemeld, ("de ochtend laat de weeknood open en maakt geen week", gemeld)
+        del gemeld[:], gemaakt[:], vastgelegd[:]
+        D.WEEK, D.HANDMATIG = "2026-W43", True
+        D.weekoverzicht_maken = lambda week, nu=None: gemaakt.append(week) or f"week {week}"
+        D.main()
+        assert gemaakt == ["2026-W43"] and not vastgelegd and D.WEEKNOOD in gemeld, (gemaakt, vastgelegd, gemeld)
+        # met de hand mislukt: geen algemene weeknood (Codex-controle fase 2, ronde 3)
+        del gemeld[:], gemaakt[:]
+        D.ag.open_noden = lambda: []
+        D.weekoverzicht_maken = faal
+        with redirect_stderr(io.StringIO()):
+            D.main()
+        assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, gemeld
+    finally:
+        (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
+         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET) = oud
+        for naam in ("ronde", "log", "open_noden"):
+            D.ag.__dict__.pop(naam, None)
+
+
+def test_fase2_dagbestand_teruggelezen_voor_het_bord():
+    """X2 (Codex-controle fase 2, ronde 3): ook het dagbestand is teruggelezen voor het item naar het bord gaat."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        echt = D._lees
+        D._lees = lambda pad: "kapot" if str(pad).endswith(f"{DAG}.md") and "/dagboek/" in str(pad) else echt(pad)
+        try:
+            ronde(w)
+            raise AssertionError("een dagbestand dat niet terug te lezen is, moet de ronde laten falen")
+        except RuntimeError as e:
+            assert "niet teruggelezen" in str(e) and "bestand" in str(e), e
+        finally:
+            D._lees = echt
+        assert f"vaststelling:{DAG}" not in w.items, "geen item op het bord zonder teruggelezen dagbestand"
+
+
+def test_fase2_weken_voor_de_nacht():
+    """Codex-controle fase 2, ronde 3: de nacht maakt de laatst afgesloten week, en de week ervoor zolang die ontbreekt."""
+    nu = datetime(2026, 11, 2, 0, 30, tzinfo=timezone.utc)
+    with tempfile.TemporaryDirectory() as m:
+        oud = D.DAGBOEK
+        D.DAGBOEK = os.path.join(m, "dagboek")
+        try:
+            assert D.weken_voor_de_nacht(nu) == ["2026-W43", "2026-W44"], D.weken_voor_de_nacht(nu)
+            os.makedirs(os.path.join(m, "dagboek", "2026", "week"))
+            with open(os.path.join(m, "dagboek", "2026", "week", "2026-W43.json"), "w") as f:
+                f.write("{}")
+            assert D.weken_voor_de_nacht(nu) == ["2026-W44"], D.weken_voor_de_nacht(nu)
+        finally:
+            D.DAGBOEK = oud
+
+
+def test_fase2_tijdslimiet_gaat_door_een_gewone_foutafhandeling():
+    """Codex-controle fase 2, ronde 4 (K3): loopt de weekstap vast in een stuk met een gewone foutafhandeling (de
+    firmanamen uit kern), dan stopt ze toch op haar grens en keert ze nooit terug als geslaagd."""
+    import organisatie
+    import signal
+    import time
+    with tempfile.TemporaryDirectory() as m:
+        w, gevangen = Wereld(m), {}
+        oud = _week_wereld(m, w, gevangen)
+        organisatie.firmas = lambda *a, **k: time.sleep(3) or []
+        vorige = signal.getsignal(signal.SIGALRM)
+        begin = time.monotonic()
+        try:
+            D.met_tijdslimiet(D.weekoverzicht_maken, 0.2, "2026-W43", datetime(2026, 10, 27, 0, 30, tzinfo=timezone.utc))
+            raise AssertionError("de tijdslimiet werd ingeslikt: de week keerde terug als geslaagd")
+        except D.WeekTijdOp:
+            pass
+        finally:
+            D.DAGBOEK, D.lees_agenda, organisatie.firmas, bord.call = oud
+            D.ag.__dict__.pop("klaarzet", None)
+        assert time.monotonic() - begin < 2, "de grens hield de week niet tegen"
+        assert signal.getsignal(signal.SIGALRM) == vorige and signal.getitimer(signal.ITIMER_REAL)[0] == 0
+        assert "weekoverzicht:2026-W43" not in gevangen, "een week die op haar grens stopte, staat niet op het bord"
+
+
+def test_fase2_alarm_tijdens_het_uitzetten():
+    """Codex-controle fase 2, ronde 5: gaat het alarm af net tijdens het uitzetten, dan komt de vorige
+    alarmafhandeling toch terug."""
+    import signal
+    vorige = signal.getsignal(signal.SIGALRM)
+    echt = signal.setitimer
+
+    def setitimer(soort, seconden, *a):
+        if seconden == 0:
+            echt(soort, 0)
+            raise D.WeekTijdOp("alarm tijdens het uitzetten")
+        return echt(soort, seconden, *a)
+
+    signal.setitimer = setitimer
+    try:
+        D.met_tijdslimiet(lambda: "klaar", 5)
+        raise AssertionError("het nagebootste alarm moest doorkomen")
+    except D.WeekTijdOp:
+        pass
+    finally:
+        signal.setitimer = echt
+    assert signal.getsignal(signal.SIGALRM) == vorige, "de vorige alarmafhandeling kwam niet terug"
+
 
 if __name__ == "__main__":
     import traceback

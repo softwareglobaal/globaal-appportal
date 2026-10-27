@@ -38,6 +38,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_taken.py",
     "mijnagents-runner/tests/test_uitrol_regie.py",
     "mijnagents-runner/tests/test_uitvoerder_signaal.py",
+    "mijnagents-runner/tests/test_weekoverzicht.py",
     "mijnagents-runner/tests/test_whatsapp.py",
     "mijnagents-runner/tests/test_zoom_account.py",
     "mijnagents-runner/tests/test_zoom_wacht.py",
