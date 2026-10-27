@@ -3650,7 +3650,13 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
     for e in niet_zichtbaar:
         if _firma_uid(e) not in gezien:   # dezelfde afspraak op twee firma-agenda's: een blok (review 27-10-2026)
             gezien.add(_firma_uid(e))
-            kand[_firma_sleutel(e)] = (e, True)
+            if e.get("_tijd_onzeker"):
+                # bij het herlezen bleek de tijd onzeker (geen offset, geen tijdzone): de vraag, nooit een blok (hertest 19)
+                lijst = [(e.get("_agendanaam"), _tijd(e, "start"), _tijd(e, "end"))]
+                kand[_firma_sleutel(e)] = (dict(e, _kopieen=lijst, _alleen_noemt=False,
+                                                _vinger=hashlib.sha256(json.dumps(lijst).encode()).hexdigest()[:12]), None)
+            else:
+                kand[_firma_sleutel(e)] = (e, True)
     gekozen, onz2, twijfel = _firma_kopieen_kiezen(evs, onleesbaar)
     onzeker = (set(onzeker) | onz2) - set(twijfel)
     for k, kopieen in twijfel.items():

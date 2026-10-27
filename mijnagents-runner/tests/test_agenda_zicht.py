@@ -846,6 +846,29 @@ finally:
 check("een uitgenodigde gast met onbekende tijdzone krijgt meteen de vraag 'uur niet zeker'",
       len(_ins42) == 1 and "uur niet zeker" in _ins42[0]["summary"], str(_ins42))
 
+# --- Codex-hertest 19: bleek de tijd bij het herlezen onzeker, dan de vraag, geen blok ------------------------------
+_e19 = ev("h19", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}])
+g19 = NepGoogle([_e19], zichtbaar=False, vers={"h19": {"start": {"dateTime": f"{_morgen}T21:30:00"},
+                                                       "end": {"dateTime": f"{_morgen}T22:30:00"}}})
+_o19z = dict(W._KAL_TZ)
+W._KAL_TZ.pop(ELEVAIT, None)
+try:
+    _, niet19, _, _ = met(g19, W.firma_gasten, [_e19], "tok")
+finally:
+    W._KAL_TZ.clear()
+    W._KAL_TZ.update(_o19z)
+_ins43 = []
+_o43 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma43-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins43.append(body) or {"id": "q43"}
+try:
+    met(NepGoogle([]), W.firma_vangnet, [_e19], niet19, "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o43
+check("bleek de tijd bij het herlezen onzeker, dan de vraag 'uur niet zeker' en geen Bezet blok (hertest 19)",
+      niet19 and niet19[0].get("_tijd_onzeker") and len(_ins43) == 1 and "uur niet zeker" in _ins43[0]["summary"]
+      and _ins43[0]["transparency"] == "transparent", str((niet19, _ins43)))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
