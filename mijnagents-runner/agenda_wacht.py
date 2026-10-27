@@ -3246,8 +3246,8 @@ def _dagroute(dag):
     m = re.search(r"reistijd: .*?(\d+) mislukt", r.stdout or "")
     if r.returncode == 0 and m and int(m.group(1)) > 0:
         return False, "een rit mislukte"           # dan blijft de dag wachten (Codex-hertest 27)
-    if r.returncode == 0 and "[reistijd] kaartdienst niet beschikbaar" in (r.stdout or ""):
-        return False, "kaartdienst niet beschikbaar"   # de rit ontbreekt nog: de dag blijft wachten (hertest 28)
+    if r.returncode == 0 and "[reistijd] rit ontbreekt door een storing" in (r.stdout or ""):
+        return False, "rit ontbreekt door een storing"  # de dag blijft wachten (hertest 28 en 30)
     return r.returncode == 0, f"exitcode {r.returncode}"
 
 
@@ -3696,9 +3696,9 @@ def _firma_vraag_body(k, e, start, sterk):
         tijd = {"start": {"date": dag}, "end": {"date": volgende}}
     titel = ("VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda" if sterk
              else "VR Agendawacht: firma-afspraak die jou lijkt aan te gaan")
-    # met het uur erbij: twee blokken op een dag dragen zo elk hun eigen titel, en een rit (die zijn afspraak aan de titel
-    # herkent) kan niet naar het andere blok overlopen (Codex-hertest 29)
-    uur = f" {start[11:16]}" if "dateTime" in tijd.get("start", {}) else ""
+    # met het uur en het eigen kenmerk erbij: elk blok draagt zo zijn eigen titel, ook twee op hetzelfde uur, en een rit
+    # (die zijn afspraak aan de titel herkent) kan niet naar een ander blok overlopen (Codex-hertest 29 en 30)
+    uur = (f" {start[11:16]}, #{merk['private'][MAILMERK][:6]}" if "dateTime" in tijd.get("start", {}) else "")
     return {"summary": f"{titel} ({_ddmm(dag)}{uur})"[:200], "reminders": {"useDefault": False, "overrides": []}, **tijd,
             "transparency": "opaque" if sterk else "transparent", "description": tekst, "extendedProperties": merk}
 
@@ -5234,7 +5234,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
             _li = lees_titel(a["titel"])
-            if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
+            # ook een Bezet firmablok op een echt adres, met zijn algemene titel (Codex-hertest 30)
+            if "T" in a.get("start", "") and not _li["reistijd"] and (
+                    _li["buiten"] or _li["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, _bruikbare_locatie(adres))) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
                     and not any(x.get("kalender") == a.get("kalender") and _zelfde_tijd(x.get("einde"), a["start"])
                                 and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
@@ -7732,11 +7734,11 @@ def main():
         except Exception as _e:  # noqa: BLE001
             print(f"  [dagcontrole] niet gelukt: {type(_e).__name__}: {str(_e)[:120]}", flush=True)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
-        _kaart = sum("kaartdienst niet beschikbaar" in r for r in rregels)
-        if _kaart:
-            # een tijdelijke kaartstoring telt als 'zonder adres', maar de rit ontbreekt: _dagroute laat de dag dan
-            # wachten (Codex-hertest 28)
-            print(f"  [reistijd] kaartdienst niet beschikbaar: {_kaart} rit(ten) volgende ronde opnieuw", flush=True)
+        _storing = sum("kaartdienst niet beschikbaar" in r or "grendelbron niet te lezen" in r for r in rregels)
+        if _storing:
+            # een tijdelijke storing (kaartdienst, of een grendelbron die niet te lezen is) telt niet als 'mislukt', maar
+            # de rit ontbreekt: _dagroute laat de dag dan wachten (Codex-hertest 28 en 30)
+            print(f"  [reistijd] rit ontbreekt door een storing: {_storing} (volgende ronde opnieuw)", flush=True)
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.

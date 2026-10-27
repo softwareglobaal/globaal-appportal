@@ -1051,15 +1051,16 @@ finally:
 check("een Bezet firmablok met een echt adres op een dag zonder auto: een waarschuwing, geen rit (hertest 28)",
       any("BUITEN op een dag zonder auto" in r for r in _r52[-1]) and not _ins52, str((_r52, _ins52)))
 _sp.run = lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "  [schrijf] reistijd: 0 blok(ken) gemaakt, 0 bestonden al, "
-                                                                    "1 zonder adres, 0 mislukt\n  [reistijd] kaartdienst niet "
-                                                                    "beschikbaar: 1 rit(ten) volgende ronde opnieuw\n", "stderr": ""})()
+                                                                    "1 zonder adres, 0 mislukt\n  [reistijd] rit ontbreekt door "
+                                                                    "een storing: 1 (volgende ronde opnieuw)\n", "stderr": ""})()
 try:
     _uit52 = _ECHTE_DAGROUTE("2026-11-02")       # subprocess.run is nagemaakt: er start niets
 finally:
     _sp.run = _o51
 _bron28 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("een tijdelijke kaartstoring in de dagroute: de dag blijft wachten, en de ritstap schrijft die regel (hertest 28)",
-      _uit52[0] is False and '[reistijd] kaartdienst niet beschikbaar: {_kaart}' in _bron28, str(_uit52))
+      _uit52[0] is False and '[reistijd] rit ontbreekt door een storing: {_storing}' in _bron28
+      and '"kaartdienst niet beschikbaar" in r or "grendelbron niet te lezen" in r' in _bron28, str(_uit52))
 _e52 = dict(ev("x52", "Mehdi: [EL-IN] overleg"), location=_ADR52)
 _pat52, _raw52 = [], {"transparency": "opaque", "location": "Verkeerde straat 9, 9999 Elders"}
 _o52b = (W._prive_item_lezen, W._google, W._patch)
@@ -1083,8 +1084,8 @@ _eB = dict(ev("b53", "Mehdi: [EL-IN] overleg B"), location="Meir 50, 2000 Antwer
            start={"dateTime": f"{_morgen}T14:00:00+01:00"}, end={"dateTime": f"{_morgen}T15:00:00+01:00"})
 _bA = W._firma_vraag_body("firma|a53@google.com|", _eA, f"{_morgen}T10:00:00+01:00", True)
 _bB = W._firma_vraag_body("firma|b53@google.com|", _eB, f"{_morgen}T14:00:00+01:00", True)
-check("twee firmablokken op een dag hebben elk een eigen titel (met het uur; hertest 29)",
-      _bA["summary"] != _bB["summary"] and _bA["summary"].endswith("10:00)") and _bB["summary"].endswith("14:00)"),
+check("twee firmablokken op een dag hebben elk een eigen titel (met het uur en hun kenmerk; hertest 29)",
+      _bA["summary"] != _bB["summary"] and " 10:00, #" in _bA["summary"] and " 14:00, #" in _bB["summary"],
       str((_bA["summary"], _bB["summary"])))
 def _blok53(eid, body):
     return {"kalender": W.PRIVE_AGENDA, "id": eid, "titel": body["summary"], "start": body["start"]["dateTime"],
@@ -1113,8 +1114,41 @@ finally:
     W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
 _naar_A = [b for i, b in _pat53 if i == "rit-b" and "10:00" in json.dumps(b)]
 check("in de rittenroute krijgt blok A een eigen heenrit en neemt het de rit van blok B niet over (hertest 29)",
-      not _naar_A and any(b.get("description", "").startswith("Reistijd voor: ") and "10:00) (" in b["description"]
+      not _naar_A and any(b.get("description", "").startswith("Reistijd voor: ") and " 10:00, #" in b["description"]
                           for b in _ins53), str((_pat53, _ins53))[:600])
+
+# --- Codex-hertest 30: twee firmablokken op hetzelfde uur; een onleesbare bron voor dagen zonder auto -------------
+_eC = dict(_eB, id="c54", iCalUID="c54@google.com", summary="Mehdi: [EL-IN] overleg C",
+           start={"dateTime": f"{_morgen}T10:00:00+01:00"}, end={"dateTime": f"{_morgen}T11:00:00+01:00"})
+_bC = W._firma_vraag_body("firma|c54@google.com|", _eC, f"{_morgen}T10:00:00+01:00", True)
+_ritC = dict(_ritB, id="rit-c", start=f"{_morgen}T09:15:00+01:00", einde=f"{_morgen}T09:45:00+01:00",
+             omschrijving=_ritB["omschrijving"].replace(_bB["summary"], _bC["summary"]))
+check("twee firmablokken op hetzelfde uur hebben elk een eigen titel, en de rit van het ene hoort niet bij het andere "
+      "(hertest 30)", _bA["summary"] != _bC["summary"] and W.rit_hoort_bij(_ritC, _bC["summary"], "voor")
+      and not W.rit_hoort_bij(_ritC, _bA["summary"], "voor"), str((_bA["summary"], _bC["summary"])))
+_pat54, _ins54 = [], []
+_o54 = {n: getattr(W, n) for n in _o52}
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: set())
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (25, "proef")), (lambda *_a: "Antwerpen")
+W._insert = lambda kal, body, tok, *a, **k: _ins54.append(body) or {"id": f"n{len(_ins54)}"}
+W._patch = lambda x, body, tok, *a, **k: _pat54.append((x.get("id"), body))
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+try:
+    W.reistijd_zetten([_blok53("qA", _bA), _blok53("qC", _bC), dict(_ritC)])
+    W.geen_auto_dagen = lambda: None                      # de bron voor dagen zonder auto is niet te lezen
+    _r55 = W.reistijd_zetten([_blok53("qA", _bA)])
+finally:
+    for _n, _f in _o54.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+check("in de rittenroute krijgt blok A een eigen heenrit naast blok C op hetzelfde uur (hertest 30)",
+      not [i for i, _ in _pat54 if i == "rit-c"]
+      and any(b.get("description", "").startswith(f"Reistijd voor: {_bA['summary']} (") for b in _ins54),
+      str((_pat54, _ins54))[:600])
+check("is de bron voor dagen zonder auto niet te lezen, dan staat het firmablok zelf in de meldingen (geen rit; hertest 30)",
+      any(_bA["start"]["dateTime"][:16] in r and "grendelbron niet te lezen" in r for r in _r55[-1]), str(_r55[-1]))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
