@@ -3639,9 +3639,34 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     _zorg_gezet(a["start"][:10], bestaand)
                     st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
                     continue
-                # een ander uur dan de mail, zonder mailhistorie die de verschuiving bevestigt (het blok viel buiten de
-                # vergelijking): niet zelf verzetten, want Mehdi kan het met de hand gecorrigeerd hebben. Een open punt, dat de
-                # gewone mailmelding als vraag in de privé-agenda zet (Codex-hertest 10, PR 113)
+                # een ander uur dan de mail. Bevestigt de mailhistorie de verschuiving (van dit uur naar het nieuwe), dan
+                # verzet ik hetzelfde blok, volledig teruggelezen (Codex-hertest 12). Zonder die bevestiging niet: Mehdi kan
+                # het met de hand gecorrigeerd hebben; dan een open punt (hertest 10)
+                hist_v = z.get("historie") or []
+                if hist_v and hist_v[-1].get("naar") == a["start"] and _zelfde_tijd(hist_v[-1].get("van"), x.get("start")) \
+                        and not x.get("hele_dag"):
+                    try:
+                        volledig = _lees_event(PRIVE_AGENDA, bestaand, tok)
+                        if volledig is None:
+                            raise RuntimeError("omschrijving niet te lezen")
+                        _zorg_gezet(a["start"][:10], bestaand)
+                        _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
+                                   "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
+                                   "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van "
+                                                   f"{hist_v[-1]['van'][:16].replace('T', ' ')} naar "
+                                                   f"{a['start'][:16].replace('T', ' ')} volgens mail {hist_v[-1].get('bron', '')}.").strip(),
+                                   **_niet_meer_vervallen(x)}, tok)
+                        probleem = _zorg_nalezen(PRIVE_AGENDA, bestaand, tok, start=a["start"], einde=a["einde"])
+                    except Exception as ex:  # noqa: BLE001
+                        probleem = type(ex).__name__
+                    if probleem:
+                        st["fout"] += 1
+                        st["prive"].append(f"{wat}: verzet maar het teruglezen klopt niet ({probleem})")
+                    else:
+                        a["status"] = "gezet"
+                        st["verzet"] += 1
+                        st["prive"].append(f"{wat}: verzet volgens de mailhistorie (zelfde item {bestaand}), teruggelezen")
+                    continue
                 a["status"], a["detail"] = "afwijkend", (f"in de agenda {(x.get('start') or '')[:16].replace('T', ' ')}, "
                                                          f"volgens mail {a['start'][:16].replace('T', ' ')}: welk uur klopt?")
                 st["open"] += 1

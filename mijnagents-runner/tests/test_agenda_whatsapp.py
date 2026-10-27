@@ -570,7 +570,7 @@ check("een vervallen zorgblok dat de praktijk verzet, wordt weer een gewone afsp
                                                                                 "transparency": "opaque"}
       and W._niet_meer_vervallen({"titel": "!! [PR] Tandarts - Proef"}) == {})
 _h7 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
-check("en de verschuifroute van de zorgstap gebruikt dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 1)
+check("en beide verschuifroutes van de zorgstap gebruiken dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 2)
 check("ook 'vervalt:' gaat weg, dezelfde vormen als de herkenning (hertest 10)",
       W._niet_meer_vervallen({"titel": "vervalt: !! [PR] Kine - X"})["summary"] == "!! [PR] Kine - X"
       and W._niet_meer_vervallen({"titel": "!! vervalt - [PR] Kine - X"})["summary"] == "!! [PR] Kine - X")
@@ -599,6 +599,36 @@ W._zorg_gezet("2028-06-01", "ver21")
 W.ZORG_GEZET[:] = []
 check("een blok voorbij het venster wordt bij het zetten meteen met dag en id bewaard (hertest 11)",
       AW.verre_dagen() == {"2028-06-01": ["ver21"]}, str(AW.verre_dagen()))
+
+# --- Codex-hertest 12 (PR 113): een door de mail bevestigde verschuiving voorbij dag 120 verzet het blok wel -------
+_oud_uur = (_ver_start - timedelta(days=7))
+_pat22 = []
+_o22 = (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen,
+        list(W.ZORG_GEZET), W._lees_event)
+W._insert = lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen nieuw blok"))
+W._zorg_blok_met_merk = lambda sleutel, tok: "b22"
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "!! [PR] Tandarts - Proef",
+                                        "start": _oud_uur.isoformat(), "einde": (_oud_uur + timedelta(minutes=30)).isoformat(),
+                                        "hele_dag": False, "omschrijving": "", "deelnemers": [], "maker": W.WERKAGENDA, "_merk": {}}
+W._lees_event = lambda kal, eid, tok: {"description": "praktijk"}
+W._patch = lambda x, body, tok, **kw: _pat22.append(body)
+W._zorg_nalezen = lambda *a, **k: ""
+_MA._zorg_json = lambda a: a["zorg"]
+_MA.zorgprofielen = lambda: [{"id": "p", "soort": "tandarts"}]
+W.ZORG_GEZET[:] = []
+try:
+    _m22 = _mail16()
+    _m22[0]["zorg"] = dict(_m22[0]["zorg"], historie=[{"van": _oud_uur.isoformat(), "naar": _ver_start.isoformat(), "bron": "mail 2"}])
+    _rz22 = W.zorg_afspraken_zetten(_m22, [], "tok")
+    _rz22b = W.zorg_afspraken_zetten(_mail16(), [], "tok")       # zonder historie: open punt
+finally:
+    (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen) = _o22[:7]
+    W.ZORG_GEZET[:] = _o22[7]
+    W._lees_event = _o22[8]
+check("bevestigt de mailhistorie de verschuiving voorbij dag 120, dan verzet het blok mee, teruggelezen (hertest 12)",
+      _rz22["verzet"] == 1 and len(_pat22) == 1 and _pat22[0]["start"]["dateTime"] == _ver_start.isoformat()
+      and _pat22[0]["description"].startswith("praktijk"), str((_rz22["prive"], _pat22)))
+check("zonder die bevestiging blijft het een open punt, niets verzet", _rz22b["open"] == 1 and len(_pat22) == 1, str(_rz22b["prive"]))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
