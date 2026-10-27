@@ -3209,6 +3209,23 @@ def _tijd(e, veld):
     return (e.get(veld) or {}).get("dateTime") or (e.get(veld) or {}).get("date") or ""
 
 
+def _naar_brussel(e):
+    """Een firma-afspraak met haar tijden in Brusselse tijd. Google geeft de tijd in de tijdzone van de bronagenda
+    (Suriname): 21:30 daar is 01:30 de dag erna in Brussel. Datum en uur van een vraag volgen Brussel (Codex-hertest 15).
+    Een hele dag blijft haar datum."""
+    if not isinstance(e, dict):
+        return e
+    uit = dict(e)
+    for veld in ("start", "end", "originalStartTime"):
+        t = (e.get(veld) or {}).get("dateTime")
+        if t:
+            try:
+                uit[veld] = {"dateTime": datetime.fromisoformat(t.replace("Z", "+00:00")).astimezone(TIJDZONE).isoformat()}
+            except ValueError:
+                pass
+    return uit
+
+
 def _google(url, tok, data=None, methode=None, kop=None):
     import urllib.request  # noqa: PLC0415
     req = urllib.request.Request(url, data=json.dumps(data).encode() if data is not None else None, method=methode,
@@ -3243,7 +3260,7 @@ def firma_afspraken(tok, nu=None, dagen=FIRMA_VOORUIT_DAGEN):
         except Exception:  # noqa: BLE001
             onleesbaar.append(adres)
             continue
-        uit += [{**e, "kalender": adres, "_agendanaam": naam} for e in items if e.get("status") != "cancelled"]
+        uit += [{**_naar_brussel(e), "kalender": adres, "_agendanaam": naam} for e in items if e.get("status") != "cancelled"]
     return uit, onleesbaar
 
 
@@ -3343,8 +3360,8 @@ def firma_gasten(evs, tok, onleesbaar=()):
                 if _gast_status(terug) == "declined":
                     continue            # intussen door Mehdi zelf afgewezen: niets te tonen
                 # de teruggelezen afspraak beslist: een collega kan intussen het uur verzet hebben (Codex-hertest 4, punt 1)
-                ev = {**ev, **{k: terug[k] for k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID")
-                               if k in terug}}
+                ev = {**ev, **{k: v for k, v in _naar_brussel(terug).items()
+                               if k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID")}}
                 regels.append(f"{_tijd(ev, 'start')[:16]} gast gezet op {ev['_agendanaam']}")
                 vers_gezet = True
             if not _op_werkagenda(ev, tok):
@@ -3494,7 +3511,7 @@ def _firma_actueel(ev, tok):
         return None
     if x.get("status") == "cancelled":
         return False
-    return {**x, "kalender": ev["kalender"], "_agendanaam": ev.get("_agendanaam")}
+    return {**_naar_brussel(x), "kalender": ev["kalender"], "_agendanaam": ev.get("_agendanaam")}
 
 
 def _prive_vraag_id(k, tok):

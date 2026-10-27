@@ -743,6 +743,27 @@ check("de twijfelvraag loopt van de vroegste tot de laatste kopie en noemt per k
 check("verschuift alleen een andere kopie, dan wordt de vraag bijgewerkt", len(_pat34) == 1 and "16:00" in _pat34[0]["description"],
       str(_pat34))
 
+# --- Codex-hertest 15: tijden van firma-agenda's in Brusselse tijd (Suriname 21:30 = Brussel 01:30 de dag erna) ------
+_sr = (_nu + timedelta(days=3)).date().isoformat()
+_sr_na = (_nu + timedelta(days=4)).date().isoformat()
+_k35 = dict(ev("g35", "Mehdi: [EL-PO] overleg"), organizer={"email": "siyan@voorbeeld.test"},
+            start={"dateTime": f"{_sr}T21:30:00-03:00", "timeZone": "America/Paramaribo"},
+            end={"dateTime": f"{_sr}T22:30:00-03:00", "timeZone": "America/Paramaribo"})
+_ins35 = []
+_o35 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma35-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins35.append(body) or {"id": "t35"}
+try:
+    _gelezen35, _ = met(NepGoogle([_k35]), W.firma_afspraken, "tok")
+    met(NepGoogle([]), W.firma_vangnet, _gelezen35, [], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o35
+check("een firma-afspraak om 21:30 Surinaamse tijd wordt gelezen als 01:30 Brusselse tijd de dag erna",
+      _gelezen35 and _gelezen35[0]["start"]["dateTime"].startswith(f"{_sr_na}T01:30"), str(_gelezen35[:1]))
+check("en de vraag staat op die Brusselse dag, met het Brusselse uur (hertest 15)",
+      _ins35 and _ins35[0]["start"] == {"date": _sr_na} and "01:30" in _ins35[0]["description"]
+      and "21:30" not in _ins35[0]["description"], str(_ins35[:1]))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
