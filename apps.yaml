@@ -49,10 +49,10 @@ apps:
     status: active
   - id: barstenscheuren
     name: Barsten & Scheuren
-    description: Stabiliteitsverslagen — barsten en scheuren
+    description: Stabiliteitsverslagen — barsten en scheuren (v1, vervangen door v2)
     subdomain: barstenscheuren
     roles: [admin, manager, barstenscheuren]
-    status: active
+    status: archived   # Mehdi 27-10-2026; v1 is sinds 17-09-2026 weg, de naam stuurt door naar v2
   - id: barstenscheurenv2
     name: Barsten & Scheuren v2
     description: Dossiers verwerken, checklist met bewijsstatus, meetstand kennisbank
