@@ -967,7 +967,19 @@ check("een open Bezet blok voor een firma-afspraak op een echt adres telt voor d
 _src = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 check("de rittenroute gebruikt dat, en de kleurronde werkt het belrooster meteen bij na een nieuw of verzet blok",
       "_firma_buitenblok(a, fysiek)" in _src.split("def reistijd_zetten(")[1][:60000]
-      and "bellen.rooster_schrijven(rooster)" in _src.split("def firma_kleurronde(")[1][:1500])
+      and "_dagroute(dag)" in _src.split("def firma_kleurronde(")[1][:1500])
+_pat49 = []
+_o49 = (W._patch,)
+W._patch = lambda x, body, tok, **kw: _pat49.append(body)
+try:
+    W._firma_blok_bijzetten({"id": "q", "titel": "VR Agendawacht: x"}, "firma|x@google.com|", ev("x", "Mehdi: [EL-IN] o"),
+                            f"{_morgen}T10:00:00+01:00", True, "tok")
+finally:
+    W._patch = _o49[0]
+check("wordt een vraag een Bezet blok met een uur, dan krijgt ze ook de herinnering van 15 minuten (hertest 25)",
+      _pat49 and _pat49[0]["reminders"] == {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]}, str(_pat49))
+_dr = W._dagroute.__code__.co_consts
+check("de dagroute na een nieuw firmablok wacht op het rondeslot (zoals het agendasignaal)", "--slot-wacht" in _dr and "--dag" in _dr)
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

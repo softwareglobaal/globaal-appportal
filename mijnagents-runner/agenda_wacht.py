@@ -3179,21 +3179,32 @@ def _firma_buitenblok(a, fysiek):
                 and not a.get("_vrij") and "T" in (a.get("start") or "") and a.get("kalender") == PRIVE_AGENDA)
 
 
-FIRMA_BLOK_VERANDERD = False     # zette of verzette deze ronde een Bezet blok? Dan het belrooster meteen bijwerken
+FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette of verzette: daar meteen de dagroute
+
+
+def _dagroute(dag):
+    """De gewone dagroute (--dag) voor een dag, in een eigen proces dat op het rondeslot wacht: ritten en belrooster.
+    Geeft (gelukt, uitleg); gelukt is None als het slot bezet bleef."""
+    import subprocess  # noqa: PLC0415
+    try:
+        r = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--dag", dag, "--slot-wacht", "300"],
+                           capture_output=True, text=True, timeout=1200)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, type(e).__name__
+    return (None if r.returncode == 75 else r.returncode == 0), f"exitcode {r.returncode}"   # 75: slot bezet (agenda_signaal)
 
 
 def firma_kleurronde(vandaag):
     """De firmacontrole in de kleurronde. De noden gaan daar niet naar het bord (dat zet de volledige ronde, declaratief);
     verandert wat er mis is, dan komt het in het werkverslag, zodat Mehdi het ook in het weekend ziet (overleg P8)."""
     teksten = sorted(n["tekst"] for n in firma_stap(vandaag))
-    if FIRMA_BLOK_VERANDERD:
-        # een nieuw of verzet Bezet blok in het weekend of 's avonds: het belrooster meteen bijwerken, niet pas in de
-        # volgende volledige ronde (Codex-hertest 24)
-        try:
-            rooster = rooster_maken([x for x in afspraken(-1, 8) if not x.get("fout")], archief_afspraken(-1, 8), vandaag, [])
-            bellen.rooster_schrijven(rooster)
-        except Exception as e:  # noqa: BLE001
-            teksten.append(f"Belrooster niet bijgewerkt na een firmablok ({type(e).__name__})")
+    for dag in sorted(FIRMA_DAGEN):
+        # een nieuw of verzet Bezet blok, ook in het weekend of 's nachts: meteen de gewone dagroute voor die dag, met
+        # ritten en het belrooster (zoals het agendasignaal dat doet), niet pas in de volgende volledige ronde
+        # (Codex-hertest 24 en 25)
+        gelukt, uitleg = _dagroute(dag)
+        if gelukt is False:
+            teksten.append("Dagroute na een nieuw firmablok mislukt; de volgende ronde zet de rit en de oproep")
     try:
         with open(FIRMA_NODEN, encoding="utf-8") as f:
             vorige = json.load(f)
@@ -3665,7 +3676,7 @@ def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
     Mehdi het, dan blijven zijn titel en tekst staan en verandert alleen de tijd, de status en de plaats."""
     body = _firma_vraag_body(k, e, start, sterk)
     nieuw = {"transparency": body["transparency"], "start": _tijd_patch(body["start"]), "end": _tijd_patch(body["end"]),
-             "location": body.get("location", "")}
+             "location": body.get("location", ""), "reminders": body["reminders"]}     # ook de herinnering (hertest 25)
     if (x.get("titel") or "").startswith("VR Agendawacht:"):
         nieuw.update(summary=body["summary"], description=body["description"])
     _patch(x, nieuw, tok)
@@ -3907,9 +3918,9 @@ def firma_stap(vandaag):
             g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok, onleesbaar)
             gregels += g2
         vregels = firma_vangnet(evs, niet_zichtbaar, tok, onleesbaar=onleesbaar, onzeker=onzeker)
-    global FIRMA_BLOK_VERANDERD
-    FIRMA_BLOK_VERANDERD = any(("voor Mehdi die niet doorkwam" in r or "mee verschoven" in r or "opnieuw gezet" in r
-                                or "hersteld" in r) for r in vregels)
+    FIRMA_DAGEN.clear()
+    FIRMA_DAGEN.update(r[:10] for r in vregels if re.match(r"\d{4}-\d{2}-\d{2} ", r) and any(
+        m in r for m in ("voor Mehdi die niet doorkwam", "mee verschoven", "opnieuw gezet", "een keer hersteld")))
     if gregels or vregels:
         ag.log(f"dag {vandaag}", "schrijf", "firma-agenda's: Mehdi als stille gast waar het hem aangaat",
                "\n".join(gregels + vregels))
