@@ -168,7 +168,7 @@ check("staat de afspraak daarna zichtbaar op de werkagenda, dan geen vangnet", n
 g2 = NepGoogle([ev("b1", "Mehdi: [EL-IN] overleg")], zichtbaar=False)
 _, niet2a, onz2a, _ = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
 check("net als gast gezet en nog niet zichtbaar: deze ronde geen blok (Google toont de kopie soms even later)",
-      not niet2a and onz2a == {f"firma|b1"}, str((niet2a, onz2a)))
+      not niet2a and onz2a == {f"firma|b1@google.com|"}, str((niet2a, onz2a)))
 _b1 = ev("b1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA, "responseStatus": "needsAction"}])
 _, niet2, _, _ = met(NepGoogle([_b1], zichtbaar=False), W.firma_gasten, [_b1], "tok")
 check("de ronde erna, met Mehdi al als gast en nog altijd niet zichtbaar (verborgen uitnodiging): naar het vangnet",
@@ -287,7 +287,7 @@ _o13 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelos
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma13-")) / "agenda-firma-vragen.json")
 W._insert = lambda kal, body, tok, toch=False: _ins13.append(body) or {"id": f"q{len(_ins13)}"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
-    W.FIRMAMERK: f"firma|g1", W.MAILMERK: "abcdef0123456789" if _open13.get(eid, True) else "opgelost:abcdef0123456789"}}
+    W.FIRMAMERK: f"firma|g1@google.com|", W.MAILMERK: "abcdef0123456789" if _open13.get(eid, True) else "opgelost:abcdef0123456789"}}
 W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg13.append((x["id"], vrij)) or True
 W._patch = lambda x, body, tok, **kw: _pat13.append((x["id"], body))
 try:
@@ -315,7 +315,7 @@ check("verandert alleen het einde, of wordt het een afspraak voor Mehdi, dan wor
       len(_einde) == 1 and _einde[0][1]["end"] == {"dateTime": f"{_dag2}T12:00:00+01:00", "date": None}
       and _einde[0][1]["transparency"] == "opaque", str(_einde))
 check("van een onleesbare agenda wordt niets afgerond en blijft het register staan (punt 17)",
-      _na_onl[0] == [] and f"firma|g1" in _na_onl[1], str(_na_onl))
+      _na_onl[0] == [] and f"firma|g1@google.com|" in _na_onl[1], str(_na_onl))
 check("verdwijnt de afspraak, dan 'Opgelost' en Beschikbaar: het oude uur blijft niet bezet (punt 13)",
       _opg_weg == [("q1", True)], str(_opg_weg))
 check("komt de afspraak terug na een opgeloste vraag, dan komt er een nieuwe vraag", len(_ins13) == 2, str(len(_ins13)))
@@ -323,7 +323,7 @@ check("komt de afspraak terug na een opgeloste vraag, dan komt er een nieuwe vra
 _dag3 = (_nu + timedelta(days=3)).date().isoformat()
 _dag5 = (_nu + timedelta(days=5)).date().isoformat()
 _heel = dict(ev("h1", "Mehdi: [EL-IN] Suriname reis"), start={"date": _dag3}, end={"date": _dag5})
-_hb = W._firma_vraag_body(f"firma|h1", _heel, _dag3, True)
+_hb = W._firma_vraag_body(f"firma|h1@google.com|", _heel, _dag3, True)
 check("een hele-dag-afspraak voor Mehdi die niet doorkomt: een Bezet blok over dezelfde dagen (punt 10)",
       _hb["start"] == {"date": _dag3} and _hb["end"] == {"date": _dag5} and _hb["transparency"] == "opaque", str(_hb))
 check("dat blok sluit geen dag af voor de agent (geen markering)",
@@ -356,7 +356,7 @@ _e15 = ev("m1_20261102", "Mehdi: [EL-IN] meeting", reeks="m1")
 g15 = _Nep15([_e15])
 _, niet15, onz15, _ = met(g15, W.firma_gasten, [_e15], "tok")
 check("verzet een collega het uur terwijl de gast gezet wordt, dan geldt het nieuwe uur en komt er geen blok op het oude",
-      not niet15 and onz15 == {f"firma|m1_20261102"} and "13:59" in getattr(g15, "gezocht", ""),
+      not niet15 and onz15 == {f"firma|m1_20261102@google.com|"} and "13:59" in getattr(g15, "gezocht", ""),
       str((niet15, onz15, getattr(g15, "gezocht", ""))))
 
 _gist = (_nu - timedelta(days=1)).date().isoformat()
@@ -366,7 +366,7 @@ _o16 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelos
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma16-")) / "agenda-firma-vragen.json")
 W._insert = lambda kal, body, tok, toch=False: _ins16.append(body) or {"id": "r1"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
-    W.FIRMAMERK: f"firma|n1", W.MAILMERK: "abcdef0123456789"}}
+    W.FIRMAMERK: f"firma|n1@google.com|", W.MAILMERK: "abcdef0123456789"}}
 W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg16.append((x["id"], vrij)) or True
 try:
     _n1 = dict(ev("n1", "Mehdi: [EL-IN] beurs"), start={"date": _gist}, end={"date": _overmorgen})
@@ -396,7 +396,7 @@ class _NepOnleesbaarGet(NepGoogle):
 _e18 = ev("s2", "Mehdi: [EL-IN] meeting")
 _, niet18, onz18, _ = met(_NepOnleesbaarGet([_e18]), W.firma_gasten, [_e18], "tok")
 check("is de afspraak daarna niet te lezen, dan geen blok op een oude tijd; het vangnet laat haar staan (onzeker)",
-      not niet18 and onz18 == {f"firma|s2"}, str((niet18, onz18)))
+      not niet18 and onz18 == {f"firma|s2@google.com|"}, str((niet18, onz18)))
 
 _volg = []
 _o19 = (W.firma_afspraken, W.firma_gasten, W.firma_vangnet, W.agenda.zichtbaarheid, W.agenda._toegang, W.FIRMA_SLOT)
@@ -421,25 +421,25 @@ _d20 = _n20.date().isoformat()
 _pat20, _ins20 = [], []
 _o20 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch)
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma20-")) / "agenda-firma-vragen.json")
-Path(W.FIRMA_VRAGEN).write_text(json.dumps({f"firma|t1": {
+Path(W.FIRMA_VRAGEN).write_text(json.dumps({f"firma|t1@google.com|": {
     "gevraagd": _d20, "dag": _d20, "start": f"{_d20}T10:00:00+01:00", "einde": f"{_d20}T11:00:00+01:00", "sterk": True,
     "id": "q9"}}), encoding="utf-8")
 W._insert = lambda kal, body, tok, toch=False: _ins20.append(body) or {"id": "nieuw"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
-    W.FIRMAMERK: f"firma|{'t1' if eid == 'q9' else 't2'}", W.MAILMERK: "abcdef0123456789"}}
+    W.FIRMAMERK: f"firma|{'t1' if eid == 'q9' else 't2'}@google.com|", W.MAILMERK: "abcdef0123456789"}}
 W._patch = lambda x, body, tok, **kw: _pat20.append((x["id"], body))
 try:
     _t1 = dict(ev("t1", "Mehdi: [EL-IN] overleg"), start={"dateTime": f"{_d20}T14:00:00+01:00"},
                end={"dateTime": f"{_d20}T15:00:00+01:00"})
     met(NepGoogle([_t1]), W.firma_vangnet, [_t1], [_t1], "tok", _n20)
     _reg20 = json.loads(Path(W.FIRMA_VRAGEN).read_text(encoding="utf-8"))
-    _t2 = dict(_t1, id="t2")
+    _t2 = dict(_t1, id="t2", iCalUID="t2@google.com")
     met(NepGoogle([_t2], bestaande_vraag=True), W.firma_vangnet, [_t2], [_t2], "tok", _n20)
 finally:
     W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch = _o20
 check("verzet naar later nadat het oude uur voorbij is: hetzelfde blok gaat meteen naar het nieuwe uur (hertest 5, punt 2)",
       _pat20[:1] and _pat20[0][0] == "q9" and _pat20[0][1]["start"]["dateTime"] == f"{_d20}T14:00:00+01:00" and not _ins20
-      and _reg20[f"firma|t1"]["start"] == f"{_d20}T14:00:00+01:00", str((_pat20, _ins20)))
+      and _reg20[f"firma|t1@google.com|"]["start"] == f"{_d20}T14:00:00+01:00", str((_pat20, _ins20)))
 check("staat de vraag er al zonder registratie, dan wordt ze meteen op de juiste tijd gezet, geen tweede",
       len(_pat20) == 2 and _pat20[1][0] == "v" and not _ins20, str(_pat20))
 
@@ -477,7 +477,7 @@ W.gearchiveerd = lambda: set()
 W._MARKERS[_dagm] = [("Buitenland (Suriname)", "alles")]
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "titel": "VR Agendawacht: x", "deelnemers": [],
                                         "_agendagasten": [], "maker": W.WERKAGENDA, "start": f"{_dagm}T10:00:00+01:00",
-                                        "hele_dag": False, "_merk": {W.FIRMAMERK: f"firma|u1",
+                                        "hele_dag": False, "_merk": {W.FIRMAMERK: f"firma|u1@google.com|",
                                                                      W.MAILMERK: "abcdef0123456789"}}
 _ns = _NepSchrijf()
 try:
@@ -512,7 +512,7 @@ _w = [ev(f"w{i}", "Mehdi, Siyan: [EL-IN] Wekelijkse", gasten=[{"email": W.WERKAG
       for i in (1, 2)]
 _, niet22, onz22, _ = met(_NepWerkStuk(_w), W.firma_gasten, _w, "tok")
 check("is de werkagenda even niet te lezen, dan geen blokken voor afspraken die er al op staan (onzeker)",
-      not niet22 and onz22 == {f"firma|w1", f"firma|w2"}, str((niet22, onz22)))
+      not niet22 and onz22 == {f"firma|w1@google.com|", f"firma|w2@google.com|"}, str((niet22, onz22)))
 
 _d1 = ev("x1", "Mehdi: [EL-PO] overleg HDS en Elevait", gasten=[{"email": W.WERKAGENDA, "responseStatus": "needsAction"}])
 _d2 = dict(_d1, kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV")
@@ -615,7 +615,7 @@ _o29 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._patch)
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma29-")) / "agenda-firma-vragen.json")
 W._insert = lambda kal, body, tok, toch=False: _ins29.append(body) or {"id": "b29"}
 W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
-    W.FIRMAMERK: "firma|dup1", W.MAILMERK: "abcdef0123456789"}}
+    W.FIRMAMERK: "firma|dup1@google.com|", W.MAILMERK: "abcdef0123456789"}}
 W._patch = lambda x, body, tok, **kw: _pat29.append((x["id"], body))
 try:
     _hds = dict(ev("dup1", "Mehdi: [EL-PO] overleg"), kalender="hdssuriname@gmail.com", _agendanaam="High Design Studio NV")
@@ -628,6 +628,31 @@ finally:
 check("dezelfde afspraak op twee firma-agenda's, de ene onleesbaar en de afspraak verzet: een blok, dat meeschuift",
       len(_ins29) == 1 and len(_pat29) == 1 and _pat29[0][1]["start"]["dateTime"].endswith("14:00:00+01:00"),
       str((len(_ins29), _pat29)))
+
+# --- Codex-hertest 10: een leesbare kopie beslist; kopieën met een ander Google-id zijn dezelfde afspraak ----------
+_opg30, _ins30 = [], []
+_o30 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma30-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins30.append(body) or {"id": "b30"}
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "hele_dag": True, "start": _morgen,
+                                        "_merk": {W.FIRMAMERK: "firma|gedeeld@google.com|", W.MAILMERK: "abcdef0123456789"}}
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg30.append(x["id"]) or True
+W._patch = lambda x, body, tok, **kw: None
+try:
+    _a = dict(ev("idA", "Mehdi: [EL-PO] overleg"), iCalUID="gedeeld@google.com", kalender="hdssuriname@gmail.com")
+    _b = dict(ev("idB", "Mehdi: [EL-PO] overleg"), iCalUID="gedeeld@google.com")       # Elevait, ander Google-id
+    met(NepGoogle([]), W.firma_vangnet, [_a, _b], [_a, _b], "tok")
+    _n30 = len(_ins30)
+    # HDS (waar het blok vandaan kwam) is onleesbaar; de Elevait-kopie staat nu zichtbaar op de werkagenda
+    met(NepGoogle([]), W.firma_vangnet, [_b], [], "tok", None, ["hdssuriname@gmail.com"])
+finally:
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch = _o30
+check("kopieën van dezelfde afspraak met een ander Google-id geven een blok (iCalUID beslist)", _n30 == 1, str(_n30))
+check("is de agenda van het blok onleesbaar maar staat een leesbare kopie nu zichtbaar, dan Opgelost en Beschikbaar",
+      _opg30 == ["b30"], str(_opg30))
+check("de sleutel is dezelfde in Suriname- en Brusselse tijd (oorspronkelijke tijd in UTC)",
+      W._firma_sleutel({"iCalUID": "r@google.com", "originalStartTime": {"dateTime": "2026-11-02T06:00:00-03:00"}})
+      == W._firma_sleutel({"iCalUID": "r@google.com", "originalStartTime": {"dateTime": "2026-11-02T10:00:00+01:00"}}))
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

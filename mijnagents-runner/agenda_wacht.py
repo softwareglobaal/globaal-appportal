@@ -3371,15 +3371,27 @@ def firma_gasten(evs, tok):
     return regels, niet_zichtbaar, onzeker, opnieuw
 
 
+def _utc(t):
+    """Een tijd als UTC-tekst, zodat twee agenda's in een andere tijdzone (Suriname, Brussel) dezelfde keer geven."""
+    if "T" not in (t or ""):
+        return t or ""
+    try:
+        return datetime.fromisoformat(t.replace("Z", "+00:00")).astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%MZ")
+    except ValueError:
+        return t
+
+
 def _firma_sleutel(e):
-    """De sleutel van een firma-afspraak in het register en op het blok: haar Google-id, niet de agenda. Een kopie op een
-    tweede firma-agenda draagt hetzelfde id; zo werkt elke leesbare kopie hetzelfde blok bij (Codex-hertest 9)."""
-    return f"firma|{e.get('id')}"
+    """De identiteit van een firma-afspraak, voor ontdubbeling, register en blok: haar iCalUID en, bij een keer van een
+    reeks, de oorspronkelijke tijd in UTC. Niet de agenda en niet het Google-id: dat is alleen binnen een agenda uniek,
+    en een kopie op een tweede firma-agenda kan een ander id hebben (Codex-hertest 9 en 10). Een verschoven afspraak
+    houdt zo haar sleutel, en elke leesbare kopie werkt hetzelfde blok bij."""
+    return f"firma|{e.get('iCalUID') or e.get('id')}|{_utc(_tijd(e, 'originalStartTime'))}"
 
 
 def _firma_uid(e):
-    """Dezelfde afspraak op twee firma-agenda's (de ene nodigt de andere uit) deelt iCalUID en begin van de keer."""
-    return (e.get("iCalUID") or e.get("id"), _tijd(e, "originalStartTime") or _tijd(e, "start"))
+    """Dezelfde afspraak op twee firma-agenda's (de ene nodigt de andere uit): dezelfde sleutel."""
+    return _firma_sleutel(e)
 
 
 _FIRMA_ADRESSEN = None
@@ -3565,9 +3577,11 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             continue
         gewenst[k] = (e, sterk, start, _tijd(e, "end"))
     regels, gewijzigd = [], False
+    gelezen = {_firma_sleutel(e) for e in evs or []}
     for k, r in list(reg.items()):
         g = gewenst.get(k)
-        if k in onzeker or (not g and r.get("kalender") in onleesbaar):
+        # een onleesbare agenda houdt alleen tegen wat geen leesbare kopie heeft: een leesbare kopie beslist (hertest 10)
+        if k in onzeker or (not g and r.get("kalender") in onleesbaar and k not in gelezen):
             continue                    # een halve lezing rondt niets af en verschuift niets (Codex-hertest 3, punt 17)
         # schuift de afspraak naar later, dan volgt het blok meteen, ook als het oude uur al voorbij is (hertest 5, 2)
         if not g and (_einde_voorbij(r.get("einde"), nu) or (not r.get("einde") and r.get("dag", "") < vandaag)):
