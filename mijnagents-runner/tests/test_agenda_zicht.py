@@ -20,6 +20,7 @@ HIER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HIER))
 sys.path.insert(0, str(HIER / "koppelingen"))
 import agenda_wacht as W          # noqa: E402
+_ECHTE_DAGROUTE = W._dagroute
 W._dagroute = lambda dag: (True, "test")        # een test start nooit een echte dagroute
 W.FIRMA_DAGEN_WACHT = str(Path(tempfile.mkdtemp(prefix="firmadagen-")) / "agenda-firma-dagen.json")
 
@@ -1007,6 +1008,23 @@ check("bij een verschuiving naar een andere dag komen de oude en de nieuwe dag i
       "oude en nieuwe dag" in _src26.split("def firma_vangnet(")[1][:9000])
 check("een Bezet blok van een firma-afspraak houdt zijn ritten vast bij de opruimcontrole",
       "_firma_buitenblok(x, _bruikbare_locatie(" in _src26.split("def reistijd_zetten(")[1])
+
+# --- Codex-hertest 27 ------------------------------------------------------------------------------------------
+import subprocess as _sp  # noqa: E402
+_o51 = _sp.run
+_sp.run = lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "  [schrijf] reistijd: 0 blok(ken) gemaakt, 0 bestonden al, "
+                                                                    "0 zonder adres, 1 mislukt\n", "stderr": ""})()
+try:
+    _uit51 = _ECHTE_DAGROUTE("2026-11-02")       # subprocess.run is nagemaakt: er start niets
+finally:
+    _sp.run = _o51
+check("een dagroute waarin een rit mislukte, telt niet als geslaagd: de dag blijft wachten (hertest 27)",
+      _uit51[0] is False, str(_uit51))
+_bron27 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("het wachtbestand wordt alleen onder een slot gelezen en geschreven", "fcntl.flock(slot, fcntl.LOCK_EX)" in
+      _bron27.split("def _firma_dagen_bewerk(")[1][:800])
+check("een hernoemd en een na een onderbreking opgenomen Bezet blok zetten hun dag ook in de lijst",
+      _bron27.count("# de rit van toen klopt niet meer") == 2 and "na een onderbreking: ook rit en oproep" in _bron27)
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

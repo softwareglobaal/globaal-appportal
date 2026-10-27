@@ -3190,28 +3190,40 @@ def _firma_dagen_na_ronde():
         print(f"firma-dagen niet afgewerkt ({type(e).__name__})", file=sys.stderr, flush=True)
 
 
+def _firma_dagen_bewerk(fn):
+    """Het wachtbestand lezen en schrijven onder een slot: twee rondes overschrijven elkaars dagen niet (hertest 27)."""
+    import fcntl  # noqa: PLC0415
+    os.makedirs(os.path.dirname(FIRMA_DAGEN_WACHT), exist_ok=True)
+    with open(FIRMA_DAGEN_WACHT + ".lock", "w", encoding="utf-8") as slot:
+        fcntl.flock(slot, fcntl.LOCK_EX)
+        try:
+            with open(FIRMA_DAGEN_WACHT, encoding="utf-8") as f:
+                wacht = set(json.load(f))
+        except (OSError, ValueError):
+            wacht = set()
+        wacht = fn(wacht)
+        tmp = f"{FIRMA_DAGEN_WACHT}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(sorted(wacht), f)
+        os.replace(tmp, FIRMA_DAGEN_WACHT)
+        return set(wacht)
+
+
 def firma_dagen_afwerken():
     """De dagroute voor elke dag met een gewijzigd Bezet blok, uit deze ronde en eerdere die niet lukten. Een dag blijft
-    bewaard tot zijn dagroute lukt (Codex-hertest 26); een voorbije dag valt weg. Draait na het rondeslot: in de
-    kleurronde en na de volledige ronde. Geeft de dagen die nog wachten."""
-    try:
-        with open(FIRMA_DAGEN_WACHT, encoding="utf-8") as f:
-            wacht = set(json.load(f))
-    except (OSError, ValueError):
-        wacht = set()
-    wacht |= FIRMA_DAGEN
+    bewaard tot zijn dagroute lukt (Codex-hertest 26 en 27); een voorbije dag valt weg. Draait na het rondeslot: in de
+    kleurronde en na de volledige ronde. Het wachtbestand alleen onder een slot; de dagroute zelf erbuiten. Geeft de
+    dagen die nog wachten."""
+    nieuw = set(FIRMA_DAGEN)
     FIRMA_DAGEN.clear()
     vandaag = nu_lokaal().date().isoformat()
-    over = set()
-    for dag in sorted(d for d in wacht if d >= vandaag):
-        gelukt, _ = _dagroute(dag)
-        if gelukt is not True:
-            over.add(dag)               # slot bezet of mislukt: de volgende ronde opnieuw
-    os.makedirs(os.path.dirname(FIRMA_DAGEN_WACHT), exist_ok=True)
-    tmp = f"{FIRMA_DAGEN_WACHT}.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(sorted(over), f)
-    os.replace(tmp, FIRMA_DAGEN_WACHT)
+    wacht = _firma_dagen_bewerk(lambda w: {d for d in (w | nieuw) if d >= vandaag})
+    gelukt = set()
+    for dag in sorted(wacht):
+        ok, _ = _dagroute(dag)
+        if ok is True:
+            gelukt.add(dag)
+    over = _firma_dagen_bewerk(lambda w: {d for d in w if d not in gelukt and d >= vandaag})
     return sorted(over)
 
 
@@ -3224,7 +3236,12 @@ def _dagroute(dag):
                            capture_output=True, text=True, timeout=1200)
     except (subprocess.TimeoutExpired, OSError) as e:
         return False, type(e).__name__
-    return (None if r.returncode == 75 else r.returncode == 0), f"exitcode {r.returncode}"   # 75: slot bezet (agenda_signaal)
+    if r.returncode == 75:
+        return None, "rondeslot bezet"                                     # 75: slot bezet (agenda_signaal)
+    m = re.search(r"reistijd: .*?(\d+) mislukt", r.stdout or "")
+    if r.returncode == 0 and m and int(m.group(1)) > 0:
+        return False, "een rit mislukte"           # dan blijft de dag wachten (Codex-hertest 27)
+    return r.returncode == 0, f"exitcode {r.returncode}"
 
 
 def firma_kleurronde(vandaag):
@@ -3874,6 +3891,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                                "transparency": "transparent",
                                **({"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})} if d0 else {})}, tok)
                     regels.append(f"{r.get('dag')} hernoemd blok voor een firma-afspraak opgelost en Beschikbaar gezet")
+                    if r.get("sterk"):
+                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
                 elif open_:
                     _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
                                             "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True)
@@ -3902,6 +3921,8 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                 reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk, "id": bestaand,
                           "kalender": e["kalender"], "vinger": vinger}
                 regels.append(f"{dag} bestaande vraag over een firma-afspraak op de juiste tijd gezet")
+                if sterk:
+                    FIRMA_DAGEN.add(dag)        # na een onderbreking: ook rit en oproep (Codex-hertest 27)
             elif bestaand:
                 # niet terug te lezen: opnemen zonder tijd, zodat de volgende ronde het blok bijzet en er geen tweede komt
                 reg[k] = {"gevraagd": vandaag, "dag": dag, "start": "", "einde": "", "sterk": sterk, "id": bestaand,
