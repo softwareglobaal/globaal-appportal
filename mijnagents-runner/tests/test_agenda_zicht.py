@@ -869,6 +869,27 @@ check("bleek de tijd bij het herlezen onzeker, dan de vraag 'uur niet zeker' en 
       niet19 and niet19[0].get("_tijd_onzeker") and len(_ins43) == 1 and "uur niet zeker" in _ins43[0]["summary"]
       and _ins43[0]["transparency"] == "transparent", str((niet19, _ins43)))
 
+# --- Codex-hertest 20: onbekende tijdzone dekt de aangrenzende dagen; 'mehdi' in kleine letters telt -------------------
+_d20a = (_nu + timedelta(days=3)).date().isoformat()
+_d20b = (_nu + timedelta(days=4)).date().isoformat()
+_d20c = (_nu + timedelta(days=2)).date().isoformat()
+_e20 = dict(ev("tz20", "Mehdi: [EL-IN] overleg"), _tijd_onzeker=True,
+            start={"dateTime": f"{_d20a}T21:30:00"}, end={"dateTime": f"{_d20a}T22:30:00"},
+            _kopieen=[("Elevait N.V.", f"{_d20a}T21:30:00", f"{_d20a}T22:30:00")])
+_b20 = W._firma_vraag_body("firma|tz20@google.com|", _e20, f"{_d20a}T21:30:00", None)
+check("bij een onbekende tijdzone dekt de vraag ook de dag ervoor en erna (hertest 20)",
+      _b20["start"] == {"date": _d20c} and _b20["end"]["date"] > _d20b, str((_b20["start"], _b20["end"])))
+_ins44 = []
+_o44 = (W._insert, W.FIRMA_VRAGEN)
+W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma44-")) / "agenda-firma-vragen.json")
+W._insert = lambda kal, body, tok, toch=False: _ins44.append(body) or {"id": "q44"}
+try:
+    _klein = ev("kl44", "Overleg KDS", beschrijving="mehdi sluit aan")
+    met(NepGoogle([]), W.firma_vangnet, [_klein], [], "tok")
+finally:
+    W._insert, W.FIRMA_VRAGEN = _o44
+check("'mehdi' in kleine letters in de omschrijving geeft ook een vraag (hertest 20)", len(_ins44) == 1, str(len(_ins44)))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

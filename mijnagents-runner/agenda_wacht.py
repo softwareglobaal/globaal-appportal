@@ -3560,6 +3560,16 @@ def _firma_vragen_lezen():
         return {}
 
 
+def _tz_bekend(t):
+    """Heeft deze tijd een offset (of is het een hele dag)?"""
+    if "T" not in (t or ""):
+        return True
+    try:
+        return datetime.fromisoformat(t.replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
 def _firma_vraag_body(k, e, start, sterk):
     """De vraag in de privé-agenda. Een afspraak voor Mehdi die niet doorkwam (sterk) wordt een Bezet blok op haar eigen
     tijd, zodat Calendly er niet over boekt (Codex-hertest 2, punt 10): op haar uur, of over haar hele dag(en) als ze
@@ -3579,6 +3589,10 @@ def _firma_vraag_body(k, e, start, sterk):
         laatste = (eind or start)[:10]
         tot = laatste if "T" not in eind and laatste > dag else \
             (datetime.fromisoformat(laatste) + timedelta(days=1)).date().isoformat()
+        if e.get("_tijd_onzeker") or any(not _tz_bekend(t) for _, t, _ in e.get("_kopieen") or []):
+            # tijdzone onbekend: de echte Brusselse dag kan een dag vroeger of later zijn; de vraag dekt ze (hertest 20)
+            dag = (datetime.fromisoformat(dag) - timedelta(days=1)).date().isoformat()
+            tot = max(tot, (datetime.fromisoformat(laatste) + timedelta(days=2)).date().isoformat())
         return {"summary": f"VR Agendawacht: firma-afspraak voor jou, uur niet zeker ({_ddmm(dag)})"[:200],
                 "start": {"date": dag}, "end": {"date": max(tot, volgende)}, "transparency": "transparent",
                 "reminders": {"useDefault": False, "overrides": []}, "description": tekst, "extendedProperties": merk}
@@ -3674,7 +3688,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
                 onzeker.add(k)
                 continue
         voor = any(MEHDI_VOORAAN.match(e.get("summary") or "") or _gast_status(e) not in (None, "declined") for e in kopieen)
-        noemt = any(re.search(r"\bMehdi\b", f"{e.get('summary') or ''} {e.get('description') or ''}") for e in kopieen)
+        noemt = any(re.search(r"\bMehdi\b", f"{e.get('summary') or ''} {e.get('description') or ''}", re.I) for e in kopieen)
         if voor or noemt:
             # de vraag dekt elke mogelijke datum, van de vroegste tot de laatste kopie, en noemt per kopie datum en uur;
             # verandert een kopie, dan verandert haar vingerafdruk en wordt de vraag bijgewerkt (Codex-hertest 14)
@@ -3686,7 +3700,7 @@ def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
             kand[k] = (e, None)
     for e in gekozen:
         tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
-        if re.search(r"\bMehdi\b", tekst) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e) \
+        if re.search(r"\bMehdi\b", tekst, re.I) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e) \
                 and _firma_uid(e) not in gezien:
             gezien.add(_firma_uid(e))
             kand[_firma_sleutel(e)] = (e, False)
