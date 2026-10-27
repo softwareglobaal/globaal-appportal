@@ -105,6 +105,7 @@ class Stop(RuntimeError):
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
               "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "vervanging": {},
+              "vervangers": {},
               "inventaris": "",
               "dekking": False, "dropbox": ""}
 
@@ -629,12 +630,22 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 staat["vervanging"][fid] = {**oud, "sinds": moment}
                 continue
             staat["verdwenen"][fid] = {**oud, "sinds": moment}
+    gebruikt = set(staat["vervangers"])
     for fid, oud in list(staat["vervanging"].items()):
+        if fid in per_id:
+            del staat["vervanging"][fid]  # Codex controle verwerking 2, punt 42: het id is terug, het volgt de gewone weg
+            continue
         m = next((x for x in meetings if x["uuid"] == oud.get("uuid")), None)
-        vervanger = m and any(f.get("id") and f["id"] != fid and f.get("status") == "completed"
-                              and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
-                              and _zelfde_begin(f.get("start"), oud.get("start")) for f in m["bestanden"])
+        # Codex controle verwerking 2, punt 41: alleen een NIEUW bestand telt, een dat er niet was toen het voorlopige
+        # id gezien werd, en elk bestand vervangt hoogstens een voorlopig id
+        vervanger = next((f["id"] for f in (m["bestanden"] if m else [])
+                          if f.get("id") and f["id"] != fid and f["id"] not in set(oud.get("andere") or [])
+                          and f["id"] not in gebruikt and f.get("status") == "completed"
+                          and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
+                          and _zelfde_begin(f.get("start"), oud.get("start"))), None)
         if vervanger:
+            gebruikt.add(vervanger)
+            staat["vervangers"][vervanger] = fid
             del staat["vervanging"][fid]  # het definitieve bestand volgt de gewone weg (gezien, kopie, bewijs)
         elif m is None or (_utc(moment) - (_utc(oud.get("sinds")) or _utc(moment))) > VERVANGING_WACHT:
             del staat["vervanging"][fid]  # de meeting is weg, of de vervanger bleef uit: een verlies tot Mehdi beslist
@@ -642,9 +653,11 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     for f in te_doen:  # Codex controle 4, punt 20: elk onbewezen bestand wordt bijgehouden, ook in verwerking
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
     for f in bezig:
-        staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0),
-                                    "uuid": per_id[f["id"]][0]["uuid"], "bezig": True, "soort": f.get("soort", ""),
-                                    "opnametype": f.get("opnametype", "")}
+        m = per_id[f["id"]][0]
+        staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0), "uuid": m["uuid"],
+                                    "bezig": True, "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
+                                    # welke bestanden de meeting al had: die kunnen nooit de vervanger zijn (punt 41)
+                                    "andere": sorted(x["id"] for x in m["bestanden"] if x.get("id") and x["id"] != f["id"])}
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:
