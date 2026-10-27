@@ -24,7 +24,9 @@ Een storing is de tijd dat mijn bouwnood voor een dienst op het bord openstaat. 
 sluit hem pas als ik hem niet meer meld; een nieuwe storing is een nieuwe nood met een nieuw nummer. Per storing gaat er
 een keer een signaal naar Mehdi, via De Bode (zijn ja van 27-10-2026, want een nood voor claude-code heeft geen vaste
 lezer), met dat nummer in de `uniek`: het bord maakt een item met dezelfde `uniek` nooit een tweede keer. Het signaal
-komt de ronde nadat de nood openging.
+komt de ronde nadat de nood openging, en elke open bouwnood krijgt het voor de ronde hem kan sluiten, ook als de bouw
+intussen herstelde (dan als terugblik). Een dienst die even niet na te kijken is, of open noden die het bord niet geeft,
+sluiten geen storing (tweede driehoeksoverleg 27-10-2026, X2 en K2).
 
 Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen een
 slotbestand (een ronde tegelijk). Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
@@ -76,18 +78,26 @@ def onbekendtekst(dienst):
 
 
 def signaal(m, nood_id):
-    """Het signaal voor Mehdi bij de storing met bouwnood `nood_id`. Dat nummer is geen teller maar de nood van deze
-    storing, vast zolang ze duurt (N10). De inhoud draagt geen minuten; de titel draagt nooit het woord dat De Bode als
-    alarm leest en hem doet bellen (AGENTNORM.md 6)."""
-    duur = (f"de bouw loopt {DREMPEL_MIN} minuten of langer achter" if m["minuten"] is not None else
-            "de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt, staat niet meer in de reflog, of "
-            "de reflog is niet te lezen")
-    return {"voor": "mehdi", "soort": "signaal", "sleutel": m["dienst"],
-            "titel": f"Bouw van {m['dienst']} loopt achter op de code",
-            "uniek": f"bouwwacht-achter-{m['dienst']}-{nood_id}",
-            "inhoud": f"De VM draait voor {m['dienst']} niet de code die er na de laatste git pull staat: {duur} "
-                      f"(laatste geslaagde bouw {m['gebouwd']}). De nood staat op het bord voor claude-code; wat de bouw "
-                      f"zegt, staat in ~/deploy-{m['dienst']}.log op de VM."}
+    """Het signaal voor Mehdi bij de storing met bouwnood `nood_id`, met wat de meting van deze ronde zegt (`m`). Dat
+    nummer is geen teller maar de nood van deze storing, vast zolang ze duurt (N10). De inhoud draagt geen minuten; de
+    titel draagt nooit het woord dat De Bode als alarm leest en hem doet bellen (AGENTNORM.md 6)."""
+    dienst = m["dienst"]
+    if m["stand"] in ("gelijk", "bezig"):
+        # tweede overleg X2: de storing herstelde voor dit signaal kon vertrekken; ze krijgt het toch, als terugblik
+        stand = ("de bouw liep " + str(DREMPEL_MIN) + " minuten of langer achter en is intussen " +
+                 ("weer gelijk met de code" if m["stand"] == "gelijk" else "opnieuw aan het bouwen na een nieuwe pull"))
+    elif m["stand"] == "onbekend":
+        stand = "de bouw loopt achter; deze ronde kon ik de dienst niet nakijken"
+    elif m["minuten"] is not None:
+        stand = f"de bouw loopt {DREMPEL_MIN} minuten of langer achter (laatste geslaagde bouw {m['gebouwd']})"
+    else:
+        stand = ("de bouw loopt achter sinds een onbekende tijd: de markering ontbreekt, staat niet meer in de reflog, "
+                 f"of de reflog is niet te lezen (laatste geslaagde bouw {m['gebouwd']})")
+    return {"voor": "mehdi", "soort": "signaal", "sleutel": dienst,
+            "titel": f"Bouw van {dienst} loopt achter op de code",
+            "uniek": f"bouwwacht-achter-{dienst}-{nood_id}",
+            "inhoud": f"De VM draait voor {dienst} niet de code die er na de laatste git pull staat: {stand}. De nood "
+                      f"staat op het bord voor claude-code; wat de bouw zegt, staat in ~/deploy-{dienst}.log op de VM."}
 
 
 class Onleesbaar(RuntimeError):
@@ -238,28 +248,38 @@ def werk(r, nu=None):
         r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
         return []
     uitslag = meet(nu)
-    noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
-             for m in uitslag if m["stand"] in ("achter", "onbekend")]
-    open_ = open_noden() if noden else None
-    for m, tekst in noden:
+    open_ = open_noden()
+    if open_ is None:
+        # Zonder de open noden ken ik de nummers van de storingen niet. Dan sluit deze ronde niets, zodat geen storing
+        # verdwijnt voor haar signaal vertrok (tweede overleg X2); nieuwe noden komen er wel bij.
+        r.noden_onbekend = True
+    for m in uitslag:
+        dienst = m["dienst"]
+        tekst = {"achter": noodtekst, "onbekend": onbekendtekst}.get(m["stand"], lambda d: None)(dienst)
+        if tekst is None:
+            continue
         r.nood(tekst, wie="claude-code")
         # een regel in het werkverslag als de nood nieuw is, niet elke 2 minuten dezelfde; weet het bord niet wat
         # open staat, dan geen regel (de nood zelf gaat wel mee)
         if open_ is not None and tekst not in open_:
-            ag.log(m["dienst"], "fout", regel(m))
+            ag.log(dienst, "fout", regel(m))
+        # een dienst die deze ronde niet na te kijken is, sluit zijn storing niet (tweede overleg K2)
+        if m["stand"] == "onbekend" and open_ and noodtekst(dienst) in open_:
+            r.nood(noodtekst(dienst), wie="claude-code")
     if any(m.get("zonder_reflog") for m in uitslag):
         r.nood(REFLOGNOOD, wie="claude-code")
     r.detail = "; ".join(regel(m) for m in uitslag)
-    achter = [m for m in uitslag if m["stand"] == "achter"]
-    if achter and open_ is None:
-        # zonder de open noden ken ik het nummer van de storing niet; de volgende ronde probeert opnieuw
-        r.nood(SIGNAALNOOD, wie="claude-code")
-        r.detail += "; signaal wacht: open noden onbekend"
+    if open_ is None:
+        if any(m["stand"] == "achter" for m in uitslag):
+            r.nood(SIGNAALNOOD, wie="claude-code")
+            r.detail += "; signaal wacht: open noden onbekend"
         return uitslag
-    # Het signaal van een storing gaat zodra haar nood op het bord openstaat, dus de ronde nadat ze begon. Elke ronde
-    # opnieuw zolang ze duurt: het bord maakt het maar een keer (zelfde uniek), en lukte het een keer niet, dan probeert
-    # de volgende ronde het vanzelf opnieuw.
-    signalen = [signaal(m, open_[noodtekst(m["dienst"])]) for m in achter if noodtekst(m["dienst"]) in open_]
+    # Elke storing waarvan de bouwnood openstaat, krijgt haar signaal, voor de eindhartslag van deze ronde die nood kan
+    # sluiten: ook als de bouw intussen herstelde, dan als terugblik (tweede overleg X2). Het vertrekt dus de ronde nadat
+    # de nood openging, en elke ronde opnieuw zolang ze openstaat: het bord maakt het maar een keer (zelfde uniek), en
+    # lukte het een keer niet, dan probeert de volgende ronde het vanzelf opnieuw.
+    per_dienst = {m["dienst"]: m for m in uitslag}
+    signalen = [signaal(per_dienst[d], open_[noodtekst(d)]) for d in DIENSTEN if noodtekst(d) in open_]
     if signalen:
         try:
             ag.klaarzet(signalen)

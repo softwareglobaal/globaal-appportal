@@ -3077,7 +3077,9 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   niet lezen"), dan de nood "Bouw loopt achter op de code: <map>" (claude-code), met minuten, korte boomcodes en de
   laatste regel van `~/deploy-<map>.log` in het detail; gelijk of een gewone bouw sluit de nood. Een storing is de tijd
   dat die nood openstaat: de ronde daarna een signaal voor Mehdi via De Bode (ja van Mehdi, 27-10-2026), met `uniek` =
-  `bouwwacht-achter-<map>-<nummer van de nood op het bord>`, dus een keer per storing; titel zonder het belwoord. Een
+  `bouwwacht-achter-<map>-<nummer van de nood op het bord>`, dus een keer per storing; titel zonder het belwoord. Elke
+  open bouwnood krijgt zijn signaal voor de ronde hem kan sluiten, ook na herstel (als terugblik); een dienst die even
+  niet na te kijken is, of open noden die het bord niet geeft, sluiten geen storing (tweede overleg, X2 en K2). Een
   eigen stand als klok was er eerst (overleg K2), maar gaf in zes Codex-toetsen telkens nieuwe randgevallen; de
   duurzame stand van een storing staat op het bord. De wacht leest alleen (`git rev-parse`, `git log -g`) en schrijft
   alleen een slotbestand (`mijnagents-data/bouwwacht.slot`, een ronde tegelijk: bezet slaat de ronde over, geen slot

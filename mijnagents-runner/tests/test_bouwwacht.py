@@ -415,10 +415,14 @@ def test_een_storing_geeft_een_signaal_voor_mehdi(repo):
     repo.zet("d", T0 + 13 * MIN)
     ronde(T0 + 30 * MIN, b)
     assert [x["uniek"] for x in signalen(b)] == [s["uniek"]] and list(b.items) == [s["uniek"]]
-    # na herstel is de volgende storing nieuw
+    # na herstel: nog een keer dezelfde uniek, als terugblik (het bord maakt er geen tweede van), en de nood sluit
     repo.bouw("mijnagents")
     ronde(T0 + 31 * MIN, b)
-    assert signalen(b) == [] and ACHTER not in b.noden
+    assert [x["uniek"] for x in signalen(b)] == [s["uniek"]] and "intussen weer gelijk" in signalen(b)[0]["inhoud"]
+    assert ACHTER not in b.noden and len(b.items) == 1
+    ronde(T0 + 33 * MIN, b)
+    assert signalen(b) == []
+    # de volgende storing is nieuw
     repo.zet("b", T0 + 40 * MIN)
     for minuut in (50, 52):
         ronde(T0 + minuut * MIN, b)
@@ -470,9 +474,88 @@ def test_een_markering_die_even_ontbreekt_is_geen_nieuwe_storing(repo):
 def test_de_signaaltitel_belt_mehdi_niet_op():
     """Het woord stil in een signaaltitel laat De Bode bellen (AGENTNORM.md 6); een bouw die achterloopt is geen oproep."""
     for dienst in B.DIENSTEN:
-        for minuten in (None, 12):
-            s = B.signaal({"dienst": dienst, "gebouwd": "abc1234", "minuten": minuten}, 101)
+        for m in ({"stand": "achter", "minuten": None, "gebouwd": "abc1234"},
+                  {"stand": "achter", "minuten": 12, "gebouwd": "abc1234"},
+                  {"stand": "gelijk"}, {"stand": "bezig", "minuten": 2, "gebouwd": "abc1234"},
+                  {"stand": "onbekend", "reden": "x"}):
+            s = B.signaal(dict(m, dienst=dienst), 101)
             assert "stil" not in s["titel"].lower() and "stil" not in s["uniek"].lower(), s
+            assert s["uniek"] == f"bouwwacht-achter-{dienst}-101" and s["titel"] == f"Bouw van {dienst} loopt achter op de code"
+
+
+@proef
+def test_een_storing_die_herstelt_voor_haar_signaal_krijgt_het_toch(repo):
+    """Tweede overleg X2: de nood ging open, de bouw herstelde voor de volgende ronde, en Mehdi kreeg niets."""
+    repo.zet("b", T0)
+    b = Bord()
+    ronde(T0 + 10 * MIN, b)
+    assert ACHTER in b.noden and b.items == {}
+    nummer = b.noden[ACHTER]
+    repo.bouw("mijnagents")                      # hersteld voor de volgende ronde
+    ronde(T0 + 12 * MIN, b)
+    [s] = signalen(b)
+    assert s["uniek"] == f"bouwwacht-achter-mijnagents-{nummer}" and "intussen weer gelijk" in s["inhoud"]
+    assert ACHTER not in b.noden, "na het signaal sluit de nood"
+    # ook als de klok door een nieuwe pull onder de drempel zakt: dan een terugblik met de nieuwe bouw
+    repo.zet("d", T0 + 13 * MIN)
+    for minuut in (24, 26):
+        ronde(T0 + minuut * MIN, b)
+    nummer2 = b.noden[ACHTER]
+    repo.zet("b", T0 + 27 * MIN)                 # even gelijk met de gebouwde versie, geen ronde ziet het
+    repo.zet("d", T0 + 27 * MIN + 30)            # en meteen een nieuwe pull
+    ronde(T0 + 28 * MIN, b)
+    assert [x["uniek"] for x in signalen(b)] == [f"bouwwacht-achter-mijnagents-{nummer2}"]
+    assert "opnieuw aan het bouwen" in signalen(b)[0]["inhoud"] and ACHTER not in b.noden
+
+
+@proef
+def test_een_dienst_die_even_niet_na_te_kijken_is_sluit_zijn_storing_niet(repo):
+    """Tweede overleg K2: achter, gesignaleerd, onbekend, achter gaf twee signalen voor een storing."""
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
+    repo.zet("b", T0)
+    b = Bord()
+    for minuut in (10, 12):
+        ronde(T0 + minuut * MIN, b)
+    nummer = b.noden[ACHTER]
+    with open(pad) as f:
+        gebouwd = f.read()
+    os.remove(pad)
+    os.makedirs(pad)                             # de markering is even niet te lezen
+    ronde(T0 + 14 * MIN, b)
+    assert b.noden[ACHTER] == nummer and "Bouwwacht kan mijnagents niet nakijken" in b.noden
+    os.rmdir(pad)
+    with open(pad, "w") as f:
+        f.write(gebouwd)
+    ronde(T0 + 16 * MIN, b)
+    assert b.noden[ACHTER] == nummer and len(b.items) == 1
+
+
+@proef
+def test_twee_diensten_in_storing_geven_twee_signalen(repo):
+    """Tweede overleg X3."""
+    repo.zet("b", T0)
+    repo.zet("e", T0 + MIN)
+    b = Bord()
+    for minuut in (12, 14):
+        ronde(T0 + minuut * MIN, b)
+    assert sorted(i["sleutel"] for i in b.items.values()) == ["agents", "mijnagents"]
+    assert len({i["uniek"] for i in b.items.values()}) == 2
+
+
+@proef
+def test_zonder_open_noden_sluit_de_ronde_niets(repo):
+    """Tweede overleg X2: weet de ronde de open noden niet, dan verdwijnt geen storing voor haar signaal vertrok."""
+    repo.zet("b", T0)
+    b = Bord()
+    ronde(T0 + 10 * MIN, b)
+    nummer = b.noden[ACHTER]
+    repo.bouw("mijnagents")
+    b.nood_weg = True
+    ronde(T0 + 12 * MIN, b)
+    assert eind(b)["nood_sluiten"] is False and b.noden[ACHTER] == nummer and b.items == {}
+    b.nood_weg = False
+    ronde(T0 + 14 * MIN, b)
+    assert [x["uniek"] for x in signalen(b)] == [f"bouwwacht-achter-mijnagents-{nummer}"] and ACHTER not in b.noden
 
 
 @proef

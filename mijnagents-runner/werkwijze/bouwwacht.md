@@ -37,8 +37,10 @@ na een git pull staat. Ik besta omdat het bord van 26-10 rond 19:00 tot 27-10
 6. Bij een bouw die achterloopt zet ik ook een signaal klaar voor Mehdi, dat
    De Bode hem brengt: een keer per storing. Een storing loopt zolang mijn nood
    voor die dienst op het bord openstaat; het signaal draagt het nummer van die
-   nood en vertrekt de ronde nadat ze openging. In de titel staat nooit het
-   woord dat De Bode doet bellen.
+   nood en vertrekt de ronde nadat ze openging. Herstelde de bouw intussen, dan
+   krijgt hij het toch, als terugblik. Kan ik een dienst even niet nakijken, of
+   weet het bord niet wat openstaat, dan sluit ik geen storing. In de titel
+   staat nooit het woord dat De Bode doet bellen.
 7. Een nieuwe nood schrijf ik een keer in mijn werkverslag, niet elke ronde.
 
 Wie mijn nood leest: de nood staat op het bord, voor claude-code. Daar is geen
