@@ -52,9 +52,10 @@ VERBODEN = [
     ("S1", re.compile(r"\b(?:architect|office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:visited|present|attended|checked|inspected|supervised)\b", re.I)),
     ("S1", re.compile(r"\b(?:only|at\s+most|a\s+maximum\s+of)\s+(?:one|1)\s+(?:site\s+)?visit\b", re.I)),
     # "liable to rot" of "liable to crack" (vatbaar voor) is gewone technische tekst; "liable for", "held liable", "liable to
-    # the client" en "liable to pay" zijn een juridisch oordeel (35e review)
+    # the client" en "liable to pay" zijn een juridisch oordeel (35e review). Zo ook "in default mode" of "in default
+    # settings" (standaardinstelling) tegenover "is in default", "in default of payment" of "in default under" (36e review).
     ("S5", re.compile(r"\b(?:liable\b(?!\s+to\s+(?!(?:the|a|an|him|her|them|us|you|it|his|their|our|its|any|each|all|pay|"
-                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b|breach\s+of\s+contract\b|at\s+fault\b|"
+                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b(?!\s+(?!(?:of|under|towards|by|since|with)\b)[a-z])|breach\s+of\s+contract\b|at\s+fault\b|"
                       r"negligen(?:t|ce)\b|culpable\b)", re.I)),
 ]
 

@@ -648,5 +648,15 @@ for tekst in ["The contractor is liable for the damage.", "The contractor is hel
               "The contractor is liable to pay damages."]:
     check(f"juridisch liable blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
 
+# Zesendertigste review 27-10-2026: "in default mode" (standaardinstelling) is gewone Engelse tekst; "is in default",
+# "in default of payment", "in default under" en "declared in default by" blijven S5
+for tekst in ["The heat pump still runs in default mode; the installer will set the heating curve before handover.",
+              "The ventilation unit is still in default settings.", "The inverter is in default configuration.",
+              "The thermostat stays in default position."]:
+    check(f"in default <naamwoord> blijft: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []) and S.controleer(tekst) == [], S.toepassen(tekst))
+for tekst in ["The contractor is in default.", "The contractor is in default of payment.", "The contractor is in default under the contract.",
+              "The contractor was declared in default by the client."]:
+    check(f"juridisch in default blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
