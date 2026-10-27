@@ -85,10 +85,12 @@ class NepGoogle:
     """Nagemaakte Google: GET van een afspraak (vers, met etag), PATCH met If-Match, de lijst van de werkagenda op
     iCalUID (zichtbaar of niet), de privé-agenda op firmamerk, en firma-agenda's over twee pagina's."""
 
-    def __init__(self, items, zichtbaar=True, botsing=(), bestaande_vraag=False, vers=None, ander_uur=False):
+    def __init__(self, items, zichtbaar=True, botsing=(), bestaande_vraag=False, vers=None, ander_uur=False,
+                 botsing_keer=None, onleesbaar=()):
         self.items = {e["id"]: e for e in items}
         self.patches, self.zichtbaar, self.botsing, self.bestaande_vraag = [], zichtbaar, set(botsing), bestaande_vraag
         self.vers, self.ander_uur = vers or {}, ander_uur
+        self.botsing_keer, self.onleesbaar = dict(botsing_keer or {}), set(onleesbaar)
 
     def __call__(self, req, timeout=None, *a, **k):
         url = getattr(req, "full_url", req)
@@ -97,7 +99,8 @@ class NepGoogle:
         methode = req.get_method() if hasattr(req, "get_method") else "GET"
         if methode == "PATCH":
             eid = urllib.parse.unquote(u.path.rsplit("/", 1)[1])
-            if eid in self.botsing:
+            if eid in self.botsing or self.botsing_keer.get(eid, 0) > 0:
+                self.botsing_keer[eid] = self.botsing_keer.get(eid, 0) - 1
                 raise urllib.error.HTTPError(url, 412, "Precondition Failed", {}, None)
             body = json.loads(req.data)
             self.patches.append((url, body, req.get_header("If-match")))
@@ -109,6 +112,9 @@ class NepGoogle:
                 st = {"dateTime": f"{_morgen}T15:00:00+01:00"}        # een andere keer van dezelfde reeks
             return io.BytesIO(json.dumps({"items": [{"id": "x", "status": "confirmed", "start": st}] if self.zichtbaar else []}).encode())
         if "privateExtendedProperty" in q:
+            if self.bestaande_vraag == "opgelost":
+                return io.BytesIO(json.dumps({"items": [{"id": "oud", "extendedProperties": {"private": {
+                    W.MAILMERK: "opgelost:abcdef0123456789"}}}]}).encode())
             if self.bestaande_vraag == "pagina2":
                 if q.get("pageToken") == "2":
                     return io.BytesIO(json.dumps({"items": [{"id": "v"}]}).encode())
@@ -119,6 +125,8 @@ class NepGoogle:
             return io.BytesIO(json.dumps({**self.items[eid], **self.vers.get(eid, {})}).encode())
         if u.path.endswith("/events"):
             kal = urllib.parse.unquote(u.path.split("/calendars/")[1].split("/events")[0])
+            if kal in self.onleesbaar:
+                raise urllib.error.HTTPError(url, 500, "Backend Error", {}, None)
             alle = [e for e in self.items.values() if e.get("kalender") == kal and not e.get("_moeder")]
             if q.get("pageToken") == "2":
                 return io.BytesIO(json.dumps({"items": alle[1:]}).encode())
@@ -160,10 +168,16 @@ _, niet2 = met(g2, W.firma_gasten, list(g2.items.values()), "tok")
 check("komt de afspraak niet zichtbaar op de werkagenda (verborgen uitnodiging), dan gaat ze naar het vangnet",
       len(niet2) == 1)
 
-g3 = NepGoogle([ev("c9", "Mehdi: [EL-IN] overleg")], botsing={"c9"})
-r3, _ = met(g3, W.firma_gasten, list(g3.items.values()), "tok")
-check("veranderde een collega de afspraak intussen (412), dan wordt niets overschreven en volgt de volgende ronde",
-      not g3.patches and any("intussen veranderd" in r for r in r3), str(r3))
+g3 = NepGoogle([ev("c9", "Mehdi: [EL-IN] overleg")], botsing={"c9"},
+              vers={"c9": {"start": {"dateTime": f"{_morgen}T14:00:00+01:00"}, "end": {"dateTime": f"{_morgen}T15:00:00+01:00"}}})
+r3, niet3 = met(g3, W.firma_gasten, list(g3.items.values()), "tok")
+check("blijft een collega de afspraak veranderen (412), dan wordt niets overschreven",
+      not g3.patches and any("bleef veranderen" in r for r in r3), str(r3))
+check("en gaat de afspraak zoals ze nu is (nieuw uur) naar het vangnet (Codex-hertest 3, punt 16)",
+      len(niet3) == 1 and niet3[0]["start"]["dateTime"].endswith("14:00:00+01:00"), str(niet3))
+g3b = NepGoogle([ev("c8", "Mehdi: [EL-IN] overleg")], botsing_keer={"c8": 1})
+r3b, niet3b = met(g3b, W.firma_gasten, list(g3b.items.values()), "tok")
+check("na een enkele 412 leest de agent opnieuw en zet hij de gast alsnog", len(g3b.patches) == 1 and not niet3b, str(r3b))
 
 g7 = NepGoogle([ev("d1", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA}])], ander_uur=True)
 _, niet7 = met(g7, W.firma_gasten, list(g7.items.values()), "tok")
@@ -177,20 +191,26 @@ g8b = NepGoogle([ev("e2", "Mehdi: [EL-IN] overleg")], vers={"e2": {"status": "ca
 met(g8b, W.firma_gasten, list(g8b.items.values()), "tok")
 check("een intussen geschrapte afspraak krijgt geen gast", not g8b.patches)
 check("een bestaande vraag wordt ook op een volgende zoekpagina gevonden",
-      met(NepGoogle([], bestaande_vraag="pagina2"), W._prive_vraag_bestaat, "elevait|x", "tok") is True)
+      met(NepGoogle([], bestaande_vraag="pagina2"), W._prive_vraag_id, "elevait|x", "tok") == "v")
+check("een opgeloste vraag houdt een nieuwe vraag niet tegen (Codex-hertest 3, punt 13)",
+      met(NepGoogle([], bestaande_vraag="opgelost"), W._prive_vraag_id, "elevait|x", "tok") == "")
 
 _moeder = {"id": "reeks1", "summary": "Mehdi: [EL-IN] wekelijkse meeting", "etag": '"e-reeks1"', "attendees": [],
            "kalender": ELEVAIT, "_moeder": True}
 _inst = [ev(f"reeks1_2026110{i}", "Mehdi: [EL-IN] wekelijkse meeting", reeks="reeks1") for i in (2, 3)]
 g4 = NepGoogle([_moeder] + _inst)
 met(g4, W.firma_gasten, _inst, "tok")
-check("een reeks met Mehdi vooraan krijgt de gast een keer in de reeks zelf, niet per keer",
-      len(g4.patches) == 1 and "/reeks1?" in g4.patches[0][0], str([u for u, _, _ in g4.patches]))
+check("een reeks: alleen de keren in het leesvenster krijgen de gast, nooit de moederreeks (Codex-hertest 3, punt 11)",
+      sorted(u.split("/events/")[1].split("?")[0] for u, _, _ in g4.patches) == ["reeks1_20261102", "reeks1_20261103"],
+      str([u for u, _, _ in g4.patches]))
 
 g5 = NepGoogle([ev("p1", "x"), ev("p2", "y"), ev("p3", "z")])
-_pag = met(g5, W.firma_afspraken, "tok")
-check("de firma-agenda's worden over alle pagina's gelezen", _pag is not None and len([e for e in _pag if e["kalender"] == ELEVAIT]) == 3,
-      str(_pag and len(_pag)))
+_pag, _onl = met(g5, W.firma_afspraken, "tok")
+check("de firma-agenda's worden over alle pagina's gelezen", not _onl and len([e for e in _pag if e["kalender"] == ELEVAIT]) == 3,
+      str((len(_pag), _onl)))
+_pag2, _onl2 = met(NepGoogle([ev("p1", "x")], onleesbaar={"hdssuriname@gmail.com"}), W.firma_afspraken, "tok")
+check("een onleesbare firma-agenda stopt de andere niet: Elevait gelezen, HDS gemeld (Codex-hertest 3, punt 17)",
+      len(_pag2) == 1 and _onl2 == ["hdssuriname@gmail.com"], str((len(_pag2), _onl2)))
 check("het leesvenster gaat even ver als de ritten (365 dagen)", W.FIRMA_VOORUIT_DAGEN >= 365)
 
 # --- Z3: het vangnet, eenmaal per afspraak --------------------------------------------------------------------
@@ -224,7 +244,7 @@ check("een afspraak die Mehdi alleen noemt: een dagvraag op Beschikbaar die geen
       and not W.markeringen_uit([{"titel": _zwak[0]["summary"], "start": _zwak[0]["start"]["date"],
                                   "einde": _zwak[0]["end"]["date"], "hele_dag": True}], _zwak[0]["start"]["date"]))
 check("een 'Mehdi: ...'-afspraak die niet doorkwam: een Bezet blok op haar eigen uur (Calendly boekt er niet over)",
-      len(_sterk) == 1 and "transparency" not in _sterk[0] and _sterk[0]["start"]["dateTime"].endswith("10:00:00+01:00"))
+      len(_sterk) == 1 and _sterk[0]["transparency"] == "opaque" and _sterk[0]["start"]["dateTime"].endswith("10:00:00+01:00"))
 
 # --- Codex-hertest 2: oorspronkelijke tijd, gemengde reeks, H-Architects en UNABO, vraag volgt de afspraak ---------
 _e7 = ev("f1_20261102T090000Z", "Mehdi: [EL-IN] overleg", gasten=[{"email": W.WERKAGENDA}], reeks="f1")
@@ -249,31 +269,115 @@ g11 = NepGoogle([_moeder2] + _gem)
 met(g11, W.firma_gasten, _gem, "tok")
 check("een gemengde reeks (een keer voor een collega): alleen de keer voor Mehdi krijgt de gast, niet de hele reeks",
       [u.split("/events/")[1].split("?")[0] for u, _, _ in g11.patches] == ["reeks2_20261102"], str([u for u, _, _ in g11.patches]))
-check("H-Architects en UNABO worden ook gescand voor de stille gast (Mehdi verbergt ze ook)",
-      {"73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com",
-       "b135d9900db83399539bb5fe4ad9dc1ace19af20273c078ce2180cc47e9232fe@group.calendar.google.com"}
-      <= {a for a, _ in W.firma_scan()})
-_ins13, _opg13 = [], []
-_o13 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost)
+_HA = "73e8b6359d04b7bdb02aa045e668cd6f9d9f007bec51ce370494e7de7501f0c4@group.calendar.google.com"
+check("H-Architects en UNABO blijven zichtbaar en worden niet gescand: de agent zet daar zelf ritten (overleg P1)",
+      _HA not in {a for a, _ in W.firma_meelezen()} and not hasattr(W, "firma_scan"))
+check("een verborgen agenda waarop de agent ritten zet, wordt gemeld; Elevait verborgen niet (Codex-hertest 3, punt 12)",
+      W.verborgen_schrijfagendas({**{k: True for k in W.KALENDERS}, _HA: False, ELEVAIT: False}) == ["H-Architects"]
+      and "H-Architects" in W.verborgen_schrijfagendas({}))     # niet in de lijst: evenmin te zien
+# --- Codex-hertest 3: het blok volgt zijn afspraak, hele dag, gastafspraken, onleesbare agenda, ook in het weekend ----
+_ins13, _opg13, _pat13, _open13 = [], [], [], {"q1": True}
+_o13 = (W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch)
 W.FIRMA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="firma13-")) / "agenda-firma-vragen.json")
 W._insert = lambda kal, body, tok, toch=False: _ins13.append(body) or {"id": f"q{len(_ins13)}"}
-W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {W.FIRMAMERK: f"{ELEVAIT}|g1",
-                                                                                          W.MAILMERK: "abcdef0123456789"}}
-W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="": _opg13.append(x["id"]) or True
+W._prive_item_lezen = lambda eid, tok: {"id": eid, "titel": "VR Agendawacht: x", "_merk": {
+    W.FIRMAMERK: f"{ELEVAIT}|g1", W.MAILMERK: "abcdef0123456789" if _open13.get(eid, True) else "opgelost:abcdef0123456789"}}
+W._eigen_melding_opgelost = lambda x, k, tok, nu, reden="", vrij=False: _opg13.append((x["id"], vrij)) or True
+W._patch = lambda x, body, tok, **kw: _pat13.append((x["id"], body))
 try:
     _g1 = ev("g1", "Overleg KDS", beschrijving="Mehdi beslist mee")
     met(NepGoogle([_g1]), W.firma_vangnet, [_g1], [], "tok")
-    _g1b = dict(_g1, start={"dateTime": f"{(_nu + timedelta(days=2)).date().isoformat()}T10:00:00+01:00"})
+    _dag2 = (_nu + timedelta(days=2)).date().isoformat()
+    _g1b = dict(_g1, start={"dateTime": f"{_dag2}T10:00:00+01:00"}, end={"dateTime": f"{_dag2}T11:00:00+01:00"})
     met(NepGoogle([_g1b]), W.firma_vangnet, [_g1b], [], "tok")
+    _schuif, _n_schuif = list(_pat13), len(_ins13)
+    _g1c = dict(_g1b, end={"dateTime": f"{_dag2}T12:00:00+01:00"})     # zelfde begin, later einde
+    met(NepGoogle([_g1c]), W.firma_vangnet, [_g1c], [_g1c], "tok")     # en nu een afspraak voor Mehdi die niet doorkomt
+    _einde = list(_pat13[len(_schuif):])
+    _r_onl = met(NepGoogle([]), W.firma_vangnet, [], [], "tok", None, [ELEVAIT])
+    _na_onl = (list(_opg13), json.loads(Path(W.FIRMA_VRAGEN).read_text(encoding="utf-8")))
     met(NepGoogle([]), W.firma_vangnet, [], [], "tok")
+    _opg_weg = list(_opg13)
+    _open13["q1"] = False                                              # de vraag is opgelost; de afspraak komt terug
+    met(NepGoogle([_g1]), W.firma_vangnet, [_g1], [], "tok")
 finally:
-    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost = _o13
-check("verschuift de afspraak, dan krijgt de oude vraag 'Opgelost' en komt er een op de nieuwe dag; verdwijnt ze, dan opgelost",
-      len(_ins13) == 2 and _opg13 == ["q1", "q2"], str((len(_ins13), _opg13)))
+    W._insert, W.FIRMA_VRAGEN, W._prive_item_lezen, W._eigen_melding_opgelost, W._patch = _o13
+check("verschuift de afspraak, dan schuift hetzelfde blok mee (geen tweede vraag, oude dag niet bezet; punt 13)",
+      len(_schuif) == 1 and _schuif[0][0] == "q1" and _schuif[0][1]["start"] == {"date": _dag2, "dateTime": None}
+      and _n_schuif == 1, str((_schuif, _n_schuif)))
+check("verandert alleen het einde, of wordt het een afspraak voor Mehdi, dan wordt het blok ook bijgewerkt (Bezet, op het uur)",
+      len(_einde) == 1 and _einde[0][1]["end"] == {"dateTime": f"{_dag2}T12:00:00+01:00", "date": None}
+      and _einde[0][1]["transparency"] == "opaque", str(_einde))
+check("van een onleesbare agenda wordt niets afgerond en blijft het register staan (punt 17)",
+      _na_onl[0] == [] and f"{ELEVAIT}|g1" in _na_onl[1], str(_na_onl))
+check("verdwijnt de afspraak, dan 'Opgelost' en Beschikbaar: het oude uur blijft niet bezet (punt 13)",
+      _opg_weg == [("q1", True)], str(_opg_weg))
+check("komt de afspraak terug na een opgeloste vraag, dan komt er een nieuwe vraag", len(_ins13) == 2, str(len(_ins13)))
+
+_dag3 = (_nu + timedelta(days=3)).date().isoformat()
+_dag5 = (_nu + timedelta(days=5)).date().isoformat()
+_heel = dict(ev("h1", "Mehdi: [EL-IN] Suriname reis"), start={"date": _dag3}, end={"date": _dag5})
+_hb = W._firma_vraag_body(f"{ELEVAIT}|h1", _heel, _dag3, True)
+check("een hele-dag-afspraak voor Mehdi die niet doorkomt: een Bezet blok over dezelfde dagen (punt 10)",
+      _hb["start"] == {"date": _dag3} and _hb["end"] == {"date": _dag5} and _hb["transparency"] == "opaque", str(_hb))
+check("dat blok sluit geen dag af voor de agent (geen markering)",
+      not W.markeringen_uit([{"titel": _hb["summary"], "start": _dag3, "einde": _dag5, "hele_dag": True}], _dag3))
+
+_gast = [ev("k1", "SAIS26 | Panel", gasten=[{"email": W.WERKAGENDA, "responseStatus": "accepted"}]),
+         ev("k2", "SAIS26 | Diner", gasten=[{"email": W.WERKAGENDA, "responseStatus": "declined"}])]
+g14 = NepGoogle(_gast, zichtbaar=False)
+_, niet14 = met(g14, W.firma_gasten, _gast, "tok")
+check("Mehdi als gast zonder zijn naam vooraan, niet zichtbaar (verborgen uitnodiging): naar het vangnet (punt 14)",
+      [e["id"] for e in niet14] == ["k1"] and not g14.patches, str([e["id"] for e in niet14]))
+
+_bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
+check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",
+      "firma_kleurronde(" in _kleur)
+_o_kr = (W.firma_stap, W.FIRMA_NODEN, W.ag.log)
+W.FIRMA_NODEN = str(Path(tempfile.mkdtemp(prefix="firmanoden-")) / "agenda-firma-noden.json")
+_kr_log, _kr_noden = [], [[{"tekst": "Firma-agenda niet te lezen: HDS", "wie": "claude"}]] * 2 + [[]]
+W.firma_stap = lambda vandaag: _kr_noden.pop(0)
+W.ag.log = lambda *a, **k: _kr_log.append(a)
+try:
+    for _ in range(3):
+        W.firma_kleurronde("2026-10-31")
+finally:
+    W.firma_stap, W.FIRMA_NODEN, W.ag.log = _o_kr
+check("in de kleurronde komt een nood in het werkverslag, eenmaal, en ook het herstel (overleg P8)",
+      [a[2] for a in _kr_log] == ["firma-agenda's: Firma-agenda niet te lezen: HDS", "firma-agenda's: weer in orde"],
+      str(_kr_log))
+_o_st = (W.agenda.zichtbaarheid, W.firma_meelezen)
+W.agenda.zichtbaarheid = lambda: {W.WERKAGENDA: False, ELEVAIT: False}
+W.firma_meelezen = lambda: []
+try:
+    _nst = W.firma_stap("2026-10-27")
+finally:
+    W.agenda.zichtbaarheid, W.firma_meelezen = _o_st
+check("staat Mehdi's werkagenda verborgen, dan een nood voor Mehdi zonder teller; Elevait verborgen is goed",
+      len(_nst) == 1 and "mehdi werk agenda" in _nst[0]["tekst"] and "Elevait" not in _nst[0]["tekst"]
+      and not any(ch.isdigit() for ch in _nst[0]["tekst"]), str(_nst))
+import fcntl  # noqa: E402
+_o_sl = (W.FIRMA_SLOT, W.agenda.zichtbaarheid, W.firma_afspraken)
+W.FIRMA_SLOT = str(Path(tempfile.mkdtemp(prefix="firmaslot-")) / "agenda-firma.lock")
+W.agenda.zichtbaarheid = lambda: {}
+_gelezen = []
+W.firma_afspraken = lambda tok, *a, **k: _gelezen.append(1) or ([], [])
+_tok_o = W.agenda._toegang
+W.agenda._toegang = lambda: "tok"
+try:
+    with open(W.FIRMA_SLOT, "w") as _sl:
+        fcntl.flock(_sl, fcntl.LOCK_EX)
+        W.firma_stap("2026-10-27")
+finally:
+    W.FIRMA_SLOT, W.agenda.zichtbaarheid, W.firma_afspraken = _o_sl
+    W.agenda._toegang = _tok_o
+check("loopt er al een firmacontrole (slot), dan leest een tweede ronde niets", not _gelezen)
 
 # --- Z4: de zichtbaarheid teruglezen -------------------------------------------------------------------------
 _ur.urlopen = lambda req, timeout=None, *a, **k: io.BytesIO(json.dumps({"items": [
-    {"id": ELEVAIT, "selected": False}, {"id": W.WERKAGENDA, "selected": True}, {"id": "zonder"}]}).encode())
+    {"id": ELEVAIT, "selected": False}, {"id": W.WERKAGENDA, "selected": True}, {"id": "zonder"},
+    {"id": "weg", "selected": True, "hidden": True}]}).encode())
 _otok = W.agenda._toegang
 W.agenda._toegang = lambda: "tok"
 try:
@@ -281,13 +385,14 @@ try:
 finally:
     _ur.urlopen = _echt
     W.agenda._toegang = _otok
-check("de zichtbaarheid per agenda is terug te lezen (selected)",
-      zicht == {ELEVAIT: False, W.WERKAGENDA: True, "zonder": False}, str(zicht))
+check("de zichtbaarheid per agenda is terug te lezen (aangevinkt en niet uit de lijst gehaald)",
+      zicht == {ELEVAIT: False, W.WERKAGENDA: True, "zonder": False, "weg": False}, str(zicht))
 
-# --- een onleesbare firma-agenda: geen gast en geen vangnet op een halve lezing --------------------------------
+# --- onleesbare firma-agenda's: geen gast en geen vangnet op een halve lezing --------------------------------
 _ur.urlopen = lambda *a, **k: (_ for _ in ()).throw(OSError("netwerk weg"))
 try:
-    check("een firma-agenda die niet te lezen is, geeft None (niets doen)", W.firma_afspraken("tok") is None)
+    check("zijn alle firma-agenda's onleesbaar, dan geen afspraken en alle twee gemeld",
+          W.firma_afspraken("tok") == ([], [ELEVAIT, "hdssuriname@gmail.com"]))
 finally:
     _ur.urlopen = _echt
 
