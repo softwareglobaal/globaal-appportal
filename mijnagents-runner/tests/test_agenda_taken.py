@@ -1314,6 +1314,22 @@ _mk_auto = dict(_mk_lara, titel="Mehdi: geen auto - geen werfbezoeken/buiten", k
 _ba = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_auto] + _lara_items[:1], "2026-11-03")
        if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
 check("op een dag 'geen auto' blijft de Lara-ophaling wel een vraag", _ba == {("oma", "tegen_dagmarker")}, str(_ba))
+for _volg in ([_mk_lara, _mk_auto], [_mk_auto, _mk_lara]):
+    _bc = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole(_volg + _lara_items[:2], "2026-11-03")
+           if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+    check(f"Lara-markering en 'geen auto' samen ({'Lara eerst' if _volg[0] is _mk_lara else 'auto eerst'}): de ophaling en de "
+          "zwemles blijven een vraag", _bc == {("oma", "tegen_dagmarker"), ("zwem", "tegen_dagmarker")}, str(_bc))
+_la = {"id": "la", "titel": "!! Mehdi: [LA] Lara naar oma", "start": "2026-11-03T16:00:00+01:00",
+       "einde": "2026-11-03T16:30:00+01:00", "kalender": W.PRIVE_AGENDA}
+_bla = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_auto, _la], "2026-11-03")
+        if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+check("een [LA]-afspraak op een dag 'geen auto' is ook een vraag", _bla == {("la", "tegen_dagmarker")}, str(_bla))
+_bla2 = {(x["a"]["id"], x["soort"]) for x in _D83.dagcontrole([_mk_lara, _la], "2026-11-03")
+         if x["soort"] in ("tegen_dagmarker", "op_vrije_dag")}
+check("en tegen alleen de Lara-markering niet", not _bla2, str(_bla2))
+check("alleen 'Geen buiten afspraken ... Lara' is de Lara-markering, niet elk woord Lara",
+      W.LARA_MARKERING.search("!! Mehdi: Geen buiten afspraken Lara ophalen")
+      and not W.LARA_MARKERING.search("Buitenland, Lara bij mama") and not W.LARA_MARKERING.search("Geen auto, Lara bij oma"))
 
 # Een afspraak op een afgesloten dag (audit A13, FR-92): van een klant of Calendly is het een vraag; een eigen afspraak
 # plande Mehdi zelf (zichtbaar, geen vraag); een ja van Mehdi staat op de afspraak en wordt niet opnieuw gevraagd.

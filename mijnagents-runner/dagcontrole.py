@@ -155,13 +155,16 @@ def dagcontrole(items, dag):
     for a in afspraken:
         if (a.get("_merk") or {}).get(W.JA_MERK) == dag:
             continue          # Mehdi zei ja voor precies deze dag; verplaatst naar een andere dag telt die ja niet (FR-92, V10)
-        m = W.markering_tegen(a["titel"], dag, markers, locatie=a.get("locatie") or "")
+        if a.get("kalender") in lara or W.bellen.is_lara_titel(a.get("titel")):
+            # 'Geen buiten afspraken Lara ophalen' staat er voor de ophaling zelf: een Lara-afspraak botst er nooit mee.
+            # Tot 27-10-2026 belde De Bode elke week over de eigen ophaling en de zwemles ('Zeg wat ik doe'). Elke andere
+            # markering die dag ('geen auto', Buitenland, geen afspraken) blijft wel gelden, ook voor een [LA]-titel en
+            # ook als de Lara-markering eerst staat (driehoeksoverleg D1 en D2).
+            m = W.markering_tegen(a["titel"], dag, [(t, w) for t, w in markers if not W.LARA_MARKERING.search(t)],
+                                  locatie=a.get("locatie") or "", lara_vrij=False)
+        else:
+            m = W.markering_tegen(a["titel"], dag, markers, locatie=a.get("locatie") or "")
         if not m:
-            continue
-        if "lara" in m.lower() and (a.get("kalender") in lara or W.bellen.is_lara_titel(a.get("titel"))):
-            # 'Geen buiten afspraken Lara ophalen' staat er voor de ophaling zelf: een Lara-afspraak van die dag botst
-            # er nooit mee. Tot 27-10-2026 belde De Bode elke week over de eigen ophaling en de zwemles ('Zeg wat ik
-            # doe'). Een andere markering, zoals 'geen auto', blijft wel gelden voor een Lara-rit.
             continue
         alles = any(t == m and wat == "alles" for t, wat in markers)
         if alles and W._van_mehdi(a):
