@@ -764,6 +764,15 @@ check("en de vraag staat op die Brusselse dag, met het Brusselse uur (hertest 15
       _ins35 and _ins35[0]["start"] == {"date": _sr_na} and "01:30" in _ins35[0]["description"]
       and "21:30" not in _ins35[0]["description"], str(_ins35[:1]))
 
+# --- Codex-hertest 16: een tijd zonder offset geldt in haar eigen timeZone -----------------------------------------
+_nb = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00", "timeZone": "America/Paramaribo"},
+                       "end": {"dateTime": "2026-10-30T22:30:00", "timeZone": "America/Paramaribo"}})
+check("een tijd zonder offset met timeZone Suriname wordt de juiste Brusselse tijd (31/10 01:30)",
+      _nb["start"]["dateTime"].startswith("2026-10-31T01:30") and _nb["end"]["dateTime"].startswith("2026-10-31T02:30"), str(_nb))
+_nb2 = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00"}})
+check("zonder offset en zonder timeZone telt Brusselse tijd", _nb2["start"]["dateTime"].startswith("2026-10-30T21:30:00+01:00"),
+      str(_nb2))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

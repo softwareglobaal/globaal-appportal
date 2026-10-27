@@ -3220,8 +3220,11 @@ def _naar_brussel(e):
         t = (e.get(veld) or {}).get("dateTime")
         if t:
             try:
-                uit[veld] = {"dateTime": datetime.fromisoformat(t.replace("Z", "+00:00")).astimezone(TIJDZONE).isoformat()}
-            except ValueError:
+                d = datetime.fromisoformat(t.replace("Z", "+00:00"))
+                if d.tzinfo is None:        # een tijd zonder offset geldt in haar eigen timeZone (Codex-hertest 16)
+                    d = d.replace(tzinfo=ZoneInfo((e.get(veld) or {}).get("timeZone") or "Europe/Brussels"))
+                uit[veld] = {"dateTime": d.astimezone(TIJDZONE).isoformat()}
+            except (ValueError, KeyError):
                 pass
     return uit
 
