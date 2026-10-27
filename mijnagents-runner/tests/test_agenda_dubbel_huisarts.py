@@ -6,6 +6,8 @@ import uuid
 from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
+import os
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(__import__("tempfile").mkdtemp(prefix="aw-test-"), "agenda-whatsapp.json"))  # nooit de echte wachtrij
 from unittest.mock import patch
 
 HIER = Path(__file__).resolve().parent.parent
