@@ -3538,10 +3538,11 @@ def _toekomst(start, nu):
 
 def _niet_meer_vervallen(x):
     """Een zorgblok dat Mehdi liet vervallen ('A3 vervalt') en dat de praktijk nu naar een nieuw uur verzet, is weer een
-    gewone afspraak: 'vervalt' weg en Bezet, zodat de meldstap het als nieuwe versie meldt (Codex-hertest 7, PR 113)."""
+    gewone afspraak: 'vervalt' weg en Bezet, zodat de meldstap het als nieuwe versie meldt (Codex-hertest 7, PR 113). Dezelfde
+    vormen als lara_vervalt herkent, ook 'vervalt:' (hertest 10)."""
     if not lara_vervalt(x):
         return {}
-    return {"summary": re.sub(r"^(\s*(?:VR\s+)?(?:!!\s*)?)vervalt\s+", r"\1", x.get("titel") or "", flags=re.I).strip(),
+    return {"summary": re.sub(r"^(\s*(?:VR\s+)?(?:!!\s*)?)vervalt\b[\s:,.\-]*", r"\1", x.get("titel") or "", flags=re.I).strip(),
             "transparency": "opaque"}
 
 
@@ -3636,27 +3637,13 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     _zorg_gezet(a["start"][:10], bestaand)
                     st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
                     continue
-                try:
-                    volledig = _lees_event(PRIVE_AGENDA, bestaand, tok)
-                    if volledig is None:
-                        raise RuntimeError("omschrijving niet te lezen")     # nooit een afgekapte omschrijving terug
-                    _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
-                               "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
-                               "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van "
-                                               f"{(x.get('start') or '')[:16].replace('T', ' ')} naar "
-                                               f"{a['start'][:16].replace('T', ' ')} volgens mail.").strip(),
-                               **_niet_meer_vervallen(x)}, tok)
-                    probleem = _zorg_nalezen(PRIVE_AGENDA, bestaand, tok, start=a["start"], einde=a["einde"])
-                except Exception as ex:  # noqa: BLE001
-                    probleem = type(ex).__name__
-                if probleem:
-                    st["fout"] += 1
-                    st["prive"].append(f"{wat}: verzet maar het teruglezen klopt niet ({probleem})")
-                else:
-                    a["status"] = "gezet"
-                    st["verzet"] += 1
-                    _zorg_gezet(a["start"][:10], bestaand)
-                    st["prive"].append(f"{wat}: verzet (zelfde item {bestaand}, buiten het mailvenster), teruggelezen")
+                # een ander uur dan de mail, zonder mailhistorie die de verschuiving bevestigt (het blok viel buiten de
+                # vergelijking): niet zelf verzetten, want Mehdi kan het met de hand gecorrigeerd hebben. Een open punt, dat de
+                # gewone mailmelding als vraag in de privé-agenda zet (Codex-hertest 10, PR 113)
+                a["status"], a["detail"] = "afwijkend", (f"in de agenda {(x.get('start') or '')[:16].replace('T', ' ')}, "
+                                                         f"volgens mail {a['start'][:16].replace('T', ' ')}: welk uur klopt?")
+                st["open"] += 1
+                st["prive"].append(f"{wat}: blok ({bestaand}) staat op een ander uur dan de mail; open punt, niet verzet")
                 continue
             body = _zorg_body(a, z, profiel)
             try:
@@ -3669,6 +3656,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["fout"] += 1
                 st["prive"].append(f"{wat}: niet gezet ({type(ex).__name__})")
                 continue
+            _zorg_gezet(a["start"][:10], e.get("id"))   # meteen na het zetten, voor de teruglezing (Codex-hertest 10)
             gelezen = {}
             probleem = _zorg_teruglezen(PRIVE_AGENDA, e.get("id"), body, tok, gelezen)
             a["google"] = f"{PRIVE_AGENDA}|{e.get('id')}"
@@ -3679,7 +3667,6 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             else:
                 a["status"] = "gezet"
                 st["gezet"] += 1
-                _zorg_gezet(a["start"][:10], e.get("id"))
                 st["prive"].append(f"{wat}: blok gezet in de privé-agenda ({e.get('id')}), teruggelezen")
                 if bijwerken_items and z.get("mehdi") is True and (PRIVE_AGENDA, e.get("id")) not in per_id:
                     # De hoofdronde gebruikte al een agenda-momentopname. Geef het teruggelezen nieuwe blok
@@ -3782,6 +3769,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     volledig = _lees_event(kal, eid, tok)
                     if volledig is None:
                         raise RuntimeError("omschrijving niet te lezen")   # nooit een afgekapte omschrijving terug (PR 113)
+                    _zorg_gezet(a["start"][:10], eid)    # vooraf: ook als de teruglezing daarna mislukt (Codex-hertest 10)
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
                                "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
@@ -3794,7 +3782,6 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     else:
                         a["status"] = "gezet"
                         st["verzet"] += 1
-                        _zorg_gezet(a["start"][:10], eid)
                         st["prive"].append(f"{wat}: verzet van {hist[-1]['van'][:16]} (zelfde item {eid}), teruggelezen{notitie}")
                 except Exception as ex:  # noqa: BLE001
                     st["fout"] += 1
@@ -3848,6 +3835,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             st["prive"].append(f"{x['start'][:16]}: VOORSTEL zorgafspraak naar privé te verhuizen ({reden})")
             continue
         try:
+            _zorg_gezet((x.get("start") or "")[:10], x.get("id"))    # vooraf (Codex-hertest 10)
             _verplaats_naar(x, PRIVE_AGENDA, tok)
             _patch(verhuisd_item, body, tok, eigen_zorgverhuis=True)
             probleem = _zorg_nalezen(PRIVE_AGENDA, x["id"], tok, titel_pr=True, weg_van=WERKAGENDA,
@@ -3857,7 +3845,6 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["prive"].append(f"{x['start'][:16]} verhuisd maar het teruglezen klopt niet ({probleem})")
                 continue
             st["verhuisd"] += 1
-            _zorg_gezet((x.get("start") or "")[:10], x.get("id"))
             if bijwerken_items:
                 # De volledige ronde gebruikt dezelfde itemlijst voor reistijd; het doel is pas na teruglezen zeker.
                 x["kalender"], x["titel"], x["omschrijving"] = PRIVE_AGENDA, body["summary"], body["description"]

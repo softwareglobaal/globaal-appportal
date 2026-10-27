@@ -524,9 +524,9 @@ finally:
     (W._insert, W._zorg_blok_met_merk, W._prive_item_lezen, W._patch, W._zorg_nalezen, _MA._zorg_json, _MA.zorgprofielen) = _o17[:7]
     W.ZORG_GEZET[:] = _o17[7]
     W._lees_event = _o17[8]
-check("een zorgblok voorbij dag 120 dat de praktijk verzette, schuift mee (zelfde item) en de meldstap kijkt het na",
-      _pat17 and _pat17[0]["start"]["dateTime"] == _ver_start.isoformat() and _pat17[0]["description"].startswith("praktijk, volledig") and _gezet17 == [(_ver_start.date().isoformat(), "bestaand17")]
-      and any("verzet (zelfde item" in r for r in _rz17["prive"]), str((_pat17[:1], _gezet17, _rz17["prive"])))
+check("een zorgblok voorbij dag 120 op een ander uur dan de mail: niet zelf verzet (misschien met de hand gecorrigeerd), "
+      "maar een open punt (hertest 10)",
+      not _pat17 and not _gezet17 and any("open punt, niet verzet" in r for r in _rz17["prive"]), str((_pat17[:1], _gezet17, _rz17["prive"])))
 # een verre dag blijft tot elk nieuw blok gemeld is, ook als een ander blok van die dag al gemeld was
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw17-")) / "agenda-whatsapp.json")
 AW.basislijn([("oud18", "2028-03-07T08:00:00+01:00", "2028-03-07T08:30:00+01:00")])
@@ -567,7 +567,13 @@ check("een vervallen zorgblok dat de praktijk verzet, wordt weer een gewone afsp
                                                                                 "transparency": "opaque"}
       and W._niet_meer_vervallen({"titel": "!! [PR] Tandarts - Proef"}) == {})
 _h7 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
-check("en beide verschuifroutes van de zorgstap gebruiken dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 2)
+check("en de verschuifroute van de zorgstap gebruikt dat", _h7.count("**_niet_meer_vervallen(x)}, tok)") == 1)
+check("ook 'vervalt:' gaat weg, dezelfde vormen als de herkenning (hertest 10)",
+      W._niet_meer_vervallen({"titel": "vervalt: !! [PR] Kine - X"})["summary"] == "!! [PR] Kine - X"
+      and W._niet_meer_vervallen({"titel": "!! vervalt - [PR] Kine - X"})["summary"] == "!! [PR] Kine - X")
+_mv10 = _h7[_h7.index("volledig = _lees_event(kal, eid, tok)"):][:900]
+check("de verschuiving wordt voor de meldstap onthouden voor ze geschreven en teruggelezen wordt (hertest 10)",
+      _mv10.index("_zorg_gezet(") < _mv10.index("_patch(x,"))
 
 # --- Codex-hertest 8 (PR 113) ---------------------------------------------------------------------------------
 AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw20-")) / "agenda-whatsapp.json")
