@@ -88,7 +88,7 @@ check("eerste ronde: alleen het blok dat nu botst (het ECG) krijgt een melding; 
       and d["meldingen"].get(f"zorg:rust:{rust['start']}:{rust['einde']}", {}).get("status") == "basis", str(d))
 check("het ECG staat op ?? (na !!), met de botsing bovenaan de omschrijving, en wacht op antwoord (W4)",
       _pat and _pat[0][1]["summary"].startswith("!! ?? [PR] Huisarts") and "ANTWERK" in _pat[0][1]["description"]
-      and ecg_m.get("vraag") == {"id": "ecg"}, str(_pat[:1]))
+      and ecg_m.get("vraag") == {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]}, str(_pat[:1]))
 check("de ??-titel blijft geldig voor de zorgcontrole (nog [PR], niet VR, geen 'Agendawacht vraagt')",
       "[PR]" in _pat[0][1]["summary"] and not _pat[0][1]["summary"].startswith("VR")
       and "Agendawacht vraagt" not in _pat[0][1]["description"])
@@ -165,11 +165,11 @@ W._patch = lambda a, body, tok, **kw: _pat2.append(body) or _bewaard.update(body
 W._lees_event = lambda kal, eid, tok: dict(_bewaard)
 try:
     rv = W.whatsapp_antwoorden_verwerken("tok")
-    AW.klaarzetten("zorg:ecg:later", "x", {"id": "ecg"})
+    AW.klaarzetten("zorg:ecg:later", "x", {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]})
     c2 = AW._lees()["meldingen"]["zorg:ecg:later"]["code"]
     AW.antwoord_herkennen(f"{c2} vervalt")
     rv2 = W.whatsapp_antwoorden_verwerken("tok")
-    AW.klaarzetten("zorg:weg:1", "x", {"id": "weg"})
+    AW.klaarzetten("zorg:weg:1", "x", {"id": "weg", "start": "", "einde": ""})
     AW.antwoord_herkennen(f"{AW._lees()['meldingen']['zorg:weg:1']['code']} ja")
     rv3 = W.whatsapp_antwoorden_verwerken("tok")
 finally:
@@ -182,6 +182,59 @@ check("'vervalt': 'vervalt' vooraan en Beschikbaar, nooit gewist, en Mehdi belt 
       and any("Bel zelf de praktijk" in v.get("tekst", "") for v in AW._lees()["meldingen"].values()), str((_pat2[1:], rv2)))
 check("een vervallen zorgblok krijgt geen rit en botst met niets meer", W.lara_vervalt({"titel": _pat2[1]["summary"]}))
 check("staat de afspraak er niet meer, dan verandert er niets en zegt de bevestiging dat", "niets veranderd" in rv3[0], str(rv3))
+
+# --- Codex-controle PR 113 -----------------------------------------------------------------------------------
+# punt 1: een antwoord over het oude uur verandert een verschoven afspraak niet
+AW.klaarzetten("zorg:ecg:oud", "x", {"id": "ecg", "start": f"{d0}T09:00:00+01:00", "einde": f"{d0}T09:15:00+01:00"})
+_c31 = AW._lees()["meldingen"]["zorg:ecg:oud"]["code"]
+AW.antwoord_herkennen(f"{_c31} vervalt")
+_pat31 = []
+_o31 = (W._patch, W._prive_item_lezen)
+W._prive_item_lezen = lambda eid, tok: dict(ecg, titel="!! ?? [PR] Huisarts - Praktijk Verpleegkundigen")
+W._patch = lambda a, body, tok, **kw: _pat31.append(body)
+try:
+    _rv31 = W.whatsapp_antwoorden_verwerken("tok")
+finally:
+    W._patch, W._prive_item_lezen = _o31
+check("een antwoord over het oude uur van een intussen verschoven afspraak verandert niets (punt 1)",
+      not _pat31 and any("verschoven" in r for r in _rv31)
+      and any("intussen verschoven" in v.get("tekst", "") for v in AW._lees()["meldingen"].values()), str(_rv31))
+
+# punt 2: alleen het bericht dat nu vertrekt staat op 'bezig'
+for i in range(3):
+    AW.klaarzetten(f"proef:rij{i}", f"rij {i}")
+_staten = []
+
+
+def _kijk(t, kop):
+    _staten.append(sorted(m["status"] for k, m in AW._lees()["meldingen"].items() if k.startswith("proef:rij")))
+    return "whatsapp"
+
+
+AW.versturen(_kijk, [], False, (Plafond,))
+check("bij het versturen staat telkens alleen het vertrekkende bericht op 'bezig' (punt 2)",
+      all(st.count("bezig") <= 1 for st in _staten) and sum(st.count("bezig") for st in _staten) == 3
+      and all(m["status"] == "verzonden" for k, m in AW._lees()["meldingen"].items() if k.startswith("proef:rij")),
+      str(_staten[-4:]))
+
+# punt 3: een blok dat in de eerste ronde zelf gemaakt werd, krijgt zijn melding
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw3-")) / "agenda-whatsapp.json")
+_vers = item("vers", "!! [PR] Tandarts - Praktijk Z", f"{d2}T15:00:00+01:00", f"{d2}T15:30:00+01:00",
+             merk={W.ZORGMERK: "z9"})
+_vers["_gemaakt"] = (W.nu_lokaal() + timedelta(seconds=5)).astimezone(W.ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+_oud = dict(item("oud", "!! [PR] Kine - Praktijk Q", f"{d2}T08:00:00+01:00", f"{d2}T08:30:00+01:00",
+                 merk={W.ZORGMERK: "z8"}), _gemaakt="2026-01-01T00:00:00.000Z")
+_r33 = W.zorg_whatsapp([_vers, _oud], "tok")
+_m33 = AW._lees()["meldingen"]
+check("eerste ronde: een zorgblok dat deze ronde gemaakt werd, krijgt toch zijn melding; een oud blok niet (punt 3)",
+      any(k.startswith("zorg:vers:") and v.get("status") == "klaar" for k, v in _m33.items())
+      and any(k.startswith("zorg:oud:") and v.get("status") == "basis" for k, v in _m33.items()), str(_m33))
+
+# punt 4: de archiefagenda's tellen mee, en een onleesbaar archief stopt de melding
+_hoofd = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+_aanroep = _hoofd[_hoofd.index("een WhatsApp-melding per nieuw of verschoven zorgblok uit mail"):][:900]
+check("de WhatsApp-controle leest ook de archiefagenda's en wacht als die niet te lezen zijn (punt 4)",
+      "archief_afspraken(0, 120, alleen_lezen=True)" in _aanroep and "ARCHIEF_FOUT" in _aanroep)
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")

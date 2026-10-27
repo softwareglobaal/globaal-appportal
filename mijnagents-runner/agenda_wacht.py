@@ -6094,11 +6094,16 @@ def _te_valideren(x, botsing, tok, nu):
     x["titel"] = terug.get("summary") or titel
 
 
-def zorg_whatsapp(items, tok, nu=None):
+RONDE_START = nu_lokaal()  # wanneer dit proces begon: een blok dat daarna gemaakt werd, is van deze ronde
+
+
+def zorg_whatsapp(items, tok, nu=None, sinds=None):
     """W1 tot W4 en W8: een WhatsApp-melding per nieuwe of verschoven versie van een zorgblok uit mail, nooit twee keer.
-    De eerste keer (basislijn) krijgt alleen een toekomstig blok dat nu botst een melding (zoals het ECG op 5/11 tegen
-    ANTWERK); de rest wordt stil bekend. Geeft regels zonder titels."""
+    De eerste keer (basislijn) krijgt een toekomstig blok dat nu botst een melding (zoals het ECG op 5/11 tegen
+    ANTWERK), en ook een blok dat deze ronde gemaakt werd (Google 'created'; Codex-controle PR 113, punt 3); de rest wordt
+    stil bekend. items: alle agenda's, ook de archiefagenda's (punt 4). Geeft regels zonder titels."""
     nu = nu or nu_lokaal()
+    sinds = sinds or RONDE_START or nu
     zorg = [x for x in items if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(ZORGMERK)
             and "T" in x.get("start", "") and not _voorbij(x["start"], nu) and not lara_vervalt(x)]
     eerste = not AW.basislijn_gezet()
@@ -6108,7 +6113,8 @@ def zorg_whatsapp(items, tok, nu=None):
         if AW.bekend(versie):
             continue
         botsing = botst_met(x, items)
-        if eerste and not botsing:
+        van_nu = (x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
+        if eerste and not botsing and not van_nu:
             stil.append(versie)
             continue
         if botsing and "??" not in (x.get("titel") or ""):
@@ -6118,7 +6124,8 @@ def zorg_whatsapp(items, tok, nu=None):
                 regels.append(f"{x['start'][:16]} (zorg): niet op te valideren gezet ({type(e).__name__}); volgende ronde opnieuw")
                 continue
         verschoven = any(k.startswith(f"zorg:{x['id']}:") for k in AW._lees()["meldingen"])
-        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven), {"id": x["id"]} if botsing else None)
+        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven),
+                              {"id": x["id"], "start": x["start"], "einde": x["einde"]} if botsing else None)
         regels.append(f"{x['start'][:16]} (zorg): WhatsApp-melding {code} klaargezet"
                       + (", botst: te valideren" if botsing else ""))
     if eerste:
@@ -6140,6 +6147,14 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
             AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
                                                      "ik heb niets veranderd.")
             regels.append(f"{code}: afspraak niet meer gevonden, niets veranderd")
+            continue
+        v = m.get("vraag") or {}
+        if (v.get("start"), v.get("einde")) != (x.get("start"), x.get("einde")):
+            # intussen verschoven: het antwoord ging over het oude uur (Codex-controle PR 113, punt 1)
+            AW.verwerkt(sleutel, "verschoven")
+            AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
+                                                     "niets veranderd. Je krijgt een nieuwe melding over het nieuwe uur.")
+            regels.append(f"{code}: afspraak intussen verschoven, niets veranderd")
             continue
         kern = re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip()
         body = {"summary": kern} if keuze == "ja" else {
@@ -6480,8 +6495,8 @@ def main():
                 # een WhatsApp-melding per nieuw of verschoven zorgblok uit mail (Mehdi, 27-10-2026; W1 tot W8). Alleen
                 # op een volledige lezing: een onleesbare agenda kan een botsing verbergen.
                 try:
-                    _zi = afspraken(0, 120)
-                    if any(x.get("fout") for x in _zi):
+                    _zi = afspraken(0, 120) + archief_afspraken(0, 120, alleen_lezen=True)
+                    if any(x.get("fout") for x in _zi) or ARCHIEF_FOUT:
                         mail_noden.append({"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, "
                                                     "volgende ronde opnieuw", "wie": "claude"})
                     else:

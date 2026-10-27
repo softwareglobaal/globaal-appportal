@@ -98,8 +98,9 @@ def klaarzetten(sleutel, tekst, vraag=None):
 
 def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
     """Door De Bode, elke ronde: de klaarstaande meldingen naar Mehdi, alleen via WhatsApp (stuur_wa(tekst, kop=...)).
-    In de stille uren niets. niet_beschikbaar: de uitzondering(en) voor 'nu niet' (dagplafond, venster): dan blijft
-    de melding klaar staan. Geeft het aantal verzonden meldingen."""
+    In de stille uren niets. Telkens staat alleen het bericht dat nu vertrekt op 'bezig': een onderbreking maakt zo
+    hoogstens dat ene bericht onzeker (Codex-controle PR 113, punt 2). niet_beschikbaar: de uitzondering(en) voor 'nu
+    niet' (dagplafond, venster): dan blijft de melding klaar staan en stop ik deze ronde. Geeft het aantal verzonden."""
     if stil:
         return 0
     with _bewerk() as d:
@@ -108,38 +109,43 @@ def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
                 m["status"] = "onzeker"
                 nood.append({"tekst": f"Agendawacht: melding {m.get('code')} misschien al verstuurd en onderbroken; "
                                       "niet herhaald, kijk ze na", "wie": "claude-code"})
-        te_sturen = [k for k, m in d["meldingen"].items() if m.get("status") == "klaar"]
-        for k in te_sturen:
+    n, gedaan = 0, set()
+    while True:
+        with _bewerk() as d:
+            k = next((k for k, m in d["meldingen"].items() if m.get("status") == "klaar" and k not in gedaan), None)
+            if k is None:
+                return n
             d["meldingen"][k]["status"] = "bezig"
             d["meldingen"][k]["poging"] = _nu().isoformat()
-        teksten = {k: d["meldingen"][k]["tekst"] for k in te_sturen}
-    n = 0
-    for k in te_sturen:
+            tekst = d["meldingen"][k]["tekst"]
+        gedaan.add(k)
+        stop = False
         try:
-            kanaal = stuur_wa(teksten[k], kop=KOP)
+            kanaal = stuur_wa(tekst, kop=KOP)
             nieuw, extra = "verzonden", {"kanaal": kanaal, "verzonden": _nu().isoformat()}
             n += 1
-        except tuple(niet_beschikbaar) as e:        # zeker niet vertrokken: later opnieuw
-            nieuw, extra = "klaar", {"wacht": str(e)[:160]}
+        except tuple(niet_beschikbaar) as e:        # zeker niet vertrokken: later opnieuw, en de rest ook
+            nieuw, extra, stop = "klaar", {"wacht": str(e)[:160]}, True
             nood.append({"tekst": "Agendawacht: een WhatsApp-melding wacht op het venster of het dagplafond", "wie": "mehdi"})
         except RuntimeError as e:                   # Meta weigerde het bericht: zeker niet vertrokken
             nieuw, extra = "klaar", {"fout": str(e)[:160]}
         except Exception as e:  # noqa: BLE001      # bv. een time-out: misschien vertrokken
             nieuw, extra = "onzeker", {"fout": f"{type(e).__name__}"}
-            nood.append({"tekst": f"Agendawacht: WhatsApp-melding misschien niet aangekomen ({type(e).__name__}); "
-                                  "niet herhaald", "wie": "claude-code"})
+            nood.append({"tekst": "Agendawacht: een WhatsApp-melding is misschien niet aangekomen; niet herhaald",
+                         "wie": "claude-code"})
         with _bewerk() as d:
             m = d["meldingen"].get(k)
-            if m is None:
-                continue
-            if nieuw == "klaar" and "fout" in extra:
-                m["pogingen"] = int(m.get("pogingen") or 0) + 1
-                if m["pogingen"] >= MAX_POGINGEN:
-                    nieuw = "mislukt"
-                    nood.append({"tekst": f"Agendawacht: WhatsApp-melding {m.get('code')} door Meta geweigerd", "wie": "claude-code"})
-            m["status"] = nieuw
-            m.update(extra)
-    return n
+            if m is not None:
+                if nieuw == "klaar" and "fout" in extra:
+                    m["pogingen"] = int(m.get("pogingen") or 0) + 1
+                    if m["pogingen"] >= MAX_POGINGEN:
+                        nieuw = "mislukt"
+                        nood.append({"tekst": "Agendawacht: een WhatsApp-melding werd door Meta geweigerd",
+                                     "wie": "claude-code"})
+                m["status"] = nieuw
+                m.update(extra)
+        if stop:
+            return n
 
 
 def antwoord_herkennen(tekst):
