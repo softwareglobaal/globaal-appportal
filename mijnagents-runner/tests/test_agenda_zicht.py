@@ -769,9 +769,13 @@ _nb = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00", "timeZone": 
                        "end": {"dateTime": "2026-10-30T22:30:00", "timeZone": "America/Paramaribo"}})
 check("een tijd zonder offset met timeZone Suriname wordt de juiste Brusselse tijd (31/10 01:30)",
       _nb["start"]["dateTime"].startswith("2026-10-31T01:30") and _nb["end"]["dateTime"].startswith("2026-10-31T02:30"), str(_nb))
-_nb2 = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00"}})
-check("zonder offset en zonder timeZone telt Brusselse tijd", _nb2["start"]["dateTime"].startswith("2026-10-30T21:30:00+01:00"),
-      str(_nb2))
+_nb2 = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00"}}, "America/Paramaribo")
+check("zonder offset en zonder timeZone geldt de tijdzone van de firma-agenda (hertest 17)",
+      _nb2["start"]["dateTime"].startswith("2026-10-31T01:30"), str(_nb2))
+_nb3 = W._naar_brussel({"start": {"dateTime": "2026-10-30T21:30:00"}})
+check("is ook die onbekend, dan is de tijd onzeker", _nb3.get("_tijd_onzeker") is True)
+_gk5, _, _tw5 = W._firma_kopieen_kiezen([dict(ev("tz1", "Mehdi: [EL-IN] overleg"), _tijd_onzeker=True)])
+check("en dan geen blok maar de vraag 'uur niet zeker'", not _gk5 and len(_tw5) == 1)
 
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]

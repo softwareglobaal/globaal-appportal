@@ -3209,10 +3209,14 @@ def _tijd(e, veld):
     return (e.get(veld) or {}).get("dateTime") or (e.get(veld) or {}).get("date") or ""
 
 
-def _naar_brussel(e):
+_KAL_TZ = {}          # tijdzone per firma-agenda, gelezen met haar afspraken
+
+
+def _naar_brussel(e, kal_tz=None):
     """Een firma-afspraak met haar tijden in Brusselse tijd. Google geeft de tijd in de tijdzone van de bronagenda
     (Suriname): 21:30 daar is 01:30 de dag erna in Brussel. Datum en uur van een vraag volgen Brussel (Codex-hertest 15).
-    Een hele dag blijft haar datum."""
+    Een tijd zonder offset geldt in haar eigen timeZone, anders in die van de agenda (hertest 16, 17); is geen van beide
+    bekend, dan krijgt de afspraak '_tijd_onzeker' en komt er geen Bezet blok. Een hele dag blijft haar datum."""
     if not isinstance(e, dict):
         return e
     uit = dict(e)
@@ -3221,11 +3225,15 @@ def _naar_brussel(e):
         if t:
             try:
                 d = datetime.fromisoformat(t.replace("Z", "+00:00"))
-                if d.tzinfo is None:        # een tijd zonder offset geldt in haar eigen timeZone (Codex-hertest 16)
-                    d = d.replace(tzinfo=ZoneInfo((e.get(veld) or {}).get("timeZone") or "Europe/Brussels"))
+                if d.tzinfo is None:
+                    tz = (e.get(veld) or {}).get("timeZone") or kal_tz
+                    if not tz:
+                        uit["_tijd_onzeker"] = True
+                        continue
+                    d = d.replace(tzinfo=ZoneInfo(tz))
                 uit[veld] = {"dateTime": d.astimezone(TIJDZONE).isoformat()}
             except (ValueError, KeyError):
-                pass
+                uit["_tijd_onzeker"] = True
     return uit
 
 
@@ -3263,7 +3271,15 @@ def firma_afspraken(tok, nu=None, dagen=FIRMA_VOORUIT_DAGEN):
         except Exception:  # noqa: BLE001
             onleesbaar.append(adres)
             continue
-        uit += [{**_naar_brussel(e), "kalender": adres, "_agendanaam": naam} for e in items if e.get("status") != "cancelled"]
+        if adres not in _KAL_TZ:
+            try:
+                import urllib.parse  # noqa: PLC0415
+                _KAL_TZ[adres] = _google(f"{agenda.API}/calendars/{urllib.parse.quote(adres, safe='')}?fields=timeZone",
+                                         tok).get("timeZone")
+            except Exception:  # noqa: BLE001
+                _KAL_TZ[adres] = None
+        uit += [{**_naar_brussel(e, _KAL_TZ.get(adres)), "kalender": adres, "_agendanaam": naam}
+                for e in items if e.get("status") != "cancelled"]
     return uit, onleesbaar
 
 
@@ -3363,8 +3379,9 @@ def firma_gasten(evs, tok, onleesbaar=()):
                 if _gast_status(terug) == "declined":
                     continue            # intussen door Mehdi zelf afgewezen: niets te tonen
                 # de teruggelezen afspraak beslist: een collega kan intussen het uur verzet hebben (Codex-hertest 4, punt 1)
-                ev = {**ev, **{k: v for k, v in _naar_brussel(terug).items()
-                               if k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID")}}
+                ev = {**ev, **{k: v for k, v in _naar_brussel(terug, _KAL_TZ.get(ev["kalender"])).items()
+                               if k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID",
+                                        "_tijd_onzeker")}}
                 regels.append(f"{_tijd(ev, 'start')[:16]} gast gezet op {ev['_agendanaam']}")
                 vers_gezet = True
             if not _op_werkagenda(ev, tok):
@@ -3426,7 +3443,9 @@ def _firma_kopieen_kiezen(evs, onleesbaar=()):
     gekozen, onzeker, twijfel = [], set(), {}
     for k, kopieen in groepen.items():
         org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()]
-        if org:
+        if any(e.get("_tijd_onzeker") for e in kopieen):
+            twijfel[k] = kopieen        # tijdzone onbekend: nooit een blok op een gok (Codex-hertest 17)
+        elif org:
             gekozen.append(org[0])
         elif {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & stuk:
             onzeker.add(k)
@@ -3514,7 +3533,7 @@ def _firma_actueel(ev, tok):
         return None
     if x.get("status") == "cancelled":
         return False
-    return {**_naar_brussel(x), "kalender": ev["kalender"], "_agendanaam": ev.get("_agendanaam")}
+    return {**_naar_brussel(x, _KAL_TZ.get(ev["kalender"])), "kalender": ev["kalender"], "_agendanaam": ev.get("_agendanaam")}
 
 
 def _prive_vraag_id(k, tok):
