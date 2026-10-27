@@ -1026,6 +1026,57 @@ check("het wachtbestand wordt alleen onder een slot gelezen en geschreven", "fcn
 check("een hernoemd en een na een onderbreking opgenomen Bezet blok zetten hun dag ook in de lijst",
       _bron27.count("# de rit van toen klopt niet meer") == 2 and "na een onderbreking: ook rit en oproep" in _bron27)
 
+# --- Codex-hertest 28 ------------------------------------------------------------------------------------------
+_ADR52 = "Kerkstraat 1, 2000 Antwerpen"
+_blk52 = {"kalender": W.PRIVE_AGENDA, "id": "q52", "titel": "VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda",
+          "start": f"{_morgen}T10:00:00+01:00", "einde": f"{_morgen}T11:00:00+01:00", "locatie": _ADR52, "_vrij": False,
+          "maker": W.WERKAGENDA, "omschrijving": "", "deelnemers": [],
+          "_merk": {W.FIRMAMERK: "firma|x52@google.com|", W.MAILMERK: "abcdef0123456789"}}
+_o52 = {n: getattr(W, n) for n in ("_cache_laden", "_cache_bewaren", "lara_vakantiedagen", "schoolvakantie_dekking",
+                                   "geen_auto_dagen", "plek_zoeken", "vaste_plek", "coord", "rijtijd_min", "ritlabel",
+                                   "_insert", "_patch")}
+_o52i, _o52t, _ins52 = W.projectadressen.index, W.agenda._toegang, []
+W._cache_laden, W._cache_bewaren = (lambda: {}), (lambda _c: None)
+W.lara_vakantiedagen, W.schoolvakantie_dekking, W.geen_auto_dagen = (lambda: set()), (lambda: None), (lambda: {_morgen})
+W.plek_zoeken, W.vaste_plek = (lambda _s: (None, None)), (lambda _s: (None, None))
+W.coord, W.rijtijd_min, W.ritlabel = (lambda adres, _c: (1, 1)), (lambda *_a: (20, "proef")), (lambda *_a: "Antwerpen")
+W._insert, W._patch = (lambda *_a, **_k: _ins52.append(_a)), (lambda *_a, **_k: None)
+W.projectadressen.index, W.agenda._toegang = (lambda: {}), (lambda: "proef")
+try:
+    _r52 = W.reistijd_zetten([dict(_blk52)])
+finally:
+    for _n, _f in _o52.items():
+        setattr(W, _n, _f)
+    W.projectadressen.index, W.agenda._toegang = _o52i, _o52t
+check("een Bezet firmablok met een echt adres op een dag zonder auto: een waarschuwing, geen rit (hertest 28)",
+      any("BUITEN op een dag zonder auto" in r for r in _r52[-1]) and not _ins52, str((_r52, _ins52)))
+_sp.run = lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "  [schrijf] reistijd: 0 blok(ken) gemaakt, 0 bestonden al, "
+                                                                    "1 zonder adres, 0 mislukt\n  [reistijd] kaartdienst niet "
+                                                                    "beschikbaar: 1 rit(ten) volgende ronde opnieuw\n", "stderr": ""})()
+try:
+    _uit52 = _ECHTE_DAGROUTE("2026-11-02")       # subprocess.run is nagemaakt: er start niets
+finally:
+    _sp.run = _o51
+_bron28 = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
+check("een tijdelijke kaartstoring in de dagroute: de dag blijft wachten, en de ritstap schrijft die regel (hertest 28)",
+      _uit52[0] is False and '[reistijd] kaartdienst niet beschikbaar: {_kaart}' in _bron28, str(_uit52))
+_e52 = dict(ev("x52", "Mehdi: [EL-IN] overleg"), location=_ADR52)
+_pat52, _raw52 = [], {"transparency": "opaque", "location": "Verkeerde straat 9, 9999 Elders"}
+_o52b = (W._prive_item_lezen, W._google, W._patch)
+W._prive_item_lezen = lambda eid, tok: dict(_blk52, locatie=_raw52["location"])
+W._google = lambda url, tok, *a, **k: dict(_raw52)
+W._patch = lambda x, body, tok, **kw: _pat52.append(body)
+try:
+    _r52a = {"id": "q52"}
+    _m52a = W._firma_blok_nakijken("firma|x52@google.com|", _r52a, (_e52, True, _blk52["start"], _blk52["einde"], None), "tok")
+    _raw52["location"] = _ADR52
+    _m52b = W._firma_blok_nakijken("firma|x52@google.com|", {"id": "q52"}, (_e52, True, _blk52["start"], _blk52["einde"], None), "tok")
+finally:
+    W._prive_item_lezen, W._google, W._patch = _o52b
+check("een bestaand Bezet blok met een verkeerd adres wordt een keer hersteld naar de plaats van de firma-afspraak (hertest 28)",
+      len(_pat52) == 1 and _pat52[0]["location"] == _ADR52 and _r52a.get("hersteld") and "andere plaats" in _m52a
+      and _m52b == "", str((_pat52, _r52a, _m52a, _m52b)))
+
 _bron = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _kleur = _bron[_bron.index('if "--kleuren" in sys.argv:'):_bron.index('if "--zorg" in sys.argv:')]
 check("de firmacontrole draait ook in de kleurronde (om :17 en :47, elke dag, ook in het weekend; punt 15)",

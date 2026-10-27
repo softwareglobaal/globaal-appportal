@@ -3241,6 +3241,8 @@ def _dagroute(dag):
     m = re.search(r"reistijd: .*?(\d+) mislukt", r.stdout or "")
     if r.returncode == 0 and m and int(m.group(1)) > 0:
         return False, "een rit mislukte"           # dan blijft de dag wachten (Codex-hertest 27)
+    if r.returncode == 0 and "[reistijd] kaartdienst niet beschikbaar" in (r.stdout or ""):
+        return False, "kaartdienst niet beschikbaar"   # de rit ontbreekt nog: de dag blijft wachten (hertest 28)
     return r.returncode == 0, f"exitcode {r.returncode}"
 
 
@@ -3770,9 +3772,11 @@ def _firma_blok_nakijken(k, r, g, tok):
     if mk.get(FIRMAMERK) != k or str(mk.get(MAILMERK, "")).startswith("opgelost:") or not _firma_blok_open(x, k):
         return ""                       # door Mehdi afgerond of niet meer van mij: niets doen
     raw = _google(f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events/"
-                  f"{urllib.parse.quote(r['id'], safe='')}?fields=transparency", tok)
+                  f"{urllib.parse.quote(r['id'], safe='')}?fields=transparency,location", tok)
+    # ook de plaats: een blok met een verkeerd adres stuurt de rit naar die plaats (Codex-hertest 28)
+    plaats = (_firma_vraag_body(k, e, start, sterk).get("location") or "").strip()
     goed = (_utc(x.get("start")) == _utc(start) and _utc(x.get("einde")) == _utc(einde)
-            and raw.get("transparency", "opaque") != "transparent")
+            and raw.get("transparency", "opaque") != "transparent" and (raw.get("location") or "").strip() == plaats)
     if goed:
         return ""
     if r.get("hersteld"):
@@ -3780,7 +3784,7 @@ def _firma_blok_nakijken(k, r, g, tok):
     _firma_blok_bijzetten(x, k, e, start, sterk, tok)
     FIRMA_DAGEN.add(start[:10])
     r["hersteld"] = True
-    return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven of Beschikbaar: een keer hersteld"
+    return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven, Beschikbaar of op een andere plaats: een keer hersteld"
 
 
 def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
@@ -5112,7 +5116,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # Geen auto die dag: geen rit. Staat er toch een buitenafspraak, dan is dat een
         # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
         if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
-            if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
+            # ook een Bezet blok voor een verborgen firma-afspraak met een echt adres: dat draagt een algemene titel
+            # (Codex-hertest 28)
+            if info["buiten"] or info["soort"] in BUITEN_SOORTEN or _firma_buitenblok(a, _bruikbare_locatie(adres)):
                 regels.append(f"{a['start'][:16]} {_toon(a, 50)}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
         fysiek = _bruikbare_locatie(adres)
@@ -7250,6 +7256,11 @@ def main():
         except Exception as _e:  # noqa: BLE001
             print(f"  [dagcontrole] niet gelukt: {type(_e).__name__}: {str(_e)[:120]}", flush=True)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
+        _kaart = sum("kaartdienst niet beschikbaar" in r for r in rregels)
+        if _kaart:
+            # een tijdelijke kaartstoring telt als 'zonder adres', maar de rit ontbreekt: _dagroute laat de dag dan
+            # wachten (Codex-hertest 28)
+            print(f"  [reistijd] kaartdienst niet beschikbaar: {_kaart} rit(ten) volgende ronde opnieuw", flush=True)
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
