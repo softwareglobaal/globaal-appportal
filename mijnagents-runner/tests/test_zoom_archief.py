@@ -456,7 +456,12 @@ def test_za01_wacht_op_de_dekking():
         gekozen, _ = ZA_ACC.te_versturen([a], [oud], datetime(2026, 10, 27, 7, tzinfo=timezone.utc))
         assert [x["code"] for x in gekozen] == ["ZA-01"], "een geweigerd voorstel van voor de kopie houdt het niet tegen"
         d["account"]["recording.auto_delete_cmr"] = True
-        assert za01()["toestand"] == "goed", "staat de wisregel al aan, dan is het goed, met of zonder kopie"
+        a = za01()
+        assert a["toestand"] == "onbekend" and "wisregel staat aan" in a["reden"], \
+            "Codex controle 9, punt 42: de wisregel staat aan en de kopie is niet veilig: niet goed"
+        json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": True, "wisregel_veilig": True},
+                  open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+        assert za01()["toestand"] == "goed", "de wisregel staat aan en de kopie is veilig: goed"
     finally:
         ZA_ACC.ARCHIEF_DEKKING = oud_pad
 
@@ -1193,6 +1198,70 @@ def test_codex39_een_bestand_dat_tussen_de_twee_lezingen_verandert_houdt_groen_t
         Z.opnames = opnames
         _, uit = ronde(nu=NU + timedelta(hours=1))
         assert gezien["n"] == 2 and not uit["dekking"] and not uit["veilig"], (mutatie, gezien, uit)
+
+
+# ---------------------------------------------------------------------- Codex-controle 9 (27-10-2026) ---
+def test_codex40_een_ontbrekende_staat_na_eerdere_rondes_is_een_fout():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    os.remove(ZA.staat_pad())
+    try:
+        ronde(nu=NU + timedelta(hours=1))
+        raise AssertionError("na eerdere rondes hoort een ontbrekende staat de ronde te breken")
+    except ValueError:
+        pass
+    assert not _dekking()["dekking"], "en de dekking is ingetrokken"
+
+
+def test_codex41_42_de_zoomwacht_waarschuwt_bij_dekking_nee_en_bij_een_wisregel_die_al_aan_staat():
+    oud_pad, oud_lezen = ZA_ACC.ARCHIEF_DEKKING, ZA_ACC.voorstellen_lezen
+    ZA_ACC.ARCHIEF_DEKKING = os.path.join(tempfile.mkdtemp(prefix="w41-", dir=MAP), "dekking.json")
+    rij = {"id": 41, "status": "open", "parameters": json.dumps({"zoom_advies": "ZA-01", "stand": {"kopie": "ja"}})}
+    try:
+        json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": False, "wisregel_veilig": True},
+                  open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+        ZA_ACC.voorstellen_lezen = lambda: [rij]
+        r = Ronde()
+        ZA_ACC.wisregel_wacht(r)
+        assert ZA_ACC.NOOD_WISREGEL_WACHT in teksten(r), "punt 41: dekking nee bij een open ZA-01"
+        ZA_ACC.voorstellen_lezen = lambda: []
+        json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": False, "wisregel_veilig": False},
+                  open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+        staat = {"account": {"basis": {"instellingen": {"recording.auto_delete_cmr": True}}}}
+        r = Ronde()
+        ZA_ACC.wisregel_wacht(r, staat)
+        assert ZA_ACC.NOOD_WISREGEL_AAN in teksten(r), "punt 42: de wisregel staat aan, ook zonder voorstel"
+        staat["account"]["basis"]["instellingen"]["recording.auto_delete_cmr"] = False
+        r = Ronde()
+        ZA_ACC.wisregel_wacht(r, staat)
+        assert not r.noden
+        assert not re.search(r"\d", ZA_ACC.NOOD_WISREGEL_AAN), "N10"
+    finally:
+        ZA_ACC.ARCHIEF_DEKKING, ZA_ACC.voorstellen_lezen = oud_pad, oud_lezen
+
+
+def test_codex43_een_opname_json_die_uit_dropbox_verdwijnt_wordt_opnieuw_gezet():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    _tot_ja(z)
+    pad = ZA.mapnaam(m) + "/opname.json"
+    del d.bestanden[pad]
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["dekking"] and pad in d.bestanden, "de beschrijving staat er weer, deze ronde is geen ja"
+    _, uit = ronde(nu=NU + timedelta(hours=2))
+    assert uit["dekking"]
+    del d.bestanden[pad]
+    del z.meetings["u1"]  # nu ook weg uit Zoom: de bewaarde inhoud zet ze terug
+    r, uit = ronde(nu=NU + timedelta(hours=3))
+    assert pad in d.bestanden and json.loads(d.bestanden[pad])["uuid"] == "u1"
+
+
+def test_codex44_een_dekking_uit_de_toekomst_telt_niet():
+    pad = os.path.join(tempfile.mkdtemp(prefix="w44-", dir=MAP), "dekking.json")
+    json.dump({"ts": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(), "dekking": True,
+               "wisregel_veilig": True}, open(pad, "w"))
+    assert ZA_ACC.archief_dekking(pad) == "onbekend" and ZA_ACC.archief_veilig(pad) == "onbekend"
 
 if __name__ == "__main__":
     goed = fout = 0

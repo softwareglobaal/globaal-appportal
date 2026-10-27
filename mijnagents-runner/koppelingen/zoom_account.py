@@ -632,6 +632,7 @@ ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
 ARCHIEF_GELDIG = timedelta(hours=3)    # De Zoomarchivaris draait elk uur en slaat hoogstens een ronde over voor de
                                        # keten; een ouder bestand zegt niets meer (Codex, Zoomarchief controle 4)
 NOOD_WISREGEL_WACHT = "Wacht met de wisregel: niet elke Zoom-opname staat bewezen in je Dropbox"
+NOOD_WISREGEL_AAN = "De wisregel staat aan terwijl niet elke oude Zoom-opname bewezen in je Dropbox staat"
 
 
 def _archief(sleutel, pad=None, nu=None):
@@ -641,7 +642,8 @@ def _archief(sleutel, pad=None, nu=None):
         with open(os.path.expanduser(pad or ARCHIEF_DEKKING), encoding="utf-8") as f:
             d = json.load(f)
         ts = datetime.fromisoformat(d["ts"])
-        oud = (nu or datetime.now(timezone.utc)) - ts > ARCHIEF_GELDIG
+        leeftijd = (nu or datetime.now(timezone.utc)) - ts
+        oud = leeftijd > ARCHIEF_GELDIG or leeftijd < -timedelta(minutes=5)  # Codex controle 9, punt 44: geen toekomst
     except (OSError, ValueError, KeyError, TypeError):
         return "onbekend"
     if oud or not isinstance(d.get(sleutel), bool):
@@ -681,7 +683,7 @@ def archief_veilig(pad=None, nu=None):
     return _archief("wisregel_veilig", pad, nu)
 
 
-def wisregel_wacht(r):
+def wisregel_wacht(r, staat=None):
     """Codex, Zoomarchief controle 3, punt 12: staat er een ZA-01-voorstel open of goedgekeurd terwijl de kopie niet
     veilig is voor de wisregel, dan een nood voor Mehdi, elke ronde opnieuw tot het weer veilig is. De besluitknop op het
     bord voert zelf niets uit; dit is de waarschuwing bij het besluit."""
@@ -693,8 +695,14 @@ def wisregel_wacht(r):
         r.noden_onbekend = True
         return
     if any(x.get("status") in ("open", "goedgekeurd") and _params(x).get("zoom_advies") == "ZA-01" for x in rijen) \
-            and archief_veilig() != "ja":
+            and (archief_veilig() != "ja" or archief_dekking() != "ja"):  # Codex controle 9, punt 41
         r.nood(NOOD_WISREGEL_WACHT, "mehdi")
+    # Codex controle 9, punt 42: staat de wisregel volgens de laatste accountscan al aan, dan meld ik zelfstandig dat de
+    # kopie niet veilig is, ook zonder voorstel; de wisregel wist dan echt
+    account = staat.get("account") if isinstance(staat, dict) else None
+    inst = ((account or {}).get("basis") or {}).get("instellingen") if isinstance(account, dict) else None
+    if isinstance(inst, dict) and inst.get("recording.auto_delete_cmr") is True and archief_veilig() != "ja":
+        r.nood(NOOD_WISREGEL_AAN, "mehdi")
 
 
 def adviezen(d, gesprekken=0, staat_acc=None):
@@ -750,6 +758,10 @@ def adviezen(d, gesprekken=0, staat_acc=None):
     if dekking != "ja" and open01:
         uit[-1]["reden"] = ("wacht op de volledige kopie in je Dropbox (De Zoomarchivaris): " +
                             ("nog niet alle opnames bewezen" if dekking == "nee" else "dekking onbekend"))
+    if wis is True and archief_veilig() != "ja":
+        # Codex controle 9, punt 42: de wisregel staat aan, maar de kopie is niet veilig: dat is niet "goed"
+        uit[-1].update(toestand="onbekend", stand=None,
+                       reden="de wisregel staat aan, maar niet elke oude opname staat bewezen in je Dropbox")
 
     uop = gebruiker.get("recording.auto_recording") if gebruiker else None
     utr = gebruiker.get("recording.recording_audio_transcript") if gebruiker else None
@@ -1314,7 +1326,7 @@ def herhaal_bewaarde_scannoden(r, staat):
     """Herhaal de bekende scannoden bij een Zoom-ronde die de accountscan niet kan bereiken."""
     if not scan_aan(r.werkwijze):
         return
-    wisregel_wacht(r)
+    wisregel_wacht(r, staat)
     account = staat.get("account") if isinstance(staat, dict) else None
     scannoden = account.get("scannoden") if isinstance(account, dict) else None
     if isinstance(scannoden, dict):
@@ -1325,7 +1337,7 @@ def ronde(r, w, staat, klok, gesprekken=0, forceer=False):
     """Een accountdeel binnen de bestaande Zoom-ronde; schrijft staat pas na geslaagde bordstappen."""
     if not scan_aan(r.werkwijze):
         return ""
-    wisregel_wacht(r)
+    wisregel_wacht(r, staat)
     oud = copy.deepcopy(staat.get("account") or {})
     vorige_noden = oud.get("scannoden") if isinstance(oud.get("scannoden"), dict) else {}
     scannoden = copy.deepcopy(vorige_noden)

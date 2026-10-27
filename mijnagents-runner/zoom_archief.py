@@ -118,6 +118,9 @@ def lees_staat():
         with open(staat_pad(), encoding="utf-8") as f:
             s = json.load(f)
     except FileNotFoundError:
+        if os.path.exists(os.path.join(DATA, ".in_gebruik")):
+            # Codex controle 9, punt 40: na eerdere rondes is een ontbrekende staat een fout; anders vergeet ik wat ik zag
+            raise ValueError("staat.json ontbreekt na eerdere rondes") from None
         s = {}
     if not isinstance(s, dict) or not isinstance(s.get("bestanden", {}), dict):
         raise ValueError("staat.json onleesbaar")
@@ -136,6 +139,9 @@ def _schrijf_json(pad, inhoud):
 
 def schrijf_staat(s):
     _schrijf_json(staat_pad(), s)
+    teken = os.path.join(DATA, ".in_gebruik")
+    if not os.path.exists(teken):
+        open(teken, "w").close()
 
 
 # --------------------------------------------------------------- namen ---
@@ -306,7 +312,7 @@ def schrijf_opname_json(m, bewezen, werkmap, bewaker=None):
     schrijf_beschrijving(opname_json(m, bewezen), f"{mapnaam(m)}/opname.json", werkmap, bewaker)
 
 
-def bewijzen_nakijken(staat, bewaker=None):
+def bewijzen_nakijken(staat, bewaker=None, aanwezig=()):
     """Codex 4 en controle 2, punt 11: klopt elk eerder bewijs nog met wat nu in Dropbox staat? Een bestand dat weg is
     of anders is, gaat uit de bewezen bestanden en terug naar 'gezien': staat het nog in Zoom, dan kopieer ik het
     opnieuw; is het ook uit Zoom weg, dan maakt de volgende volledige inventaris het 'verdwenen', tot Mehdi beslist.
@@ -323,6 +329,25 @@ def bewijzen_nakijken(staat, bewaker=None):
             del staat["bestanden"][fid]
             staat["gezien"][fid] = {"start": b.get("start", ""), "grootte": b.get("grootte", 0), "was_bewezen": True}
             weg += 1
+    # Codex controle 9, punt 43: een opname.json die weg is, wordt opnieuw gezet: met de bewaarde inhoud, of zoals de
+    # meeting nu in Zoom staat; kan geen van beide, dan blijft het een blokkade
+    for uuid, e in list(staat["meetings"].items()):
+        map_ = e if isinstance(e, str) else e.get("map", "")
+        pad = f"{map_}/opname.json"
+        x = in_dropbox.get((D.basis() + pad).lower())
+        if x is None:
+            if bewaker:
+                bewaker()
+            x = D.metadata(pad)
+        if x:
+            continue
+        del staat["meetings"][uuid]
+        weg += 1
+        if isinstance(e, dict) and e.get("inhoud"):
+            staat["beschrijvingen"][uuid] = {"inhoud": e["inhoud"], "pad": pad}
+            staat["blokkades"][f"opname:{uuid}"] = OPNAME_JSON
+        elif uuid not in aanwezig:
+            staat["blokkades"][f"opname:{uuid}"] = OPNAME_JSON
     return weg
 
 
@@ -590,7 +615,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     nagekeken_weg = 0
     if not droog:  # elke ronde: een dekking ja steunt nooit op een bewijs dat niet nagekeken is
         try:
-            nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker)
+            nagekeken_weg = bewijzen_nakijken(staat, bewaker=bewaker, aanwezig=uuids)
         except (Stop, D.TijdOp, Z.TijdOp) as e:
             return stop("", "", f"nakijken niet af: {e}", staat)
         except Exception as e:  # noqa: BLE001  zonder nakijken geen dekking ja, en de nood blijft tot het lukt
@@ -669,7 +694,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 try:
                     bewaker()
                     schrijf_beschrijving(inhoud, pad, werkmap, bewaker=bewaker)
-                    staat["meetings"][m["uuid"]] = staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
+                    staat["meetings"][m["uuid"]] = {"map": pad.rsplit("/", 1)[0], "inhoud": inhoud}
                     staat["blokkades"].pop(f"opname:{m['uuid']}", None)
                     staat["beschrijvingen"].pop(m["uuid"], None)
                 except (Stop, D.TijdOp) as e:
@@ -681,11 +706,11 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         # de meeting intussen uit Zoom weg is; de nood blijft tot het lukt
         for uuid, b in list(staat["beschrijvingen"].items()):
             if gestopt or uuid in uuids:
-                continue
+                continue  # een meeting die nog in Zoom staat, schrijft de gewone stap hierboven opnieuw
             try:
                 bewaker()
                 schrijf_beschrijving(b["inhoud"], b["pad"], werkmap, bewaker=bewaker)
-                staat["meetings"][uuid] = b["pad"].rsplit("/", 1)[0]
+                staat["meetings"][uuid] = {"map": b["pad"].rsplit("/", 1)[0], "inhoud": b["inhoud"]}
                 staat["blokkades"].pop(f"opname:{uuid}", None)
                 del staat["beschrijvingen"][uuid]
             except (Stop, D.TijdOp) as e:
