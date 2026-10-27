@@ -353,6 +353,56 @@ niets buiten plannen.
   online boeking.** Calendly boekt alleen online afspraken; die vragen geen auto, dus
   de online boeking blijft open en wordt niet geblokkeerd door de geen-auto-marker.
 
+## Alleen zien wat Mehdi aangaat (driehoeksoverleg 27-10-2026, Z1 tot Z8 en P1 tot P8)
+
+Mehdi wil in zijn agenda alleen zien wat hij moet doen of waar hij bij moet zijn. Alle ruis zat in Elevait N.V. Mehdi
+verbergt alleen de firma-agenda's van collega's (Elevait N.V., High Design Studio NV; in `agenda-taken.json` onder
+`firma_meelezen`); niets wordt verwijderd of afgemeld. Zichtbaar blijven de agenda's waarop ik zelf ritten en vragen
+zet (`KALENDERS`: mehdi werk agenda, prive agenda Mehdi, Lara, H-Architects, UNABO, zoomafspraken).
+
+- Ik lees de firma-agenda's alleen mee, 365 dagen vooruit. Een afspraak met `Mehdi: ...` vooraan krijgt Mehdi als
+  stille gast (zonder mail, alleen de gastenlijst verandert, met If-Match), per keer en nooit op de moederreeks. Ik lees
+  na dat ze op zijn werkagenda staat; ook een afspraak waar hij al gast is (niet afgewezen).
+- Komt een afspraak voor Mehdi niet door, dan zet ik een Bezet blok in zijn privé-agenda op haar tijd (op het uur, of
+  over haar hele dagen). Noemt een firma-afspraak Mehdi zonder hem als gast, dan een dagvraag op Beschikbaar (komende
+  zeven dagen). Eenmaal per afspraak. Het blok volgt zijn afspraak: verschuift ze, dan schuift het mee; verdwijnt ze
+  of komt ze door, dan `Opgelost`, Beschikbaar en een hele-dag-item (geen oproep meer). Het blok spiegelt een bestaande
+  afspraak: het komt er ook op een dag met `Buitenland` of `geen afspraken`. Vlak na het zetten van de gast wacht ik een
+  ronde; een werkagenda die even niet te lezen is, maakt geen blok. Dezelfde afspraak op twee firma-agenda's: een blok.
+  Op de werkagenda-kopie van een firma-afspraak schrijf ik niets, ook geen telefoonnummer.
+- Alleen de kopie van de organisator bepaalt het uur. Zijn er alleen gastkopieën of is de tijdzone onbekend, dan geen
+  blok maar een vraag 'uur niet zeker' (Beschikbaar). Een afspraak die Mehdi zelf organiseert, blijft van hem.
+- Verdwijnt of verschuift mijn Bezet blok terwijl de afspraak bleef, dan herstel ik het een keer; doet Mehdi het daarna
+  opnieuw, dan beslist hij.
+- Een onleesbare firma-agenda stopt de andere niet; van haar rond ik niets af. Een agenda waarop ik ritten zet en die
+  Mehdi verborgen heeft, wordt een nood: hij zet het vinkje terug.
+- Dit draait in de volledige ronde en in de kleurronde (om :17 en :47, elke dag, ook in het weekend).
+- Verder schrijf ik niets op een firma-agenda: geen rit, kleur of vraag (`mag_schrijven()` kent ze niet).
+- Calendly verandert niet: geen firma-agenda telt als bezet; alleen het Bezet blok in de privé-agenda telt.
+- Mehdi's weergave aanpassen is zijn instelling: hij vinkt Elevait N.V. zelf uit (ook op elk toestel), of geeft een
+  keer zijn ja. Wie voor zichzelf plant in een firma-agenda, zet zijn eigen naam vooraan (`Siyan: ...`).
+
+De grendel is `tests/test_agenda_zicht.py`.
+
+## WhatsApp-melding bij een afspraak uit mail (Mehdi, 27-10-2026; driehoeksoverleg W1 tot W10)
+
+Mehdi werkt via WhatsApp. Zet ik een afspraak uit mail in de agenda (vandaag alleen de zorgroute) of verschuift die,
+dan krijgt hij eenmaal een korte WhatsApp: wat (soort en praktijk), wanneer, welke agenda en een eventuele botsing.
+Nooit een adres of mailinhoud; op het bord en in het werkverslag geen titels.
+
+- Een botsing telt over alle agenda's, ook met een hele-dag-blok dat Bezet staat (zoals een beurs). Beschikbaar,
+  vervallen en ritten tellen niet. `botsingen()` gebruikt dezelfde regel.
+- Bij een botsing zet ik de afspraak toch (ze is bevestigd), maar op `??` (te valideren), na `!!`, met de botsing
+  bovenaan de omschrijving. Ik verplaats en wis niets, ook de botsende afspraak niet.
+- Mehdi antwoordt met de code uit het bericht: `A3 ja` (beide laten staan: `??` weg) of `A3 vervalt` (`vervalt`
+  vooraan en Beschikbaar; hij belt zelf de praktijk). Een los `ja` telt niet. Ik lees terug en bevestig dan pas.
+- Alleen De Bode verstuurt, alleen via WhatsApp, nooit in de stille uren en nooit via Telegram (de regel van 25-09-2026
+  blijft). De wachtrij (`mijnagents-data/agenda-whatsapp.json`) heeft een verzendspoor: een onderbroken verzending
+  gaat niet blind opnieuw. Het dagplafond van de betaalde sjablonen blijft.
+- De eerste keer krijgt alleen een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een hele-dag-blokkade).
+
+De grendel is `tests/test_agenda_whatsapp.py`.
+
 ## Lara tijdens schoolvakanties (mandaat van Mehdi, 22-09-2026)
 
 Tijdens een schoolvakantie of feestdag haalt Mehdi Lara niet op. Dan:

@@ -29,6 +29,7 @@ from zoneinfo import ZoneInfo
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import agenda  # noqa: E402
+import agenda_whatsapp as AW  # noqa: E402
 import bellen  # noqa: E402
 import projectadressen  # noqa: E402
 import bord  # noqa: E402
@@ -597,6 +598,8 @@ def markeringen_bezet(items, tok=None):
     stond op Beschikbaar en Jordy Scheurmans boekte via Calendly om 10:30 (FR-84). Geeft de lijst die ik op Bezet zette."""
     gezet = []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if not a.get("hele_dag") or not a.get("_vrij") or a.get("_archief") or (a.get("_merk") or {}).get(LARAMERK):
             continue
         if any(wat == "alles" and patroon.search(a.get("titel") or "") for patroon, wat in DAG_MARKERINGEN):
@@ -847,6 +850,8 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
     import urllib.request
     if is_zorgschaduw(a):
         raise SchaduwItem("schaduw van een privé-zorgafspraak")
+    if _firma_kopie(a):
+        raise SchaduwItem("gastkopie van een firma-afspraak")    # elke route slaat ze over; dit is de grendel
     if not mag_schrijven(a["kalender"]):
         raise GeenSchrijfrecht(a["kalender"])
     nieuwe_herinneringen = None
@@ -882,8 +887,9 @@ def _patch(a, body, tok, toch=False, eigen_rit=False, eigen_zorgverhuis=False, u
             ag.log("titelwijziging", "voorstel", "VOORSTEL: titel niet gewijzigd",
                    f"{_toon(a)} -> {str(body['summary'])[:90]} ({reden})")
             raise TitelVoorstel(reden)
-    # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
-    if "start" in body and not toch:
+    # een afspraak naar een dag verzetten die een markering afsluit, kan alleen met een ja van Mehdi (FR-83); het eigen
+    # spiegelblok van een firma-afspraak volgt zijn afspraak, ook naar zo'n dag (review 27-10-2026)
+    if "start" in body and not toch and not (a.get("_merk") or {}).get(FIRMAMERK):
         dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
         m = markering_tegen(body.get("summary") or a.get("titel"), dag,
                            locatie=body.get("location") or a.get("locatie") or "")
@@ -943,6 +949,8 @@ def herinneringen_zetten(items, alleen_dag=None):
     nu_iso = nu_lokaal().isoformat()
     gezet, al, weg, fout = 0, 0, 0, 0
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if _voorbij(a["start"], nu_iso) or a.get("kalender", "").startswith("en.be#"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1336,6 +1344,8 @@ def titels_normaliseren(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1433,6 +1443,8 @@ def uitroep_vooraan(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels, reeksen = 0, [], set()
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu) \
                 or a.get("_archief") or not mag_schrijven(a.get("kalender", "")):
             continue
@@ -1796,6 +1808,8 @@ def titels_aanvullen(items, alleen_dag=None):
     projecten = projectadressen.index()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu) or a.get("_archief"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -1882,6 +1896,8 @@ def zoom_zetten(items, alleen_dag=None):
     nu = nu_lokaal().isoformat()
     gedaan, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or _voorbij(a["start"], nu):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -2068,6 +2084,8 @@ def kleuren_zetten(items, alleen_dag=None):
     global HANDKLEUREN
     HANDKLEUREN = []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a["start"][:10] < nu_dag or a.get("kalender", "").startswith("en.be#"):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
@@ -2639,9 +2657,11 @@ def _insert(kalender, body, tok, toch=False):
         raise GeenSchrijfrecht(kalender)
     if body.get("summary"):
         body["summary"] = canoniek(body["summary"])
-    # een nieuwe afspraak op een dag die een markering afsluit, kan alleen met een ja van Mehdi (FR-83)
+    # een nieuwe afspraak op een dag die een markering afsluit, kan alleen met een ja van Mehdi (FR-83). Het eigen blok
+    # dat een bestaande firma-afspraak spiegelt, is geen nieuwe afspraak: dat moet er juist staan (review 27-10-2026)
     dag = ((body.get("start") or {}).get("dateTime") or "")[:10]
-    m = markering_tegen(body.get("summary"), dag, locatie=body.get("location") or "") if not toch else None
+    spiegel = bool(((body.get("extendedProperties") or {}).get("private") or {}).get(FIRMAMERK))
+    m = markering_tegen(body.get("summary"), dag, locatie=body.get("location") or "") if not (toch or spiegel) else None
     if m:
         raise DagMarkering(f"{dag} staat '{m}': '{(body.get('summary') or '')[:60]}' kan die dag niet zonder ja van Mehdi")
     if toch:
@@ -2869,8 +2889,10 @@ def mail_meldingen(res, bestaande, tok, nu=None):
     return regels
 
 
-def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
-    """Zet alleen een eigen mailmelding (merk van de agent, privé-agenda) op 'Opgelost'. Wissen doet de agent niet."""
+def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost", vrij=False, extra=None):
+    """Zet alleen een eigen mailmelding (merk van de agent, privé-agenda) op 'Opgelost'. Wissen doet de agent niet.
+    Met vrij=True wordt het blok ook Beschikbaar: een opgelost Bezet blok houdt geen uur meer vast (Codex-hertest 3, 13).
+    extra gaat mee in dezelfde schrijfactie (bv. een hele dag), zodat er nooit een halve afronding blijft (review 3, R2)."""
     if x.get("kalender") != PRIVE_AGENDA or (x.get("_merk") or {}).get(MAILMERK) != k or not x.get("id"):
         return False
     titel = re.sub(r"^VR Agendawacht:\s*", "", x.get("titel") or "")
@@ -2879,7 +2901,8 @@ def _eigen_melding_opgelost(x, k, tok, nu, reden="opgelost"):
     nieuwe_merk = {**(x.get("_merk") or {}), MAILMERK: f"opgelost:{k}"}
     _patch(x, {"summary": nieuwe_titel,
                "description": nieuwe_oms,
-               "extendedProperties": {"private": nieuwe_merk}}, tok)
+               "extendedProperties": {"private": nieuwe_merk},
+               **({"transparency": "transparent"} if vrij else {}), **(extra or {})}, tok)
     x["titel"] = nieuwe_titel
     x["omschrijving"] = nieuwe_oms
     x["_merk"] = nieuwe_merk
@@ -3130,6 +3153,927 @@ def lara_gewist_bijwerken(eid, uur, titel, sleutel, tok, dagen):
     return True
 
 
+# Firma-agenda's van collega's (driehoeksoverleg 27-10-2026, Z1 tot Z7). Mehdi verbergt ze in zijn weergave; hij wil
+# alleen zien wat hij moet doen of waar hij bij moet zijn. De agent leest ze alleen mee (werkwijze/agenda-taken.json,
+# 'firma_meelezen'): een afspraak die Mehdi aangaat ('Mehdi: ...' vooraan), krijgt Mehdi als stille gast, zonder mail,
+# zodat ze op zijn werkagenda verschijnt. Verder schrijft de agent er niets: mag_schrijven() kent deze agenda's niet.
+MEHDI_VOORAAN = re.compile(r"^\W*(?:VR\s+)?(?:!+\s*)?Mehdi\b[^:\n]{0,60}:", re.I)
+FIRMAMERK = "agendawacht_firma"
+FIRMA_VRAGEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-vragen.json")
+FIRMA_VOORUIT_DAGEN = 365          # zo ver als de ritten: een afspraak over drie weken mag niet ontbreken (Codex, punt 1)
+FIRMA_VANGNET_DAGEN = 7
+
+
+def firma_meelezen():
+    """[(adres, naam)] van de firma-agenda's die de agent alleen meeleest. Geen kopie in de code (Z1)."""
+    try:
+        d = json.loads((Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8"))
+        return [(a["adres"], a.get("naam") or a["adres"]) for a in d.get("firma_meelezen") or [] if a.get("adres")]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+FIRMA_SLOT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma.lock")
+FIRMA_NODEN = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-noden.json")
+
+
+FIRMARIT = "agendawacht_firma_rit"     # wat de titelcode van de firma-afspraak zegt: buiten, anders of geen
+# een Belgische of Nederlandse postcode met de gemeente erna ('3000 Leuven', '1012 AB Amsterdam')
+FIRMA_POSTCODE_RE = re.compile(r"(?<![\d.,/-])[1-9]\d{3}(?:\s?[A-Z]{2})?\s+[A-Za-zÀ-ÿ]")
+
+
+def _firma_ritcode(e):
+    """De titelcode van de firma-afspraak, voor de ritten: 'buiten' (een buitencode), 'anders' (een code zonder rit,
+    zoals IN of een online code) of 'geen' (geen code: dan beslist de plaats). Overleg review 3, R4."""
+    info = lees_titel((e or {}).get("summary") or "")
+    if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
+        return "buiten"
+    return "anders" if info["soort"] else "geen"
+
+
+def _firma_open_blok(a):
+    """Mijn open Bezet blok met een uur voor een verborgen firma-afspraak, in de privé-agenda."""
+    mk = a.get("_merk") or {}
+    return bool(mk.get(FIRMAMERK) and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
+                and not a.get("_vrij") and "T" in (a.get("start") or "") and a.get("kalender") == PRIVE_AGENDA)
+
+
+def _firma_buitenblok(a, fysiek):
+    """Mijn open Bezet blok voor een verborgen firma-afspraak: voor de ritten een buitenafspraak, ook al draagt het een
+    algemene titel (Codex-hertest 24). Het volgt de titelcode van zijn firma-afspraak (een code zonder rit: geen rit) en
+    vraagt een volledig adres met een Belgische of Nederlandse postcode: 'Keizerstraat 12' kan net zo goed in Paramaribo
+    liggen (overleg review 3, R4)."""
+    mk = a.get("_merk") or {}
+    return bool(fysiek and _firma_open_blok(a) and mk.get(FIRMARIT, "geen") != "anders"
+                and FIRMA_POSTCODE_RE.search(a.get("locatie") or ""))
+
+
+def _firma_blok_zonder_adres(a):
+    """Een open firmablok dat een rit zou vragen maar geen volledig adres heeft: dan geen rit, wel een regel (R4)."""
+    mk = a.get("_merk") or {}
+    plaats = a.get("locatie") or ""
+    return (_firma_open_blok(a) and not FIRMA_POSTCODE_RE.search(plaats)
+            and (mk.get(FIRMARIT) == "buiten" or (mk.get(FIRMARIT, "geen") == "geen" and _bruikbare_locatie(plaats))))
+
+
+def _titel_info(a):
+    """lees_titel() voor de ritten en het belrooster. Een item van de firmacontrole leest als zijn eigen titel zonder
+    code, ook als Mehdi het hernoemde ('onderweg naar ...' of twee firmacodes): dan beslist het merk, niet de titel
+    (Codex-hertest 31). Voor elk ander item is dit gewoon lees_titel()."""
+    if (a.get("_merk") or {}).get(FIRMAMERK):
+        return lees_titel("")
+    return lees_titel(a.get("titel") or "")
+
+
+def _vraagt_rit(a, info, fysiek):
+    """Vraagt deze afspraak een rit? Een item van de firmacontrole beslist alleen via _firma_buitenblok, op elke plek
+    (overleg review 3, R1 en R4); de rest volgt zijn titelcode."""
+    if (a.get("_merk") or {}).get(FIRMAMERK):
+        return _firma_buitenblok(a, fysiek)
+    return bool(info["buiten"] or info["soort"] in BUITEN_SOORTEN)
+
+
+FIRMA_DAGEN = set()       # de dagen waarop deze ronde een Bezet blok zette, verzette of afrondde: daar meteen de dagroute
+FIRMA_DAGEN_WACHT = os.path.expanduser("~/appportal/mijnagents-data/agenda-firma-dagen.json")
+
+
+def _firma_dagen_na_ronde():
+    try:
+        firma_dagen_afwerken()
+    except Exception as e:  # noqa: BLE001
+        print(f"firma-dagen niet afgewerkt ({type(e).__name__})", file=sys.stderr, flush=True)
+
+
+def _firma_dagen_bewerk(fn):
+    """Het wachtbestand lezen en schrijven onder een slot: twee rondes overschrijven elkaars dagen niet (hertest 27)."""
+    import fcntl  # noqa: PLC0415
+    os.makedirs(os.path.dirname(FIRMA_DAGEN_WACHT), exist_ok=True)
+    with open(FIRMA_DAGEN_WACHT + ".lock", "w", encoding="utf-8") as slot:
+        fcntl.flock(slot, fcntl.LOCK_EX)
+        try:
+            with open(FIRMA_DAGEN_WACHT, encoding="utf-8") as f:
+                wacht = set(json.load(f))
+        except (OSError, ValueError):
+            wacht = set()
+        wacht = fn(wacht)
+        tmp = f"{FIRMA_DAGEN_WACHT}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(sorted(wacht), f)
+        os.replace(tmp, FIRMA_DAGEN_WACHT)
+        return set(wacht)
+
+
+def firma_dagen_afwerken():
+    """De dagroute voor elke dag met een gewijzigd Bezet blok, uit deze ronde en eerdere die niet lukten. Een dag blijft
+    bewaard tot zijn dagroute lukt (Codex-hertest 26 en 27); een voorbije dag valt weg. Draait na het rondeslot: in de
+    kleurronde en na de volledige ronde. Het wachtbestand alleen onder een slot; de dagroute zelf erbuiten. Geeft de
+    dagen die nog wachten."""
+    nieuw = set(FIRMA_DAGEN)
+    FIRMA_DAGEN.clear()
+    vandaag = nu_lokaal().date().isoformat()
+    wacht = _firma_dagen_bewerk(lambda w: {d for d in (w | nieuw) if d >= vandaag})
+    gelukt = set()
+    for dag in sorted(wacht):
+        ok, _ = _dagroute(dag)
+        if ok is True:
+            gelukt.add(dag)
+    over = _firma_dagen_bewerk(lambda w: {d for d in w if d not in gelukt and d >= vandaag})
+    return sorted(over)
+
+
+def _dagroute(dag):
+    """De gewone dagroute (--dag) voor een dag, in een eigen proces dat op het rondeslot wacht: ritten en belrooster.
+    Geeft (gelukt, uitleg); gelukt is None als het slot bezet bleef."""
+    import subprocess  # noqa: PLC0415
+    try:
+        r = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--dag", dag, "--slot-wacht", "300"],
+                           capture_output=True, text=True, timeout=1200)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, type(e).__name__
+    if r.returncode == 75:
+        return None, "rondeslot bezet"                                     # 75: slot bezet (agenda_signaal)
+    m = re.search(r"reistijd: .*?(\d+) mislukt", r.stdout or "")
+    if r.returncode == 0 and m and int(m.group(1)) > 0:
+        return False, "een rit mislukte"           # dan blijft de dag wachten (Codex-hertest 27)
+    if r.returncode == 0 and "[reistijd] rit ontbreekt door een storing" in (r.stdout or ""):
+        return False, "rit ontbreekt door een storing"  # de dag blijft wachten (hertest 28 en 30)
+    return r.returncode == 0, f"exitcode {r.returncode}"
+
+
+def firma_kleurronde(vandaag):
+    """De firmacontrole in de kleurronde. De noden gaan daar niet naar het bord (dat zet de volledige ronde, declaratief);
+    verandert wat er mis is, dan komt het in het werkverslag, zodat Mehdi het ook in het weekend ziet (overleg P8)."""
+    teksten = sorted(n["tekst"] for n in firma_stap(vandaag))
+    # een nieuw, verzet of afgerond Bezet blok, ook in het weekend of 's nachts: meteen de gewone dagroute voor die dag,
+    # met ritten en het belrooster (zoals het agendasignaal dat doet); wat niet lukt, wacht op de volgende ronde
+    # (Codex-hertest 24 tot 26)
+    if firma_dagen_afwerken():
+        teksten.append("Dagroute na een gewijzigd firmablok nog niet gelukt; de volgende ronde opnieuw")
+    try:
+        with open(FIRMA_NODEN, encoding="utf-8") as f:
+            vorige = json.load(f)
+    except (OSError, ValueError):
+        vorige = []
+    if teksten != vorige:
+        ag.log(f"dag {vandaag}", "bevinding", "firma-agenda's: " + ("; ".join(teksten) if teksten else "weer in orde"))
+        os.makedirs(os.path.dirname(FIRMA_NODEN), exist_ok=True)
+        with open(FIRMA_NODEN, "w", encoding="utf-8") as f:
+            json.dump(teksten, f, ensure_ascii=False)
+    return teksten
+
+
+def verborgen_schrijfagendas(zicht):
+    """De agenda's waarop de agent zelf ritten en vragen zet (KALENDERS, zonder de feestdagen) en die Mehdi in zijn
+    weergave verborgen heeft: daar zou hij een eigen rit missen. Alleen de firma-agenda's van collega's mogen verborgen
+    zijn (overleg P1, Codex-hertest 3, punt 12). Een agenda die niet in Mehdi's lijst staat, ziet hij evenmin."""
+    return sorted(n.split("(")[0].strip() for k, n in KALENDERS.items() if "#holiday" not in k and zicht.get(k) is not True)
+
+
+def _gast_status(ev):
+    """Mehdi's antwoord als gast ('accepted', 'declined', ...), of None als hij geen gast is."""
+    return next(((g.get("responseStatus") or "") for g in ev.get("attendees") or []
+                 if (g.get("email") or "").lower() == WERKAGENDA), None)
+
+
+def _gast_mehdi(ev):
+    return _gast_status(ev) is not None
+
+
+def _tijd(e, veld):
+    return (e.get(veld) or {}).get("dateTime") or (e.get(veld) or {}).get("date") or ""
+
+
+_KAL_TZ = {}          # tijdzone per firma-agenda, gelezen met haar afspraken
+
+
+def _naar_brussel(e, kal_tz=None):
+    """Een firma-afspraak met haar tijden in Brusselse tijd. Google geeft de tijd in de tijdzone van de bronagenda
+    (Suriname): 21:30 daar is 01:30 de dag erna in Brussel. Datum en uur van een vraag volgen Brussel (Codex-hertest 15).
+    Een tijd zonder offset geldt in haar eigen timeZone, anders in die van de agenda (hertest 16, 17); is geen van beide
+    bekend, dan krijgt de afspraak '_tijd_onzeker' en komt er geen Bezet blok. Een hele dag blijft haar datum."""
+    if not isinstance(e, dict):
+        return e
+    uit = dict(e)
+    for veld in ("start", "end", "originalStartTime"):
+        t = (e.get(veld) or {}).get("dateTime")
+        if t:
+            try:
+                d = datetime.fromisoformat(t.replace("Z", "+00:00"))
+                if d.tzinfo is None:
+                    tz = (e.get(veld) or {}).get("timeZone") or kal_tz
+                    if not tz:
+                        uit["_tijd_onzeker"] = True
+                        continue
+                    d = d.replace(tzinfo=ZoneInfo(tz))
+                uit[veld] = {"dateTime": d.astimezone(TIJDZONE).isoformat()}
+            except (ValueError, KeyError):
+                uit["_tijd_onzeker"] = True
+    return uit
+
+
+def _google(url, tok, data=None, methode=None, kop=None):
+    import urllib.request  # noqa: PLC0415
+    req = urllib.request.Request(url, data=json.dumps(data).encode() if data is not None else None, method=methode,
+                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json", **(kop or {})})
+    return json.load(urllib.request.urlopen(req, timeout=30))
+
+
+def _lijst_alles(kal, q, tok):
+    """Alle items van een events-lijst, over alle pagina's: Google kan een lege pagina met een volgende token geven."""
+    import urllib.parse  # noqa: PLC0415
+    uit, pagina = [], None
+    while True:
+        qq = dict(q, **({"pageToken": pagina} if pagina else {}))
+        d = _google(f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events?" + urllib.parse.urlencode(qq), tok)
+        uit += d.get("items", [])
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return uit
+
+
+def firma_afspraken(tok, nu=None, dagen=FIRMA_VOORUIT_DAGEN):
+    """De komende afspraken op de firma-agenda's, over alle pagina's, als ruwe Google-items met 'kalender' erbij, en de
+    adressen van de agenda's die niet volledig te lezen waren. Een onleesbare agenda stopt de andere niet; van haar komt
+    niets in de lijst, dus geen gast en geen vangnet op een halve lezing (Codex, punt 4; hertest 3, punt 17)."""
+    nu = nu or nu_lokaal()
+    uit, onleesbaar = [], []
+    for adres, naam in firma_meelezen():
+        q = {"timeMin": nu.isoformat(), "timeMax": (nu + timedelta(days=dagen)).isoformat(), "singleEvents": "true",
+             "maxResults": "2500"}
+        try:
+            items = _lijst_alles(adres, q, tok)
+        except Exception:  # noqa: BLE001
+            onleesbaar.append(adres)
+            continue
+        if adres not in _KAL_TZ:
+            try:
+                import urllib.parse  # noqa: PLC0415
+                _KAL_TZ[adres] = _google(f"{agenda.API}/calendars/{urllib.parse.quote(adres, safe='')}?fields=timeZone",
+                                         tok).get("timeZone")
+            except Exception:  # noqa: BLE001
+                _KAL_TZ[adres] = None
+        uit += [{**_naar_brussel(e, _KAL_TZ.get(adres)), "kalender": adres, "_agendanaam": naam}
+                for e in items if e.get("status") != "cancelled"]
+    return uit, onleesbaar
+
+
+GASTVELDEN = ("email", "displayName", "optional", "responseStatus", "comment", "additionalGuests", "resource")
+
+
+class _BlijftVeranderen(RuntimeError):
+    """Drie keer na elkaar een 412: de laatst gelezen afspraak gaat mee naar het vangnet (Codex-hertest 3, punt 16)."""
+
+    def __init__(self, vers):
+        super().__init__("afspraak bleef veranderen (412)")
+        self.vers = vers
+
+
+def _gast_erbij(kal, eid, tok, pogingen=3):
+    """Zet alleen Mehdi erbij als gast, zonder mail (sendUpdates=none). Ik lees de afspraak vlak ervoor opnieuw, behoud
+    alle schrijfbare velden van de bestaande gasten (Google vervangt de hele lijst) en schrijf met If-Match op de etag,
+    zodat een wijziging van een collega intussen nooit overschreven wordt (Codex, punt 2). De body draagt alleen
+    'attendees'. Bij een 412 lees ik opnieuw en probeer ik nog eens. Geeft het teruggelezen item, of None als de
+    afspraak intussen geschrapt is of niet meer voor Mehdi."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.parse  # noqa: PLC0415
+    url = f"{agenda.API}/calendars/{urllib.parse.quote(kal, safe='')}/events/{urllib.parse.quote(eid, safe='')}"
+    for _ in range(pogingen):
+        vers = _google(url, tok)
+        if _gast_mehdi(vers):
+            return vers
+        if vers.get("status") == "cancelled" or not MEHDI_VOORAAN.match(vers.get("summary") or ""):
+            return None                 # intussen geschrapt of niet meer voor Mehdi: niets doen (Codex-hertest, punt 8)
+        gasten = [{k: v for k, v in g.items() if k in GASTVELDEN} for g in vers.get("attendees") or []]
+        body = {"attendees": gasten + [{"email": WERKAGENDA, "responseStatus": "needsAction"}]}
+        try:
+            return _google(url + "?sendUpdates=none", tok, body, "PATCH", {"If-Match": vers.get("etag") or "*"})
+        except urllib.error.HTTPError as e:
+            if e.code != 412:
+                raise                   # een collega veranderde de afspraak intussen: opnieuw lezen en beoordelen
+    raise _BlijftVeranderen(vers)
+
+
+def _op_werkagenda(ev, tok):
+    """Staat de afspraak zichtbaar op Mehdi's werkagenda? Ik zoek ze in de gewone lijst van zijn werkagenda op haar
+    iCalUID: een verborgen uitnodiging staat daar niet in (showHiddenInvitations staat standaard uit), een geslaagde
+    get op het id bewijst dat niet (Codex, punt 3)."""
+    uid = ev.get("iCalUID")
+    start = _tijd(ev, "start")
+    if not uid or not start:
+        return False
+    # alle keren van een reeks delen de iCalUID: ik zoek deze ene keer, op haar eigen begin (Codex-hertest, punt 7)
+    van = datetime.fromisoformat(start if "T" in start else start + "T00:00:00+00:00")
+    q = {"iCalUID": uid, "singleEvents": "true", "showDeleted": "false", "maxResults": "250",
+         "timeMin": (van - timedelta(minutes=1)).isoformat(), "timeMax": (van + timedelta(minutes=1)).isoformat()}
+    orig = _tijd(ev, "originalStartTime")
+    for x in _lijst_alles(WERKAGENDA, q, tok):
+        xs, xo = _tijd(x, "start"), _tijd(x, "originalStartTime")
+        if x.get("status") == "cancelled" or not xs:
+            continue
+        if datetime.fromisoformat(xs if "T" in xs else xs + "T00:00:00+00:00") != van:
+            continue
+        # twee verplaatste keren van dezelfde reeks kunnen op hetzelfde uur vallen: de oorspronkelijke tijd beslist (punt 7)
+        if orig and (not xo or datetime.fromisoformat(xo if "T" in xo else xo + "T00:00:00+00:00")
+                     != datetime.fromisoformat(orig if "T" in orig else orig + "T00:00:00+00:00")):
+            continue
+        if "date" in (x.get("start") or {}) and x.get("transparency") == "transparent" and any(
+                wat == "alles" and patroon.search(t or "") for patroon, wat in DAG_MARKERINGEN
+                for t in (x.get("summary"), ev.get("summary"))):
+            # een hele dag die alles afsluit ('geen afspraken', 'Buitenland') maar op Beschikbaar staat, zoals Google een
+            # hele dag zet: Calendly telt ze niet, dus telt ze niet als doorgekomen; dan het gewone Bezet blok over die
+            # dag(en). Op de kopie zelf schrijf ik niets (overleg review 3, R3; FR-84)
+            ev["_op_beschikbaar"] = True
+            continue
+        return True
+    return False
+
+
+def firma_gasten(evs, tok, onleesbaar=()):
+    """Z2: elke komende keer op een firma-agenda met 'Mehdi: ...' vooraan krijgt Mehdi als stille gast, en ik lees na
+    dat ze zichtbaar op zijn werkagenda staat. Alleen keren, nooit de moederreeks: zo kan een keer van een collega,
+    ook buiten het leesvenster, nooit mee (Codex-hertest 3, punt 11); een keer die later in het venster komt, krijgt de
+    gast in een latere ronde. Een afspraak waar Mehdi al gast is, welke titel ook en niet afgewezen, krijgt dezelfde
+    zichtbaarheidscontrole (punt 14). Na een fout lees ik de afspraak opnieuw en beslist alleen wat er nu staat: het
+    vangnet krijgt nooit een oude tijd (Codex-hertest 5, punt 1). Geeft (regels, niet_zichtbaar, onzeker, opnieuw):
+    onzeker zijn de sleutels die niet te beoordelen waren (het vangnet laat die staan), opnieuw is waar als een
+    afspraak tijdens de controle verdween (een collega verzette de reeks): dan leest firma_stap de agenda opnieuw."""
+    regels, niet_zichtbaar, opnieuw = [], [], False
+    evs, onzeker, twijfel = _firma_kopieen_kiezen(evs, onleesbaar)
+    onzeker |= set(twijfel)             # een gastkopie zonder organisator: geen gast en geen blok (het vangnet vraagt)
+    gezien = set()
+    for ev in evs:
+        voor_mehdi = bool(MEHDI_VOORAAN.match(ev.get("summary") or ""))
+        status = _gast_status(ev)
+        if status == "declined" or (not voor_mehdi and status is None):
+            continue
+        if _firma_uid(ev) in gezien:
+            continue                    # dezelfde afspraak op een tweede firma-agenda (een gastkopie): een keer (review)
+        gezien.add(_firma_uid(ev))
+        vers_gezet = False
+        try:
+            if status is None:
+                terug = _gast_erbij(ev["kalender"], ev["id"], tok)
+                if terug is None:
+                    regels.append(f"afspraak op {ev['_agendanaam']} intussen geschrapt of niet meer voor Mehdi")
+                    continue
+                if not _gast_mehdi(terug):
+                    raise RuntimeError("gast niet teruggelezen")
+                if _gast_status(terug) == "declined":
+                    continue            # intussen door Mehdi zelf afgewezen: niets te tonen
+                # de teruggelezen afspraak beslist: een collega kan intussen het uur verzet hebben (Codex-hertest 4, punt 1)
+                ev = {**ev, **{k: v for k, v in _naar_brussel(terug, _KAL_TZ.get(ev["kalender"])).items()
+                               if k in ("summary", "start", "end", "description", "originalStartTime", "iCalUID",
+                                        "_tijd_onzeker")}}
+                regels.append(f"{_tijd(ev, 'start')[:16]} gast gezet op {ev['_agendanaam']}")
+                vers_gezet = True
+            if not _op_werkagenda(ev, tok):
+                if vers_gezet:
+                    # net gezet: Google kan de kopie op de werkagenda even later tonen. Pas de volgende ronde, met Mehdi
+                    # al als gast, beslist of ze verborgen blijft; zo komt er geen blok voor een paar seconden (review)
+                    onzeker.add(_firma_sleutel(ev))
+                else:
+                    uitslag = _firma_beoordelen(ev, tok)    # vlak voor het blok: alleen wat er nu staat (hertest 6, 2)
+                    if uitslag[0] == "blok":
+                        niet_zichtbaar.append(uitslag[1])
+                    elif uitslag[0] == "onzeker":
+                        onzeker.add(_firma_sleutel(ev))
+                    elif uitslag[0] == "weg":
+                        opnieuw = True
+        except Exception as e:  # noqa: BLE001
+            regels.append(f"gast niet gezet op {ev.get('_agendanaam')} ("
+                          + ("de afspraak bleef veranderen" if isinstance(e, _BlijftVeranderen) else type(e).__name__) + ")")
+            uitslag = _firma_beoordelen(ev, tok)
+            if uitslag[0] == "blok":
+                niet_zichtbaar.append(uitslag[1])
+            elif uitslag[0] == "onzeker":
+                onzeker.add(_firma_sleutel(ev))
+            elif uitslag[0] == "weg":
+                opnieuw = True          # verdwenen of geschrapt: de agenda opnieuw lezen, de nieuwe keren tellen
+    return regels, niet_zichtbaar, onzeker, opnieuw
+
+
+def _utc(t):
+    """Een tijd als UTC-tekst, zodat twee agenda's in een andere tijdzone (Suriname, Brussel) dezelfde keer geven."""
+    if "T" not in (t or ""):
+        return t or ""
+    try:
+        return datetime.fromisoformat(t.replace("Z", "+00:00")).astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%MZ")
+    except ValueError:
+        return t
+
+
+def _firma_sleutel(e):
+    """De identiteit van een firma-afspraak, voor ontdubbeling, register en blok: haar iCalUID en, bij een keer van een
+    reeks, de oorspronkelijke tijd in UTC. Niet de agenda en niet het Google-id: dat is alleen binnen een agenda uniek,
+    en een kopie op een tweede firma-agenda kan een ander id hebben (Codex-hertest 9 en 10). Een verschoven afspraak
+    houdt zo haar sleutel, en elke leesbare kopie werkt hetzelfde blok bij."""
+    return f"firma|{e.get('iCalUID') or e.get('id')}|{_utc(_tijd(e, 'originalStartTime'))}"
+
+
+def _firma_kopieen_kiezen(evs, onleesbaar=()):
+    """Een afspraak kan op twee firma-agenda's staan (de ene nodigt de andere uit), of alleen als gastkopie (de
+    organisator is iemand anders). Alleen de kopie op de agenda van de organisator bepaalt het uur: een gast kan de tijd
+    op zijn eigen kopie wijzigen (Codex-hertest 11 tot 13). Geeft (gekozen, onzeker, twijfel):
+    - gekozen: de kopie van de organisator, die gewoon verwerkt wordt;
+    - onzeker: de organisator is een firma-agenda die nu niet te lezen is; er verandert niets (die nood bestaat al);
+    - twijfel: geen kopie van de organisator te lezen; geen gast en geen Bezet blok, wel een zichtbare vraag dat het
+      uur niet zeker is ({sleutel: kopieën})."""
+    stuk = {a.lower() for a in onleesbaar or ()}
+    groepen = {}
+    for e in evs or []:
+        groepen.setdefault(_firma_sleutel(e), []).append(e)
+    gekozen, onzeker, twijfel = [], set(), {}
+    eigen = {a.lower() for a in KALENDERS} | _eigen_accounts()
+    for k, kopieen in groepen.items():
+        if {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & eigen:
+            continue                    # Mehdi's eigen afspraak met een firma-agenda als gast: staat al bij hem (review 2)
+        org = [e for e in kopieen if ((e.get("organizer") or {}).get("email") or "").lower() == (e.get("kalender") or "").lower()
+               and not e.get("_tijd_onzeker")]
+        if org:
+            gekozen.append(org[0])      # een zekere kopie van de organisator beslist altijd (Codex-hertest 18)
+        elif {((e.get("organizer") or {}).get("email") or "").lower() for e in kopieen} & stuk:
+            onzeker.add(k)              # organisator onleesbaar: niets veranderen, ook een bestaand blok niet (hertest 23)
+        elif any(e.get("_tijd_onzeker") for e in kopieen):
+            twijfel[k] = kopieen        # tijdzone onbekend: nooit een blok op een gok (Codex-hertest 17)
+        else:
+            twijfel[k] = kopieen
+    return gekozen, onzeker, twijfel
+
+
+def _firma_uid(e):
+    """Dezelfde afspraak op twee firma-agenda's (de ene nodigt de andere uit): dezelfde sleutel."""
+    return _firma_sleutel(e)
+
+
+_FIRMA_ADRESSEN = None
+_FIRMA_UIDS = None          # iCalUID's van de firma-agenda's, eenmaal per proces gelezen; False als dat niet lukte
+
+
+def _firma_uids():
+    """De iCalUID's van alle afspraken op de firma-agenda's (een jaar vooruit, een dag terug), eenmaal per proces.
+    False als een firma-agenda niet te lezen was: dan weet ik niet welke kopie van een collega is."""
+    global _FIRMA_UIDS
+    if _FIRMA_UIDS is None:
+        try:
+            tok = agenda._toegang()
+            # een dag terug tot twee dagen voorbij het rittenvenster (verre_afspraken): Google laat weg wat op of na
+            # timeMax begint, en het grensuur mag niet ontbreken (Codex-hertest 8)
+            evs, onleesbaar = firma_afspraken(tok, nu_lokaal() - timedelta(days=1), FIRMA_VOORUIT_DAGEN + 3)
+            _FIRMA_UIDS = False if onleesbaar else {e.get("iCalUID") for e in evs if e.get("iCalUID")}
+        except Exception:  # noqa: BLE001
+            _FIRMA_UIDS = False
+    return _FIRMA_UIDS
+
+
+def _firma_kopie(a):
+    """Is dit item op Mehdi's werkagenda de gastkopie van een afspraak op een firma-agenda? Daarop schrijft de agent
+    niets: geen telefoon, kleur, herinnering, titel of vraag. Het is de afspraak van een collega (review en
+    Codex-hertest 6, 27-10-2026). Herkend aan de organisator (de firma-agenda) of aan dezelfde afspraak (iCalUID) op een
+    firma-agenda, ook als een collega de organisator is (Codex-hertest 7). Een eigen afspraak van Mehdi, met een
+    firma-agenda als gast, blijft van hem. Is een firma-agenda niet te lezen, dan telt elke afspraak die Mehdi niet zelf
+    organiseerde als kopie: liever een ronde geen kleur dan een schrijfactie op andermans afspraak. Een rit ernaartoe
+    is wel van Mehdi en staat apart."""
+    global _FIRMA_ADRESSEN
+    if a.get("_organisator_zelf") is True or "_organisator" not in a:
+        return False                    # van Mehdi zelf, of een eigen hulpblok zonder Google-organisator
+    if _FIRMA_ADRESSEN is None:
+        _FIRMA_ADRESSEN = {adres.strip().lower() for adres, _ in firma_meelezen()}
+    if (a.get("_organisator") or "").strip().lower() in _FIRMA_ADRESSEN:
+        return True
+    uids = _firma_uids()
+    if uids is False:
+        return True
+    return bool(a.get("_ical")) and a["_ical"] in uids
+
+
+def _firma_beoordelen(ev, tok):
+    """Lees de afspraak opnieuw en beslis op wat er nu staat, vlak voor een blok (Codex-hertest 5 en 6):
+    ('blok', actueel), ('weg', None), ('onzeker', None) of ('niets', None)."""
+    nu_ev = _firma_actueel(ev, tok)
+    if nu_ev is None:
+        return "onzeker", None
+    if nu_ev is False:
+        return "weg", None
+    st = _gast_status(nu_ev)
+    if st is None:                      # geen gast: dan staat ze zeker niet op zijn werkagenda
+        return ("blok", nu_ev) if MEHDI_VOORAAN.match(nu_ev.get("summary") or "") else ("niets", None)
+    if st == "declined":
+        return "niets", None
+    try:
+        return ("niets", None) if _op_werkagenda(nu_ev, tok) else ("blok", nu_ev)
+    except Exception:  # noqa: BLE001
+        return "onzeker", None          # werkagenda niet te lezen: niets veranderen (review)
+
+
+def _firma_actueel(ev, tok):
+    """De afspraak zoals ze nu op de firma-agenda staat (met 'kalender' en agendanaam), False als ze weg of geschrapt
+    is, None als ze niet te lezen is."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.parse  # noqa: PLC0415
+    try:
+        x = _google(f"{agenda.API}/calendars/{urllib.parse.quote(ev['kalender'], safe='')}/events/"
+                    f"{urllib.parse.quote(ev['id'], safe='')}", tok)
+    except urllib.error.HTTPError as e:
+        return False if e.code in (404, 410) else None
+    except Exception:  # noqa: BLE001
+        return None
+    if x.get("status") == "cancelled":
+        return False
+    return {**_naar_brussel(x, _KAL_TZ.get(ev["kalender"])), "kalender": ev["kalender"], "_agendanaam": ev.get("_agendanaam")}
+
+
+def _prive_vraag_id(k, tok):
+    """Het id van een open vraag met dit firmamerk in de privé-agenda, of ''. Zo zet een ronde na een time-out geen
+    tweede (punt 5); een opgeloste vraag telt niet, die houdt een nieuwe niet tegen (Codex-hertest 3, punt 13)."""
+    q = {"privateExtendedProperty": f"{FIRMAMERK}={k}", "showDeleted": "false", "maxResults": "50"}
+    for x in _lijst_alles(PRIVE_AGENDA, q, tok):        # alle pagina's (Codex-hertest, punt 9)
+        merk = ((x.get("extendedProperties") or {}).get("private") or {})
+        if x.get("status") != "cancelled" and not str(merk.get(MAILMERK, "")).startswith("opgelost:"):
+            return x.get("id") or ""
+    return ""
+
+
+def _firma_vragen_lezen():
+    try:
+        with open(FIRMA_VRAGEN, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _tz_bekend(t):
+    """Heeft deze tijd een offset (of is het een hele dag)?"""
+    if "T" not in (t or ""):
+        return True
+    try:
+        return datetime.fromisoformat(t.replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
+def _firma_vraag_body(k, e, start, sterk):
+    """De vraag in de privé-agenda. Een afspraak voor Mehdi die niet doorkwam (sterk) wordt een Bezet blok op haar eigen
+    tijd, zodat Calendly er niet over boekt (Codex-hertest 2, punt 10): op haar uur, of over haar hele dag(en) als ze
+    geen uur heeft (hertest 3, punt 10). Een afspraak die Mehdi alleen noemt: een vraag voor de hele dag op Beschikbaar."""
+    dag = start[:10]
+    eind = _tijd(e, "end")
+    volgende = (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()
+    merk = {"private": {MAILMERK: hashlib.sha256(f"firma:{k}".encode()).hexdigest()[:16], FIRMAMERK: k,
+                        FIRMARIT: _firma_ritcode(e)}}
+    if sterk is None:
+        # twijfel: alleen gastkopieën, het uur van de organisator is niet te lezen (Codex-hertest 13)
+        waar = "; ".join(f"op {n}: {_ddmm((t or '')[:10])}" + (f" om {t[11:16]}" if "T" in (t or "") else " (hele dag)")
+                         for n, t, _ in e.get("_kopieen") or [])
+        org = (e.get("organizer") or {}).get("email") or "de organisator"
+        tekst = (f"Agendawacht vraagt: '{(e.get('summary') or '')[:80]}' staat {waar}, maar de agenda van de organisator "
+                 f"({org}) kan ik niet lezen. Het uur is dus niet zeker; ik zet er geen blok voor. Kijk het na bij de "
+                 "organisator.")
+        laatste = (eind or start)[:10]
+        tot = laatste if "T" not in eind and laatste > dag else \
+            (datetime.fromisoformat(laatste) + timedelta(days=1)).date().isoformat()
+        if e.get("_tijd_onzeker") or any(not _tz_bekend(t) for _, t, _ in e.get("_kopieen") or []):
+            # tijdzone onbekend: de echte Brusselse dag kan een dag vroeger of later zijn; de vraag dekt ze (hertest 20)
+            dag = (datetime.fromisoformat(dag) - timedelta(days=1)).date().isoformat()
+            tot = max(tot, (datetime.fromisoformat(laatste) + timedelta(days=2)).date().isoformat())
+        return {"summary": f"VR Agendawacht: firma-afspraak voor jou, uur niet zeker ({_ddmm(dag)})"[:200],
+                "start": {"date": dag}, "end": {"date": max(tot, volgende)}, "transparency": "transparent",
+                "reminders": {"useDefault": False, "overrides": []}, "description": tekst, "extendedProperties": merk}
+    tekst = (f"Agendawacht vraagt: op de agenda {e.get('_agendanaam')} staat '{(e.get('summary') or '')[:80]}' op "
+             f"{_ddmm(dag)}{(' om ' + start[11:16]) if 'T' in start else ''}, en die "
+             + ("is voor jou maar komt niet op je werkagenda (instelling van Google). Dit blok houdt de tijd bezet tot het "
+                "opgelost is." if sterk else "lijkt jou aan te gaan, maar ze staat niet op je werkagenda. Moet jij erbij zijn? "
+                "Zeg het, dan komt ze erop; anders laat je deze vraag weg."))
+    if sterk and "T" in start and "T" in eind:
+        tijd = {"start": {"dateTime": start}, "end": {"dateTime": eind}, "location": e.get("location") or "",
+                # een eigen herinnering: ook in het weekend, voor de volledige ronde een oproep plant (Codex-hertest 24)
+                "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]}}
+    elif sterk:
+        tijd = {"start": {"date": dag}, "end": {"date": eind[:10] if eind[:10] > dag else volgende}}
+    else:
+        tijd = {"start": {"date": dag}, "end": {"date": volgende}}
+    titel = ("VR Agendawacht: firma-afspraak voor jou, niet op je werkagenda" if sterk
+             else "VR Agendawacht: firma-afspraak die jou lijkt aan te gaan")
+    if sterk and e.get("_op_beschikbaar"):
+        # wel op de werkagenda, maar een hele dag op Beschikbaar (R3)
+        titel = "VR Agendawacht: firma-dag voor jou staat op Beschikbaar"
+        tekst = (f"Agendawacht: op de agenda {e.get('_agendanaam')} sluit '{(e.get('summary') or '')[:80]}' {_ddmm(dag)} af. "
+                 "Op je werkagenda staat ze op Beschikbaar (zo zet Google een hele dag), en dan telt Calendly ze niet. Dit "
+                 "blok houdt de dag bezet. Zet je de dag op je werkagenda zelf op Bezet, dan rond ik dit blok af.")
+    # met het uur en het eigen kenmerk erbij: elk blok draagt zo zijn eigen titel, ook twee op hetzelfde uur, en een rit
+    # (die zijn afspraak aan de titel herkent) kan niet naar een ander blok overlopen (Codex-hertest 29 en 30)
+    uur = (f" {start[11:16]}, #{merk['private'][MAILMERK][:6]}" if "dateTime" in tijd.get("start", {}) else "")
+    return {"summary": f"{titel} ({_ddmm(dag)}{uur})"[:200], "reminders": {"useDefault": False, "overrides": []}, **tijd,
+            "transparency": "opaque" if sterk else "transparent", "description": tekst, "extendedProperties": merk}
+
+
+def _einde_voorbij(t, nu):
+    """Is dit einde voorbij? Een datum (hele dag) telt exclusief, zoals bij Google; leeg telt niet als voorbij. Een
+    eigen naam: _voorbij() verderop gaat over een begin en telt leeg als voorbij."""
+    if not t:
+        return False
+    if "T" not in t:
+        return t[:10] <= nu.date().isoformat()
+    try:
+        return datetime.fromisoformat(t) <= nu
+    except (TypeError, ValueError):
+        return False
+
+
+def _tijd_patch(t):
+    """Een begin of einde voor een PATCH: Google voegt velden samen, dus het andere soort tijd wordt expliciet leeg."""
+    return {"date": t["date"], "dateTime": None} if "date" in t else {"dateTime": t["dateTime"], "date": None}
+
+
+def _firma_blok_open(x, k):
+    """Is dit privé-item mijn open vraag voor deze firma-afspraak? Herkend aan merk en maker, niet aan de titel: Mehdi
+    mag het blok hernoemen, het blijft het blok van die afspraak (review 2)."""
+    mk = (x or {}).get("_merk") or {}
+    return (x is not None and mk.get(FIRMAMERK) == k and not str(mk.get(MAILMERK, "")).startswith("opgelost:")
+            and (x.get("maker") or WERKAGENDA).strip().lower() in _eigen_accounts())
+
+
+def _firma_blok_bijzetten(x, k, e, start, sterk, tok):
+    """Zet mijn eigen blok op de huidige tijd, soort en plaats van zijn afspraak (zelfde item, zelfde merk). Hernoemde
+    Mehdi het, dan blijven zijn titel en tekst staan en verandert alleen de tijd, de status en de plaats."""
+    body = _firma_vraag_body(k, e, start, sterk)
+    nieuw = {"transparency": body["transparency"], "start": _tijd_patch(body["start"]), "end": _tijd_patch(body["end"]),
+             "location": body.get("location", ""), "reminders": body["reminders"],     # ook de herinnering (hertest 25)
+             # en de titelcode van de afspraak, die beslist over de rit; het merk blijft (overleg review 3, R4)
+             "extendedProperties": {"private": {**(x.get("_merk") or {}), FIRMARIT: _firma_ritcode(e)}}}
+    if (x.get("titel") or "").startswith("VR Agendawacht:"):
+        nieuw.update(summary=body["summary"], description=body["description"])
+    _patch(x, nieuw, tok)
+
+
+def _firma_tweede_afwijking(k, r, e, start, tok):
+    """Het Bezet blok verdween of verschoof opnieuw na mijn herstel: ik zet het niet nog eens (Mehdi beslist), maar ik
+    leg het hem een keer zichtbaar voor, als vraag op Beschikbaar in zijn privé-agenda (Codex-hertest 23)."""
+    if r.get("tweede_gemeld"):
+        return ""
+    dag = start[:10]
+    volgende = (datetime.fromisoformat(dag) + timedelta(days=1)).date().isoformat()
+    body = {"summary": f"VR Agendawacht: Bezet blok voor een firma-afspraak weg ({_ddmm(dag)})"[:200],
+            "start": {"date": dag}, "end": {"date": volgende}, "transparency": "transparent",
+            "reminders": {"useDefault": False, "overrides": []},
+            "description": (f"Agendawacht vraagt: '{(e.get('summary') or '')[:80]}' staat nog op {e.get('_agendanaam')} op "
+                            f"{_ddmm(dag)}{(' om ' + start[11:16]) if 'T' in start else ''}. Het Bezet blok ervoor is weer weg of "
+                            "verzet; ik zet het niet opnieuw. Calendly kan dat uur nu boeken. Klopt dat? Anders zet je het blok "
+                            "terug of laat je het me weten."),
+            "extendedProperties": {"private": {MAILMERK: hashlib.sha256(f"firma-weg:{k}".encode()).hexdigest()[:16],
+                                               FIRMAMERK: f"{k}|weg"}}}
+    _insert(PRIVE_AGENDA, body, tok)
+    r["tweede_gemeld"] = True
+    return f"{dag} Bezet blok voor een firma-afspraak opnieuw weg of verzet: Mehdi een keer gevraagd"
+
+
+def _firma_blok_nakijken(k, r, g, tok):
+    """De afspraak veranderde niet, maar staat mijn Bezet blok er nog zoals het hoort? Verdwenen, verschoven of op
+    Beschikbaar gezet: een keer herstellen, zodat Calendly niet over de verborgen afspraak boekt (Codex-hertest 22). Ik
+    blijf het nakijken: gebeurt het opnieuw, dan zet ik het niet nog eens maar vraag ik het Mehdi een keer zichtbaar
+    (hertest 23). Werkt r bij en geeft een regel, of ''."""
+    e, sterk, start, einde, _ = g
+    import urllib.parse  # noqa: PLC0415
+    x = _prive_item_lezen(r["id"], tok) if r.get("id") else None    # None: echt weg; een leesfout gooit (dan niets doen)
+    if x is None:
+        if r.get("hersteld"):
+            return _firma_tweede_afwijking(k, r, e, start, tok)
+        n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
+        r.update(id=n.get("id", ""), hersteld=True)
+        FIRMA_DAGEN.add(start[:10])
+        return f"{start[:10]} Bezet blok voor een firma-afspraak was weg: een keer opnieuw gezet"
+    mk = x.get("_merk") or {}
+    if mk.get(FIRMAMERK) != k or str(mk.get(MAILMERK, "")).startswith("opgelost:") or not _firma_blok_open(x, k):
+        return ""                       # door Mehdi afgerond of niet meer van mij: niets doen
+    raw = _google(f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events/"
+                  f"{urllib.parse.quote(r['id'], safe='')}?fields=transparency,location", tok)
+    # ook de plaats: een blok met een verkeerd adres stuurt de rit naar die plaats (Codex-hertest 28)
+    plaats = (_firma_vraag_body(k, e, start, sterk).get("location") or "").strip()
+    goed = (_utc(x.get("start")) == _utc(start) and _utc(x.get("einde")) == _utc(einde)
+            and raw.get("transparency", "opaque") != "transparent" and (raw.get("location") or "").strip() == plaats
+            and mk.get(FIRMARIT, "geen") == _firma_ritcode(e))
+    if goed:
+        return ""
+    if r.get("hersteld"):
+        return _firma_tweede_afwijking(k, r, e, start, tok)
+    _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+    FIRMA_DAGEN.add(start[:10])
+    r["hersteld"] = True
+    return f"{start[:10]} Bezet blok voor een firma-afspraak was verschoven, Beschikbaar of op een andere plaats: een keer hersteld"
+
+
+def firma_vangnet(evs, niet_zichtbaar, tok, nu=None, onleesbaar=(), onzeker=()):
+    """Z3: wat op een firma-agenda Mehdi aangaat maar niet op zijn werkagenda staat, wordt eenmaal een vraag in de
+    privé-agenda: een afspraak voor Mehdi die niet doorkwam (een Bezet blok, tot FIRMA_VOORUIT_DAGEN vooruit), of een
+    afspraak die Mehdi in titel of omschrijving noemt zonder hem als gast (de komende FIRMA_VANGNET_DAGEN). Het blok
+    volgt zijn afspraak: verschuift die (begin of einde), dan schuift het blok mee; verdwijnt ze of komt ze nu wel door,
+    dan 'Opgelost' en Beschikbaar (Codex-hertest 3, punt 13). Van een onleesbare agenda blijft alles staan (punt 17)."""
+    nu = nu or nu_lokaal()
+    vandaag = nu.date().isoformat()
+    zwak_grens = (nu + timedelta(days=FIRMA_VANGNET_DAGEN)).isoformat()
+    reg = _firma_vragen_lezen()
+    kand, gezien = {}, set()
+    for e in niet_zichtbaar:
+        if _firma_uid(e) not in gezien:   # dezelfde afspraak op twee firma-agenda's: een blok (review 27-10-2026)
+            gezien.add(_firma_uid(e))
+            if e.get("_tijd_onzeker"):
+                # bij het herlezen bleek de tijd onzeker (geen offset, geen tijdzone): de vraag, nooit een blok (hertest 19)
+                lijst = [(e.get("_agendanaam"), _tijd(e, "start"), _tijd(e, "end"))]
+                kand[_firma_sleutel(e)] = (dict(e, _kopieen=lijst, _alleen_noemt=False,
+                                                _vinger=hashlib.sha256(json.dumps(lijst).encode()).hexdigest()[:12]), None)
+            else:
+                kand[_firma_sleutel(e)] = (e, True)
+    gekozen, onz2, twijfel = _firma_kopieen_kiezen(evs, onleesbaar)
+    onzeker = (set(onzeker) | onz2) - set(twijfel)
+    for k, kopieen in twijfel.items():
+        # geen kopie van de organisator: een zichtbare vraag, nooit een blok op een uur dat niet zeker is (hertest 13).
+        # Afgewezen: niets. Is Mehdi gast en staat zijn eigen uitnodiging (met het uur van de organisator) zichtbaar op
+        # zijn werkagenda, dan is er niets te vragen (review 2); een leesfout: onzeker
+        if any(_gast_status(e) == "declined" for e in kopieen):
+            continue
+        gast = [e for e in kopieen if _gast_status(e) is not None and not e.get("_tijd_onzeker")]
+        if gast:                        # met een onzekere tijd kan ik niet zoeken: dan meteen de vraag (hertest 18)
+            try:
+                if _op_werkagenda(gast[0], tok):
+                    continue
+            except Exception:  # noqa: BLE001
+                onzeker.add(k)
+                continue
+        voor = any(MEHDI_VOORAAN.match(e.get("summary") or "") or _gast_status(e) not in (None, "declined") for e in kopieen)
+        noemt = any(re.search(r"\bMehdi\b", f"{e.get('summary') or ''} {e.get('description') or ''}", re.I) for e in kopieen)
+        if voor or noemt:
+            # de vraag dekt elke mogelijke datum, van de vroegste tot de laatste kopie, en noemt per kopie datum en uur;
+            # verandert een kopie, dan verandert haar vingerafdruk en wordt de vraag bijgewerkt (Codex-hertest 14)
+            kop = sorted(kopieen, key=lambda c: _utc(_tijd(c, "start")))
+            laatste = max(kopieen, key=lambda c: _utc(_tijd(c, "end")) or _tijd(c, "end"))
+            lijst = [(c.get("_agendanaam"), _tijd(c, "start"), _tijd(c, "end")) for c in kop]
+            e = dict(kop[0], start=kop[0].get("start"), end=laatste.get("end"), _kopieen=lijst, _alleen_noemt=not voor,
+                     _vinger=hashlib.sha256(json.dumps(lijst).encode()).hexdigest()[:12])
+            kand[k] = (e, None)
+    for e in gekozen:
+        tekst = f"{e.get('summary') or ''} {e.get('description') or ''}"
+        if re.search(r"\bMehdi\b", tekst, re.I) and not MEHDI_VOORAAN.match(e.get("summary") or "") and not _gast_mehdi(e) \
+                and _firma_uid(e) not in gezien:
+            gezien.add(_firma_uid(e))
+            kand[_firma_sleutel(e)] = (e, False)
+    gewenst = {}
+    for k, (e, sterk) in kand.items():
+        start = _tijd(e, "start")
+        # een afspraak die al begon maar nog loopt (meerdaags), telt nog mee (Codex-hertest 4, punt 2)
+        zwak = sterk is False or (sterk is None and e.get("_alleen_noemt"))
+        if not start or _einde_voorbij(_tijd(e, "end"), nu) or (zwak and start > zwak_grens):
+            continue
+        # een Bezet blok volgt ook de plaats van zijn afspraak: een nieuw adres werkt het blok bij (Codex-hertest 21)
+        # en de titelcode: een collega die IN in PB verandert, verandert of er een rit komt (overleg review 3, R4)
+        vinger = e.get("_vinger") or (hashlib.sha256(f"{e.get('location') or ''}|{_firma_ritcode(e)}".encode()).hexdigest()[:12]
+                                      if sterk and (e.get("location") or "") else "")
+        gewenst[k] = (e, sterk, start, _tijd(e, "end"), vinger)
+    regels, gewijzigd = [], False
+    gelezen = {_firma_sleutel(e) for e in evs or []}
+    for k, r in list(reg.items()):
+        g = gewenst.get(k)
+        # een onleesbare agenda houdt alleen tegen wat geen leesbare kopie heeft: een leesbare kopie beslist (hertest 10)
+        if k in onzeker or (not g and r.get("kalender") in onleesbaar and k not in gelezen):
+            continue                    # een halve lezing rondt niets af en verschuift niets (Codex-hertest 3, punt 17)
+        # schuift de afspraak naar later, dan volgt het blok meteen, ook als het oude uur al voorbij is (hertest 5, 2)
+        if not g and (_einde_voorbij(r.get("einde"), nu) or (not r.get("einde") and r.get("dag", "") < vandaag)):
+            reg.pop(k)                  # de afspraak is helemaal voorbij: alleen uit het register (Codex-hertest 4, punt 2)
+            gewijzigd = True
+            continue
+        if g and (g[1], g[2], g[3], g[4]) == (r.get("sterk"), r.get("start"), r.get("einde"), r.get("vinger", "")):
+            if g[1] is True:
+                try:
+                    regel = _firma_blok_nakijken(k, r, g, tok)
+                    if regel:
+                        regels.append(regel)
+                        gewijzigd = True
+                except Exception as ex:  # noqa: BLE001
+                    regels.append(f"{r.get('dag')} Bezet blok niet nagekeken ({type(ex).__name__})")
+            continue
+        try:
+            x = _prive_item_lezen(r["id"], tok) if r.get("id") else None
+            mk = (x or {}).get("_merk") or {}
+            open_ = _firma_blok_open(x, k)
+            if g and open_:
+                e, sterk, start, einde, vinger = g
+                _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+                if sterk or r.get("sterk"):
+                    FIRMA_DAGEN.update({(r.get("start") or r.get("dag") or "")[:10], start[:10]} - {""})   # oude en nieuwe dag
+                reg[k] = {**r, "dag": start[:10], "start": start, "einde": einde, "sterk": sterk, "kalender": e["kalender"],
+                          "vinger": vinger}
+                regels.append(f"{start[:10]} vraag over een firma-afspraak mee verschoven met de afspraak")
+            else:
+                if open_ and not (x.get("titel") or "").startswith("VR Agendawacht:"):
+                    # hernoemd door Mehdi: zijn titel blijft, het blok wordt opgelost, Beschikbaar en een hele dag
+                    d0 = (x.get("start") or "")[:10]
+                    d1 = (datetime.fromisoformat(d0) + timedelta(days=1)).date().isoformat() if d0 else d0
+                    _patch(x, {"extendedProperties": {"private": {**mk, MAILMERK: f"opgelost:{mk.get(MAILMERK)}"}},
+                               "transparency": "transparent",
+                               **({"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})} if d0 else {})}, tok)
+                    regels.append(f"{r.get('dag')} hernoemd blok voor een firma-afspraak opgelost en Beschikbaar gezet")
+                    if r.get("sterk"):
+                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
+                elif open_:
+                    dag_ = {}
+                    if not x.get("hele_dag") and "T" in (x.get("start") or ""):
+                        # een opgelost blok met een uur kreeg anders nog een oproep (belrooster) en telde als botsing; in
+                        # dezelfde schrijfactie als 'Opgelost', zodat een fout ertussen geen opgelost blok met uur laat
+                        # staan (review 3, R2)
+                        d0 = x["start"][:10]
+                        d1 = (datetime.fromisoformat(d0) + timedelta(days=1)).date().isoformat()
+                        dag_ = {"start": _tijd_patch({"date": d0}), "end": _tijd_patch({"date": d1})}
+                    _eigen_melding_opgelost(x, mk.get(MAILMERK), tok, nu,
+                                            "de firma-afspraak verdween of staat nu op je werkagenda", vrij=True, extra=dag_)
+                    if r.get("sterk"):
+                        FIRMA_DAGEN.add((r.get("start") or r.get("dag") or "")[:10])    # de rit van toen klopt niet meer
+                    regels.append(f"{r.get('dag')} vraag over een firma-afspraak op opgelost en Beschikbaar gezet")
+                reg.pop(k)              # weg of al afgerond: staat de afspraak er nog, dan volgt hieronder een nieuwe vraag
+            gewijzigd = True
+        except Exception as ex:  # noqa: BLE001
+            regels.append(f"{r.get('dag')} vraag niet bijgewerkt ({type(ex).__name__})")
+    for k, (e, sterk, start, einde, vinger) in gewenst.items():
+        if k in reg or k in onzeker:
+            continue
+        dag = start[:10]
+        try:
+            bestaand = _prive_vraag_id(k, tok)
+            x = _prive_item_lezen(bestaand, tok) if bestaand else None
+            if bestaand and _firma_blok_open(x, k):
+                # de vraag stond er al (na een time-out of een opgeruimd register): meteen op de juiste tijd (hertest 5, 2)
+                _firma_blok_bijzetten(x, k, e, start, sterk, tok)
+                reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk, "id": bestaand,
+                          "kalender": e["kalender"], "vinger": vinger}
+                regels.append(f"{dag} bestaande vraag over een firma-afspraak op de juiste tijd gezet")
+                if sterk:
+                    FIRMA_DAGEN.add(dag)        # na een onderbreking: ook rit en oproep (Codex-hertest 27)
+            elif bestaand:
+                # niet terug te lezen: opnemen zonder tijd, zodat de volgende ronde het blok bijzet en er geen tweede komt
+                reg[k] = {"gevraagd": vandaag, "dag": dag, "start": "", "einde": "", "sterk": sterk, "id": bestaand,
+                          "kalender": e["kalender"]}
+            else:
+                n = _insert(PRIVE_AGENDA, _firma_vraag_body(k, e, start, sterk), tok) or {}
+                reg[k] = {"gevraagd": vandaag, "dag": dag, "start": start, "einde": einde, "sterk": sterk,
+                          "id": n.get("id", ""), "kalender": e["kalender"], "vinger": vinger}
+                if sterk:
+                    FIRMA_DAGEN.add(dag)
+                regels.append(f"{dag} vraag gezet: firma-afspraak " + ("voor Mehdi die niet doorkwam" if sterk else
+                                                                     "met een uur dat niet zeker is" if sterk is None
+                                                                     else "die Mehdi noemt"))
+            gewijzigd = True
+        except Exception as ex:  # noqa: BLE001
+            regels.append(f"{dag} vraag niet gezet ({type(ex).__name__})")
+    if gewijzigd:
+        os.makedirs(os.path.dirname(FIRMA_VRAGEN), exist_ok=True)
+        tmp = f"{FIRMA_VRAGEN}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(reg, f, ensure_ascii=False, indent=0)
+        os.replace(tmp, FIRMA_VRAGEN)
+    return regels
+
+
+def firma_stap(vandaag):
+    """De firma-stap (Z1 tot Z3): in de volledige ronde en in de kleurronde (om :17 en :47, elke dag, ook in het
+    weekend), zodat een nieuwe afspraak geen werkdag wacht (Codex-hertest 3, punt 15). Een eigen slot: nooit twee
+    tegelijk. Geeft noden met een vaste tekst, zonder teller (N10)."""
+    import fcntl  # noqa: PLC0415
+    noden = []
+    try:
+        verborgen = verborgen_schrijfagendas(agenda.zichtbaarheid())
+    except Exception as e:  # noqa: BLE001
+        verborgen = []
+        noden.append({"tekst": f"Zichtbaarheid van de agenda's niet te lezen ({type(e).__name__})", "wie": "claude"})
+    if verborgen:
+        noden.append({"tekst": "Verborgen in je Google Agenda, maar de Agendawacht zet daar ritten: "
+                               + ", ".join(verborgen) + ". Zet het vinkje terug.", "wie": "mehdi"})
+    if not firma_meelezen():
+        return noden
+    os.makedirs(os.path.dirname(FIRMA_SLOT), exist_ok=True)
+    with open(FIRMA_SLOT, "w", encoding="utf-8") as slot:
+        try:
+            fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return noden                # een andere ronde is er al mee bezig
+        tok = agenda._toegang()
+        evs, onleesbaar = firma_afspraken(tok)
+        gregels, niet_zichtbaar, onzeker, opnieuw = firma_gasten(evs, tok, onleesbaar)
+        if opnieuw:                     # een collega verzette een reeks tijdens de controle: de nieuwe keren lezen (hertest 5)
+            evs, onleesbaar = firma_afspraken(tok)
+            g2, niet_zichtbaar, onzeker, _ = firma_gasten(evs, tok, onleesbaar)
+            gregels += g2
+        vregels = firma_vangnet(evs, niet_zichtbaar, tok, onleesbaar=onleesbaar, onzeker=onzeker)
+
+    if gregels or vregels:
+        ag.log(f"dag {vandaag}", "schrijf", "firma-agenda's: Mehdi als stille gast waar het hem aangaat",
+               "\n".join(gregels + vregels))
+    namen = dict(firma_meelezen())
+    if onleesbaar:
+        noden.append({"tekst": "Firma-agenda niet te lezen: " + ", ".join(namen.get(a, a) for a in onleesbaar)
+                               + "; afspraken voor Mehdi daarin niet nagekeken", "wie": "claude"})
+    if any("niet gezet" in r or "niet bijgewerkt" in r for r in gregels + vregels):
+        noden.append({"tekst": "Een gast of vraag voor een firma-afspraak is niet gezet; zie het werkverslag", "wie": "claude"})
+    return noden
+
+
 # Zorgafspraken uit mail ('Opdracht voor Claude - kine en tandarts in de privéagenda' v1.0, 14-10-2026). Een smalle
 # uitzondering op 'uit mail zet ik niets': een bevestigde afspraak voor Mehdi bij een beheerde persoonlijke zorgpraktijk
 # (profielen in het privéregister, nooit in git) wordt een echt blok in de privé-agenda: begin en einde uit de mail,
@@ -3369,6 +4313,8 @@ def zorg_profielplaatsen_zetten(items, tok, nu=None, profielen=None):
     profielen = MA.zorgprofielen() if profielen is None else profielen
     gezet, open_ = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if not _toekomst(a.get("start"), nu) or a.get("kalender") != PRIVE_AGENDA or not is_zorg_titel(a.get("titel")):
             continue
         p = _zorg_profiel_kiezen(a, profielen, nu)
@@ -3535,6 +4481,55 @@ def _toekomst(start, nu):
         return False
 
 
+def _niet_meer_vervallen(x):
+    """Een zorgblok dat Mehdi liet vervallen ('A3 vervalt') en dat de praktijk nu naar een nieuw uur verzet, is weer een
+    gewone afspraak: 'vervalt' weg en Bezet, zodat de meldstap het als nieuwe versie meldt (Codex-hertest 7, PR 113). Dezelfde
+    vormen als lara_vervalt herkent, ook 'vervalt:' (hertest 10)."""
+    if not lara_vervalt(x):
+        return {}
+    return {"summary": re.sub(r"^(\s*(?:VR\s+)?(?:!!\s*)?)vervalt\b[\s:,.\-]*", r"\1", x.get("titel") or "", flags=re.I).strip(),
+            "transparency": "opaque"}
+
+
+def _zorg_blok_met_merk(sleutel, tok):
+    """Het id van een blok in de privé-agenda met dit zorgmerk, op welke datum ook, of ''. Over alle pagina's."""
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    if not sleutel:
+        return ""
+    pagina = None
+    while True:
+        q = {"privateExtendedProperty": f"{ZORGMERK}={sleutel}", "showDeleted": "false", "maxResults": "50"}
+        if pagina:
+            q["pageToken"] = pagina
+        url = f"{agenda.API}/calendars/{urllib.parse.quote(PRIVE_AGENDA, safe='')}/events?" + urllib.parse.urlencode(q)
+        d = json.load(urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"}),
+                                             timeout=30))
+        for x in d.get("items", []):
+            if x.get("status") != "cancelled" and x.get("id"):
+                return x["id"]
+        pagina = d.get("nextPageToken")
+        if not pagina:
+            return ""
+
+
+ZORG_GEZET = []      # (dag, id) van elk blok dat de zorgroute deze ronde zette, verzette of verhuisde
+
+
+def _zorg_gezet(dag, ident, nieuw=True, doel=None):
+    """Een blok dat de zorgroute gaat zetten, verzetten of verhuizen, voor de schrijfactie: duurzaam in de WhatsApp-
+    wachtrij, zodat de meldstap het ook na een onderbreking of in de eerste ronde als nieuw ziet (Codex-hertest 8 tot 13,
+    PR 113). ident: het id van het blok of, voor een nieuw blok, zijn zorgsleutel (het merk). Lukt het vastleggen niet,
+    dan gooit dit: de schrijfactie gaat dan niet door. nieuw=False (alleen gekoppeld): geen melding in de eerste ronde,
+    alleen de verre dag voor de meldstap."""
+    if nieuw:
+        AW.gezet_onthouden(dag, ident, doel)
+    if (datetime.fromisoformat(dag).date() - nu_lokaal().date()).days >= ZORG_WHATSAPP_DAGEN - 1:
+        AW.verre_dagen([(dag, ident)])          # dag en id samen, meteen (Codex-hertest 11, PR 113)
+    ZORG_GEZET.append((dag, ident, nieuw))
+WACHTRIJ_KLAAR = True   # False als het begin van de ronde niet in de WhatsApp-wachtrij kon: dan zet de zorgroute niets
+
+
 def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
     """Zet, koppelt, volgt of verhuist zorgafspraken (zie hierboven). Werkt de status en het Google-ID in res bij, zodat
     het register ze bewaart en de gewone mailmelding geen tweede vraag zet. Geeft tellingen, 'bord' (zonder namen,
@@ -3563,8 +4558,84 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                 st["noden"].append({"tekst": f"Huisartsafspraak {wanneer} op {begint:%d-%m %H:%M}: "
                                              "kijk in je privé-agenda.", "wie": "mehdi"})
         if a["status"] == "ontbreekt" and toekomst and a.get("einde"):
+            try:
+                # binnen het venster van de mailvergelijking zag die het blok al; daarbuiten niet: dan op het merk zoeken
+                ver = (datetime.fromisoformat(a["start"]).astimezone(TIJDZONE).date() - nu.astimezone(TIJDZONE).date()).days \
+                    >= MAIL_VENSTER_DAGEN - 1
+                # een verschuiving kan van voorbij het venster naar binnen het venster gaan: dan staat het oude blok er nog
+                # buiten de vergelijking, en zoek ik het ook op zijn merk (review 2, PR 113)
+                verzet = any(h.get("van") for h in (z.get("historie") or []))
+                bestaand = _zorg_blok_met_merk(a.get("sleutel"), tok) if (ver or verzet) else ""
+            except Exception as ex:  # noqa: BLE001
+                st["fout"] += 1
+                st["prive"].append(f"{wat}: niet gezet, bestaand blok niet na te gaan ({type(ex).__name__})")
+                continue
+            if bestaand:
+                # het blok staat er al, maar buiten het leesvenster van de mailvergelijking (120 dagen): geen tweede blok.
+                # Op hetzelfde uur: koppelen. Op een ander uur: het blok verschuift mee, teruggelezen, zodat de melding
+                # 'verschoven' volgt (Codex-hertest 5 en 6, PR 113)
+                a["google"] = f"{PRIVE_AGENDA}|{bestaand}"
+                x = _prive_item_lezen(bestaand, tok)
+                if x is None:
+                    st["fout"] += 1
+                    st["prive"].append(f"{wat}: bestaand blok niet terug te lezen ({bestaand})")
+                    continue
+                if _zelfde_tijd(x.get("start"), a["start"]) and _zelfde_tijd(x.get("einde"), a["einde"]):
+                    a["status"] = "gekoppeld"
+                    st["gekoppeld"] += 1
+                    # ook na een herstart tussen zetten en melden kijkt de meldstap dit blok na (Codex-hertest 7, PR 113);
+                    # een gekoppeld blok is niet nieuw: geen melding 'gezet' in de eerste ronde (hertest 13)
+                    try:
+                        _zorg_gezet(a["start"][:10], bestaand, nieuw=False)
+                    except Exception:  # noqa: BLE001
+                        pass                    # er verandert niets in de agenda; de meldstap leest het later toch
+                    st["prive"].append(f"{wat}: blok stond er al ({bestaand}), gekoppeld")
+                    continue
+                # een ander uur dan de mail. Bevestigt de mailhistorie de verschuiving (van dit uur naar het nieuwe), dan
+                # verzet ik hetzelfde blok, volledig teruggelezen (Codex-hertest 12). Zonder die bevestiging niet: Mehdi kan
+                # het met de hand gecorrigeerd hebben; dan een open punt (hertest 10)
+                hist_v = z.get("historie") or []
+                if hist_v and hist_v[-1].get("naar") == a["start"] and _zelfde_tijd(hist_v[-1].get("van"), x.get("start")) \
+                        and not x.get("hele_dag"):
+                    try:
+                        volledig = _lees_event(PRIVE_AGENDA, bestaand, tok)
+                        if volledig is None:
+                            raise RuntimeError("omschrijving niet te lezen")
+                        _zorg_gezet(a["start"][:10], bestaand, doel=(a["start"], a["einde"]))
+                        _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
+                                   "end": {"dateTime": a["einde"], "timeZone": "Europe/Brussels"},
+                                   "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van "
+                                                   f"{hist_v[-1]['van'][:16].replace('T', ' ')} naar "
+                                                   f"{a['start'][:16].replace('T', ' ')} volgens mail {hist_v[-1].get('bron', '')}.").strip(),
+                                   **_niet_meer_vervallen(x)}, tok)
+                        probleem = _zorg_nalezen(PRIVE_AGENDA, bestaand, tok, start=a["start"], einde=a["einde"])
+                    except Exception as ex:  # noqa: BLE001
+                        probleem = type(ex).__name__
+                    if probleem:
+                        st["fout"] += 1
+                        st["prive"].append(f"{wat}: verzet maar het teruglezen klopt niet ({probleem})")
+                    else:
+                        a["status"] = "gezet"
+                        st["verzet"] += 1
+                        st["prive"].append(f"{wat}: verzet volgens de mailhistorie (zelfde item {bestaand}), teruggelezen")
+                    continue
+                a["status"], a["detail"] = "afwijkend", (f"in de agenda {(x.get('start') or '')[:16].replace('T', ' ')}, "
+                                                         f"volgens mail {a['start'][:16].replace('T', ' ')}: welk uur klopt?")
+                st["open"] += 1
+                st["prive"].append(f"{wat}: blok ({bestaand}) staat op een ander uur dan de mail; open punt, niet verzet")
+                try:
+                    # meteen zichtbaar voor Mehdi, op WhatsApp, een keer per afwijking: de gewone mailvraag komt pas
+                    # binnen veertien dagen (Codex-hertest 11, PR 113). Soort en praktijk, geen adres.
+                    AW.klaarzetten(f"afwijkend:{a.get('sleutel')}:{a['start']}:{x.get('start')}",
+                                   f"Agendawacht: een zorgafspraak uit mail klopt niet ({_kale_titel(x.get('titel') or a.get('titel'))}). "
+                                   f"In je agenda: {_wanneer(x)}. Volgens de mail: {_wanneer(a)}. Welk uur klopt? Pas het "
+                                   "zelf aan in je privé-agenda; ik verzet het niet.")
+                except Exception:  # noqa: BLE001
+                    st["prive"].append(f"{wat}: WhatsApp over de afwijking niet klaargezet")
+                continue
             body = _zorg_body(a, z, profiel)
             try:
+                _zorg_gezet(a["start"][:10], a.get("sleutel"), doel=(a["start"], a["einde"]))   # eerst vastleggen (hertest 13)
                 e = _insert(PRIVE_AGENDA, body, tok)
             except DagMarkering as ex:
                 st["open"] += 1
@@ -3683,10 +4754,15 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
                     einde = (datetime.fromisoformat(a["start"]) + duur).isoformat()
                     notitie = " Het einde stond niet in de mail: de oude duur is behouden."
                 try:
+                    volledig = _lees_event(kal, eid, tok)
+                    if volledig is None:
+                        raise RuntimeError("omschrijving niet te lezen")   # nooit een afgekapte omschrijving terug (PR 113)
+                    _zorg_gezet(a["start"][:10], eid, doel=(a["start"], einde))    # vooraf (Codex-hertest 10)
                     _patch(x, {"start": {"dateTime": a["start"], "timeZone": "Europe/Brussels"},
                                "end": {"dateTime": einde, "timeZone": "Europe/Brussels"},
-                               "description": ((x.get("omschrijving") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
-                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip()}, tok)
+                               "description": ((volledig.get("description") or "").rstrip() + f"\n\nVerzet van {hist[-1]['van'][:16].replace('T', ' ')} "
+                                               f"naar {a['start'][:16].replace('T', ' ')} volgens mail {hist[-1].get('bron', '')}.{notitie}").strip(),
+                               **_niet_meer_vervallen(x)}, tok)
                     probleem = _zorg_nalezen(kal, eid, tok, start=a["start"], einde=einde)
                     if probleem:
                         st["fout"] += 1
@@ -3747,6 +4823,7 @@ def zorg_afspraken_zetten(res, items, tok, nu=None, bijwerken_items=False):
             st["prive"].append(f"{x['start'][:16]}: VOORSTEL zorgafspraak naar privé te verhuizen ({reden})")
             continue
         try:
+            _zorg_gezet((x.get("start") or "")[:10], x.get("id"), doel=(x.get("start"), x.get("einde")))   # vooraf
             _verplaats_naar(x, PRIVE_AGENDA, tok)
             _patch(verhuisd_item, body, tok, eigen_zorgverhuis=True)
             probleem = _zorg_nalezen(PRIVE_AGENDA, x["id"], tok, titel_pr=True, weg_van=WERKAGENDA,
@@ -3945,6 +5022,8 @@ def duur_ter_plaatse_zetten(items, tok=None, nu=None):
         return 0, ["Duur ter plaatse: masterregel niet leesbaar; geen afspraak gewijzigd"]
     gezet, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         doel = _duur_doel(a, minuten, patroon)
         if not doel or (a.get("_merk") or {}).get(DUURMERK) == str(minuten):
             continue
@@ -4070,6 +5149,8 @@ def agendagasten_zetten(items, tok=None, nu=None):
     nu_iso = (nu or nu_lokaal()).isoformat()
     uit, reeksen, voorgestelde_reeksen = [], {}, set()
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if (is_zorgschaduw(a) or a.get("hele_dag") or a.get("fout") or a.get("_archief") or "T" not in a.get("start", "")
                 or _voorbij(a["start"], nu_iso) or not a.get("_organisator_zelf")
                 or a.get("kalender") != WERKAGENDA or lees_titel(a["titel"])["reistijd"]):
@@ -4171,7 +5252,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     if niet_op_kaart is not None:
         niet_op_kaart.clear()
     gemaakt, al, geen_adres, fout, regels = 0, 0, 0, 0, []
-    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"]]
+    reistijden = [x for x in items if _titel_info(x)["reistijd"]]
     projecten = projectadressen.index()
 
     def handmatige_rit_bij(a, richting):
@@ -4223,8 +5304,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         if zonder_auto is None or (is_lara and (vrij is None or buiten_bron)):
             # de grendelbron is onbekend: geen rit, ook geen gok (Codex A11). Elke getroffen komende buitenafspraak staat
             # apart in de meldingen, niet alleen in een algemene logregel (ronde 3)
-            _li = lees_titel(a["titel"])
-            if "T" in a.get("start", "") and not _li["reistijd"] and (_li["buiten"] or _li["soort"] in BUITEN_SOORTEN) \
+            _li = _titel_info(a)
+            # ook een Bezet firmablok op een echt adres, met zijn algemene titel (Codex-hertest 30)
+            if "T" in a.get("start", "") and not _li["reistijd"] and _vraagt_rit(a, _li, _bruikbare_locatie(adres)) \
                     and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag) \
                     and not any(x.get("kalender") == a.get("kalender") and _zelfde_tijd(x.get("einde"), a["start"])
                                 and rit_hoort_bij(x, a["titel"], "voor") for x in reistijden):
@@ -4239,13 +5321,15 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         # ('vervalt' vooraan, L4) krijgt ook geen rit.
         if lara_zonder_rit(a, vrij):
             continue
-        info = lees_titel(a["titel"])
+        info = _titel_info(a)
         if info["firma_conflict"]:
             continue          # H1-1, driehoeksoverleg C2, 17-10-2026: geen rit uit een dubbelzinnige firma.
         # Geen auto die dag: geen rit. Staat er toch een buitenafspraak, dan is dat een
         # waarschuwing (collega die het vergat), geen gewone rit. Mandaat van Mehdi, 22-09-2026.
-        if a.get("start", "")[:10] in zonder_auto and not lees_titel(a["titel"])["reistijd"]:
-            if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
+        if a.get("start", "")[:10] in zonder_auto and not _titel_info(a)["reistijd"]:
+            # ook een Bezet blok voor een verborgen firma-afspraak met een echt adres: dat draagt een algemene titel
+            # (Codex-hertest 28)
+            if _vraagt_rit(a, info, _bruikbare_locatie(adres)):
                 regels.append(f"{a['start'][:16]} {_toon(a, 50)}: BUITEN op een dag zonder auto (door {maker(a)})")
             continue
         fysiek = _bruikbare_locatie(adres)
@@ -4263,7 +5347,9 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 woord, vp = vaste_plek(a["titel"])
                 if vp:
                     adres, fysiek, bron_adres = vp["adres"], True, f"vaste plek ({woord})"
-        if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
+        if info["reistijd"] or not _vraagt_rit(a, info, fysiek):
+            if _firma_blok_zonder_adres(a) and not _voorbij(a["start"], nu) and (not alleen_dag or a["start"][:10] == alleen_dag):
+                regels.append(f"{a['start'][:16]} {_toon(a, 50)}: firmablok zonder volledig adres: geen rit")
             continue
         a["_bron_adres"] = bron_adres
         if fysiek and bron_adres == "agenda" and info["nummer"] in projecten:
@@ -4344,7 +5430,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         for x in items:
             if is_zorgschaduw(x) or "T" not in x.get("start", "") or x.get("hele_dag"):
                 continue
-            ix = lees_titel(x["titel"])
+            ix = _titel_info(x)
             if ix["reistijd"] or ix["buiten"] or ix["soort"] in BUITEN_SOORTEN:
                 continue
             try:
@@ -4366,7 +5452,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
         tijdens het rijden. Mandaat van Mehdi, 23-09-2026."""
         if is_zorgschaduw(x) or "T" not in x.get("start", "") or x.get("hele_dag"):
             return False
-        ix = lees_titel(x.get("titel") or "")
+        ix = _titel_info(x)
         if ix["reistijd"] or ix["buiten"] or ix["soort"] in BUITEN_SOORTEN + ("IN",):
             return False
         return ix["soort"] in EXTERN_ONLINE or x.get("kalender") == "zoomafspraken@gmail.com"
@@ -4388,7 +5474,7 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     def rijdend_toegestaan(x):
         """Een intern overleg op een werkagenda zonder fysieke plek mag tijdens het rijden (mandaat Mehdi 23-09-2026);
         het houdt een ketenrit dus niet tegen. Lara en privé tellen altijd als echte afspraak."""
-        ix = lees_titel(x.get("titel") or "")
+        ix = _titel_info(x)
         plek = (x.get("locatie") or "").strip().lower()
         return (ix["soort"] == "IN" and not ix["buiten"] and not ix["reistijd"]
                 and x.get("kalender") not in PRIVE_KALENDERS and (not plek or plek.startswith("http")))
@@ -4842,7 +5928,8 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
                 gemaakt += 1
             elif is_laatste:
                 al += 1
-            melding = _vertrekmelding_zetten(a, vertrek_min + 5, tok)
+            # de rit is van Mehdi, de afspraak van een collega: op een firmakopie geen vertrekmelding (Codex-hertest 6)
+            melding = _vertrekmelding_zetten(a, vertrek_min + 5, tok) if not _firma_kopie(a) else False
             regels.append(f"{a['start'][:16]} {_toon(a, 44)}: {van_plaats} → {plaats} {heen} min (file x{fh})"
                           + (f", terug naar huis {terug} min (file x{ft})" if is_laatste else ", daarna door naar de volgende")
                           + f", adres uit {bron_adres}"
@@ -4858,11 +5945,17 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     elders = {}          # tijdstip -> agenda's met een afspraak die dan begint of eindigt
     begins_alle, eindes_alle = set(), set()
     for x in items:
-        _lx = lees_titel(x["titel"]) if "T" in x.get("start", "") else None
+        _lx = _titel_info(x) if "T" in x.get("start", "") else None
         # alleen een afspraak die een rit heeft, houdt een rit vast; een afspraak die geen rit meer vraagt (Lara
         # 'overgeslagen', zonder !!) niet (FR-79, gezien 01-10-2026). Ook een Lara-afspraak op een officiële
         # vakantiedag of met 'vervalt' vooraan niet: dan ruim ik haar eigen ritten op (FR-210)
-        if _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
+        if _lx and not _lx["reistijd"] and (x.get("_merk") or {}).get(FIRMAMERK):
+            # ook een Bezet blok van een verborgen firma-afspraak houdt zijn ritten vast (Codex-hertest 26), maar alleen
+            # zolang het een rit vraagt, ook als Mehdi het hernoemde: dan beslist alleen _firma_buitenblok (review 3, R1)
+            if _vraagt_rit(x, _lx, _bruikbare_locatie(x.get("locatie") or "")):
+                grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
+                grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
+        elif _lx and not _lx["reistijd"] and (_lx["buiten"] or _lx["soort"] in BUITEN_SOORTEN) \
                 and not lara_zonder_rit(x, vrij):
             grenzen.add((x["kalender"], datetime.fromisoformat(x["start"])))
             grenzen.add((x["kalender"], datetime.fromisoformat(x["einde"])))
@@ -4916,8 +6009,12 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
             # verhuist mijn rit mee. Gezien 24-09-2026: de ritten voor een privé-afspraak van
             # 23-09 bleven rood op de werkagenda staan, zichtbaar voor collega's.
             m = re.search(r"Reistijd (?:voor|na): (.+?) \(\d+ min", x.get("omschrijving") or "")
-            bij = [y for y in items if m and not lees_titel(y["titel"])["reistijd"] and y["start"][:10] == x["start"][:10]
-                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)]
+            # een firmablok dat geen rit meer vraagt (opgelost, Beschikbaar, hele dag of online) houdt ze niet vast,
+            # ook niet als Mehdi het hernoemde (review 3, R1)
+            bij = [y for y in items if m and not _titel_info(y)["reistijd"] and y["start"][:10] == x["start"][:10]
+                   and titel_sleutel(y["titel"]) == titel_sleutel(m.group(1)) and not lara_zonder_rit(y, vrij)
+                   and not ((y.get("_merk") or {}).get(FIRMAMERK)
+                            and not _vraagt_rit(y, {}, _bruikbare_locatie(y.get("locatie") or "")))]
             if any(y["kalender"] == x["kalender"] for y in bij):
                 continue          # de afspraak staat er nog, op deze agenda (bv. te laat aankomen)
             ander = {y["kalender"] for y in bij} & ((elders.get(e0, set()) | elders.get(s0, set())) - {x["kalender"]})
@@ -4976,14 +6073,14 @@ def belrooster(items, vandaag):
     vertrekmoment van mijn rit, anders BEL_BUITEN_MIN vooraf. Niet voor intern (IN),
     terugkerend, hele dag, reistijd, Lara, feestdagen."""
     from datetime import timedelta
-    reistijden = [x for x in items if lees_titel(x["titel"])["reistijd"] and "T" in x["start"]]
+    reistijden = [x for x in items if _titel_info(x)["reistijd"] and "T" in x["start"]]
     regels = []
     for a in items:
         if (a.get("hele_dag") or a.get("_terugkerend") or a["start"][:10] < vandaag
                 or a.get("kalender", "").startswith("en.be#") or bellen.afgezegd(a)):
             continue
         kal = KALENDERS.get(a["kalender"], "")
-        info = lees_titel(a["titel"])
+        info = _titel_info(a)
         if info["reistijd"] or info["soort"] == "IN" or kal == "Lara" or lara_vervalt(a):
             continue
         start = datetime.fromisoformat(a["start"])
@@ -5277,6 +6374,8 @@ def projectnummers_zetten(items, alleen_dag=None, ook_verleden=False):
     nu = nu_lokaal().isoformat()
     gezet, regels = 0, []
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         if a.get("hele_dag") or "T" not in a.get("start", "") or a.get("_archief") \
                 or a["titel"].lower().startswith("canceled"):
             continue
@@ -5442,6 +6541,8 @@ def contact_zetten(items, alleen_dag=None):
             continue
         if alleen_dag and a["start"][:10] != alleen_dag:
             continue
+        if _firma_kopie(a):
+            continue                    # de afspraak van een collega op een firma-agenda: daar schrijf ik niets
         info = lees_titel(a["titel"])
         if info["reistijd"] or info["soort"] not in EXTERNE_SOORTEN or not info.get("firma") \
                 or a["titel"].lower().startswith("canceled"):
@@ -5868,6 +6969,8 @@ def vragen_in_agenda(items, nu=None, niet_op_kaart=None):
             open_[id_] = zin
     gezet = weg = 0
     for a in items:
+        if _firma_kopie(a):
+            continue                    # gastkopie van een firma-afspraak: daar schrijf ik niets (Codex-hertest 6)
         eigen = (a.get("maker") or "").strip().lower() in _eigen_accounts()
         ander = a.get("kalender") in PRIVE_KALENDERS
         sluit_adres = ((a.get("titel") or "").startswith("VR ")
@@ -5970,19 +7073,336 @@ def bel_als_vastgelopen(items, nu=None):
     return None
 
 
+def _bezet_item(y):
+    """Telt dit item als bezet bij een botsing? Niet: Beschikbaar, vervallen, ritten, feestdagen of een leesfout."""
+    return not (y.get("_vrij") or y.get("fout") or y.get("kalender", "").startswith("en.be#") or lara_vervalt(y)
+                or lees_titel(y.get("titel") or "")["reistijd"])
+
+
+def _hele_dagen(y):
+    """De dagen (ISO) die een hele-dag-item dekt; het einde is exclusief, zoals bij Google."""
+    from datetime import date as _d  # noqa: PLC0415
+    try:
+        s = _d.fromisoformat(y["start"][:10])
+        e = _d.fromisoformat((y.get("einde") or y["start"])[:10])
+    except (KeyError, ValueError):
+        return []
+    return [(s + timedelta(days=i)).isoformat() for i in range(max(1, (e - s).days))]
+
+
+def botst_met(x, items):
+    """Wat Bezet staat op de tijd van x, over alle agenda's: afspraken met een uur die overlappen, en hele-dag-blokken op
+    die dag (zoals 'ANTWERK vakbeurs'; tot 27-10-2026 telden hele dagen nergens mee, driehoeksoverleg W3). Niet x zelf,
+    niet Beschikbaar, vervallen, ritten of feestdagen. Geeft de botsende items."""
+    if "T" not in x.get("start", "") or "T" not in x.get("einde", ""):
+        return []
+    try:
+        s1, e1 = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"])
+    except ValueError:
+        return []
+    dag = s1.astimezone(TIJDZONE).date().isoformat()
+    uit = []
+    for y in items:
+        if y is x or (x.get("id") and y.get("id") == x.get("id")) or is_zorgschaduw(y) or not _bezet_item(y):
+            continue                    # ook niet de schaduw van dezelfde zorgafspraak op werk (review PR 113)
+        if y.get("hele_dag"):
+            if dag in _hele_dagen(y):
+                uit.append(y)
+        elif "T" in y.get("start", "") and "T" in y.get("einde", ""):
+            try:
+                s2, e2 = datetime.fromisoformat(y["start"]), datetime.fromisoformat(y["einde"])
+            except ValueError:
+                continue
+            if s2 < e1 and s1 < e2:
+                uit.append(y)
+    return uit
+
+
 def botsingen(items):
-    """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting)."""
+    """Twee afspraken die elkaar overlappen op dezelfde dag (bv. een Zoom tijdens een opmeting), en een hele-dag-blok dat
+    Bezet staat op een dag met afspraken (bv. 'ANTWERK vakbeurs'), dat telt eenmaal per dag (driehoeksoverleg W3,
+    27-10-2026). Beschikbaar, vervallen en ritten tellen niet. Een privétitel staat er als '(privé)': dit gaat naar het
+    bord."""
     uit = []
     tijd = [(datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["einde"]), x) for x in items
-            if "T" in x["start"] and not lees_titel(x["titel"])["reistijd"] and not x.get("kalender", "").startswith("en.be#")
-            and not lara_vervalt(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
+            if "T" in x["start"] and _bezet_item(x)]          # een vervallen Lara-afspraak botst met niets meer (FR-210)
     tijd.sort(key=lambda t: t[0])
     for i, (s1, e1, a) in enumerate(tijd):
         for s2, e2, b in tijd[i + 1:]:
             if s2 >= e1:
                 break
-            uit.append(f"{a['start'][:16]} {a['titel'][:45]}  ×  {b['start'][11:16]} {b['titel'][:45]}")
+            uit.append(f"{a['start'][:16]} {_toon(a, 45)}  ×  {b['start'][11:16]} {_toon(b, 45)}")
+    for h in [x for x in items if x.get("hele_dag") and _bezet_item(x)]:
+        for dag in _hele_dagen(h):
+            op_dag = [a for s1, _, a in tijd if s1.astimezone(TIJDZONE).date().isoformat() == dag and a is not h]
+            if op_dag:
+                uit.append(f"{dag} {_toon(h, 45)} (hele dag)  ×  " + ", ".join(
+                    f"{a['start'][11:16]} {_toon(a, 30)}" for a in op_dag[:3]) + (" ..." if len(op_dag) > 3 else ""))
     return uit
+
+
+# WhatsApp-melding als ik een afspraak uit mail zet (Mehdi, 27-10-2026; driehoeksoverleg W1 tot W10). Vandaag zet alleen
+# de zorgroute een afspraak uit mail (ZORGMERK, privé-agenda). Elke nieuwe of verschoven versie van zo'n blok krijgt een
+# korte WhatsApp: wat, wanneer, welke agenda en een eventuele botsing. Bij een botsing staat het blok op '??' (te
+# valideren) tot Mehdi antwoordt met de code uit het bericht. De wachtrij en het versturen: koppelingen/agenda_whatsapp.py
+# en De Bode. Op het bord en in het werkverslag geen titels: medisch is privé.
+WEEKDAG = ("ma", "di", "wo", "do", "vr", "za", "zo")
+
+
+def _kale_titel(t):
+    t = re.sub(r"^\s*((VR|ZL|!+|\?\?|vervalt)\s+)+", "", t or "", flags=re.I)
+    t = CODE_RE.sub("", t).replace("??", "")
+    t = re.sub(r"^\s*Mehdi\b[^:\n]{0,60}:\s*", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" -:")[:70]
+
+
+def _wanneer(x):
+    if x.get("hele_dag"):
+        dagen = _hele_dagen(x)
+        f = lambda d: f"{int(d[8:10])}/{int(d[5:7])}"  # noqa: E731
+        return f"hele dag {f(dagen[0])}" + (f"-{f(dagen[-1])}" if len(dagen) > 1 else "") if dagen else "hele dag"
+    try:
+        s = datetime.fromisoformat(x["start"]).astimezone(TIJDZONE)
+        e = datetime.fromisoformat(x["einde"]).astimezone(TIJDZONE)
+    except (KeyError, TypeError, ValueError):
+        return (x.get("start") or "")[:16]      # een vreemde tijd mag de melding niet laten vallen
+    return f"{WEEKDAG[s.weekday()]} {s.day}/{s.month} {s:%H:%M}-{e:%H:%M}"
+
+
+def _agendanaam(kal):
+    return {PRIVE_AGENDA: "privé", WERKAGENDA: "werk"}.get(kal, (KALENDERS.get(kal) or kal).split("(")[0].strip())
+
+
+def _zorg_bericht(x, botsing, verschoven, kan_vragen=True):
+    """De vaste vorm (W2): soort en praktijk, geen adres, geen mailinhoud."""
+    regels = [f"Agendawacht: afspraak uit mail {'verschoven' if verschoven else 'gezet'} ({{code}})",
+              f"Wat: {_kale_titel(x['titel'])}", f"Wanneer: {_wanneer(x)}", f"Agenda: {_agendanaam(x['kalender'])}"]
+    if botsing:
+        regels.append("Botsing: " + "; ".join(f"{_kale_titel(y['titel'])} ({_wanneer(y)})" for y in botsing[:2])
+                      + (f" en nog {len(botsing) - 2}" if len(botsing) > 2 else ""))
+        regels.append("Staat op ?? (te valideren). Antwoord '{code} ja' = beide laten staan, of '{code} vervalt' = deze "
+                      "afspraak vervalt (bel dan zelf de praktijk)." if kan_vragen else
+                      "Ik kon deze afspraak niet op ?? zetten (ze is niet door mij gemaakt); kijk zelf of bel de praktijk.")
+    else:
+        regels.append("Botsing: geen")
+    return "\n".join(regels)
+
+
+def _te_valideren(x, botsing, tok, nu):
+    """W4: '??' in de titel (na '!!', zodat de volgorde van tekens_vooraan blijft) en de botsing bovenaan de
+    omschrijving. Verplaatst en wist niets. Teruggelezen."""
+    t = tekens_vooraan(x["titel"])
+    m = re.match(r"^(\s*(?:VR\s+)?!!\s*)", t)
+    titel = (m.group(1) + "?? " + t[m.end():]) if m else "?? " + t
+    e = _lees_event(x["kalender"], x["id"], tok)
+    if e is None:
+        raise RuntimeError("omschrijving niet te lezen")   # anders schreef ik een lege omschrijving (review PR 113)
+    regel = (f"Te valideren ({nu:%d-%m-%Y}): botst met " + "; ".join(_kale_titel(y["titel"]) for y in botsing[:3])
+             + ". Antwoord op WhatsApp met de code uit het bericht.")
+    _patch(x, {"summary": titel, "description": regel + "\n\n" + (e.get("description") or "")}, tok)
+    terug = _lees_event(x["kalender"], x["id"], tok) or {}
+    if "??" not in (terug.get("summary") or ""):
+        raise RuntimeError("?? niet teruggelezen")
+    x["titel"] = terug.get("summary") or titel
+
+
+RONDE_START = nu_lokaal()  # wanneer dit proces begon: een blok dat daarna gemaakt werd, is van deze ronde
+
+
+def _niet_meer_te_valideren(x, tok):
+    """Mijn eigen '??' en de regel 'Te valideren' weg, teruggelezen."""
+    e = _lees_event(x["kalender"], x["id"], tok)
+    if e is None:
+        raise RuntimeError("niet te lezen")
+    oms = re.sub(r"^Te valideren \([^)]*\):[^\n]*\n\n", "", e.get("description") or "")
+    _patch(x, {"summary": re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip(), "description": oms}, tok)
+    terug = _lees_event(x["kalender"], x["id"], tok)
+    if terug is None or "??" in (terug.get("summary") or "??"):
+        raise RuntimeError("niet teruggelezen")
+    x["titel"] = terug.get("summary")
+
+
+def _eerste_doel_gehaald(x):
+    """Wilde de eerste ronde dit blok zetten of verzetten, en staat het ook op het beoogde uur? Mislukte de verschuiving,
+    dan is het geen nieuw blok en komt er geen melding over het oude uur (Codex-hertest 15, PR 113)."""
+    doelen = AW.eerste_doel()
+    for ident in (x.get("id"), (x.get("_merk") or {}).get(ZORGMERK)):
+        if ident in AW.eerste_ids():
+            doel = doelen.get(ident)
+            if not doel or (_zelfde_tijd(x.get("start"), doel[0]) and _zelfde_tijd(x.get("einde"), doel[1])):
+                return True
+    return False
+
+
+def zorg_whatsapp(items, tok, nu=None, sinds=None):
+    """W1 tot W4 en W8: een WhatsApp-melding per nieuwe of verschoven versie van een zorgblok uit mail, nooit twee keer.
+    De eerste keer (basislijn) krijgt een toekomstig blok dat nu botst een melding (zoals een zorgafspraak tegen een
+    ANTWERK), en ook een blok dat deze ronde gemaakt werd (Google 'created'; Codex-controle PR 113, punt 3); de rest wordt
+    stil bekend. items: alle agenda's, ook de archiefagenda's (punt 4). Geeft regels zonder titels."""
+    nu = nu or nu_lokaal()
+    vast = AW.sinds()
+    # de basislijn telt vanaf de eerste ronde met deze code, ook als die meldstap toen mislukte (Codex-hertest 2, PR 113)
+    sinds = sinds or (datetime.fromisoformat(vast) if vast else None) or RONDE_START or nu
+    zorg = [x for x in items if x.get("kalender") == PRIVE_AGENDA and (x.get("_merk") or {}).get(ZORGMERK)
+            and "T" in x.get("start", "") and not _voorbij(x["start"], nu) and not lara_vervalt(x)]
+    eerste = not AW.basislijn_gezet()
+    stil, regels = [], []
+    for x in zorg:
+        if AW.laatste(x["id"]) == [x["start"], x["einde"]]:
+            continue                    # deze versie is al gemeld (of stond er al voor deze code)
+        botsing = botst_met(x, items)
+        van_nu = ((x.get("_gemaakt") or "") >= sinds.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S")
+                  or _eerste_doel_gehaald(x))      # ook verschoven, maar alleen als het beoogde uur er staat (hertest 8, 15)
+        if eerste and not botsing and not van_nu:
+            stil.append((x["id"], x["start"], x["einde"]))
+            continue
+        eerder = {k: v for k, v in AW._lees()["meldingen"].items() if k.startswith(f"zorg:{x['id']}:")}
+        verschoven, kan_vragen = AW.laatste(x["id"]) is not None, bool(botsing)
+        if botsing and "??" not in (x.get("titel") or ""):
+            try:
+                _te_valideren(x, botsing, tok, nu)
+            except (TitelVoorstel, GeenSchrijfrecht, SchaduwItem):
+                kan_vragen = False      # blijvend geweigerd (niet door mij gemaakt): toch melden, zonder code (review)
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{x['start'][:16]} (zorg): niet op te valideren gezet ({type(e).__name__}); volgende ronde opnieuw")
+                continue
+        elif not botsing and "??" in (x.get("titel") or "") and any(v.get("vraag") for v in eerder.values()):
+            # verschoven naar een vrij uur: mijn eigen '??' gaat weg, anders bleef het blok voor altijd te valideren
+            try:
+                _niet_meer_te_valideren(x, tok)
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{x['start'][:16]} (zorg): ?? niet weggehaald ({type(e).__name__}); volgende ronde opnieuw")
+                continue
+        code = AW.versie_melden(x["id"], x["start"], x["einde"], _zorg_bericht(x, botsing, verschoven, kan_vragen),
+                                {"id": x["id"], "start": x["start"], "einde": x["einde"]} if kan_vragen else None)
+        regels.append(f"{x['start'][:16]} (zorg): WhatsApp-melding {code} klaargezet"
+                      + (", botst: te valideren" if botsing else ""))
+    if eerste:
+        AW.basislijn(stil)
+    return regels
+
+
+ZORG_WHATSAPP_DAGEN = 400      # zo ver als de zorgroute zet: een blok over vijf maanden krijgt zijn melding nu
+
+
+def zorg_whatsapp_stap():
+    """Lees alle agenda's en het archief tot ZORG_WHATSAPP_DAGEN vooruit en meld (zorg_whatsapp). Alleen op een volledige
+    lezing: een onleesbare agenda kan een botsing verbergen. Voor de volledige ronde en de zorgronde (--zorg), zodat
+    geen route een blok zet zonder melding (Codex-hertest PR 113). Geeft (regels, noden)."""
+    try:
+        # een blok dat de zorgroute verder dan het venster zette: die dag ook lezen, meteen melden. De dagen worden eerst
+        # bewaard, voor er gelezen wordt, en pas gewist als hun blokken gemeld staan (PR 113, Codex-hertest 2 tot 4)
+        vandaag = nu_lokaal().date()
+
+        def _ver(dag):
+            try:
+                return (datetime.fromisoformat(dag).date() - vandaag).days >= ZORG_WHATSAPP_DAGEN - 1
+            except (TypeError, ValueError):
+                return False
+        for d_, i_, *rest in ZORG_GEZET:
+            if not rest or rest[0]:         # alleen wat echt gezet of verzet werd, niet een gekoppeld blok (hertest 14)
+                AW.gezet_onthouden(d_, i_)
+        verre = AW.verre_dagen([(t[0], t[1]) for t in ZORG_GEZET if t[0] and t[1] and _ver(t[0])])   # {dag: [id, ...]}
+        items = afspraken(0, ZORG_WHATSAPP_DAGEN) + archief_afspraken(0, ZORG_WHATSAPP_DAGEN, alleen_lezen=True)
+        fout = bool(ARCHIEF_FOUT)
+        for dag in sorted(verre):
+            try:
+                off = (datetime.fromisoformat(dag).date() - vandaag).days
+            except ValueError:
+                continue
+            if off >= ZORG_WHATSAPP_DAGEN:
+                items += afspraken(off - 1, off + 2, alleen_lezen=True) + archief_afspraken(off - 1, off + 2, alleen_lezen=True)
+                fout = fout or bool(ARCHIEF_FOUT)
+        if any(x.get("fout") for x in items) or fout:
+            return [], [{"tekst": "WhatsApp-melding afspraken uit mail: een agenda niet te lezen, volgende ronde opnieuw",
+                         "wie": "claude"}]
+        # de schaduw van een zorgafspraak op werk telt niet als botsing, ook buiten het mailvenster; de markering van de
+        # ronde zelf blijft staan (Codex-hertest 3, PR 113)
+        bewaard = set(ZORG_SCHADUW_IDS)
+        markeer_zorgschaduwen(items)
+        ZORG_SCHADUW_IDS.update(bewaard)
+        regels = zorg_whatsapp(items, agenda._toegang())
+        gevonden = {x["id"]: x for x in items if x.get("kalender") == PRIVE_AGENDA and x.get("id")}
+        gevonden.update({(x.get("_merk") or {}).get(ZORGMERK): x for x in list(gevonden.values())
+                         if (x.get("_merk") or {}).get(ZORGMERK)})      # een nieuw blok staat er onder zijn zorgsleutel
+        klaar = []
+        for dag, ids in verre.items():
+            # pas weg als elk blok dat op die dag gezet werd, gevonden en gemeld is (Codex-hertest 6, PR 113)
+            if dag < vandaag.isoformat() or all(i in gevonden and AW.laatste(gevonden[i]["id"]) == [gevonden[i]["start"],
+                                                                                                    gevonden[i]["einde"]]
+                                                 for i in ids):         # laatste staat op het Google-id (hertest 14)
+                klaar.append(dag)
+        AW.verre_dagen_klaar(klaar)
+        return regels, []
+    except Exception as e:  # noqa: BLE001
+        return [], [{"tekst": f"WhatsApp-melding afspraken uit mail mislukt ({type(e).__name__})", "wie": "claude"}]
+
+
+def _bev(sleutel, m):
+    """De sleutel van de bevestiging voor dit ene antwoord: een nieuw antwoord na een mislukte verwerking krijgt zijn eigen
+    bevestiging, een nieuwe poging voor hetzelfde antwoord niet (review 2, PR 113)."""
+    return f"{sleutel}:bevestiging:{m.get('antwoord_tijd') or ''}"
+
+
+def whatsapp_antwoorden_verwerken(tok=None, nu=None):
+    """W5: Mehdi's antwoord met code ('A3 ja', 'A3 vervalt'), door De Bode in de wachtrij gezet. ja: '??' weg; vervalt:
+    'vervalt' vooraan en Beschikbaar, nooit wissen. Teruggelezen, dan pas bevestigd op WhatsApp. Geeft regels."""
+    nu = nu or nu_lokaal()
+    regels = []
+    for sleutel, m in AW.open_antwoorden():
+        code, keuze = m.get("code"), m.get("antwoord")
+        tok = tok or agenda._toegang()
+        x = _prive_item_lezen((m.get("vraag") or {}).get("id") or "", tok)
+        if x is None or not (x.get("_merk") or {}).get(ZORGMERK):
+            AW.afronden(sleutel, "weg", _bev(sleutel, m), f"Agendawacht: {code}: die afspraak staat niet meer in je agenda; "
+                                                     "ik heb niets veranderd.")
+            regels.append(f"{code}: afspraak niet meer gevonden, niets veranderd")
+            continue
+        v = m.get("vraag") or {}
+        if (v.get("start"), v.get("einde")) != (x.get("start"), x.get("einde")):
+            # intussen verschoven: het antwoord ging over het oude uur (Codex-controle PR 113, punt 1)
+            AW.afronden(sleutel, "verschoven", _bev(sleutel, m), f"Agendawacht: {code}: die afspraak is intussen verschoven; ik heb "
+                                                     "niets veranderd. Je krijgt een nieuwe melding over het nieuwe uur.")
+            regels.append(f"{code}: afspraak intussen verschoven, niets veranderd")
+            continue
+        kern = re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip()
+        if keuze == "ja":
+            # 'ja' zet de afspraak gewoon terug: ?? weg, en stond ze intussen op 'vervalt' (een eerdere poging die toch
+            # lukte), dan ook dat weg en weer Bezet (Codex-hertest 18, PR 113)
+            body = {"summary": (_niet_meer_vervallen({"titel": kern}).get("summary") or kern), "transparency": "opaque"}
+        else:
+            body = {"summary": kern if lara_vervalt({"titel": kern}) else f"vervalt {kern}", "transparency": "transparent"}
+        blijvend = fout_gemeld = False
+        try:
+            _patch(x, body, tok)
+            terug = _lees_event(PRIVE_AGENDA, x["id"], tok)
+            t_ = (terug or {}).get("summary") or "??"
+            ok = terug is not None and "??" not in t_ and (
+                (keuze == "ja" and not lara_vervalt({"titel": t_}) and terug.get("transparency", "opaque") != "transparent")
+                or (keuze != "ja" and lara_vervalt({"titel": t_}) and terug.get("transparency") == "transparent"))
+        except (TitelVoorstel, GeenSchrijfrecht, SchaduwItem) as e:
+            ok, blijvend, fout_gemeld = False, True, True
+            regels.append(f"{code}: niet vastgelegd ({type(e).__name__})")
+        except Exception as e:  # noqa: BLE001
+            ok, fout_gemeld = False, True
+            regels.append(f"{code}: niet vastgelegd ({type(e).__name__}); volgende ronde opnieuw")
+        if not ok and not fout_gemeld:
+            regels.append(f"{code}: niet teruggelezen; volgende ronde opnieuw")
+        if not ok:
+            # een tijdelijke fout (Google, time-out, geen teruglezing): de volgende ronde opnieuw; pas na drie keer, of bij
+            # een blijvende weigering, mislukt met een bericht aan Mehdi en een nood (review PR 113)
+            if not blijvend and AW.poging_verwerken(sleutel) < 3:
+                continue
+            AW.afronden(sleutel, "mislukt", _bev(sleutel, m), f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
+                                                     "Ik kijk het na; de afspraak staat nog op ??.")
+            continue
+        wat = f"{_kale_titel(x['titel'])} op {_wanneer(x)}"
+        tekst = (f"Agendawacht: {code} vastgelegd. {wat} blijft staan; ?? is weg." if keuze == "ja" else
+                 f"Agendawacht: {code} vastgelegd. {wat} staat nu als vervallen en Beschikbaar (niet gewist). "
+                 "Bel zelf de praktijk om af te zeggen.")
+        AW.afronden(sleutel, keuze, _bev(sleutel, m), tekst)
+        regels.append(f"{code}: {keuze} vastgelegd en teruggelezen")
+    return regels
 
 
 def _voorouders(pid=None, diepte=10):
@@ -6166,8 +7586,20 @@ def terugkijkstand(argv):
     return 0
 
 
+def _wachtrij_begin():
+    """Het begin van de eerste ronde in de WhatsApp-wachtrij, voor de zorgroute iets zet: zo telt een blok van deze ronde
+    nooit als 'oud' (PR 113). Lukt dat niet, dan False: dan zet de zorgroute deze ronde niets (Codex-hertest 4)."""
+    try:
+        AW.sinds_zetten(RONDE_START)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
+    global WACHTRIJ_KLAAR
+    WACHTRIJ_KLAAR = _wachtrij_begin()
     werkwijze = ag.werkwijze()
     ag.hartslag("actief", taak="agenda lezen")
     try:
@@ -6290,11 +7722,19 @@ def main():
                     # een onvolledige agenda is geen bewijs dat iets ontbreekt: niets vergelijken, niets zetten (Codex A15)
                     raise _Onvolledig(f"{len(_stuk)} agenda('s) niet gelezen: mail niet met de agenda vergeleken")
                 # zorgafspraken eerst: een bevestigd consult wordt een echt blok, zodat de gewone melding geen vraag zet
+                if not WACHTRIJ_KLAAR:
+                    # zonder bewaard begin geen zorgblok: anders kon het later stil als 'oud' tellen (hertest 4, PR 113)
+                    raise _Onvolledig("WhatsApp-wachtrij niet schrijfbaar: zorgafspraken deze ronde niet gezet")
                 zst = zorg_afspraken_zetten(mres, rit_items, agenda._toegang(), bijwerken_items=True)
                 zorgstap_gedaan = True
                 mail_noden.extend(n for n in zst["noden"] if n["tekst"] not in {m["tekst"] for m in mail_noden})
                 MA.statussen_bewaren(mres)
                 ag.log(f"dag {vandaag}", "schrijf", zst["bord"][0])          # alleen tellingen: niets medisch op het bord
+                # een WhatsApp-melding per nieuw of verschoven zorgblok uit mail (Mehdi, 27-10-2026; W1 tot W8)
+                _zw, _zn = zorg_whatsapp_stap()
+                if _zw:
+                    ag.log(f"dag {vandaag}", "schrijf", "WhatsApp-meldingen: afspraken uit mail", "\n".join(_zw))
+                mail_noden.extend(_zn)
                 mregels = mail_meldingen(mres, _alle, agenda._toegang())
                 _tel = {s: sum(1 for a in mres if a["status"] == s) for s in ("gekoppeld",) + MA.VRAAG_STATUSSEN + ("zonder_tijd",)}
                 ag.log(f"dag {vandaag}", "schrijf", f"mail als bron: {len(mres)} afspraken uit mail ({_tel})", "\n".join(mregels))
@@ -6321,6 +7761,10 @@ def main():
                 ag.log(f"dag {vandaag}", "schrijf", f"codes van twee letters: {rg} reeks(en) omgezet", "\n".join(rregels))
         if not DAG_ARG and not ALLEEN_VANDAAG:
             mail_noden.extend(lara_vakantie_stap(rit_items, vandaag))
+            try:
+                mail_noden.extend(firma_stap(vandaag))
+            except Exception as e:  # noqa: BLE001
+                mail_noden.append({"tekst": f"Firma-agenda's niet nagekeken ({type(e).__name__})", "wie": "claude"})
         # Agendagasten: collega's en partners op de afspraken waar ze bij horen, zonder mail (Mehdi, 03-10-2026).
         # Volledige ronde: twee maanden vooruit; de wijzigingsroute: de dag die veranderde.
         try:
@@ -6367,6 +7811,11 @@ def main():
         except Exception as _e:  # noqa: BLE001
             print(f"  [dagcontrole] niet gelukt: {type(_e).__name__}: {str(_e)[:120]}", flush=True)
         ag.log(f"dag {vandaag}", "schrijf", f"reistijd: {rg} blok(ken) gemaakt, {ral} bestonden al, {rgeen} zonder adres, {rfout} mislukt", "\n".join(rregels))
+        _storing = sum("kaartdienst niet beschikbaar" in r or "grendelbron niet te lezen" in r for r in rregels)
+        if _storing:
+            # een tijdelijke storing (kaartdienst, of een grendelbron die niet te lezen is) telt niet als 'mislukt', maar
+            # de rit ontbreekt: _dagroute laat de dag dan wachten (Codex-hertest 28 en 30)
+            print(f"  [reistijd] rit ontbreekt door een storing: {_storing} (volgende ronde opnieuw)", flush=True)
         # Een rit die niet berekend raakte mag nooit alleen een cijfer zijn: dan ziet
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
@@ -6529,7 +7978,10 @@ class _Onvolledig(Exception):
     """Een bron is niet volledig gelezen: de stap die erop steunt, slaat over."""
 
 
-def _agenda_voor_mail(van=-14, tot=120):
+MAIL_VENSTER_DAGEN = 120      # zo ver vergelijkt de mail met de agenda
+
+
+def _agenda_voor_mail(van=-14, tot=MAIL_VENSTER_DAGEN):
     """De agenda waartegen de mail vergeleken wordt, en de agenda's die niet te lezen waren. Een uitnodiging die in een
     ongelezen agenda staat, is niet 'ontbreekt': dan vergelijk ik niet (Codex A15, 15-10-2026)."""
     ruw = afspraken(van, tot)
@@ -6545,6 +7997,11 @@ def zorgronde():
     server, nooit het bord). Voor de inhaalcontrole en het bewijs; belt niet en raakt verder niets."""
     import mail_afspraken as MA  # noqa: PLC0415
     _slot = slot_nemen()  # noqa: F841
+    try:
+        AW.sinds_zetten(RONDE_START)
+    except Exception as e:  # noqa: BLE001
+        print(f"  [zorg] WhatsApp-wachtrij niet schrijfbaar ({type(e).__name__}): niets gezet (Codex-hertest 4, PR 113)")
+        return 1
     _alle, _stuk = _agenda_voor_mail()
     mres, mfout = MA.ronde(_alle, (datetime.now() - timedelta(days=14)).date().isoformat(), agenda_onvolledig=_stuk)
     if _stuk:
@@ -6552,6 +8009,9 @@ def zorgronde():
         return 1
     zst = zorg_afspraken_zetten(mres, _alle, agenda._toegang())
     MA.statussen_bewaren(mres)
+    _zw, _zn = zorg_whatsapp_stap()          # ook hier: geen zorgblok zonder WhatsApp-melding (Codex-hertest PR 113)
+    for regel in _zw + [n["tekst"] for n in _zn]:
+        print("  [whatsapp] " + regel)
     mregels = mail_meldingen(mres, _alle, agenda._toegang())
     for mb, r in sorted(MA.leesstand().items()):
         print(f"  [leesstand] {mb}: {r.get('dekking')}, laatst gelukt {r.get('laatst_gelukt')}"
@@ -6568,6 +8028,11 @@ if __name__ == "__main__":
     if "--kleuren" in sys.argv:          # om :17 en :47, ook 's nachts en in het weekend (FR-21)
         print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · kleurherstel", flush=True)
         kleurherstel()
+        try:                             # firma-agenda's: ook 's nachts en in het weekend (Codex-hertest 3, punt 15)
+            for _n in firma_kleurronde(nu_lokaal().date().isoformat()):
+                print(f"firma-agenda's: {_n}", flush=True)
+        except Exception as _e:  # noqa: BLE001
+            print(f"firma-agenda's niet nagekeken ({type(_e).__name__})", file=sys.stderr, flush=True)
         sys.exit(0)
     if "--zorg" in sys.argv:             # zorgafspraken uit mail, met de details in een privélog (opdracht v1.0, 14-10-2026)
         print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · zorgafspraken uit mail", flush=True)
@@ -6577,4 +8042,7 @@ if __name__ == "__main__":
     # Elke ronde begint met zijn tijdstip. Gezien 24-09-2026: het logboek had geen enkele tijd,
     # zodat niet na te gaan was wanneer iets gebeurde.
     print(f"=== {nu_lokaal():%Y-%m-%d %H:%M} Brussel · " + (f"dag {DAG_ARG}" if DAG_ARG else "volledige ronde"), flush=True)
+    if not DAG_ARG and not ALLEEN_VANDAAG:
+        import atexit  # noqa: PLC0415
+        atexit.register(_firma_dagen_na_ronde)   # na de ronde, als het rondeslot vrij is (Codex-hertest 26)
     sys.exit(main() or 0)

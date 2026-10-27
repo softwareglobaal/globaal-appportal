@@ -73,6 +73,7 @@ KETEN_MARGE = 10 * 60             # zoveel seconden voor de keten begint er geen
 KETEN_HARD = 5 * 60               # zoveel seconden voor de keten breekt alles af, ook de inventaris
 VRIJ_MARGE = 2 * 1024 ** 3        # zoveel schijf moet er naast het bestand vrij blijven op de VM
 POGINGEN = 3                      # een tijdelijke fout wordt pas een nood na zoveel rondes op hetzelfde bestand
+VERVANGING_WACHT = timedelta(hours=24)  # zo lang wacht een voorlopig id in verwerking op zijn definitieve vervanger
 WISREGEL_DAGEN = 30               # de wisregel van ZA-01: wat ouder is, moet bewezen in Dropbox staan
 RECHT = re.compile(r"[a-z_][a-z0-9_]*(?::[a-z0-9_]+){1,3}")
 GEMIST_ACTIE = "Zoom-opname zonder kopie als gemist aanvaarden"
@@ -103,7 +104,9 @@ class Stop(RuntimeError):
 
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
-              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "inventaris": "",
+              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "vervanging": {},
+              "vervangers": {},
+              "inventaris": "",
               "dekking": False, "dropbox": ""}
 
 
@@ -469,6 +472,12 @@ def _utc(iso):
     return d.astimezone(timezone.utc) if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
+def _zelfde_begin(a, b, speling=timedelta(minutes=2)):
+    """Hetzelfde begin van een opnamedeel, op twee minuten na (een voorlopig en een definitief bestand)."""
+    ta, tb = _utc(a), _utc(b)
+    return ta is not None and tb is not None and abs(ta - tb) <= speling
+
+
 def gb(bestanden):
     return sum(int(f.get("grootte") or 0) for f in bestanden) / 1024 ** 3
 
@@ -650,11 +659,44 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
     for fid, oud in list(staat["gezien"].items()):
         if fid not in per_id and fid not in staat["bestanden"]:
-            staat["verdwenen"][fid] = {**oud, "sinds": moment}
             del staat["gezien"][fid]
             staat["fouten"].pop(fid, None)
-    for f in te_doen + bezig:  # Codex controle 4, punt 20: elk onbewezen bestand, ook in verwerking, wordt bijgehouden
+            if oud.get("bezig") and oud.get("uuid") in uuids:
+                # Gemeten op de VM, 27-10-2026: Zoom geeft een bestand in verwerking een voorlopig id (grootte 0) en
+                # vervangt het door een definitief id zodra het klaar is. Het voorlopige wacht op zijn vervanger
+                # (Codex controle verwerking, punt 39): pas een nieuw afgerond bestand van dezelfde soort, hetzelfde
+                # opnametype en hetzelfde begin in die meeting heft het op.
+                staat["vervanging"][fid] = {**oud, "sinds": moment}
+                continue
+            staat["verdwenen"][fid] = {**oud, "sinds": moment}
+    gebruikt = set(staat["vervangers"])
+    for fid, oud in list(staat["vervanging"].items()):
+        if fid in per_id:
+            del staat["vervanging"][fid]  # Codex controle verwerking 2, punt 42: het id is terug, het volgt de gewone weg
+            continue
+        m = next((x for x in meetings if x["uuid"] == oud.get("uuid")), None)
+        # Codex controle verwerking 2, punt 41: alleen een NIEUW bestand telt, een dat er niet was toen het voorlopige
+        # id gezien werd, en elk bestand vervangt hoogstens een voorlopig id
+        vervanger = next((f["id"] for f in (m["bestanden"] if m else [])
+                          if f.get("id") and f["id"] != fid and f["id"] not in set(oud.get("andere") or [])
+                          and f["id"] not in gebruikt and f.get("status") == "completed"
+                          and f.get("soort") == oud.get("soort") and f.get("opnametype") == oud.get("opnametype")
+                          and _zelfde_begin(f.get("start"), oud.get("start"))), None)
+        if vervanger:
+            gebruikt.add(vervanger)
+            staat["vervangers"][vervanger] = fid
+            del staat["vervanging"][fid]  # het definitieve bestand volgt de gewone weg (gezien, kopie, bewijs)
+        elif m is None or (_utc(moment) - (_utc(oud.get("sinds")) or _utc(moment))) > VERVANGING_WACHT:
+            del staat["vervanging"][fid]  # de meeting is weg, of de vervanger bleef uit: een verlies tot Mehdi beslist
+            staat["verdwenen"][fid] = {k: v for k, v in oud.items() if k != "sinds"} | {"sinds": moment}
+    for f in te_doen:  # Codex controle 4, punt 20: elk onbewezen bestand wordt bijgehouden, ook in verwerking
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
+    for f in bezig:
+        m = per_id[f["id"]][0]
+        staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0), "uuid": m["uuid"],
+                                    "bezig": True, "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
+                                    # welke bestanden de meeting al had: die kunnen nooit de vervanger zijn (punt 41)
+                                    "andere": sorted(x["id"] for x in m["bestanden"] if x.get("id") and x["id"] != f["id"])}
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:
@@ -701,7 +743,8 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             if gestopt:
                 break
             ids = [f.get("id") for f in m["bestanden"]]
-            if (ids and all(ids) and m["uuid"] not in staat["meetings"]
+            wacht = {v.get("uuid") for v in staat["vervanging"].values()}  # een vervanger kan nog komen: nog geen
+            if (ids and all(ids) and m["uuid"] not in staat["meetings"] and m["uuid"] not in wacht  # beschrijving
                     and all(f.get("status") == "completed" for f in m["bestanden"])
                     and all(i in staat["bestanden"] for i in ids)):
                 inhoud, pad = opname_json(m, staat["bestanden"]), f"{mapnaam(m)}/opname.json"
@@ -754,7 +797,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     oud_open = [f for f in onbewezen if (_utc(f.get("start")) or grens) <= grens]
     binnen = klok() <= hard
     gaaf = (not droog and nagekeken_weg == 0 and not staat["verdwenen"] and not staat["onvolledig"]
-            and not staat["blokkades"] and binnen)
+            and not staat["blokkades"] and not staat["vervanging"] and binnen)
     # Dekking ja (K6, Codex controle 3 en 4): uit wat deze ronde zelf zag en nakeek. Alles wat Zoom nu heeft, was al
     # bewezen voor de ronde begon (dus een tweede inventaris), niets wordt nog verwerkt, elk bewijs klopte, niets is
     # verdwenen, onvolledig of geblokkeerd, en de ronde bleef binnen haar tijd.

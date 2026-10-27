@@ -63,6 +63,10 @@
    "wie_schrijft": "Google"
   }
  ],
+ "firma_meelezen": [
+  {"naam": "Elevait N.V.", "adres": "elevaitservices@gmail.com", "waarover": "gedeelde agenda van Elevait; collega's (Siyan) plannen er hun eigen afspraken", "regel": "alleen meelezen: wat Mehdi aangaat ('Mehdi: ...' vooraan of Mehdi als gast) krijgt Mehdi als stille gast, zodat het op zijn werkagenda staat; verder schrijft de agent er niets (driehoeksoverleg 27-10-2026, Z1 tot Z7)"},
+  {"naam": "High Design Studio NV", "adres": "hdssuriname@gmail.com", "waarover": "gedeelde agenda van HDS (verjaardagen, meterstanden, afspraken van collega's)", "regel": "alleen meelezen, zoals Elevait N.V."}
+ ],
  "titelconventie": {
   "vorm": "!! Mehdi: [FF-SS] TT nummer - klant, straat nummer, postcode gemeente   (FF firma, SS soort, TT opdracht: telkens twee letters)",
   "voorbeeld": "!! Mehdi: [UB-KB] BS 46118 - Natasja Gerritsen, Koning Albertlaan 206, 3620 Lanaken",
