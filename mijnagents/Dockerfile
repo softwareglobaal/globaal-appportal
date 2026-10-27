@@ -29,6 +29,9 @@ RUN python3 test_klaarzet_revisie.py
 # Zie test_gesprekken_api.py. P9 leest terug met mijnagents-runner/koppelingen/bordstand.py, dat niet in deze image zit;
 # de CI draait P9 in de hele repo (regie-grendels.yml), hier slaat de vlag hem zichtbaar over.
 RUN P9_OVERSLAAN_IN_BORDIMAGE=1 python3 test_gesprekken_api.py
+# Grendel op de weekpagina (/week): alleen beheer, een week die niet bestaat geeft 404, een lege of onleesbare week laat
+# de pagina niet vallen, null wordt een vraagteken, en de jaargrens 2026-W53 naar 2027-W01 klopt. Zie test_week.py.
+RUN python3 test_week.py
 # Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
 # geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
 RUN python3 test_felix.py

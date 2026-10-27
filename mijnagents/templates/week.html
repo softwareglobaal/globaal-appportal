@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week {{ week }} · {{ app_naam }}</title>
+<style>
+  :root{--bg:#0f1115;--paper:#171a21;--rand:#252a33;--tekst:#e7e9ee;--zacht:#9aa3b2;--accent:#6ea8fe;--stil:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tekst);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--rand);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px}
+  header a{color:var(--accent);text-decoration:none;font-size:13px}
+  main{padding:16px 24px;max-width:1200px;margin:0 auto}
+  .uitleg{color:var(--zacht);font-size:13px;margin:0 0 12px}
+  .kop{color:var(--zacht);font-size:13px;margin:0 0 6px}
+  .letop{color:var(--stil);font-size:13px;margin:0 0 12px}
+  .melding{background:var(--paper);border:1px solid var(--rand);border-radius:10px;padding:14px 18px;font-size:15px}
+  h2{margin:18px 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--zacht)}
+  .wrap{overflow-x:auto;border:1px solid var(--rand);border-radius:10px;background:var(--paper);margin-bottom:8px}
+  table{border-collapse:collapse;width:100%;min-width:1000px}
+  table.klein{min-width:0;width:auto}
+  th,td{text-align:left;padding:7px 9px;border-top:1px solid var(--rand);vertical-align:top}
+  th{color:var(--zacht);font-weight:600;white-space:nowrap;font-size:12px}
+  th.groep{text-align:center;color:var(--tekst)}
+  .b{border-left:1px solid var(--rand)}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  td.dag a{color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap}
+  td.stand{color:var(--zacht);font-size:12px;text-align:center}
+  td.grijs{color:var(--zacht)}
+  tr.totaal td{font-weight:700;border-top:2px solid var(--zacht)}
+  .leeg{color:var(--zacht)}
+</style>
+</head>
+<body>
+  {# Achttien kolommen naast de dag; een dag die niet vastgesteld is, krijgt een cel over die hele breedte. #}
+  {% set breedte = 18 %}
+  {% macro getal(v) %}{% if v is none %}<span class="leeg">?</span>{% elif v == '0' %}<span class="leeg">0</span>{% else %}{{ v }}{% endif %}{% endmacro %}
+  {% macro cellen(blokken) %}{% for b in blokken %}{% if b.stand %}<td class="stand b" colspan="{{ b.breedte }}">{{ b.stand }}</td>{% else %}{% for v in b.getallen %}<td class="n{% if loop.first %} b{% endif %}{% if b.grijs %} grijs{% endif %}"{% if b.grijs %} title="onvolledig"{% endif %}>{{ getal(v) }}</td>{% endfor %}{% endif %}{% endfor %}{% endmacro %}
+<header><h1>Week {{ nummer }}</h1>
+  {% if vorige %}<a href="{{ url_for('week_pagina', week=vorige) }}">← vorige week</a>{% endif %}
+  {% if volgende %}<a href="{{ url_for('week_pagina', week=volgende) }}">volgende week →</a>{% endif %}
+  <a href="{{ url_for('dagen_pagina') }}">dagen</a><a href="{{ url_for('bord') }}">bord</a></header>
+<main>
+  <p class="kop">{{ week }} · {{ van }} tot {{ tot }}{% if vastgesteld %} · {{ vastgesteld }}{% endif %}</p>
+  {% if voorbehoud %}<p class="letop">Let op: {{ voorbehoud|join(', ') }}.</p>{% endif %}
+
+  {% if fout %}
+  <p class="melding">{{ fout }}</p>
+  {% elif not aanwezig %}
+  <p class="melding">Deze week is nog niet samengevat.</p>
+  {% else %}
+
+  <h2>Gepland tegenover gebeurd</h2>
+  <div class="wrap">
+  <table>
+    <thead>
+    <tr><th rowspan="2">Dag</th><th class="groep b" colspan="4">Afspraken in de agenda</th><th class="groep b" colspan="2">Niet gepland</th>
+      <th class="groep b" colspan="3">Gesprekken</th><th class="groep b" rowspan="2">Zoom-chats</th><th class="groep b" colspan="4">WhatsApp</th>
+      <th class="groep b" colspan="2">Telefoon</th><th class="groep b" colspan="2">Mail</th></tr>
+    <tr><th class="b">Bevestigd</th><th>Aanwijzing</th><th>Geen spoor</th><th>Privé</th>
+      <th class="b">gesprekken</th><th>min</th>
+      <th class="b">aantal</th><th>min</th><th>met opname</th>
+      <th class="b">gesprekken</th><th>berichten</th><th>oproepen</th><th>min</th>
+      <th class="b">oproepen</th><th>min</th>
+      <th class="b">in</th><th>uit</th></tr>
+    </thead>
+    <tbody>
+    {% for r in rijen %}
+    <tr><td class="dag"><a href="{{ url_for('dag_pagina', datum=r.dag) }}">{{ r.label }}</a></td>
+      {% if r.vastgesteld %}{{ cellen(r.blokken) }}{% else %}<td class="stand b" colspan="{{ breedte }}">niet vastgesteld</td>{% endif %}</tr>
+    {% endfor %}
+    <tr class="totaal"><td>Totaal</td>{{ cellen(totaal) }}</tr>
+    </tbody>
+  </table>
+  </div>
+  {% if mail_onvolledig %}<p class="uitleg">Grijze mailcijfers zijn onvolledig.</p>{% endif %}
+
+  <h2>Geplande uren per firma</h2>
+  {% if heeft_planning and planning_stand != 'volledig' %}<p class="letop">Planning: {{ planning_stand or 'onbekend' }}</p>{% endif %}
+  {% if firmas %}
+  <div class="wrap">
+  <table class="klein">
+    <thead><tr><th>Firma</th><th>Afspraken</th><th>Uren</th></tr></thead>
+    <tbody>
+    {% for f in firmas %}<tr><td>{{ f.naam }}</td><td class="n">{{ getal(f.afspraken) }}</td><td class="n">{{ getal(f.uren) }}</td></tr>
+    {% endfor %}
+    <tr class="totaal"><td>Totaal</td><td class="n">{{ getal(planning_afspraken) }}</td><td class="n">{{ getal(planning_uren) }}</td></tr>
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="leeg">Geen geplande uren in dit overzicht.</p>{% endif %}
+
+  <p class="uitleg">Geplande uren en gemeten gespreksminuten staan apart; een afspraak zonder spoor is niet 'niet gedaan'.</p>
+  {% endif %}
+</main>
+</body>
+</html>

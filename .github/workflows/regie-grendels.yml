@@ -22,6 +22,7 @@ jobs:
           python-version: "3.11"
       - run: pip install -r mijnagents/requirements.txt
       - run: cd mijnagents && python3 test_gesprekken_api.py
+      - run: cd mijnagents && python3 test_week.py
 
   # De runners: de gedeelde leesweg bord.db_lees (G1, G2, T36), de begin_noden van de ronde (X4, T99) en De Fathomwacht
   # (J1, K3, Z13; BAS-01 geen privé in het werkverslag, BAS-04 het korte venster); De Zoomwacht op
@@ -53,6 +54,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_communicatie_bundelaar.py
       - run: python3 mijnagents-runner/tests/test_dagvaststelling.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
+      - run: python3 mijnagents-runner/tests/test_weekoverzicht.py
       - run: python3 mijnagents-runner/tests/test_keten.py
       - run: python3 mijnagents-runner/tests/test_regisseur.py
       - run: python3 mijnagents-runner/tests/test_bode_regie.py

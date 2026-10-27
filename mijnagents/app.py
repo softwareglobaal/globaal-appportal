@@ -1766,6 +1766,146 @@ def dag_pagina(datum):
         transcripten=van_soort("transcript", "werfbezoek"), gesprekken=gesprekken,
         gesprekken_tellend=sum(1 for g in gesprekken if not g["dubbel_van"] and telt_als_gesprek(g)),
         gesprekken_geen=sum(1 for g in gesprekken if not g["dubbel_van"] and not telt_als_gesprek(g)),
+        week=_week_van(datum),
+    )
+
+
+# --- week: wat Mehdi in een ISO-week effectief deed, naast wat gepland stond (driehoeksoverleg 27-10-2026). Alleen
+#     lezen, alleen beheer. Een runner zet per week een klaarzet-item weekoverzicht:<JJJJ-Www> met json klaar; deze
+#     pagina rekent niets uit, ze toont het. Een getal null is onbekend en wordt een vraagteken.
+WEEKDAGEN = ("Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo")
+
+
+def week_naam(d):
+    j, w, _ = d.isocalendar()
+    return f"{j:04d}-W{w:02d}"
+
+
+def _week_van(datum):
+    """De ISO-week van een dag JJJJ-MM-DD, of None voor een datum die niet bestaat."""
+    try:
+        return week_naam(datetime.strptime(datum, "%Y-%m-%d").date())
+    except ValueError:
+        return None
+
+
+def _week_maandag(week):
+    """De maandag van week JJJJ-Www, of None als die week niet bestaat (W00, W54, W53 in een jaar zonder)."""
+    m = re.fullmatch(r"(\d{4})-W(\d{2})", week)
+    try:
+        return datetime.fromisocalendar(int(m[1]), int(m[2]), 1).date() if m else None
+    except ValueError:
+        return None
+
+
+def _wk_getal(v):
+    """Een getal uit het weekoverzicht als tekst; None betekent onbekend. Ook NaN of iets anders dan een getal."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not -1e15 < v < 1e15:
+        return None
+    return str(int(v)) if float(v).is_integer() else f"{v:.1f}".replace(".", ",")
+
+
+def _wk_uren(minuten):
+    """Minuten als uren met een decimaal en een komma: 90 wordt 1,5."""
+    return None if _wk_getal(minuten) is None else f"{minuten / 60:.1f}".replace(".", ",")
+
+
+def _wk_dict(v):
+    return v if isinstance(v, dict) else {}
+
+
+def _week_blokken(e, totaal=False):
+    """De cellen van een rij, in de volgorde van de kolommen op week.html: per blok de getallen, of voor WhatsApp en
+    telefoon de stand over de breedte van het blok als die niet aangesloten is."""
+    def blok(d, *sleutels, grijs=False):
+        d = _wk_dict(d)
+        return {"getallen": [_wk_getal(d.get(k)) for k in sleutels], "grijs": grijs}
+
+    def kanaal(d, *sleutels):
+        d = _wk_dict(d)
+        if totaal:
+            # zonder een aangesloten dag geen getallen, maar de stand van de week: niet aangesloten of onbekend (Codex
+            # fase 2, punt 1: onbekend is nooit 'niet aangesloten')
+            stand = (str(d.get("stand") or "niet aangesloten") if _wk_getal(d.get("aangesloten_dagen")) == "0" else None)
+        else:
+            stand = None if d.get("stand") == "aangesloten" else str(d.get("stand") or "onbekend")
+        return {"stand": stand, "breedte": len(sleutels)} if stand else blok(d, *sleutels)
+
+    mail = _wk_dict(e.get("mail"))
+    return [blok(e.get("afspraken"), "bevestigd", "aanwijzing", "geen spoor", "privé"),
+            blok(e.get("niet_gepland"), "gesprekken", "minuten"),
+            blok(e.get("gesprekken"), "aantal", "minuten", "met_opname"),
+            blok(e, "zoom_chats"),
+            kanaal(e.get("whatsapp"), "gesprekken", "berichten", "oproepen", "minuten"),
+            kanaal(e.get("telefoon"), "oproepen", "minuten"),
+            blok(mail, "binnen", "verzonden", grijs=mail.get("onvolledig") is True)]
+
+
+def laatste_week(nu):
+    """De laatst afgesloten ISO-week in Brussel: die maakt De Dagbundelaar maandagnacht (weekoverzicht.vorige_week).
+    De lopende week is nog niet samengevat (Codex fase 2, punt 3)."""
+    vandaag = nu.astimezone(BRUSSEL).date()
+    return week_naam(vandaag - timedelta(days=vandaag.weekday() + 7))
+
+
+@app.route("/week")
+def week_nu():
+    if not mag_beslissen():
+        abort(403)
+    return redirect(url_for("week_pagina", week=laatste_week(datetime.now(BRUSSEL))))
+
+
+@app.route("/week/<week>")
+def week_pagina(week):
+    maandag = _week_maandag(week) if mag_beslissen() else None
+    if maandag is None:
+        abort(404 if mag_beslissen() else 403)
+    week = week_naam(maandag)
+    # Vorige en volgende: maandag min of plus zeven dagen, dan de ISO-week daarvan (2026-W53 gaat naar 2027-W01).
+    try:
+        vorige = week_naam(maandag - timedelta(days=7))
+    except OverflowError:
+        vorige = None
+    try:
+        volgende = week_naam(maandag + timedelta(days=7))
+    except OverflowError:
+        volgende = None
+    dagen = [maandag + timedelta(days=i) for i in range(7)]
+    item = db().execute("SELECT inhoud FROM klaarzet WHERE uniek=? AND soort='weekoverzicht'",
+                        ("weekoverzicht:" + week,)).fetchone()
+    d, fout = {}, ""
+    if item:
+        try:
+            d = json.loads(item["inhoud"] or "", parse_constant=lambda _c: None)
+        except (ValueError, RecursionError):
+            d = None
+        if not isinstance(d, dict):
+            d, fout = {}, "Het weekoverzicht van deze week staat op het bord, maar is niet leesbaar (geen geldige JSON)."
+    per_dag = {str(e.get("dag")): e for e in (d.get("dagen") if isinstance(d.get("dagen"), list) else [])
+               if isinstance(e, dict)}
+    rijen = []
+    for i, dag in enumerate(dagen):
+        e = per_dag.get(dag.isoformat(), {})
+        vast = e.get("vastgesteld") is True
+        rijen.append({"dag": dag.isoformat(), "label": f"{WEEKDAGEN[i]} {dag:%d-%m}", "vastgesteld": vast,
+                      "blokken": _week_blokken(e) if vast else []})
+    totaal, planning = _wk_dict(d.get("totaal")), _wk_dict(d.get("planning"))
+    totaal_blokken = _week_blokken(totaal, totaal=True)
+    voorbehoud = totaal.get("voorbehoud") if isinstance(totaal.get("voorbehoud"), list) else []
+    vastgesteld, aantal = _wk_getal(totaal.get("vastgesteld")), _wk_getal(totaal.get("dagen"))
+    firmas = [{"naam": str(f.get("naam") or f.get("code") or "?"), "afspraken": _wk_getal(f.get("afspraken")),
+               "uren": _wk_uren(f.get("minuten"))}
+              for f in (planning.get("uren_per_firma") if isinstance(planning.get("uren_per_firma"), list) else [])
+              if isinstance(f, dict)]
+    return render_template(
+        "week.html", app_naam=APP_NAAM, week=week, nummer=int(week[-2:]), van=f"{dagen[0]:%d-%m}",
+        tot=f"{dagen[-1]:%d-%m}", vorige=vorige, volgende=volgende, aanwezig=bool(item) and not fout, fout=fout,
+        rijen=rijen, totaal=totaal_blokken, voorbehoud=[str(x) for x in voorbehoud],
+        vastgesteld=f"{vastgesteld} van {aantal} dagen vastgesteld" if vastgesteld and aantal else "",
+        mail_onvolledig=any(b.get("grijs") for r in rijen for b in r["blokken"]) or any(b.get("grijs") for b in totaal_blokken),
+        firmas=firmas, planning_afspraken=_wk_getal(planning.get("afspraken")),
+        planning_uren=_wk_uren(planning.get("minuten")), planning_stand=planning.get("stand"),
+        heeft_planning=bool(planning),
     )
 
 

@@ -1,8 +1,9 @@
 # Werkwijze van De Dagbundelaar (Privé)
 
-Versie 3.2 (26-10-2026, naar Mehdi's opdracht "de dag vastleggen"; 3.1: inhalen na
+Versie 3.3 (27-10-2026, naar Mehdi's opdracht "de dag vastleggen"; 3.1: inhalen na
 een lange slaap van de Mac, fase 2; 3.2: de hotmailkopie van de server, haar
-dekking en een mailnood per postvak, driehoeksoverleg 26-10-2026). Ik ben de
+dekking en een mailnood per postvak, driehoeksoverleg 26-10-2026; 3.3: het
+weekoverzicht, driehoeksoverleg 27-10-2026). Ik ben de
 datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
 
 1. **De dagvaststelling**: elke nacht na middernacht leg ik vast wat Mehdi de dag
@@ -63,6 +64,18 @@ datagedreven verzamelaar van Mehdi's logboek-laag. Ik doe twee dingen:
    dezelfde tekst. Verandert er iets (een nagekomen gesprek, een late opname), dan
    een nieuwe versie; de vorige blijft in `versies/`. Ik lees bestand en item terug,
    en ik meld een dag die nog niet in Dropbox bevestigd is.
+   Naast het dagbestand bewaar ik de telling van de dag (`JJJJ-MM-DD.json`): alleen
+   aantallen en standen, met de versie van het dagbestand, nooit een naam. Pas als ook
+   die teruggelezen is, komt de dag op het bord.
+5b. **Weekoverzicht** (Mehdi, 26-10-2026: "wat ik effectief gedaan heb, wekelijks"):
+   elke nacht tel ik de dagen van de laatst afgesloten ISO-week op, met de geplande
+   uren per firma uit de titelcode. Zo werkt het zichzelf bij als een dag van die week
+   herzien wordt. Bestand `dagboek/JJJJ/week/JJJJ-Www.md` en `.json`, en een item voor
+   de pagina Week op het bord. Geen eigen koppeling: de uitkomst per afspraak komt uit
+   de dagvaststelling. Onbekend blijft onbekend, geplande uren en gemeten
+   gespreksminuten staan apart, en er staat geen naam in. Lukt het niet, dan een nood
+   tot een volgende nacht het wel maakt; de nacht breekt er niet op. Met de hand:
+   `dagbundelaar.py --week JJJJ-Www`.
 6. **Ochtend** (werkdagen, laatste stap van de gesprekkenketen): de bundels per
    dossier zoals voordien, en de dagvaststelling van gisteren opnieuw. Faalt de
    vaststelling, dan gaan de bundels toch door en meld ik het.

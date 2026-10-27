@@ -222,6 +222,13 @@ check("laag 4: hele dag op maandag", body["start"] == {"date": "2026-10-05"} and
 check("laag 4: vrij, blokkeert geen Calendly-slot (FR-57)", body["transparency"] == "transparent")
 check("laag 4: zonder melding", body["reminders"] == {"useDefault": False, "overrides": []})
 check("laag 4: gestempeld met het weeknummer", body["extendedProperties"]["private"]["agendawacht_week"] == "2026-W40")
+_lang = WC.agenda_body("2026-W40", date(2026, 10, 5), dict(uit, overzicht="x" * 9000))
+check("laag 4 (fase 2, Q6): de link naar de weekpagina staat er precies een keer, ook bij een lange tekst",
+      body["description"].count("https://mijnagents.globaal.be/week/2026-W40") == 1
+      and "mijnagents.globaal.be/week/2026-W40" in WC.agenda_body("2026-W40", date(2026, 10, 5),
+                                                                   WC.mislukt_overzicht("2026-W40", RuntimeError("x")))["description"]
+      and _lang["description"].startswith("Wat je deze week deed: https://mijnagents.globaal.be/week/2026-W40\n"),
+      body["description"][:200])
 gedaan = []
 oud_insert, oud_patch = W._insert, W._patch
 W._insert = lambda kal, b, tok: gedaan.append(("insert", kal))

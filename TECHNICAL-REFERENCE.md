@@ -3069,6 +3069,24 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   de agent, de volledige tekst en het mandaat als parameters; het runbook zet het mandaat van de kaart mee als het
   voorstel het draagt), en het geldt pas na de klik van Mehdi. Volgorde van de uitrol van
   release 1: `~/dev/samenwerking-codex/regie-zoom/uitrolstappen-release1.md`.
+- **Bewaking van de bouw** (De Bouwwacht, `bouwwacht.py`, cron `1-59/2`; K5 van de uitrol van PR #103, driehoeksoverleg
+  27-10-2026): elke 2 minuten per dienst `mijnagents`, `agents` en `siyanagents` de boom `git rev-parse HEAD:<map>` in
+  `~/appportal` tegenover `<map>-data/.built`. Het begin van het verschil komt alleen uit de reflog van HEAD: de stap
+  waarop HEAD wegging van de gebouwde boom. Verschillen ze 10 minuten of langer, of is het begin niet te zien (geen
+  markering, markering niet in de reflog, of geen leesbare reflog, dan met de nood "Bouwwacht kan de reflog van de VM
+  niet lezen"), dan de nood "Bouw loopt achter op de code: <map>" (claude-code), met minuten, korte boomcodes en de
+  laatste regel van `~/deploy-<map>.log` in het detail; gelijk of een gewone bouw sluit de nood. Een storing is de tijd
+  dat die nood openstaat: de ronde daarna een signaal voor Mehdi via De Bode (ja van Mehdi, 27-10-2026), met `uniek` =
+  `bouwwacht-achter-<map>-<nummer van de nood op het bord>`, dus een keer per storing; titel zonder het belwoord. Elke
+  open bouwnood krijgt zijn signaal voor de ronde hem kan sluiten, ook na herstel (als terugblik); een dienst die even
+  niet na te kijken is, of open noden die het bord niet geeft, sluiten geen storing (tweede overleg, X2 en K2). Een
+  eigen stand als klok was er eerst (overleg K2), maar gaf in zes Codex-toetsen telkens nieuwe randgevallen; de
+  duurzame stand van een storing staat op het bord. De wacht leest alleen (`git rev-parse`, `git log -g`) en schrijft
+  alleen een slotbestand (`mijnagents-data/bouwwacht.slot`, een ronde tegelijk: bezet slaat de ronde over, geen slot
+  geeft geen ronde en exit 1); `--droog` meet zonder bord. Zonder geldige grenzen sluit de ronde niets. Stopt de ronde
+  zonder bord of komt de eindhartslag niet aan (`bord.Agent.hartslag_ok`), dan exit 1 met de meting in
+  `~/agents/bouwwacht.log`. Werfverslag valt erbuiten (eigen bewaking via `.mislukt`). Grendels:
+  `tests/test_bouwwacht.py` in `agentnorm-grendels.yml`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
   `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is
