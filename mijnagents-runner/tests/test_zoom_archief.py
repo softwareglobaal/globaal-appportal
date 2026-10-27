@@ -1173,6 +1173,27 @@ def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
         ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
     assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
 
+
+# ---------------------------------------------------------------------- Codex-controle 8 (27-10-2026) ---
+def test_codex39_een_bestand_dat_tussen_de_twee_lezingen_verandert_houdt_groen_tegen():
+    for mutatie in ({"grootte": 2}, {"grootte": 0}, {"status": "processing"}, {"status": "deleted"}):
+        z, _, _ = opzet()
+        m = z.meeting("u1", "2022-02-02T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+        _tot_ja(z)
+        echt = z.opnames
+        gezien = {"n": 0}
+
+        def opnames(van, tot, profiel="lees", prullenbak="", streng=False, bewaker=None, mu=mutatie):
+            uit = echt(van, tot, profiel, prullenbak, streng, bewaker)
+            if prullenbak == "recording_file":
+                gezien["n"] += 1
+                if gezien["n"] == 1:  # na de eerste lezing verandert Zoom hetzelfde bestand
+                    m["bestanden"][0].update(mu)
+            return uit
+        Z.opnames = opnames
+        _, uit = ronde(nu=NU + timedelta(hours=1))
+        assert gezien["n"] == 2 and not uit["dekking"] and not uit["veilig"], (mutatie, gezien, uit)
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

@@ -732,7 +732,12 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         if tweede is None:
             dekking = veilig = False
         else:
-            nieuw_open = [f for m in tweede for f in m["bestanden"] if f.get("id") not in staat["bestanden"]]
+            # Codex controle 8, punt 39: een bekend id telt alleen als bewezen als Zoom nu dezelfde, niet-nul grootte
+            # opgeeft als de kopie in Dropbox, en het bestand afgerond is
+            bewezen = staat["bestanden"]
+            nieuw_open = [f for m in tweede for f in m["bestanden"]
+                          if not (f.get("id") in bewezen and f.get("status") == "completed" and f.get("grootte")
+                                  and bewezen[f["id"]]["grootte"] == f["grootte"])]
             if any(problemen(m) for m in tweede) or nieuw_open:
                 dekking = False
                 if any(problemen(m) for m in tweede) or any((_utc(f.get("start")) or grens) <= grens for f in nieuw_open):
