@@ -9,8 +9,8 @@ K2, K5):
   "Bouw loopt achter op de code: <map>", voor claude-code, zonder getal in de tekst;
 - de klok begint bij de echte pull (reflog), ook in de eerste ronde; een tweede pull tijdens een storing zet ze niet
   terug; een pull die de map niet raakt, telt niet; een reset of branch-wissel terug naar de gebouwde boom is gelijk;
-- zonder reflog is de eigen stand het anker; de reflog mag dat anker alleen vroeger zetten; een nieuwe markering
-  begint het anker opnieuw;
+- toont de reflog het begin, dan volgt het anker, ook na een tussentijdse gelijkheid die geen ronde zag; zonder
+  reflog is de eigen stand de klok; een nieuwe markering begint het anker opnieuw;
 - herstel sluit de nood; twee diensten in storing geven twee noden; een dienst die niet na te kijken is, houdt de
   andere niet tegen;
 - de ronde leest alleen (rev-parse en log) en schrijft niets buiten haar eigen stand; --droog schrijft en stuurt niets;
@@ -278,18 +278,32 @@ def test_zonder_reflog_is_de_eigen_stand_het_anker(repo):
 
 
 @proef
-def test_de_reflog_zet_het_anker_alleen_vroeger(repo):
+def test_toont_de_reflog_het_begin_dan_volgt_het_anker(repo):
     gebouwd = repo.boom("a", "mijnagents")
     os.makedirs(os.path.dirname(repo.stand), exist_ok=True)
     with open(repo.stand, "w") as f:
         json.dump({"mijnagents": {"gebouwd": gebouwd, "sinds": T0 - 20 * MIN}}, f)
     repo.zet("b", T0)
     uit, _ = ronde(T0 + 5 * MIN)
-    assert uit["mijnagents"]["minuten"] == 25, "het anker is vroeger dan de reflog en blijft"
+    assert uit["mijnagents"]["minuten"] == 5, "de reflog toont dat de code tot T0 gelijk was; het oude anker vervalt"
+    assert json.load(open(repo.stand))["mijnagents"]["sinds"] == T0
     with open(repo.stand, "w") as f:
         json.dump({"mijnagents": {"gebouwd": gebouwd, "sinds": T0 + 4 * MIN}}, f)
     uit, _ = ronde(T0 + 5 * MIN)
     assert uit["mijnagents"]["minuten"] == 5, "de reflog zet het begin vroeger dan het anker"
+
+
+@proef
+def test_tussen_twee_rondes_even_gelijk_begint_de_klok_opnieuw(repo):
+    """Codex-resultaattoets 3.1: een verschil van 2 minuten gaf een bouwnood van 10 minuten."""
+    repo.zet("b", T0)
+    uit, _ = ronde(T0 + MIN)                     # het anker komt op T0
+    assert uit["mijnagents"]["stand"] == "bezig"
+    repo.zet("a", T0 + 2 * MIN)                  # terug naar de gebouwde versie, geen ronde ziet het
+    repo.zet("b", T0 + 9 * MIN)
+    uit, b = ronde(T0 + 11 * MIN)
+    assert uit["mijnagents"]["stand"] == "bezig" and uit["mijnagents"]["minuten"] == 2, uit["mijnagents"]
+    assert b.eind()["nood"] == []
 
 
 @proef
@@ -300,7 +314,7 @@ def test_een_nieuwe_markering_begint_het_anker_opnieuw(repo):
     repo.zet("b", T0)
     uit, _ = ronde(T0 + 3 * MIN)
     assert uit["mijnagents"]["stand"] == "bezig" and uit["mijnagents"]["minuten"] == 3
-    assert json.load(open(repo.stand))["mijnagents"] == {"gebouwd": repo.boom("a", "mijnagents"), "sinds": T0 + 3 * MIN}
+    assert json.load(open(repo.stand))["mijnagents"] == {"gebouwd": repo.boom("a", "mijnagents"), "sinds": T0}
 
 
 @proef

@@ -10,14 +10,15 @@ geslaagde bouw. De VM haalt main niet zelf binnen, dus een verschil ontstaat all
 gebouwd is. Duurt dat verschil DREMPEL_MIN minuten of langer, dan zet ik een nood met een vaste tekst (N10); zijn ze
 weer gelijk, dan staat de nood niet meer in mijn lijst en sluit het bord hem.
 
-Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2):
-- het anker is mijn eigen stand (STAND): per dienst de markering en het moment dat ik het verschil voor het eerst zag;
-  verandert de markering of zijn ze gelijk, dan begint dat opnieuw;
-- de reflog van HEAD mag dat moment alleen vroeger zetten, nooit later: het tijdstip van de oudste aaneengesloten stap
-  waarvan de boom niet gelijk is aan de markering. Zo telt de echte pull-tijd, ook in mijn eerste ronde;
-- staat de markering niet in de reflog (ouder dan de reflog, of opgeschoond), of ontbreekt de markering, dan geldt het
-  verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt;
-- is de reflog leeg of onleesbaar, dan telt alleen het anker.
+Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2; Codex-resultaattoets 3.1):
+- toont de reflog van HEAD de laatste stap waarop de boom gelijk was aan de markering, dan begon het verschil bij de stap
+  erna. Dat is de echte pull-tijd, ook in mijn eerste ronde, en het is bewijs: ook een anker van voor die gelijkheid
+  begint dan opnieuw, want tussen twee rondes kan de code even terug gelijk geweest zijn;
+- staat de markering niet in een reflog die wel stappen heeft (ouder dan de reflog, of opgeschoond), of ontbreekt de
+  markering, dan geldt het verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt;
+- is de reflog leeg of onleesbaar, dan is mijn eigen stand (STAND) de klok: per dienst de markering en het moment dat
+  ik het verschil voor het eerst zag. Verandert de markering of zijn ze gelijk, dan begint dat opnieuw. Kan ik die
+  stand niet bewaren, dan telt zo'n verschil als ouder dan de drempel.
 
 Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen mijn eigen
 stand en haar slot (een ronde tegelijk). Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
@@ -191,7 +192,11 @@ def meet_dienst(dienst, stand, nu):
             anker = stand[dienst] = {"gebouwd": gebouwd, "sinds": int(nu)}
         sinds = begin_volgens_reflog(dienst, gebouwd)
         bron = "anker" if sinds is None else "reflog"
-        sinds = anker["sinds"] if sinds is None else sinds if sinds == OUD else min(sinds, anker["sinds"])
+        if sinds is None:
+            sinds = anker["sinds"]
+        elif sinds != OUD:
+            # de reflog toont het begin; het anker volgt, ook als het van voor een tussentijdse gelijkheid was
+            anker["sinds"] = sinds
     minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
     achter = minuten is None or minuten >= DREMPEL_MIN
     return {"dienst": dienst, "stand": "achter" if achter else "bezig", "minuten": minuten,

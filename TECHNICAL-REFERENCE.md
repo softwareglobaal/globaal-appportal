@@ -3073,9 +3073,9 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   27-10-2026): elke 2 minuten per dienst `mijnagents`, `agents` en `siyanagents` de boom `git rev-parse HEAD:<map>` in
   `~/appportal` tegenover `<map>-data/.built`. Verschillen ze 10 minuten of langer, ontbreekt de markering of staat ze
   niet in de reflog, dan de nood "Bouw loopt achter op de code: <map>" (claude-code), met minuten, korte boomcodes en
-  de laatste regel van `~/deploy-<map>.log` in het detail; gelijk sluit de nood. Het begin van het verschil is het
-  vroegste van twee: het moment dat de wacht het voor het eerst zag (`mijnagents-data/bouwwacht.json`, per dienst de
-  markering en dat moment) en de reflogstap waarop HEAD wegging van de gebouwde boom. De wacht leest alleen (`git
+  de laatste regel van `~/deploy-<map>.log` in het detail; gelijk sluit de nood. Het begin van het verschil is de
+  reflogstap waarop HEAD wegging van de gebouwde boom; zonder reflog het moment dat de wacht het voor het eerst zag
+  (`mijnagents-data/bouwwacht.json`, per dienst de markering en dat moment). De wacht leest alleen (`git
   rev-parse`, `git log -g`); `--droog` meet zonder bord en zonder stand. Een ronde tegelijk (slot
   `bouwwacht.json.slot`; is het bezet, dan slaat de ronde over, kan er geen slot komen, dan geen ronde en exit 1); een
   stand die niet te bewaren is, geeft een eigen nood en houdt geen bouwnood tegen, en zonder reflog telt een verschil
