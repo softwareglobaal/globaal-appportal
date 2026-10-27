@@ -631,12 +631,12 @@ def _waarde(d, k, reden="veld ontbreekt"):
 ARCHIEF_DEKKING = "~/appportal/mijnagents-data/zoom-archief/dekking.json"
 
 
-def archief_dekking(pad=ARCHIEF_DEKKING, nu=None):
+def archief_dekking(pad=None, nu=None):
     """Driehoeksoverleg Zoomarchief K6 (27-10-2026): staan alle Zoom-opnames bewezen in Mehdi's Dropbox? 'ja' of 'nee'
     uit het bestand van De Zoomarchivaris (zoom_archief.py), 'onbekend' zonder bestand, onleesbaar of ouder dan twee
     dagen. Mehdi: eerst een kopie, dan pas wissen."""
     try:
-        with open(os.path.expanduser(pad), encoding="utf-8") as f:
+        with open(os.path.expanduser(pad or ARCHIEF_DEKKING), encoding="utf-8") as f:
             d = json.load(f)
         ts = datetime.fromisoformat(d["ts"])
         oud = (nu or datetime.now(timezone.utc)) - ts > timedelta(days=2)
@@ -688,15 +688,18 @@ def adviezen(d, gesprekken=0, staat_acc=None):
     reden01 = f"Opslag {pct}% gebruikt"
     if store and store.get("vol_rond"):
         reden01 += f"; vermoedelijk vol rond {store['vol_rond']}"
+    # Driehoeksoverleg Zoomarchief K6 en Codex-controle 1 (27-10-2026): Mehdi wil eerst een volledige kopie, dan pas
+    # wissen. Zolang De Zoomarchivaris geen dekking ja meldt, is ZA-01 geen open advies maar onbekend, zodat er geen
+    # voorstel "zet de wisregel aan" komt. De stand draagt de kopie: een voorstel van voor de kopie (zonder die sleutel)
+    # houdt het advies na de kopie dus niet tegen als het geweigerd werd.
     dekking = archief_dekking()
-    reden01 += ("; alle opnames staan bewezen in je Dropbox" if dekking == "ja" else
-                "; nog niet alle opnames staan bewezen in je Dropbox" if dekking == "nee" else
-                "; onbekend of alle opnames in je Dropbox staan")
-    voeg("ZA-01", "hoog" if hoog01 else "middel", open01, {"wisregel": False, "band": band},
-         reden01 + "." if open01 else "",
-         "Zet een wisregel van 30 dagen aan; houd transcript en cloudopname aan." if dekking == "ja" else
-         "Wacht met de wisregel tot De Zoomarchivaris meldt dat alle opnames bewezen in je Dropbox staan (dekking ja);"
-         " zet hem dan op 30 dagen en houd transcript en cloudopname aan.")
+    reden01 += "; alle opnames staan bewezen in je Dropbox"
+    voeg("ZA-01", "hoog" if hoog01 else "middel", open01 if dekking == "ja" or open01 is not True else None,
+         {"wisregel": False, "band": band, "kopie": "ja"}, reden01 + "." if open01 else "",
+         "Zet een wisregel van 30 dagen aan; houd transcript en cloudopname aan.")
+    if dekking != "ja" and open01:
+        uit[-1]["reden"] = ("wacht op de volledige kopie in je Dropbox (De Zoomarchivaris): " +
+                            ("nog niet alle opnames bewezen" if dekking == "nee" else "dekking onbekend"))
 
     uop = gebruiker.get("recording.auto_recording") if gebruiker else None
     utr = gebruiker.get("recording.recording_audio_transcript") if gebruiker else None
@@ -1026,7 +1029,7 @@ def vingerafdruk(obj):
 
 UITVOER_SLEUTELS = frozenset((
     "naam status taak detail voorstel actie doel reden parameters runbook regelversie stand cyclus zoom_advies "
-    "wisregel band cloud geluid transcript video tweestaps wachtkamer vergrendeld codes_vergrendeld_uit "
+    "wisregel kopie band cloud geluid transcript video tweestaps wachtkamer vergrendeld codes_vergrendeld_uit "
     "code voor_host locatie model weinig_gebruik bewaartermijn apps banden lege_eigen_rollen lege_groepen "
     "afmelden api_wijzigingen transcript_band facebook_ongebruikt voor soort sleutel uniek titel inhoud "
     "week gemeten scan delen beveiliging opnames ai licenties gebruik adviezen wachtrij tekst rollen "

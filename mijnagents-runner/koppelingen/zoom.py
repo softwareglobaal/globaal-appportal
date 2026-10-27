@@ -33,6 +33,7 @@ noemt (of 'download' als het er geen noemt): zoom_leesapp.py meldt het bij de pr
 het het transcriptrecht is; De Zoomwacht zet een nood voor Mehdi.
 """
 import base64
+import http.client
 import json
 import os
 import re
@@ -354,8 +355,10 @@ def lees(pad, params=None, profiel="lees"):
     raise ZoomFout(f"HTTP {code}" + (f" (Zoom-code {zoomcode})" if isinstance(zoomcode, int) else ""))
 
 
-def lees_alles(pad, params, sleutel, profiel="lees"):
-    """Alle pagina's (next_page_token) van een lijst. None als Zoom de lijst niet kent (404): onbekend is niet leeg."""
+def lees_alles(pad, params, sleutel, profiel="lees", streng=False):
+    """Alle pagina's (next_page_token) van een lijst. None als Zoom de lijst niet kent (404): onbekend is niet leeg.
+    streng: een pagina zonder de lijst (sleutel ontbreekt of is geen lijst) is ZoomFout, geen lege pagina; De
+    Zoomarchivaris telt anders een onvolledige inventaris als volledig (Codex, Zoomarchief controle 1)."""
     uit, p = [], dict(params or {})
     while True:
         d = lees(pad, p, profiel)
@@ -363,6 +366,8 @@ def lees_alles(pad, params, sleutel, profiel="lees"):
             if p.get("next_page_token"):
                 raise ZoomFout("volgende pagina niet gevonden")
             return None
+        if streng and not isinstance(d.get(sleutel), list):
+            raise ZoomFout("onvolledig antwoord van Zoom")
         uit += d.get(sleutel) or []
         if not d.get("next_page_token"):
             return uit
@@ -496,17 +501,26 @@ def uuid_pad(uuid):
     return urllib.parse.quote(q, safe="") if uuid.startswith("/") or "//" in uuid else q
 
 
-def opnames(van_dag, tot_dag, profiel="lees", prullenbak=False):
+PRULLENBAK = ("meeting_recordings", "recording_file")
+
+
+def opnames(van_dag, tot_dag, profiel="lees", prullenbak="", streng=False):
     """De cloudopnames van de vaste gebruiker tussen twee datums (JJJJ-MM-DD), zonder een enkele link: per meeting
     uuid, nummer, onderwerp, start, duur en de bestanden (id, soort, status, start, einde, grootte, opnametype,
-    extensie). De downloadlink gaat alleen in de tabel van deze module, per bestandsid; afspeel- en deellinks en
-    toegangscodes worden meteen weggegooid. prullenbak: de opnames in de prullenbak van Zoom, die Zoom na 30 dagen wist."""
+    extensie, en of er een downloadlink was). De downloadlink gaat alleen in de tabel van deze module, per bestandsid;
+    afspeel- en deellinks en toegangscodes worden meteen weggegooid. prullenbak: een soort uit PRULLENBAK, de opnames
+    in de prullenbak van Zoom, die Zoom na 30 dagen wist: meeting_recordings voor een hele gewiste meeting,
+    recording_file voor een los gewist bestand. Zoom filtert de prullenbak niet op datum (gemeten 27-10-2026: from en to
+    komen leeg terug), dus dan gaan er geen datums mee. streng: zie lees_alles."""
     if not _VAST["id"]:
         raise Geweigerd("opnames: eerst de vaste gebruiker zetten")
-    params = {"from": van_dag, "to": tot_dag, "page_size": 300}
     if prullenbak:
-        params.update(trash="true", trash_type="meeting_recordings")
-    lijst = lees_alles(f"/users/{_VAST['id']}/recordings", params, "meetings", profiel)
+        if prullenbak not in PRULLENBAK:
+            raise ValueError(f"onbekende prullenbak: {prullenbak}")
+        params = {"page_size": 300, "trash": "true", "trash_type": prullenbak}
+    else:
+        params = {"from": van_dag, "to": tot_dag, "page_size": 300}
+    lijst = lees_alles(f"/users/{_VAST['id']}/recordings", params, "meetings", profiel, streng=streng)
     if lijst is None:
         raise ZoomFout("opnamelijst niet gevonden")
     uit = []
@@ -519,7 +533,7 @@ def opnames(van_dag, tot_dag, profiel="lees", prullenbak=False):
             bestanden.append({"id": bid, "soort": f.get("file_type") or "", "status": f.get("status") or "",
                               "start": f.get("recording_start") or "", "einde": f.get("recording_end") or "",
                               "grootte": int(f.get("file_size") or 0), "opnametype": f.get("recording_type") or "",
-                              "extensie": f.get("file_extension") or ""})
+                              "extensie": f.get("file_extension") or "", "link": bool(f.get("download_url"))})
         uit.append({"uuid": m.get("uuid") or "", "nummer": str(m.get("id") or ""), "onderwerp": m.get("topic") or "",
                     "start": m.get("start_time") or "", "duur": int(m.get("duration") or 0), "bestanden": bestanden})
     return uit
@@ -563,11 +577,13 @@ def _download_weigering(code, inhoud):
     raise ZoomFout(f"download: HTTP {code}")
 
 
-def download_naar(bestandsid, doel, profiel="lees", brok=1 << 20):
+def download_naar(bestandsid, doel, profiel="lees", brok=1 << 20, bewaker=None):
     """Een opnamebestand in brokken naar een bestand op schijf, met dezelfde grendels als download(): alleen een bestand
     uit de eigen opnamelijst (L5), een omleiding alleen naar https op zoom.us en zonder Authorization-kop na de eerste
     sprong (L1). Voor video's van honderden MB, die niet in het geheugen horen (zoom_archief.py). Geeft het aantal
-    geschreven bytes; bij een fout kan doel half geschreven zijn, de aanroeper gooit het weg."""
+    geschreven bytes; bij een fout kan doel half geschreven zijn, de aanroeper gooit het weg. Een verbinding die te vroeg
+    sluit, geeft in http.client geen fout maar een kort bestand: daarom vergelijken we met Content-Length. bewaker()
+    draait voor elke brok; een fout daar breekt de download af."""
     url = _DOWNLOADS.get(str(bestandsid))
     if not url:
         raise Geweigerd("download: bestand staat niet in de eigen opnamelijst")
@@ -594,15 +610,24 @@ def download_naar(bestandsid, doel, profiel="lees", brok=1 << 20):
             raise ZoomFout(f"Zoom niet bereikbaar ({type(e).__name__})") from None
         n = 0
         try:
+            lengte = int((antwoord.headers.get("Content-Length") if getattr(antwoord, "headers", None) else "") or -1)
+        except ValueError:
+            lengte = -1
+        try:
             with antwoord, open(doel, "wb") as f:
                 while True:
+                    if bewaker:
+                        bewaker()
                     stuk = antwoord.read(brok)
                     if not stuk:
-                        return n
+                        break
                     f.write(stuk)
                     n += len(stuk)
-        except (urllib.error.URLError, OSError) as e:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
             raise ZoomFout(f"download: afgebroken ({type(e).__name__})") from None
+        if lengte >= 0 and n != lengte:
+            raise ZoomFout("download: afgebroken (korter dan Content-Length)")
+        return n
     raise ZoomFout("download: te veel omleidingen")
 
 

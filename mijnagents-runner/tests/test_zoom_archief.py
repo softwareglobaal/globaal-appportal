@@ -58,26 +58,33 @@ class Zoom:
     """De opnamelijst en de downloads. meetings: uuid -> meeting zoals zoom.opnames ze geeft, met 'inhoud' per bestand."""
 
     def __init__(self):
-        self.meetings, self.prullenbak, self.inhoud, self.gevraagd, self.downloads = {}, {}, {}, [], []
-        self.fout = {}
+        self.meetings, self.inhoud, self.gevraagd, self.downloads = {}, {}, [], []
+        self.prullenbak = {"meeting_recordings": {}, "recording_file": {}}
+        self.fout, self.lijstfout, self.bewaker_bij = {}, None, None
 
-    def meeting(self, uuid, start, onderwerp="Overleg", bestanden=(), prullenbak=False):
+    def meeting(self, uuid, start, onderwerp="Overleg", bestanden=(), prullenbak=""):
         m = {"uuid": uuid, "nummer": "9100000001", "onderwerp": onderwerp, "start": start, "duur": 30, "bestanden": []}
         for i, (soort, opnametype, data) in enumerate(bestanden):
             fid = f"{uuid}-f{i}"
             self.inhoud[fid] = data
             m["bestanden"].append({"id": fid, "soort": soort, "status": "completed", "start": start, "einde": start,
-                                   "grootte": len(data), "opnametype": opnametype, "extensie": soort})
-        (self.prullenbak if prullenbak else self.meetings)[uuid] = m
+                                   "grootte": len(data), "opnametype": opnametype, "extensie": soort, "link": True})
+        (self.prullenbak[prullenbak] if prullenbak else self.meetings)[uuid] = m
         return m
 
-    def opnames(self, van, tot, profiel="lees", prullenbak=False):
+    def opnames(self, van, tot, profiel="lees", prullenbak="", streng=False):
         self.gevraagd.append((van, tot, prullenbak))
-        bron = self.prullenbak if prullenbak else self.meetings
-        return [json.loads(json.dumps(m)) for m in bron.values() if van <= m["start"][:10] <= tot]
+        if self.lijstfout:
+            raise self.lijstfout
+        if prullenbak:
+            assert van is None and tot is None, "de prullenbak zonder datums"
+            return [json.loads(json.dumps(m)) for m in self.prullenbak[prullenbak].values()]
+        return [json.loads(json.dumps(m)) for m in self.meetings.values() if van <= m["start"][:10] <= tot]
 
-    def download_naar(self, fid, doel, profiel="lees", brok=1 << 20):
+    def download_naar(self, fid, doel, profiel="lees", brok=1 << 20, bewaker=None):
         self.downloads.append(fid)
+        if bewaker and self.bewaker_bij == fid:
+            bewaker()
         if fid in self.fout:
             open(doel, "wb").write(b"half")
             raise self.fout[fid]
@@ -97,7 +104,14 @@ def opzet(**kw):
     ZA.time.sleep = lambda s: None
     logs = []
     ZA.ag.log = lambda onderwerp, stap, tekst, detail="": logs.append(tekst)
+    VOORSTELLEN.clear()
+    ZA.ag.hartslag = lambda status, taak="", detail="", voorstel=None, **k: VOORSTELLEN.append(
+        {"actie": voorstel["actie"], "status": "open", "reden": voorstel["reden"]}) if voorstel else None
+    ZA.bord.db_lees = lambda sql, args=(): [dict(v) for v in VOORSTELLEN]
     return z, d, logs
+
+
+VOORSTELLEN = []
 
 
 def ronde(droog=False, budget=ZA.BUDGET, proef=0, klok=None, nu=NU):
@@ -212,12 +226,12 @@ def test_k7_alleen_completed_en_de_prullenbak_eerst_dan_de_oudste():
     z, _, _ = opzet()
     nieuw = z.meeting("nieuw", "2026-10-25T09:00:00Z", bestanden=[("M4A", "audio_only", b"n")])
     oud = z.meeting("oud", "2021-08-10T09:00:00Z", bestanden=[("M4A", "audio_only", b"o")])
-    weg = z.meeting("weg", "2026-09-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"p")], prullenbak=True)
+    weg = z.meeting("weg", "2026-09-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"p")], prullenbak="meeting_recordings")
     bezig = z.meeting("bezig", "2026-10-26T09:00:00Z", bestanden=[("MP4", "speaker_view", b"b")])
     bezig["bestanden"][0]["status"] = "processing"
     _, uit = ronde()
     assert z.downloads == [weg["bestanden"][0]["id"], oud["bestanden"][0]["id"], nieuw["bestanden"][0]["id"]], z.downloads
-    assert any(g[2] for g in z.gevraagd), "de prullenbak is gelezen"
+    assert {g[2] for g in z.gevraagd} >= {"meeting_recordings", "recording_file"}, "beide prullenbakken gelezen"
     assert uit["klaar"] == 3, "een opname die Zoom nog verwerkt, telt niet en wordt niet gekopieerd"
     assert bezig["uuid"] not in ZA.lees_staat()["meetings"], "geen opname.json zolang niet alles klaar is"
 
@@ -225,14 +239,14 @@ def test_k7_alleen_completed_en_de_prullenbak_eerst_dan_de_oudste():
 def test_k7_vensters_van_30_dagen_tot_de_eerste_dag_en_daarna_kort():
     z, _, _ = opzet()
     _, uit = ronde()
-    vensters = sorted({(v, t) for v, t, _ in z.gevraagd})
+    vensters = sorted({(v, t) for v, t, p in z.gevraagd if not p})
     assert vensters[0][0] == ZA.EERSTE_DAG.isoformat() and uit["volledig"], "de eerste ronde leest alles"
     for v, t in vensters:
         dagen = (datetime.fromisoformat(t) - datetime.fromisoformat(v)).days
         assert 0 < dagen <= ZA.VENSTER, (v, t)
     z.gevraagd.clear()
     _, uit = ronde()
-    assert not uit["volledig"] and min(v for v, _, _ in z.gevraagd) >= (NU.date() - timedelta(days=ZA.KORT)).isoformat()
+    assert not uit["volledig"] and min(v for v, _, p in z.gevraagd if not p) >= (NU.date() - timedelta(days=ZA.KORT)).isoformat()
     _, uit = ronde(nu=NU + timedelta(days=1))
     assert uit["volledig"], "een nieuwe dag leest weer alles"
 
@@ -268,9 +282,22 @@ def test_k4_tijdsbudget_keten_en_slot():
     z, _, _ = opzet()
     for i in range(3):
         z.meeting(f"u{i}", f"2026-10-2{i}T09:00:00Z", bestanden=[("M4A", "audio_only", b"x")])
-    tikken = iter([0, 10, 5000, 5000, 5000])  # het begin, dan voor elk bestand
-    _, uit = ronde(budget=100, klok=lambda: next(tikken))
+    _, uit = ronde(budget=100, klok=lambda: 0.0 if not z.downloads else 200.0)  # na het eerste bestand is het budget op
     assert uit["gedaan"] == 1 and uit["gestopt"] == "tijdsbudget op", uit
+    # de harde grens breekt ook een lopend bestand af: geen bewijs, het komt een volgende ronde
+    z2, d2, _ = opzet()
+    m = z2.meeting("u9", "2026-10-20T09:00:00Z", bestanden=[("M4A", "audio_only", b"y")])
+    z2.bewaker_bij = m["bestanden"][0]["id"]
+    _, uit = ronde(budget=100, klok=lambda: 0.0 if not z2.downloads else 10_000.0)
+    assert uit["gestopt"].startswith("tijd op") and uit["gedaan"] == 0 and not d2.bestanden, uit
+    assert not ZA.lees_staat()["bestanden"] and not os.listdir(os.path.join(ZA.DATA, "werk"))
+    # en de inventaris zelf: een ronde die te laat begint, leest niet verder en sluit geen noden
+    z3, _, _ = opzet()
+    r, uit = ronde(nu=datetime(2026, 10, 27, 12, 59, tzinfo=timezone.utc))
+    assert uit is None and r.noden_onbekend and "inventaris niet af" in r.detail, r.detail
+    z, _, _ = opzet()
+    for i in range(3):
+        z.meeting(f"u{i}", f"2026-10-2{i}T09:00:00Z", bestanden=[("M4A", "audio_only", b"x")])
     _, uit = ronde(nu=datetime(2026, 10, 27, 12, 55, tzinfo=timezone.utc))
     assert uit["gedaan"] == 0 and uit["gestopt"] == "de gesprekkenketen begint", uit
     assert ZA.tot_keten(datetime(2026, 10, 27, 23, 25, tzinfo=timezone.utc)) == 300
@@ -393,25 +420,196 @@ def test_werkwijze_haalt_de_norm():
 
 
 def test_za01_wacht_op_de_dekking():
-    os.makedirs(os.path.dirname(os.path.expanduser(ZA_ACC.ARCHIEF_DEKKING)), exist_ok=True)
-    pad = os.path.expanduser(ZA_ACC.ARCHIEF_DEKKING)
-    if os.path.exists(pad):
-        os.remove(pad)
+    """Codex-controle 1, punt 5: zonder dekking ja is ZA-01 geen open advies (dus geen voorstel om de wisregel aan te
+    zetten); met dekking ja wel, met de kopie in de stand, zodat een geweigerd voorstel van daarvoor het niet tegenhoudt."""
+    oud_pad = ZA_ACC.ARCHIEF_DEKKING
+    ZA_ACC.ARCHIEF_DEKKING = os.path.join(tempfile.mkdtemp(prefix="dekking-", dir=MAP), "dekking.json")
     d = {"account": {"recording.auto_delete_cmr": False}, "opslag": {"pct": 98, "vol_dagen": 1, "vol_rond": "2026-10-28"},
-         "opslagtrend": {"x": 1}}
+         "opslagtrend": {"stand": "ok"}}
     try:
-        za01 = next(a for a in ZA_ACC.adviezen(d) if a["code"] == "ZA-01")
-    except Exception:  # noqa: BLE001  de rest van de invoer is hier niet nodig; dan rechtstreeks de tekst toetsen
-        za01 = None
-    if za01 is not None and za01["toestand"] == "open":
-        assert za01["doel"].startswith("Wacht met de wisregel") and "onbekend of alle opnames" in za01["reden"], za01
-        json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": True}, open(pad, "w"))
-        za01 = next(a for a in ZA_ACC.adviezen(d) if a["code"] == "ZA-01")
-        assert za01["doel"].startswith("Zet een wisregel van 30 dagen aan") and "bewezen in je Dropbox" in za01["reden"]
-        assert za01["stand"] == {"wisregel": False, "band": 100 if d["opslag"]["pct"] >= 100 else 90}, "de stand blijft gelijk"
-    else:
-        raise AssertionError(f"ZA-01 niet open met deze invoer: {za01}")
+        za01 = lambda: next(a for a in ZA_ACC.adviezen(d) if a["code"] == "ZA-01")  # noqa: E731
+        a = za01()
+        assert a["toestand"] == "onbekend" and a["stand"] is None and "wacht op de volledige kopie" in a["reden"], a
+        for dekking, ts in ((False, datetime.now(timezone.utc)), (True, datetime.now(timezone.utc) - timedelta(days=3))):
+            json.dump({"ts": ts.isoformat(), "dekking": dekking}, open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+            assert za01()["toestand"] == "onbekend", (dekking, ts)
+        json.dump({"ts": datetime.now(timezone.utc).isoformat(), "dekking": True}, open(ZA_ACC.ARCHIEF_DEKKING, "w"))
+        a = za01()
+        assert a["toestand"] == "open" and a["stand"] == {"wisregel": False, "band": 90, "kopie": "ja"}, a
+        assert a["doel"].startswith("Zet een wisregel van 30 dagen aan") and "bewezen in je Dropbox" in a["reden"]
+        oud = {"id": 40, "status": "geweigerd", "ts": "2026-10-26T13:04:57+00:00",
+               "parameters": json.dumps({"cyclus": 0, "regelversie": 1, "stand": {"band": 90, "wisregel": False},
+                                         "zoom_advies": "ZA-01"})}
+        gekozen, _ = ZA_ACC.te_versturen([a], [oud], datetime(2026, 10, 27, 7, tzinfo=timezone.utc))
+        assert [x["code"] for x in gekozen] == ["ZA-01"], "een geweigerd voorstel van voor de kopie houdt het niet tegen"
+        d["account"]["recording.auto_delete_cmr"] = True
+        assert za01()["toestand"] == "goed", "staat de wisregel al aan, dan is het goed, met of zonder kopie"
+    finally:
+        ZA_ACC.ARCHIEF_DEKKING = oud_pad
 
+
+# ---------------------------------------------------- Codex-controle 1 en de drie controleurs (27-10-2026) ---
+def test_codex2_los_gewist_bestand_in_de_prullenbak_wordt_gekopieerd_en_houdt_dekking_tegen():
+    z, d, _ = opzet()
+    z.meeting("u1", "2026-10-01T09:00:00Z", bestanden=[("TRANSCRIPT", "audio_transcript", b"WEBVTT\n")])
+    los = z.meeting("tijdelijk", "2026-10-01T09:00:00Z", bestanden=[("MP4", "gallery_view", b"video")],
+                    prullenbak="recording_file")
+    z.prullenbak["recording_file"] = {"u1": {**los, "uuid": "u1", "bestanden": [{**los["bestanden"][0], "id": "u1-los"}]}}
+    z.inhoud["u1-los"] = b"video"
+    _, uit = ronde()
+    assert "u1-los" in z.downloads and uit["gedaan"] == 2, z.downloads
+    assert z.downloads[0] == "u1-los", "de prullenbak eerst"
+
+
+def test_codex3_een_onvolledige_lijst_is_een_fout_en_geen_dekking():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    ronde()
+    assert json.load(open(os.path.join(ZA.DATA, "dekking.json")))["dekking"]
+    z.lijstfout = Z.ZoomFout("onvolledig antwoord van Zoom")
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert uit is None and r.noden_onbekend and "Zoom-opnamelijst niet leesbaar" in teksten(r)
+    z.lijstfout = None
+    m = z.meeting("u2", "2026-10-20T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    m["bestanden"][0]["link"] = False
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert "Zoom gaf een opnamebestand zonder id of downloadlink" in teksten(r) and not uit["dekking"]
+
+
+def test_codex4_een_bewijs_dat_uit_dropbox_verdween_wordt_nagekeken_en_opnieuw_gekopieerd():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    _, uit = ronde()
+    assert uit["dekking"]
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]  # iemand wiste de kopie in Dropbox
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert not uit["dekking"] and uit["gedaan"] == 1, uit
+    assert d.bestanden[ZA.pad_van(m, m["bestanden"][0])] == b"a", "opnieuw gekopieerd"
+    _, uit = ronde(nu=NU + timedelta(days=1))
+    assert uit["dekking"], "na een nieuwe volledige inventaris weer ja"
+
+
+def test_dekking_blijft_ja_in_een_korte_ronde_en_valt_weg_bij_nieuw_werk():
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    ronde()
+    _, uit = ronde()
+    assert uit["dekking"] and uit["volledig"]
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["volledig"] and uit["dekking"], "een korte ronde zonder nieuw werk houdt ja"
+    assert ZA_ACC.archief_dekking(os.path.join(ZA.DATA, "dekking.json"), nu=NU + timedelta(hours=1)) == "ja"
+    z.meeting("u2", "2026-10-27T09:00:00Z", bestanden=[("M4A", "audio_only", b"b")])
+    _, uit = ronde(nu=NU + timedelta(hours=2), budget=-1)
+    assert not uit["dekking"] and uit["rest"] == 1, "een nieuwe opname zonder kopie: nee"
+
+
+def test_noden_blijven_staan_in_een_ronde_die_het_bestand_niet_probeert():
+    z, d, _ = opzet()
+    m = z.meeting("oud", "2025-03-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    d.bestanden[ZA.pad_van(m, m["bestanden"][0])] = b"iets anders"
+    r, _ = ronde()
+    tekst = "Zoom-opname niet naar Dropbox gekopieerd: ander bestand op dat pad in Dropbox"
+    assert tekst in teksten(r)
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not uit["volledig"] and tekst in teksten(r), "een korte ronde ziet het bestand niet, de nood blijft"
+    del d.bestanden[ZA.pad_van(m, m["bestanden"][0])]
+    r, _ = ronde(nu=NU + timedelta(days=1))
+    assert tekst not in teksten(r), "na herstel gaat de nood dicht"
+
+
+def test_vroege_stops_sluiten_geen_noden():
+    opzet()
+    ZA.mehdi_vastzetten = lambda: ""
+    r, uit = ronde()
+    assert uit is None and r.noden_onbekend and "Zoom-gebruiker van Mehdi niet bewezen" in teksten(r)
+    opzet()
+    oud = os.environ.pop("DROPBOX_PRIVE_REFRESH_TOKEN")
+    try:
+        r, uit = ronde()
+        assert uit is None and r.noden_onbekend
+    finally:
+        os.environ["DROPBOX_PRIVE_REFRESH_TOKEN"] = oud
+
+
+def test_codex6_alleen_naar_mehdis_eigen_dropbox():
+    z, d, _ = opzet()
+    z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    d.mappen.clear()  # geen Fathom-archief: niet zijn privé-Dropbox
+    r, uit = ronde()
+    assert uit is None and not z.downloads and "Dropbox niet gebruikt: gekoppelde Dropbox is niet Mehdi's privé-archief" in teksten(r)
+    d.mappen.add("/Fathom data")
+    _, uit = ronde()
+    assert uit["gedaan"] == 1 and ZA.lees_staat()["dropbox"] == "dbid:proef-eigen"
+    d.account = "dbid:iemand-anders"
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert uit is None and "Dropbox niet gebruikt: andere Dropbox gekoppeld dan bij de eerste ronde" in teksten(r)
+    assert next(n for n in r.noden if n["tekst"].startswith("Dropbox niet gebruikt"))["wie"] == "mehdi"
+
+
+def test_codex8_verdwenen_komt_terug_of_mehdi_aanvaardt_het_gemis():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("MP4", "speaker_view", b"v")])
+    fid = m["bestanden"][0]["id"]
+    z.fout[fid] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    del z.meetings["u1"]
+    r, uit = ronde(nu=NU + timedelta(days=1))
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r) and not uit["dekking"]
+    assert len(VOORSTELLEN) == 1 and VOORSTELLEN[0]["actie"].startswith(ZA.GEMIST_ACTIE), VOORSTELLEN
+    assert "MB" in VOORSTELLEN[0]["reden"] and "Overleg" not in VOORSTELLEN[0]["reden"], "geen onderwerp in het voorstel"
+    ronde(nu=NU + timedelta(days=1, hours=1))
+    assert len(VOORSTELLEN) == 1, "een voorstel per opname, niet elke ronde"
+    VOORSTELLEN[0]["status"] = "overgeslagen"  # Mehdi keurde goed; de uitvoerder maakte er "overgeslagen" van
+    ronde(nu=NU + timedelta(days=2))
+    r, uit = ronde(nu=NU + timedelta(days=2, hours=1))
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r) and uit["dekking"], (teksten(r), uit)
+    assert fid in ZA.lees_staat()["gemist"]
+    # een andere opname die verdwijnt en terugkomt, is niet meer verdwenen
+    m2 = z.meeting("u2", "2026-08-02T09:00:00Z", bestanden=[("MP4", "speaker_view", b"w")])
+    z.fout[m2["bestanden"][0]["id"]] = Z.ZoomFout("download: HTTP 500")
+    ronde(nu=NU + timedelta(days=3))
+    z.meetings.pop("u2")
+    ronde(nu=NU + timedelta(days=4))
+    assert m2["bestanden"][0]["id"] in ZA.lees_staat()["verdwenen"]
+    z.meetings["u2"] = m2
+    del z.fout[m2["bestanden"][0]["id"]]
+    r, uit = ronde(nu=NU + timedelta(days=5))
+    assert not ZA.lees_staat()["verdwenen"] and uit["gedaan"] == 1
+
+
+def test_codex9_een_recht_dat_geen_recht_is_wordt_onbekend_recht():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-20T13:04:00Z", bestanden=[("M4A", "audio_only", b"a")])
+    z.fout[m["bestanden"][0]["id"]] = Z.GeenRecht("https://zoom.us/rec/x?pwd=geheim")
+    r, _ = ronde()
+    assert "Zoom-opname niet naar Dropbox gekopieerd: Zoom weigert de download (onbekend recht)" in teksten(r), teksten(r)
+    assert "zoom.us" not in json.dumps(r.noden)
+
+
+def test_codex10_onduidelijk_antwoord_van_dropbox_meteen_nagekeken():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-20T13:04:00Z", bestanden=[("M4A", "audio_only", b"geluid")])
+    echt = d.__call__
+
+    def antwoord_weg(url, data, koppen, pogingen=5):
+        uit = echt(url, data, koppen, pogingen)
+        if url.endswith("files/upload") and b"geluid" == data:
+            raise TimeoutError("antwoord verloren")
+        return uit
+    D._verzoek = antwoord_weg
+    r, uit = ronde()
+    assert uit["gedaan"] == 1 and not r.noden, "het bestand stond er wel: meteen bewezen, in dezelfde ronde"
+
+
+def test_zonder_grootte_van_zoom_geen_bewijs():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-20T13:04:00Z", bestanden=[("TIMELINE", "timeline", b"{}")])
+    m["bestanden"][0]["grootte"] = 0
+    r, _ = ronde()
+    assert "Zoom-opname niet naar Dropbox gekopieerd: Zoom geeft geen grootte op" in teksten(r)
+    assert not d.bestanden and not ZA.lees_staat()["bestanden"]
 
 if __name__ == "__main__":
     goed = fout = 0

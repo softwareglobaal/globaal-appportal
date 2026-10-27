@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
 import dropbox_prive as D  # noqa: E402
 import zoom as Z  # noqa: E402
 
+ECHT_VERZOEK = D._verzoek  # de proeven hieronder vervangen het; de HTTP-proeven gebruiken het echte
+
 MB = 1024 * 1024
 
 
@@ -37,6 +39,11 @@ def _fout(url, code, body=b"", location=""):
 
 class _Antwoord(io.BytesIO):
     status = 200
+
+    def __init__(self, inhoud=b"", lengte=None):
+        super().__init__(inhoud)
+        self.headers = Message()
+        self.headers["Content-Length"] = str(len(inhoud) if lengte is None else lengte)
 
 
 class _Opener:
@@ -116,10 +123,11 @@ class _Dropbox:
 
     def __init__(self):
         self.bestanden, self.sessies, self.calls = {}, {}, []
+        self.mappen, self.account = {"/Fathom data"}, "dbid:proef-eigen"
 
     def __call__(self, url, data, koppen, pogingen=5):
         pad = url.split("/2/", 1)[1]
-        arg = json.loads(koppen.get("Dropbox-API-Arg") or "null") or (json.loads(data) if data else {})
+        arg = json.loads(koppen.get("Dropbox-API-Arg") or "null") or (json.loads(data) if data and data != b"null" else {})
         self.calls.append((pad, arg, len(data or b"")))
         if pad == "files/upload_session/start":
             sid = f"s{len(self.sessies) + 1}"
@@ -143,9 +151,24 @@ class _Dropbox:
             self.bestanden[commit["path"]] = inhoud
             return self._meta(commit["path"])
         if pad == "files/get_metadata":
+            if arg["path"] in self.mappen:
+                return {".tag": "folder", "path_display": arg["path"]}
             if arg["path"] not in self.bestanden:
                 raise _fout(url, 409, json.dumps({"error_summary": "path/not_found/"}).encode())
             return self._meta(arg["path"])
+        if pad == "files/list_folder":
+            onder = [p for p in self.bestanden if p.lower().startswith(arg["path"].lower() + "/")]
+            if not onder and arg["path"] not in self.mappen:
+                raise _fout(url, 409, json.dumps({"error_summary": "path/not_found/"}).encode())
+            return {"entries": [{**self._meta(p), "path_lower": p.lower()} for p in onder[:2]],
+                    "has_more": len(onder) > 2, "cursor": json.dumps(onder[2:])}
+        if pad == "files/list_folder/continue":
+            onder = json.loads(arg["cursor"])
+            return {"entries": [{**self._meta(p), "path_lower": p.lower()} for p in onder[:2]],
+                    "has_more": len(onder) > 2, "cursor": json.dumps(onder[2:])}
+        if pad == "users/get_current_account":
+            return {"account_id": self.account, "email": "eigen@mehdi.test", "name": {"display_name": "Proef"},
+                    "account_type": {".tag": "business"}, "root_info": {".tag": "user"}}
         raise AssertionError(pad)
 
     def _meta(self, p):
@@ -191,6 +214,119 @@ def test_upload_bestand_precies_een_stuk_en_metadata():
     assert [c[0] for c in d.calls] == ["files/upload"], "precies BROK past in een enkele upload"
     assert D.metadata("/Zoom/b/video.mp4")["content_hash"] == D.inhoud_hash(pad)
     assert D.metadata("/Zoom/b/niets.mp4") is None
+
+
+def test_download_naar_merkt_een_te_kort_antwoord():
+    eerste = "https://proef.zoom.us/rec/download/b1"
+    o = _zoom({})
+    o.routes[eerste] = None
+    o.open = lambda req, timeout=None: _Antwoord(b"x" * 50, lengte=100)
+    try:
+        Z.download_naar("b1", os.path.join(MAP, "kort"))
+        raise AssertionError("een te kort antwoord hoort ZoomFout te geven")
+    except Z.ZoomFout as e:
+        assert "korter dan Content-Length" in str(e)
+
+
+def test_download_naar_bewaker_breekt_af():
+    eerste = "https://proef.zoom.us/rec/download/b1"
+    _zoom({eerste: os.urandom(3 * MB)})
+    tel = []
+
+    def bewaker():
+        tel.append(1)
+        if len(tel) > 1:
+            raise RuntimeError("tijd op")
+    try:
+        Z.download_naar("b1", os.path.join(MAP, "x"), brok=MB, bewaker=bewaker)
+        raise AssertionError("de bewaker hoort af te breken")
+    except RuntimeError as e:
+        assert str(e) == "tijd op"
+
+
+class _Http:
+    """Dropbox op het niveau van urllib (de echte _verzoek draait): een upload-sessie met een lege body bij append_v2,
+    zoals Dropbox het doet, en op verzoek een verloren antwoord (500 nadat het stuk wel aankwam)."""
+
+    def __init__(self, verlies_bij=None):
+        self.sessies, self.bestanden, self.verlies_bij, self.n = {}, {}, verlies_bij, 0
+
+    def __call__(self, req, timeout=None):
+        pad = req.full_url.split("/2/", 1)[1]
+        arg = json.loads(req.get_header("Dropbox-api-arg") or "null") or {}
+        data = req.data or b""
+        self.n += 1
+        if pad == "files/upload_session/start":
+            self.sessies["s1"] = bytearray(data)
+            return _Antwoord(json.dumps({"session_id": "s1"}).encode())
+        s = self.sessies.get(arg.get("cursor", {}).get("session_id"))
+        if pad in ("files/upload_session/append_v2", "files/upload_session/finish"):
+            if arg["cursor"]["offset"] != len(s):
+                fout = {"error_summary": "incorrect_offset/..", "error": {".tag": "incorrect_offset", "correct_offset": len(s)}}
+                if pad.endswith("finish"):
+                    fout["error"] = {".tag": "lookup_failed", "lookup_failed": fout["error"]}
+                raise _fout(req.full_url, 409, json.dumps(fout).encode())
+            s.extend(data)
+            if self.verlies_bij == self.n:
+                raise _fout(req.full_url, 500, b"verloren")
+            if pad.endswith("append_v2"):
+                return _Antwoord(b"")
+            b = bytes(s)
+            self.bestanden[arg["commit"]["path"]] = b
+            h = hashlib.sha256(b"".join(hashlib.sha256(b[i:i + 4 * MB]).digest() for i in range(0, len(b), 4 * MB)))
+            return _Antwoord(json.dumps({"size": len(b), "content_hash": h.hexdigest(),
+                                         "path_display": arg["commit"]["path"]}).encode())
+        raise AssertionError(pad)
+
+
+def _http(**kw):
+    h = _Http(**kw)
+    D._verzoek = ECHT_VERZOEK
+    D._toegang = lambda: "tok"
+    D._path_root = lambda: {}
+    D.time.sleep = lambda s: None
+    D.urllib.request.urlopen = h
+    return h
+
+
+def test_upload_sessie_op_http_lege_body_bij_append_en_herstel_na_verloren_antwoord():
+    pad = os.path.join(MAP, "sessie.bin")
+    data = os.urandom(3 * D.BROK + 7)
+    open(pad, "wb").write(data)
+    h = _http()
+    m = D.upload_bestand(pad, "/Zoom/c/video.mp4")
+    assert h.bestanden["/Zoom/c/video.mp4"] == data and m["grootte"] == len(data), "lege body bij append_v2 is succes"
+    h = _http(verlies_bij=2)  # het eerste append komt aan, maar het antwoord gaat verloren: 500, herhaling, 409 offset
+    m = D.upload_bestand(pad, "/Zoom/d/video.mp4")
+    assert h.bestanden["/Zoom/d/video.mp4"] == data, "na incorrect_offset gaat de sessie verder waar Dropbox wil"
+    assert m["content_hash"] == D.inhoud_hash(pad)
+
+
+def test_upload_bewaker_breekt_de_sessie_af_zonder_bestand():
+    pad = os.path.join(MAP, "afbreken.bin")
+    open(pad, "wb").write(os.urandom(2 * D.BROK + 1))
+    h = _http()
+    tel = []
+
+    def bewaker():
+        tel.append(1)
+        if len(tel) > 2:
+            raise RuntimeError("tijd op")
+    try:
+        D.upload_bestand(pad, "/Zoom/e/video.mp4", bewaker=bewaker)
+        raise AssertionError("de bewaker hoort af te breken")
+    except RuntimeError:
+        pass
+    assert not h.bestanden, "zonder finish geen bestand in Dropbox"
+
+
+def test_lijst_map_leest_alle_paginas():
+    d = _dropbox()
+    for i in range(5):
+        d.bestanden[f"/Zoom/m{i}/Video.MP4"] = bytes([i])
+    lijst = D.lijst_map("/Zoom")
+    assert len(lijst) == 5 and "/zoom/m3/video.mp4" in lijst, sorted(lijst)
+    assert D.lijst_map("/Bestaat niet") is None
 
 
 if __name__ == "__main__":

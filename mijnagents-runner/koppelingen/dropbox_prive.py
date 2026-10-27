@@ -101,7 +101,9 @@ def _verzoek(url, data, koppen, pogingen=5):
         req = urllib.request.Request(url, data, {"Authorization": f"Bearer {_toegang()}", **_path_root(), **koppen})
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
-                return json.load(r)
+                inhoud = r.read()
+            # upload_session/append_v2 geeft bij succes een lege body (Codex, Zoomarchief controle 1)
+            return json.loads(inhoud) if inhoud.strip() else None
         except urllib.error.HTTPError as e:
             if e.code == 429 or e.code >= 500:
                 if poging == pogingen - 1:
@@ -124,7 +126,8 @@ def account():
     """E-mail en naam van het gekoppelde account (om te zien dat het Mehdi's is)."""
     a = _verzoek(f"{API}/2/users/get_current_account", b"null", {"Content-Type": "application/json"})
     return {"email": a.get("email", ""), "naam": (a.get("name") or {}).get("display_name", ""),
-            "type": (a.get("account_type") or {}).get(".tag", ""), "root": (a.get("root_info") or {}).get(".tag", "")}
+            "type": (a.get("account_type") or {}).get(".tag", ""), "root": (a.get("root_info") or {}).get(".tag", ""),
+            "id": a.get("account_id", "")}
 
 
 def upload(inhoud, extern_pad, overschrijf=True):
@@ -145,12 +148,40 @@ def inhoud_hash(pad):
             totaal.update(hashlib.sha256(blok).digest())
 
 
+def _foutinhoud(e):
+    """Het antwoord van Dropbox bij een 409, een keer gelezen en onthouden (een HTTPError leest maar een keer)."""
+    if not hasattr(e, "_dropbox"):
+        try:
+            e._dropbox = json.loads(e.read(4096) or b"{}")
+        except (ValueError, OSError, AttributeError):
+            e._dropbox = {}
+    return e._dropbox if isinstance(e._dropbox, dict) else {}
+
+
 def _fouttag(e):
     """De error_summary van een 409 van Dropbox (bv. 'path/not_found/..'), of leeg."""
-    try:
-        return json.loads(e.read(4096) or b"{}").get("error_summary", "")
-    except (ValueError, OSError, AttributeError):
-        return ""
+    return str(_foutinhoud(e).get("error_summary", ""))
+
+
+class Verschoven(RuntimeError):
+    """Dropbox heeft een ander deel van de upload-sessie dan wij denken (incorrect_offset), bv. na een herhaalde append
+    waarvan het eerste antwoord verloren ging. correct is de plek waar Dropbox verder wil."""
+
+    def __init__(self, correct):
+        self.correct = correct
+        super().__init__(f"upload-sessie verschoven naar {correct}")
+
+
+def _juiste_plek(fout):
+    """correct_offset uit een incorrect_offset-fout, ook genest onder lookup_failed (finish), of None."""
+    for _ in range(4):
+        if not isinstance(fout, dict):
+            return None
+        if fout.get(".tag") == "incorrect_offset":
+            c = fout.get("correct_offset")
+            return c if type(c) is int else None
+        fout = fout.get(fout.get(".tag") or "")  # genest: {'.tag': 'lookup_failed', 'lookup_failed': {...}}
+    return None
 
 
 def metadata(extern_pad):
@@ -172,28 +203,68 @@ def _stuur(pad, inhoud, arg):
     except urllib.error.HTTPError as e:
         if e.code == 409 and "conflict" in (tag := _fouttag(e)):
             raise Bestaat(tag[:120]) from None
+        if e.code == 409 and (plek := _juiste_plek(_foutinhoud(e).get("error"))) is not None:
+            raise Verschoven(plek) from None
         raise
 
 
-def upload_bestand(lokaal, extern_pad):
+def upload_bestand(lokaal, extern_pad, bewaker=None):
     """Een lokaal bestand naar Dropbox, ook boven 150 MB (upload-sessie in stukken van BROK). Nooit overschrijven: mode
     add zonder autorename, dus staat er al iets op dat pad, dan Bestaat. Geeft {'grootte', 'content_hash', 'pad'} zoals
-    Dropbox het na de upload teruggeeft; dat is het bewijs, niet het feit dat de call slaagde."""
+    Dropbox het na de upload teruggeeft; dat is het bewijs, niet het feit dat de call slaagde. Zegt Dropbox dat het een
+    ander deel heeft (incorrect_offset, na een herhaalde call), dan gaan we verder waar Dropbox wil, uit hetzelfde
+    bestand. bewaker() draait voor elk stuk: een fout daar breekt de sessie af zonder finish, dus zonder bestand."""
     commit = {"path": basis() + extern_pad, "mode": "add", "autorename": False, "mute": True}
     grootte = os.path.getsize(lokaal)
     with open(lokaal, "rb") as f:
         if grootte <= BROK:
             m = _stuur("files/upload", f.read(), commit)
         else:
+            if bewaker:
+                bewaker()
             sessie = _stuur("files/upload_session/start", f.read(BROK), {"close": False})["session_id"]
-            plek = BROK
-            while grootte - plek > BROK:
-                _stuur("files/upload_session/append_v2", f.read(BROK),
-                       {"cursor": {"session_id": sessie, "offset": plek}, "close": False})
-                plek += BROK
-            m = _stuur("files/upload_session/finish", f.read(),
-                       {"cursor": {"session_id": sessie, "offset": plek}, "commit": commit})
+            plek, sprongen = BROK, 0
+            while True:
+                if bewaker:
+                    bewaker()
+                f.seek(plek)
+                laatste = grootte - plek <= BROK
+                try:
+                    if laatste:
+                        m = _stuur("files/upload_session/finish", f.read(),
+                                   {"cursor": {"session_id": sessie, "offset": plek}, "commit": commit})
+                        break
+                    _stuur("files/upload_session/append_v2", f.read(BROK),
+                           {"cursor": {"session_id": sessie, "offset": plek}, "close": False})
+                    plek += BROK
+                except Verschoven as v:
+                    sprongen += 1
+                    if sprongen > 5 or not 0 < v.correct <= grootte:
+                        raise
+                    plek = v.correct
+    if not isinstance(m, dict):
+        raise RuntimeError("Dropbox gaf geen metadata na de upload")
     return {"grootte": m.get("size"), "content_hash": m.get("content_hash", ""), "pad": m.get("path_display", "")}
+
+
+def lijst_map(extern_pad):
+    """Alle bestanden onder een map in Dropbox, recursief: {pad in kleine letters: {'grootte', 'content_hash', 'pad'}}.
+    None als de map er niet is. Dropbox vergelijkt paden zonder hoofdletters; wij dus ook."""
+    uit = {}
+    try:
+        d = rpc("files/list_folder", {"path": basis() + extern_pad, "recursive": True, "limit": 2000})
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "not_found" in _fouttag(e):
+            return None
+        raise
+    while True:
+        for x in d.get("entries") or []:
+            if x.get(".tag") == "file":
+                uit[(x.get("path_lower") or x.get("path_display", "").lower())] = {
+                    "grootte": x.get("size"), "content_hash": x.get("content_hash", ""), "pad": x.get("path_display", "")}
+        if not d.get("has_more"):
+            return uit
+        d = rpc("files/list_folder/continue", {"cursor": d["cursor"]})
 
 
 def _staat_pad(lokaal):
