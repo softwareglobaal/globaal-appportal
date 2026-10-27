@@ -32,6 +32,18 @@ import re
 
 MARKERING = "(geschrapt: schrijfregel {regel}, zie de schrijfregels van het kantoor)"
 
+# Witte lijsten voor de Engelse S5 (43e review): alleen deze woorden maken van liable to, in default en at fault techniek
+_TECHNISCH_NA_LIABLE = (r"(?:rot|rotting|crack|cracking|corrode|corrosion|rust|rusting|decay|shrink|shrinkage|swell|swelling|warp|"
+                        r"warping|settle|settlement|move|movement|fail|failure|leak|leaking|leakage|flood|flooding|freeze|"
+                        r"freezing|frost|deteriorate|deterioration|break|breakage|split|splitting|sag|sagging|condensation|"
+                        r"condense|mould|mold|fade|fading|blister|blistering|peel|peeling|spall|spalling|subside|subsidence|"
+                        r"collapse|damage|wear|erode|erosion|stain|staining|moisture|water|dampness|efflorescence)")
+_TECHNISCH_NA_DEFAULT = (r"(?:mode|modes|setting|settings|configuration|configurations|position|positions|state|value|values|"
+                         r"parameter|parameters|program|programs|programme|programmes|operation|temperature|speed|curve|"
+                         r"schedule|password|address|layout|profile)")
+_TECHNISCH_NA_FAULT = (r"(?:current|currents|level|levels|condition|conditions|loop|loops|protection|clearance|detection|"
+                       r"finding|indicator|indication|alarm|alarms|test|tests|testing|location|path|voltage|code|codes|log)")
+
 VERBODEN = [
     ("S2", re.compile(r"deontolog", re.I)),
     ("S2", re.compile(r"\borde\s+van\s+(de\s+)?architect", re.I)),
@@ -53,12 +65,11 @@ VERBODEN = [
     ("S1", re.compile(r"\b(?:no|not)\s+(?:previous|prior|earlier)\s+(?:site\s+)?visits?\b", re.I)),
     ("S1", re.compile(r"\b(?:(?:the\s+)?architect|the\s+office|our\s+office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:visited|present|attended|checked|inspected|supervised)\b", re.I)),
     ("S1", re.compile(r"\b(?:only|at\s+most|a\s+maximum\s+of)\s+(?:one|1)\s+(?:site\s+)?visit\b", re.I)),
-    # "liable to rot" of "liable to crack" (vatbaar voor) is gewone technische tekst; "liable for", "held liable", "liable to
-    # the client" en "liable to pay" zijn een juridisch oordeel (35e review). Zo ook "in default mode" of "in default
-    # settings" (standaardinstelling) tegenover "is in default", "in default of payment" of "in default under" (36e review).
-    # En "at fault currents" of "at fault level" (foutstroom, kortsluitvermogen) tegenover "is at fault (for)" (41e review).
-    ("S5", re.compile(r"\b(?:liable\b(?!\s+to\s+(?!(?:the|a|an|him|her|them|us|you|it|his|their|our|its|any|each|all|pay|"
-                      r"compensate|indemnify|reimburse)\b)[a-z])|in\s+default\b(?!\s+(?!(?:of|under|towards|by|since|with)\b)[a-z])|breach\s+of\s+contract\b|at\s+fault\b(?!\s+(?!(?:for|of|in|under|towards|by|since|with)\b)[a-z])|"
+    # Een juridisch oordeel, tenzij er een technisch woord van de witte lijst op volgt: "liable to rot" (vatbaar voor),
+    # "in default mode" (standaardinstelling), "at fault currents" (foutstroom). Bij twijfel blijft de markering:
+    # "at fault because", "in default and", "liable to the client", "liable to repair" zijn S5 (35e, 36e, 41e, 43e review).
+    ("S5", re.compile(r"\b(?:liable\b(?!\s+to\s+" + _TECHNISCH_NA_LIABLE + r"\b)|in\s+default\b(?!\s+" + _TECHNISCH_NA_DEFAULT
+                      + r"\b)|breach\s+of\s+contract\b|at\s+fault\b(?!\s+" + _TECHNISCH_NA_FAULT + r"\b)|"
                       r"negligen(?:t|ce)\b|culpable\b)", re.I)),
 ]
 

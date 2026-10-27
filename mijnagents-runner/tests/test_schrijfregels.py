@@ -715,5 +715,13 @@ for tekst in ["The bathroom RCD trips at fault currents above 30 mA.", "The dist
 for tekst in ["The contractor is at fault.", "The contractor is at fault for the leak.", "The roofer was at fault in this matter."]:
     check(f"juridisch at fault blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
 
+# Drieënveertigste review 27-10-2026: de uitzondering is een witte lijst van technische woorden; een voegwoord of
+# bijwoord na "at fault" of "in default" (and, because, here) en "liable to repair" blijven S5
+for tekst in ["The roofer is at fault because the flashing is missing.", "The contractor is at fault and must repair the roof at his own cost.",
+              "The contractor is clearly at fault here.", "The contractor is in default and must repair the roof edge.",
+              "The contractor is in default because the works are late.", "The contractor is liable to repair the damage."]:
+    check(f"juridisch blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"] and S.controleer(tekst), S.toepassen(tekst))
+check("liable to moisture ingress blijft", S.toepassen("Timber is liable to moisture ingress.") == ("Timber is liable to moisture ingress.", []))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)
