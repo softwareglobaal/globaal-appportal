@@ -553,5 +553,19 @@ for tekst, verwacht in [("De goot lekt (opname 00:12:30).", "De goot lekt."), ("
                         ("De goot lekt, zie opname 12:30.", "De goot lekt."), ("The gutter leaks (recording 00:12:30).", "The gutter leaks.")]:
     check(f"opnametijdstip blijft weg: '{tekst}'", S.toepassen(tekst)[0] == verwacht, S.toepassen(tekst))
 
+# Eenendertigste review 27-10-2026: direct na "opname" of "transcript" is ook een kort tijdstip (3:45, 0:45) een
+# opnametijdstip, zoals in productie; de schaal verder in een opname-haakje (dertigste review) blijft
+for tekst, verwacht in [("De goot lekt (opname 3:45).", "De goot lekt."), ("De goot lekt, zie opname 7:12.", "De goot lekt."),
+                        ("De goot lekt (opname 0:45).", "De goot lekt."), ("De goot lekt (transcript 4:05).", "De goot lekt."),
+                        ("De goot lekt. Zie opname 3:45.", "De goot lekt."), ("De goot lekt. (opname 3:45).", "De goot lekt."),
+                        ("De goot (opname 3:45-4:10) lekt.", "De goot lekt."), ("The gutter leaks (recording at 3:45).", "The gutter leaks.")]:
+    for profiel in (None, "aankoopkeuring"):
+        t31, ing31 = S.toepassen(tekst, profiel)
+        check(f"kort opnametijdstip weg: '{tekst}' {profiel}", t31 == verwacht and ing31 and S.toepassen(t31, profiel)[0] == t31, (t31, ing31))
+for b, verwacht in [("verklaring bouwheer, opname 3:45", "verklaring bouwheer"), ("foto 12 (opname 0:45)", "foto 12")]:
+    check(f"kort opnametijdstip weg uit de bron: '{b}'", S.bron_zichtbaar(b) == verwacht, S.bron_zichtbaar(b))
+for tekst in ["De goot is nagemeten. (Opname van de bestaande toestand, schaal 1:50.)", "Afspraak om 10:15 op de werf (10:15)."]:
+    check(f"geen opnametijdstip, blijft: '{tekst[:35]}'", S.toepassen(tekst) == (tekst, []), S.toepassen(tekst))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

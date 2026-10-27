@@ -74,21 +74,27 @@ _OPNAMETIJD = r"(?:\b\d{2}:\d{2}(?::\d{2})?\b|\b\d:\d{2}:\d{2}\b|\b\d{1,2}m\d{2}
 _OPNAMETIJDEN = _OPNAMETIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _OPNAMETIJD + r")?"
 # 30e review: alle opnameregels gebruiken die strenge definitie, zodat "(Opname ..., schaal 1:50)" gewone tekst blijft
 _TIJDSTIP = _OPNAMETIJD
+# Direct na het woord opname of transcript is elk tijdstip een opnametijdstip, ook 3:45 of 0:45, zoals in productie
+# ("(opname 3:45)", "zie opname 7:12"); alleen een tijdstip verder in de haakjes moet de strenge vorm hebben (31e review).
+_DIRECTTIJD = r"(?:\b\d{1,2}:\d{2}(?::\d{2})?\b|\b\d{1,2}m\d{2}s\b)"
+_DIRECTTIJDEN = _DIRECTTIJD + r"(?:\s*(?:-|–|tot|to)\s*" + _DIRECTTIJD + r")?"
 # alleen aan een echt zinsbegin (begin van de tekst, of na . ! ?), niet aan elk regelbegin: 'raam, zie\nopname 00:12.'
 # is het einde van een zin (24e review)
 OPNAME_LOS = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?(?:opname|transcript|audio|recording)\s+(?:van\s+|at\s+)?"
-                        + _TIJDSTIP + r"(?:\s*(?:-|–|tot|to)\s*" + _TIJDSTIP + r")?\s*[.!?](?=\s|$)", re.I)
+                        + _DIRECTTIJDEN + r"\s*[.!?](?=\s|$)", re.I)
 # "(opname 00:22:30)." als eigen zin na een punt: ook weg samen met de punt (26e review)
 # zo streng als OPNAME: alleen "(opname)" zonder meer, of een verwijzing met een tijdstip; "(Opname van de bestaande
 # toestand ...)" of "(Opname visueel en niet-destructief; ...)" is gewone tekst en blijft (27e review)
 OPNAME_LOS_HAAKJES = re.compile(r"(?:\A|(?<=[.!?])|(?<=[.!?]\n))[ \t]*\(\s*(?:zie\s+|see\s+)?(?:de\s+|the\s+)?"
-                                r"(?:opname|geluidsopname|transcript|audio|recording)(?:\s*|\b[^)]*" + _TIJDSTIP + r"[^)]*)\)\s*[.!?]?(?=\s|$)", re.I)
+                                r"(?:opname|geluidsopname|transcript|audio|recording)(?:\s*|\s+(?:van\s+|at\s+)?" + _DIRECTTIJD
+                                + r"[^)]*|\b[^)]*" + _TIJDSTIP + r"[^)]*)\)\s*[.!?]?(?=\s|$)", re.I)
 OPNAME = [
-    re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)[^)]*" + _OPNAMETIJD + r"[^)]*\)", re.I),
-    re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?" + _OPNAMETIJDEN, re.I),
+    re.compile(r"\s*\((?:opname|transcript|audio|geluidsopname)(?:\s+(?:van\s+)?" + _DIRECTTIJD + r"|[^)]*" + _OPNAMETIJD
+               + r")[^)]*\)", re.I),
+    re.compile(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|transcript|audio)\s+(?:van\s+)?" + _DIRECTTIJDEN, re.I),
     re.compile(r"\s*\((?:opname|transcript)\)", re.I),
-    re.compile(r"\s*\((?:recording|audio)[^)]*" + _OPNAMETIJD + r"[^)]*\)", re.I),
-    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?" + _OPNAMETIJDEN, re.I),
+    re.compile(r"\s*\((?:recording|audio)(?:\s+(?:at\s+)?" + _DIRECTTIJD + r"|[^)]*" + _OPNAMETIJD + r")[^)]*\)", re.I),
+    re.compile(r",?\s*(?:see\s+)?(?:the\s+)?recording\s+(?:at\s+)?" + _DIRECTTIJDEN, re.I),
     re.compile(r"\s*\(recording\)", re.I),
 ]
 # Een zin loopt tot een punt, uitroep- of vraagteken; de punt in 4.500 of 1.250.000 (tussen twee cijfers) knipt niet.
@@ -257,7 +263,11 @@ def bron_zichtbaar(bron):
     een opmeting ('Opname plaatsgesteldheid expert Claes.pdf') en een schaal (1:100) blijven; het volledige veld bron
     blijft in de gegevens ("factuur 2026-114, zie opname 00:12:05" wordt "factuur 2026-114"). 28e review."""
     b = re.sub(r"\s*\n\s*", " / ", str(bron or "").strip())
+    b = re.sub(r"\s*\((?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|transcript|audio|recording)\s+(?:van\s+|at\s+|om\s+)?"
+               + _DIRECTTIJD + r"[^()]*\)", "", b, flags=re.I)
     b = re.sub(r"\s*\([^()]*" + _OPNAMETIJD + r"[^()]*\)", "", b)
+    b = re.sub(r",?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|transcript|audio|recording)\s+(?:van\s+|at\s+|om\s+)?"
+               + _DIRECTTIJDEN, "", b, flags=re.I)
     b = re.sub(r"(?:,?\s*(?:zie\s+)?(?:de\s+)?(?:opname|geluidsopname|audio|recording)\s+(?:van\s+|at\s+|om\s+)?)?" + _OPNAMETIJDEN, "", b, flags=re.I)
     b = re.sub(r"\(\s*\)", "", b)
     return re.sub(r"\s{2,}", " ", b).strip(" ,;:-/")
