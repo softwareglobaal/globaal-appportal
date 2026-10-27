@@ -673,6 +673,28 @@ finally:
         setattr(W, k, v)
 check("een afgeronde weekvraag komt niet terug met dezelfde inhoud, wel bij een nieuw ophaalmoment",
       _n9 == 1 and len(_ins9) == 2, str((_n9, len(_ins9))))
+# hertest 15: (1) Mehdi haalt de weekvraag weg terwijl de afspraken blijven, (2) er komt een ophaalmoment bij
+_ins10 = []
+try:
+    W.LARA_VRAGEN = str(Path(tempfile.mkdtemp(prefix="lara-vragen10-")) / "agenda-lara-vragen.json")
+    W._insert = lambda kal, body, tok, toch=False: _ins10.append(body) or {"id": f"x{len(_ins10)}"}
+    W._patch = lambda a, body, tok, **k: None
+    W._prive_item_lezen = lambda eid, tok: None
+    W.lara_meldingen([], _wk, [], "tok", _nu9)                 # gevraagd; daarna haalt Mehdi de vraag weg (geen item meer)
+    W.lara_meldingen([], _wk, [], "tok", _nu9)                 # zelfde inhoud: niet opnieuw
+    _n10 = len(_ins10)
+    W.lara_meldingen([], _wk_meer, [], "tok", _nu9)            # nieuw ophaalmoment: opnieuw vragen
+    # en een bestaande vraag die bijgewerkt wordt, onthoudt haar nieuwe inhoud: geen dubbel daarna
+    _b10 = _ins10[-1]
+    _x10 = {"kalender": W.PRIVE_AGENDA, "id": "x2", "titel": _b10["summary"], "start": _b10["start"]["date"],
+            "_merk": dict(_b10["extendedProperties"]["private"]), "hele_dag": True}
+    _n10b = len(_ins10)
+    W.lara_meldingen([], _wk_meer, [_x10], "tok", _nu9)
+finally:
+    for k, v in _o9.items():
+        setattr(W, k, v)
+check("een weggehaalde weekvraag komt terug bij een nieuw ophaalmoment, niet bij dezelfde inhoud",
+      _n10 == 1 and _n10b == 2 and len(_ins10) == 2, str((_n10, _n10b, len(_ins10))))
 
 _o6 = (W._prive_item_lezen, W._patch)
 _pat6 = []

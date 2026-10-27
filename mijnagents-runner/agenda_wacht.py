@@ -2989,8 +2989,9 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
         soort = k.split(":", 1)[0]
         try:
             inhoud = body["extendedProperties"]["private"][LARA_INHOUD]
-            heropen = (k.startswith("week:") and k in reg and not reg[k].get("open")
-                       and reg[k].get("inhoud") != inhoud)        # nieuw ophaalmoment in een afgeronde week (hertest 14)
+            # een week waarvan de vraag weg of afgerond is, krijgt een nieuwe vraag zodra haar inhoud verandert (een nieuw
+            # ophaalmoment); dezelfde inhoud vraagt niet opnieuw (hertest 14 en 15)
+            heropen = k.startswith("week:") and k in reg and reg[k].get("inhoud") != inhoud
             if x is None and (k not in reg or heropen):
                 n = _insert(PRIVE_AGENDA, body, tok) or {}
                 reg[k] = {"gevraagd": nu.date().isoformat(), "id": n.get("id", ""), "open": True, "inhoud": inhoud}
@@ -3001,6 +3002,9 @@ def lara_meldingen(afwijkingen, weken, bestaande, tok, nu=None):
                                     or (x.get("_merk") or {}).get(LARA_INHOUD)
                                     != body["extendedProperties"]["private"][LARA_INHOUD]):
                 _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description", "extendedProperties")}, tok)
+                if k in reg:
+                    reg[k] = {**reg[k], "inhoud": inhoud}
+                    gewijzigd = True
                 regels.append(f"{body['start']['date']} Lara-vraag bijgewerkt ({soort})")
         except Exception as e:  # noqa: BLE001
             regels.append(f"{body['start']['date']} Lara-vraag niet gezet ({soort}, {type(e).__name__})")
