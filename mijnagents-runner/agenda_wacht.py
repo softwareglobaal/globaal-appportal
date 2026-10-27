@@ -2487,7 +2487,7 @@ def lara_vakantieblokken():
     return blokken
 
 
-def lara_vakantie_afwijkingen(blokken, officieel, vandaag):
+def lara_vakantie_afwijkingen(blokken, officieel, vandaag, dekking=None):
     """Pure functie: de blokken uit lara_vakantieblokken() met minstens één schooldag (maandag tot vrijdag, niet in de
     officiële bron) vanaf vandaag. Zo'n blok is een eigen reis, een vrije dag van de school of een fout: de agent plant
     de ritten zoals op een schooldag en vraagt het aan Mehdi (L2). Geeft [{id, titel, van, tot, schooldagen}]."""
@@ -2499,6 +2499,8 @@ def lara_vakantie_afwijkingen(blokken, officieel, vandaag):
         except (KeyError, TypeError, ValueError):
             continue
         school = []
+        if dekking is not None:
+            eind = min(eind, dekking + timedelta(days=1))    # na de bron is een dag onbekend, geen schooldag
         while a < eind:
             if a.weekday() < 5 and a.isoformat() not in officieel:
                 school.append(a.isoformat())
@@ -3034,7 +3036,7 @@ def lara_vakantie_stap(rit_items, vandaag):
     if blokken is None:
         return noden + [{"tekst": "De Lara-agenda is niet te lezen: afwijkende vakantieblokken niet nagekeken", "wie": "claude"}]
     grens = (nu.date() + timedelta(days=LARA_VRAAG_VOORUIT)).isoformat()
-    afw = [b for b in lara_vakantie_afwijkingen(blokken, officieel, nu.date()) if b["van"] <= grens]
+    afw = [b for b in lara_vakantie_afwijkingen(blokken, officieel, nu.date(), dekking) if b["van"] <= grens]
     weken = lara_vakantieweken(rit_items, namen, nu.date())
     try:
         regels = lara_meldingen(afw, weken, rit_items, agenda._toegang(), nu)
@@ -3047,20 +3049,35 @@ def lara_vakantie_stap(rit_items, vandaag):
     return noden
 
 
-def lara_gewist_melden(dag, uur, titel, sleutel, tok, dagen=None):
-    """Een vaste Lara-afspraak werd gewist op een officiële schooldag (agenda_signaal ziet dat, ook als een assistent
-    buiten Claude Code het deed): een vraag in de privé-agenda op de eerste dag. Een hele reeks geeft één vraag met de
-    lijst van de dagen. De agent zet zelf niets terug (L3)."""
+def _lara_gewist_body(dag, uur, titel, sleutel, dagen):
     k = f"gewist:{sleutel}"
     dagen = sorted(set(dagen or [dag]))
-    waar = (f"op {_ddmm(dag)} is een vaste Lara-afspraak{(' van ' + uur) if uur else ''}" if len(dagen) == 1 else
+    waar = (f"op {_ddmm(dagen[0])} is een vaste Lara-afspraak{(' van ' + uur) if uur else ''}" if len(dagen) == 1 else
             f"op {', '.join(_ddmm(d) for d in dagen[:10])}{' en later' if len(dagen) > 10 else ''} zijn vaste "
             f"Lara-afspraken van dezelfde reeks")
     tekst = (f"Agendawacht vraagt: {waar} uit de agenda gehaald, maar volgens de officiële kalender (vlaanderen.be) zijn "
              f"het schooldagen. Klopt dat? Zo niet, laat Claude 1 ze terugzetten. {LARA_MARKEREN}\n\n"
              f"Afspraak: {titel[:80] or '(titel onbekend)'}.")
-    _insert(PRIVE_AGENDA, _lara_body(k, f"VR Agendawacht: vaste Lara-afspraak gewist op een schooldag ({_ddmm(dag)})",
-                                     dag, dag, tekst), tok)
+    return _lara_body(k, f"VR Agendawacht: vaste Lara-afspraak gewist op een schooldag ({_ddmm(dagen[0])})",
+                      dagen[0], dagen[0], tekst)
+
+
+def lara_gewist_melden(dag, uur, titel, sleutel, tok, dagen=None):
+    """Een vaste Lara-afspraak werd gewist op een officiële schooldag (agenda_signaal ziet dat, ook als een assistent
+    buiten Claude Code het deed): een vraag in de privé-agenda op de eerste dag. Een hele reeks geeft één vraag met de
+    lijst van de dagen. De agent zet zelf niets terug (L3). Geeft het id van de vraag."""
+    n = _insert(PRIVE_AGENDA, _lara_gewist_body(dag, uur, titel, sleutel, dagen), tok) or {}
+    return n.get("id") or ""
+
+
+def lara_gewist_bijwerken(eid, uur, titel, sleutel, tok, dagen):
+    """Vult de bestaande vraag over een gewiste reeks aan met dagen die in een latere ronde geschrapt werden, in plaats
+    van een tweede vraag (Codex-hertest 27-10-2026, punt 1). False als de vraag er niet meer is of niet van de agent."""
+    x = _prive_item_lezen(eid, tok) if eid else None
+    if x is None or (x.get("_merk") or {}).get(LARAMERK) != f"gewist:{sleutel}":
+        return False
+    body = _lara_gewist_body(min(dagen), uur, titel, sleutel, dagen)
+    _patch(x, {k2: body[k2] for k2 in ("summary", "start", "end", "description")}, tok)
     return True
 
 

@@ -100,6 +100,9 @@ check("het juiste herfstblok en de feestdag wijken niet af", "goed" not in _ids 
 check("een eigen reis ('Lara op vakantie') schakelt geen ritten uit maar is een vraag", "reis" in _ids
       and _ids["reis"]["schooldagen"][0] == "2026-11-30")
 check("een voorbij blok en een blok in het weekend geven geen vraag", "voorbij" not in _ids and "weekend" not in _ids)
+_na = W.lara_vakantie_afwijkingen([{"id": "na", "titel": "Lara: vakantie", "van": "2030-09-02", "tot": "2030-09-07"}],
+                                  dagen, date(2030, 8, 20), dekking)
+check("na de laatste dag van de bron is een dag onbekend, geen schooldag: geen vraag", not _na, str(_na))
 _afw2 = W.lara_vakantie_afwijkingen(_blokken, dagen, date(2026, 10, 28))
 check("een lopend blok telt alleen de schooldagen vanaf vandaag",
       next(b for b in _afw2 if b["id"] == "fout")["schooldagen"] == ["2026-10-28", "2026-10-29", "2026-10-30"])
@@ -406,6 +409,54 @@ finally:
      S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o4
 check("een hele reeks gewist geeft één vraag met alle geschrapte schooldagen",
       len(_gemeld3) == 1 and _gemeld3[0][1] == ["2026-11-10", "2026-11-13", "2026-11-16"], str(_gemeld3))
+
+# dezelfde reeks over twee rondes gewist: de bestaande vraag wordt aangevuld, geen tweede vraag (Codex-hertest)
+_gemeld4, _bijgewerkt4 = [], []
+S.STAND = Path(tempfile.mkdtemp(prefix="lara4-")) / "agenda-signaal.json"
+_o5 = (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+       S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime)
+_golf = [_reeks3[:2]]
+
+
+def _google4(req, timeout=None, *a, **k):
+    return io.BytesIO(json.dumps({"items": [dict(e, updated=datetime.now(timezone.utc).isoformat()) for e in _golf[0]]}).encode())
+
+
+try:
+    S.urllib.request.urlopen = _google4
+    S.subprocess.run = lambda args, *a, **k: subprocess.CompletedProcess(args, 0, "", "")
+    S.A._toegang = lambda: "nep-token"
+    S.W.kalenders = lambda: [LARA]
+    S.W.lara_gewist_melden = lambda dag, uur, titel, sleutel, tok, dagen=None: _gemeld4.append((sleutel, dagen)) or "vraag-1"
+    S.W.lara_gewist_bijwerken = lambda eid, uur, titel, sleutel, tok, dagen: _bijgewerkt4.append((eid, sleutel, dagen)) or True
+    S.W.ag.klaarzet = lambda items: {}
+    S.meld_annulering = lambda kandidaat, nu: True
+    S.datetime = _Nu
+    S.bewaar({"gekeken": "2026-10-21T21:00:00+00:00"})
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        S.main()
+        _golf[0] = _reeks3[2:]
+        S.main()
+finally:
+    (S.urllib.request.urlopen, S.subprocess.run, S.A._toegang, S.W.kalenders, S.W.lara_gewist_melden,
+     S.W.lara_gewist_bijwerken, S.W.ag.klaarzet, S.meld_annulering, S.datetime) = _o5
+check("een reeks die over twee rondes gewist wordt, geeft één vraag die aangevuld wordt",
+      len(_gemeld4) == 1 and _bijgewerkt4 and _bijgewerkt4[-1][0] == "vraag-1"
+      and _bijgewerkt4[-1][2] == ["2026-11-10", "2026-11-13", "2026-11-16"], str((_gemeld4, _bijgewerkt4)))
+
+_o6 = (W._prive_item_lezen, W._patch)
+_pat6 = []
+try:
+    W._patch = lambda a, body, tok, **k: _pat6.append(body)
+    W._prive_item_lezen = lambda eid, tok: {"id": eid, "kalender": W.PRIVE_AGENDA, "_merk": {W.LARAMERK: "gewist:r:2026-11-10"}}
+    _ja = W.lara_gewist_bijwerken("v1", "16:00", "x", "r:2026-11-10", "tok", ["2026-11-10", "2026-11-13"])
+    _nee = W.lara_gewist_bijwerken("v1", "16:00", "x", "andere:2026-11-10", "tok", ["2026-11-10"])
+    W._prive_item_lezen = lambda eid, tok: None
+    _weg = W.lara_gewist_bijwerken("v1", "16:00", "x", "r:2026-11-10", "tok", ["2026-11-10"])
+finally:
+    W._prive_item_lezen, W._patch = _o6
+check("aanvullen werkt alleen op de eigen vraag van die reeks, en niet als ze weg is",
+      _ja and not _nee and not _weg and len(_pat6) == 1 and "13/11" in _pat6[0]["description"], str((_ja, _nee, _weg, _pat6)))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

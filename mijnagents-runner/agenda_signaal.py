@@ -208,8 +208,8 @@ def meld_lara_wissing(kandidaat, tok):
     """De vraag in de privé-agenda, daarna een signaal op het bord (zonder titel: privé). Het signaal is bijzaak: lukt het
     niet, dan staat de vraag er toch. kandidaat['dagen'] zijn alle geschrapte schooldagen van dezelfde reeks in deze
     ronde: een hele reeks wissen geeft zo één vraag, geen tientallen (reviewronde 27-10-2026)."""
-    W.lara_gewist_melden(kandidaat["dag"], kandidaat["uur"], kandidaat["titel"], kandidaat["sleutel"], tok,
-                         dagen=kandidaat.get("dagen"))
+    eid = W.lara_gewist_melden(kandidaat["dag"], kandidaat["uur"], kandidaat["titel"], kandidaat["sleutel"], tok,
+                               dagen=kandidaat.get("dagen"))
     try:
         W.ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": kandidaat["dag"],
                         "uniek": f"agenda-lara-gewist:{kandidaat['sleutel']}",
@@ -217,7 +217,7 @@ def meld_lara_wissing(kandidaat, tok):
                         "inhoud": "De vraag staat in je privé-agenda op die dag. De agent zet niets terug."}])
     except Exception as e:  # noqa: BLE001
         print(f"Lara-signaal niet op het bord ({type(e).__name__}); de vraag staat in de privé-agenda", file=sys.stderr)
-    return True
+    return eid if isinstance(eid, str) else ""
 
 
 def meld_annulering(kandidaat, nu):
@@ -388,6 +388,7 @@ def ronde(tijd):
     annuleringen = dict(st.get("annulering_open") or {})
     lara_open = dict(st.get("lara_open") or {})
     lara_gemeld = dict(st.get("lara_gemeld") or {})
+    lara_vraag = dict(st.get("lara_vraag") or {})      # reeks -> de vraag die er al staat (id, sleutel, dagen)
     officieel = W.lara_vakantiedagen()
     dekking = W.schoolvakantie_dekking() if officieel is not None else None
     if officieel is None:
@@ -421,9 +422,17 @@ def ronde(tijd):
     for reeks, lijst in sorted(per_reeks.items()):
         lijst.sort(key=lambda sk: sk[1]["dag"])
         eerste = lijst[0][1]
+        nieuw = [k["dag"] for _, k in lijst]
         try:
-            meld_lara_wissing({**eerste, "sleutel": f"{reeks}:{eerste['dag']}", "dagen": [k["dag"] for _, k in lijst]},
-                              A._toegang())
+            v = lara_vraag.get(reeks) or {}
+            alle = sorted(set(v.get("dagen") or []) | set(nieuw))
+            # een reeks die over meer rondes gewist wordt, krijgt een vraag die aangevuld wordt, geen tweede (Codex-hertest)
+            if not (v.get("id") and W.lara_gewist_bijwerken(v["id"], v.get("uur", ""), v.get("titel", ""), v["sleutel"],
+                                                          A._toegang(), alle)):
+                v = {"sleutel": f"{reeks}:{eerste['dag']}", "uur": eerste["uur"], "titel": eerste["titel"]}
+                v["id"] = meld_lara_wissing({**eerste, "sleutel": v["sleutel"], "dagen": nieuw}, A._toegang())
+                alle = nieuw
+            lara_vraag[reeks] = {**v, "dagen": alle}
             for sleutel, k in lijst:
                 lara_gemeld[sleutel] = k["dag"]
                 lara_open.pop(sleutel, None)
@@ -530,9 +539,10 @@ def ronde(tijd):
     grens = (nu - timedelta(days=2)).date().isoformat()
     vinger = {k: v for k, v in vinger.items() if v[1] >= grens}
     lara_gemeld = {k: d for k, d in lara_gemeld.items() if d >= grens}
+    lara_vraag = {r: v for r, v in lara_vraag.items() if max(v.get("dagen") or [""]) >= grens}
     bewaar({"gekeken": nu.isoformat(), "cursor": cursor, "laatste_dagen": sorted(dagen), "vinger": vinger,
             "open": open_, "opgegeven": opgegeven[-20:], "annulering_open": annuleringen,
-            "lara_open": lara_open, "lara_gemeld": lara_gemeld})
+            "lara_open": lara_open, "lara_gemeld": lara_gemeld, "lara_vraag": lara_vraag})
     return 1 if niet_gelezen or gefaald or alarm or melding_mislukt else 0
 
 
