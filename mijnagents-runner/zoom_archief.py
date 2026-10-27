@@ -654,10 +654,14 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
     for f in bezig:
         m = per_id[f["id"]][0]
+        vorige = staat["gezien"].get(f["id"]) or {}
+        # welke bestanden de meeting al had toen ik dit voorlopige id voor het eerst zag: die kunnen nooit de vervanger
+        # zijn (punt 41); vast vanaf die eerste waarneming, zodat een later verschenen vervanger wel telt (punt 44)
+        andere = vorige["andere"] if vorige.get("bezig") and isinstance(vorige.get("andere"), list) else \
+            sorted(x["id"] for x in m["bestanden"] if x.get("id") and x["id"] != f["id"])
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0), "uuid": m["uuid"],
                                     "bezig": True, "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
-                                    # welke bestanden de meeting al had: die kunnen nooit de vervanger zijn (punt 41)
-                                    "andere": sorted(x["id"] for x in m["bestanden"] if x.get("id") and x["id"] != f["id"])}
+                                    "andere": andere}
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:

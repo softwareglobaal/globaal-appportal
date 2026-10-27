@@ -1291,6 +1291,25 @@ def test_codex_verwerking_43_een_oude_regel_in_gezien_zonder_meeting_blijft_voor
     r, _ = ronde()
     assert "oud-id" in ZA.lees_staat()["verdwenen"], "een oude regel zonder meeting wordt zoals vroeger een verlies"
 
+
+def test_codex_verwerking_44_een_vervanger_die_verschijnt_terwijl_het_voorlopige_id_nog_zichtbaar_is_telt():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    voorlopig = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z", "einde": "",
+                 "grootte": 0, "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    definitief = {**voorlopig, "id": "B", "status": "completed", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    m["bestanden"] = [dict(voorlopig)]
+    ronde()                                                    # eerst alleen het voorlopige A
+    m["bestanden"] = [dict(voorlopig), dict(definitief)]
+    ronde(nu=NU + timedelta(hours=1))                          # dan A en het definitieve B samen
+    m["bestanden"] = [dict(definitief)]
+    ronde(nu=NU + timedelta(hours=2))                          # dan alleen B
+    r, _ = ronde(nu=NU + timedelta(hours=27))
+    s = ZA.lees_staat()
+    assert "A" not in s["verdwenen"] and "A" not in s["vervanging"] and "B" in s["bestanden"], s["verdwenen"]
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
