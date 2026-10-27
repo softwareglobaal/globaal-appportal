@@ -194,7 +194,11 @@ def stuur(tekst, kop=STANDAARD_KOP, voorrang=False):
     ins = instellingen()
     if not (ins["heeft_token"] and ins["pnid"] and ins["mehdi"]):
         raise NietBeschikbaar("WhatsApp niet ingesteld: META_WA_TOKEN, afzendnummer of Mehdi's nummer ontbreekt")
-    open_, _ = venster(ins)
+    try:
+        open_, _ = venster(ins)
+    except Exception as e:  # noqa: BLE001
+        # de gespreksdatabank even weg (herstart, deploy): zeker niets verstuurd, later opnieuw (review PR 113)
+        raise NietBeschikbaar(f"gesprek niet te lezen ({type(e).__name__})") from None
     naar = ins["mehdi"].lstrip("+")
     if open_:
         if kop and kop != STANDAARD_KOP and not tekst.lstrip().startswith(kop):

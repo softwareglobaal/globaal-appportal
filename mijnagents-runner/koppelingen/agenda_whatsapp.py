@@ -101,14 +101,18 @@ def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
     In de stille uren niets. Telkens staat alleen het bericht dat nu vertrekt op 'bezig': een onderbreking maakt zo
     hoogstens dat ene bericht onzeker (Codex-controle PR 113, punt 2). niet_beschikbaar: de uitzondering(en) voor 'nu
     niet' (dagplafond, venster): dan blijft de melding klaar staan en stop ik deze ronde. Geeft het aantal verzonden."""
-    if stil:
-        return 0
     with _bewerk() as d:
         for k, m in d["meldingen"].items():
-            if m.get("status") == "bezig":       # vorige ronde onderbroken tijdens het versturen: niet gokken
+            if m.get("status") == "bezig" and not stil:   # vorige ronde onderbroken tijdens het versturen: niet gokken
                 m["status"] = "onzeker"
-                nood.append({"tekst": f"Agendawacht: melding {m.get('code')} misschien al verstuurd en onderbroken; "
-                                      "niet herhaald, kijk ze na", "wie": "claude-code"})
+        # declaratief (N10): zolang een melding of een antwoord niet aankwam en niemand het nakeek, elke ronde dezelfde
+        # nood, ook in de stille uren; anders sluit het bord ze na een minuut (review PR 113)
+        if any((m.get("status") in ("onzeker", "mislukt") or (m.get("verwerkt") or {}).get("uitkomst") == "mislukt")
+               and not m.get("nagekeken") for m in d["meldingen"].values()):
+            nood.append({"tekst": "Agendawacht: een WhatsApp-melding of een antwoord van Mehdi is onzeker of mislukt; "
+                                  "kijk de wachtrij na", "wie": "claude-code"})
+    if stil:
+        return 0
     n, gedaan = 0, set()
     while True:
         with _bewerk() as d:
@@ -127,9 +131,19 @@ def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
         except tuple(niet_beschikbaar) as e:        # zeker niet vertrokken: later opnieuw, en de rest ook
             nieuw, extra, stop = "klaar", {"wacht": str(e)[:160]}, True
             nood.append({"tekst": "Agendawacht: een WhatsApp-melding wacht op het venster of het dagplafond", "wie": "mehdi"})
-        except RuntimeError as e:                   # Meta weigerde het bericht: zeker niet vertrokken
-            nieuw, extra = "klaar", {"fout": str(e)[:160]}
-        except Exception as e:  # noqa: BLE001      # bv. een time-out: misschien vertrokken
+        except RuntimeError as e:
+            if str(e).startswith("Meta weigerde"):  # Meta antwoordde nee: zeker niet vertrokken, telt als poging
+                nieuw, extra = "klaar", {"fout": str(e)[:160]}
+            else:                                   # een storing voor het versturen (databank, docker): nu niet
+                nieuw, extra, stop = "klaar", {"wacht": str(e)[:160]}, True
+        except Exception as e:  # noqa: BLE001
+            if _zeker_niet_verstuurd(e):            # DNS, verbinding geweigerd: het verzoek vertrok nooit
+                nieuw, extra, stop = "klaar", {"wacht": type(e).__name__}, True
+                with _bewerk() as d:
+                    if k in d["meldingen"]:
+                        d["meldingen"][k].update(status=nieuw, **extra)
+                return n
+            # bv. een time-out: misschien vertrokken
             nieuw, extra = "onzeker", {"fout": f"{type(e).__name__}"}
             nood.append({"tekst": "Agendawacht: een WhatsApp-melding is misschien niet aangekomen; niet herhaald",
                          "wie": "claude-code"})
@@ -148,6 +162,23 @@ def versturen(stuur_wa, nood, stil, niet_beschikbaar=()):
             return n
 
 
+def _zeker_niet_verstuurd(e):
+    """Vertrok het verzoek zeker niet? Een DNS-fout of een geweigerde verbinding: ja. Een time-out: misschien wel."""
+    import socket  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    reden = getattr(e, "reason", e) if isinstance(e, urllib.error.URLError) else e
+    if isinstance(reden, (TimeoutError, socket.timeout)):
+        return False
+    return isinstance(reden, (socket.gaierror, ConnectionRefusedError))
+
+
+def nagekeken(sleutel):
+    """Claude zag een onzekere of mislukte melding na: de nood mag dicht."""
+    with _bewerk() as d:
+        if sleutel in d["meldingen"]:
+            d["meldingen"][sleutel]["nagekeken"] = _nu().isoformat()
+
+
 def antwoord_herkennen(tekst):
     """Is dit WhatsApp-bericht van Mehdi een antwoord op een open agendavraag? 'A3 ja', 'A3 vervalt', 'ja A3'. Geeft
     None (geen agendabericht: gewoon naar het bord), of de zin waarmee ik het ontvangen bevestig. Een bericht dat met een
@@ -160,15 +191,16 @@ def antwoord_herkennen(tekst):
     code = "A" + re.sub(r"\D", "", (m.group("c1") or m.group("c2")) if m else c.group("c"))
     with _bewerk() as d:
         vraag = next((v for v in d["meldingen"].values() if v.get("code") == code and v.get("vraag")), None)
-        if vraag is None:
-            if not m:
-                return None                         # 'A4 is een papierformaat': geen agendacode, gewoon naar het bord
-            uit = f"Agendawacht: ik ken geen vraag {code}. Antwoord met de code uit mijn bericht."
-        elif not m:
+        mislukt = (vraag or {}).get("verwerkt", {}) and (vraag.get("verwerkt") or {}).get("uitkomst") == "mislukt"
+        open_ = vraag is not None and (not vraag.get("antwoord") or mislukt)
+        if vraag is None or (not m and not open_):
+            return None                             # geen open agendavraag ('A4 papier', 'A3 ja' zonder A3): naar het bord
+        if not m:
             uit = f"Agendawacht: antwoord met '{code} ja' (beide laten staan) of '{code} vervalt'."
-        elif vraag.get("antwoord"):
+        elif not open_:
             uit = f"Agendawacht: {code} is al beantwoord ({vraag['antwoord']})."
         else:
+            vraag["verwerkt"], vraag["pogingen_verwerken"] = None, 0   # na een mislukte verwerking mag het opnieuw
             keuze = (m.group("k1") or m.group("k2")).lower()
             vraag["antwoord"], vraag["antwoord_tijd"] = keuze, _nu().isoformat()
             uit = f"Agendawacht: {code} {keuze} ontvangen. Ik zet het in je agenda en bevestig binnen een kwartier."
@@ -179,6 +211,14 @@ def antwoord_herkennen(tekst):
 def open_antwoorden():
     """[(sleutel, melding)] met een antwoord dat de Agendawacht nog moet verwerken."""
     return [(k, m) for k, m in _lees()["meldingen"].items() if m.get("vraag") and m.get("antwoord") and not m.get("verwerkt")]
+
+
+def poging_verwerken(sleutel):
+    """Telt een mislukte poging om Mehdi's antwoord vast te leggen; geeft het aantal."""
+    with _bewerk() as d:
+        m = d["meldingen"].get(sleutel) or {}
+        m["pogingen_verwerken"] = int(m.get("pogingen_verwerken") or 0) + 1
+        return m["pogingen_verwerken"]
 
 
 def verwerkt(sleutel, uitkomst):

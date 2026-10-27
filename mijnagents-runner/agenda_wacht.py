@@ -5997,8 +5997,8 @@ def botst_met(x, items):
     dag = s1.astimezone(TIJDZONE).date().isoformat()
     uit = []
     for y in items:
-        if y is x or (x.get("id") and y.get("id") == x.get("id")) or not _bezet_item(y):
-            continue
+        if y is x or (x.get("id") and y.get("id") == x.get("id")) or is_zorgschaduw(y) or not _bezet_item(y):
+            continue                    # ook niet de schaduw van dezelfde zorgafspraak op werk (review PR 113)
         if y.get("hele_dag"):
             if dag in _hele_dagen(y):
                 uit.append(y)
@@ -6055,8 +6055,11 @@ def _wanneer(x):
         dagen = _hele_dagen(x)
         f = lambda d: f"{int(d[8:10])}/{int(d[5:7])}"  # noqa: E731
         return f"hele dag {f(dagen[0])}" + (f"-{f(dagen[-1])}" if len(dagen) > 1 else "") if dagen else "hele dag"
-    s = datetime.fromisoformat(x["start"]).astimezone(TIJDZONE)
-    e = datetime.fromisoformat(x["einde"]).astimezone(TIJDZONE)
+    try:
+        s = datetime.fromisoformat(x["start"]).astimezone(TIJDZONE)
+        e = datetime.fromisoformat(x["einde"]).astimezone(TIJDZONE)
+    except (KeyError, TypeError, ValueError):
+        return (x.get("start") or "")[:16]      # een vreemde tijd mag de melding niet laten vallen
     return f"{WEEKDAG[s.weekday()]} {s.day}/{s.month} {s:%H:%M}-{e:%H:%M}"
 
 
@@ -6064,7 +6067,7 @@ def _agendanaam(kal):
     return {PRIVE_AGENDA: "privé", WERKAGENDA: "werk"}.get(kal, (KALENDERS.get(kal) or kal).split("(")[0].strip())
 
 
-def _zorg_bericht(x, botsing, verschoven):
+def _zorg_bericht(x, botsing, verschoven, kan_vragen=True):
     """De vaste vorm (W2): soort en praktijk, geen adres, geen mailinhoud."""
     regels = [f"Agendawacht: afspraak uit mail {'verschoven' if verschoven else 'gezet'} ({{code}})",
               f"Wat: {_kale_titel(x['titel'])}", f"Wanneer: {_wanneer(x)}", f"Agenda: {_agendanaam(x['kalender'])}"]
@@ -6072,7 +6075,8 @@ def _zorg_bericht(x, botsing, verschoven):
         regels.append("Botsing: " + "; ".join(f"{_kale_titel(y['titel'])} ({_wanneer(y)})" for y in botsing[:2])
                       + (f" en nog {len(botsing) - 2}" if len(botsing) > 2 else ""))
         regels.append("Staat op ?? (te valideren). Antwoord '{code} ja' = beide laten staan, of '{code} vervalt' = deze "
-                      "afspraak vervalt (bel dan zelf de praktijk).")
+                      "afspraak vervalt (bel dan zelf de praktijk)." if kan_vragen else
+                      "Ik kon deze afspraak niet op ?? zetten (ze is niet door mij gemaakt); kijk zelf of bel de praktijk.")
     else:
         regels.append("Botsing: geen")
     return "\n".join(regels)
@@ -6084,7 +6088,9 @@ def _te_valideren(x, botsing, tok, nu):
     t = tekens_vooraan(x["titel"])
     m = re.match(r"^(\s*(?:VR\s+)?!!\s*)", t)
     titel = (m.group(1) + "?? " + t[m.end():]) if m else "?? " + t
-    e = _lees_event(x["kalender"], x["id"], tok) or {}
+    e = _lees_event(x["kalender"], x["id"], tok)
+    if e is None:
+        raise RuntimeError("omschrijving niet te lezen")   # anders schreef ik een lege omschrijving (review PR 113)
     regel = (f"Te valideren ({nu:%d-%m-%Y}): botst met " + "; ".join(_kale_titel(y["titel"]) for y in botsing[:3])
              + ". Antwoord op WhatsApp met de code uit het bericht.")
     _patch(x, {"summary": titel, "description": regel + "\n\n" + (e.get("description") or "")}, tok)
@@ -6095,6 +6101,19 @@ def _te_valideren(x, botsing, tok, nu):
 
 
 RONDE_START = nu_lokaal()  # wanneer dit proces begon: een blok dat daarna gemaakt werd, is van deze ronde
+
+
+def _niet_meer_te_valideren(x, tok):
+    """Mijn eigen '??' en de regel 'Te valideren' weg, teruggelezen."""
+    e = _lees_event(x["kalender"], x["id"], tok)
+    if e is None:
+        raise RuntimeError("niet te lezen")
+    oms = re.sub(r"^Te valideren \([^)]*\):[^\n]*\n\n", "", e.get("description") or "")
+    _patch(x, {"summary": re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip(), "description": oms}, tok)
+    terug = _lees_event(x["kalender"], x["id"], tok)
+    if terug is None or "??" in (terug.get("summary") or "??"):
+        raise RuntimeError("niet teruggelezen")
+    x["titel"] = terug.get("summary")
 
 
 def zorg_whatsapp(items, tok, nu=None, sinds=None):
@@ -6117,15 +6136,25 @@ def zorg_whatsapp(items, tok, nu=None, sinds=None):
         if eerste and not botsing and not van_nu:
             stil.append(versie)
             continue
+        eerder = {k: v for k, v in AW._lees()["meldingen"].items() if k.startswith(f"zorg:{x['id']}:")}
+        verschoven, kan_vragen = bool(eerder), bool(botsing)
         if botsing and "??" not in (x.get("titel") or ""):
             try:
                 _te_valideren(x, botsing, tok, nu)
+            except (TitelVoorstel, GeenSchrijfrecht, SchaduwItem):
+                kan_vragen = False      # blijvend geweigerd (niet door mij gemaakt): toch melden, zonder code (review)
             except Exception as e:  # noqa: BLE001
                 regels.append(f"{x['start'][:16]} (zorg): niet op te valideren gezet ({type(e).__name__}); volgende ronde opnieuw")
                 continue
-        verschoven = any(k.startswith(f"zorg:{x['id']}:") for k in AW._lees()["meldingen"])
-        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven),
-                              {"id": x["id"], "start": x["start"], "einde": x["einde"]} if botsing else None)
+        elif not botsing and "??" in (x.get("titel") or "") and any(v.get("vraag") for v in eerder.values()):
+            # verschoven naar een vrij uur: mijn eigen '??' gaat weg, anders bleef het blok voor altijd te valideren
+            try:
+                _niet_meer_te_valideren(x, tok)
+            except Exception as e:  # noqa: BLE001
+                regels.append(f"{x['start'][:16]} (zorg): ?? niet weggehaald ({type(e).__name__}); volgende ronde opnieuw")
+                continue
+        code = AW.klaarzetten(versie, _zorg_bericht(x, botsing, verschoven, kan_vragen),
+                              {"id": x["id"], "start": x["start"], "einde": x["einde"]} if kan_vragen else None)
         regels.append(f"{x['start'][:16]} (zorg): WhatsApp-melding {code} klaargezet"
                       + (", botst: te valideren" if botsing else ""))
     if eerste:
@@ -6159,15 +6188,25 @@ def whatsapp_antwoorden_verwerken(tok=None, nu=None):
         kern = re.sub(r"\s{2,}", " ", (x.get("titel") or "").replace("??", "")).strip()
         body = {"summary": kern} if keuze == "ja" else {
             "summary": kern if lara_vervalt({"titel": kern}) else f"vervalt {kern}", "transparency": "transparent"}
+        blijvend = fout_gemeld = False
         try:
             _patch(x, body, tok)
-            terug = _lees_event(PRIVE_AGENDA, x["id"], tok) or {}
-            ok = "??" not in (terug.get("summary") or "?") and (
+            terug = _lees_event(PRIVE_AGENDA, x["id"], tok)
+            ok = terug is not None and "??" not in (terug.get("summary") or "??") and (
                 keuze == "ja" or (lara_vervalt({"titel": terug.get("summary")}) and terug.get("transparency") == "transparent"))
-        except Exception as e:  # noqa: BLE001
-            ok, terug = False, {}
+        except (TitelVoorstel, GeenSchrijfrecht, SchaduwItem) as e:
+            ok, blijvend, fout_gemeld = False, True, True
             regels.append(f"{code}: niet vastgelegd ({type(e).__name__})")
+        except Exception as e:  # noqa: BLE001
+            ok, fout_gemeld = False, True
+            regels.append(f"{code}: niet vastgelegd ({type(e).__name__}); volgende ronde opnieuw")
+        if not ok and not fout_gemeld:
+            regels.append(f"{code}: niet teruggelezen; volgende ronde opnieuw")
         if not ok:
+            # een tijdelijke fout (Google, time-out, geen teruglezing): de volgende ronde opnieuw; pas na drie keer, of bij
+            # een blijvende weigering, mislukt met een bericht aan Mehdi en een nood (review PR 113)
+            if not blijvend and AW.poging_verwerken(sleutel) < 3:
+                continue
             AW.verwerkt(sleutel, "mislukt")
             AW.klaarzetten(f"{sleutel}:bevestiging", f"Agendawacht: {code}: ik kon je antwoord niet vastleggen. "
                                                      "Ik kijk het na; de afspraak staat nog op ??.")

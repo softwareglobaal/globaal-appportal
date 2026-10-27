@@ -148,7 +148,7 @@ check("een melding die 'bezig' bleef (onderbroken), wordt niet blind opnieuw ges
 code = ecg_m["code"]
 check("een los 'ja' is geen agendaantwoord: het gaat gewoon naar De Regisseur", AW.antwoord_herkennen("ja") is None)
 check("'A4 papier' is geen agendaantwoord", AW.antwoord_herkennen("A4 papier graag") is None)
-check("een onbekende code krijgt uitleg", "ken geen vraag" in (AW.antwoord_herkennen("A999 ja") or ""))
+check("'A999 ja' zonder zo'n vraag gaat gewoon naar het bord (review PR 113)", AW.antwoord_herkennen("A999 ja") is None)
 check("'A1 nee' telt niet; ik leg uit welke antwoorden kunnen", "vervalt" in (AW.antwoord_herkennen(f"{code} nee") or "")
       and not ecg_m.get("antwoord") and not AW.open_antwoorden())
 zin = AW.antwoord_herkennen(f"{code.lower()} Ja")
@@ -235,6 +235,110 @@ _hoofd = (HIER / "agenda_wacht.py").read_text(encoding="utf-8")
 _aanroep = _hoofd[_hoofd.index("een WhatsApp-melding per nieuw of verschoven zorgblok uit mail"):][:900]
 check("de WhatsApp-controle leest ook de archiefagenda's en wacht als die niet te lezen zijn (punt 4)",
       "archief_afspraken(0, 120, alleen_lezen=True)" in _aanroep and "ARCHIEF_FOUT" in _aanroep)
+
+# --- review met meerdere agents (PR 113) -----------------------------------------------------------------------
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw4-")) / "agenda-whatsapp.json")
+# een onzekere of mislukte melding blijft een nood, elke ronde, tot ze nagekeken is
+AW.klaarzetten("r:onz", "x")
+with AW._bewerk() as _d:
+    _d["meldingen"]["r:onz"]["status"] = "onzeker"
+_n1, _n2 = [], []
+AW.versturen(lambda t, kop: "whatsapp", _n1, False, (Plafond,))
+AW.versturen(lambda t, kop: "whatsapp", _n2, True, (Plafond,))
+AW.nagekeken("r:onz")
+_n3 = []
+AW.versturen(lambda t, kop: "whatsapp", _n3, False, (Plafond,))
+check("een onzekere melding geeft elke ronde dezelfde nood (ook in de stille uren) tot ze nagekeken is",
+      _n1 and _n2 and _n1[0]["tekst"] == _n2[0]["tekst"] and not _n3, str((_n1, _n2, _n3)))
+# een storing voor het versturen telt niet als weigering van Meta
+AW.klaarzetten("r:db", "x")
+for _ in range(4):
+    AW.versturen(lambda t, kop: (_ for _ in ()).throw(RuntimeError("psql: could not connect to server")), [], False, (Plafond,))
+check("een databank- of dockerstoring voor het versturen laat de melding klaar staan, zonder poging te tellen",
+      AW._lees()["meldingen"]["r:db"]["status"] == "klaar" and not AW._lees()["meldingen"]["r:db"].get("pogingen"))
+import socket  # noqa: E402
+import urllib.error  # noqa: E402
+AW.versturen(lambda t, kop: (_ for _ in ()).throw(urllib.error.URLError(socket.gaierror("dns"))), [], False, (Plafond,))
+check("een DNS-fout: zeker niet vertrokken, de melding blijft klaar", AW._lees()["meldingen"]["r:db"]["status"] == "klaar")
+AW.versturen(lambda t, kop: (_ for _ in ()).throw(urllib.error.URLError(TimeoutError())), [], False, (Plafond,))
+check("een time-out: misschien vertrokken, dus onzeker", AW._lees()["meldingen"]["r:db"]["status"] == "onzeker")
+_wa = (HIER / "koppelingen" / "whatsapp.py").read_text(encoding="utf-8")
+check("whatsapp.stuur maakt van een onleesbaar gesprek 'nu niet beschikbaar'",
+      "raise NietBeschikbaar(f\"gesprek niet te lezen" in _wa)
+# een oude code in een gewoon bericht gaat naar het bord
+AW.klaarzetten("zorg:oud:1", "x", {"id": "o", "start": ecg["start"], "einde": ecg["einde"]})
+_co = AW._lees()["meldingen"]["zorg:oud:1"]["code"]
+AW.antwoord_herkennen(f"{_co} ja")
+AW.verwerkt("zorg:oud:1", "ja")
+check("een bericht dat met een oude, beantwoorde code begint, gaat naar het bord",
+      AW.antwoord_herkennen(f"{_co} formaat voor de BA-set graag") is None)
+check("een exact 'Ax ja' op een beantwoorde vraag krijgt 'al beantwoord'", "al beantwoord" in (AW.antwoord_herkennen(f"{_co} ja") or ""))
+AW.verwerkt("zorg:oud:1", "mislukt")
+check("na een mislukte verwerking mag Mehdi opnieuw antwoorden", "ontvangen" in (AW.antwoord_herkennen(f"{_co} ja") or "")
+      and AW.open_antwoorden())
+
+# een tijdelijke fout bij het vastleggen: opnieuw proberen; een gemiste teruglezing is geen ja
+_st = {"summary": "!! ?? [PR] Huisarts - Praktijk Verpleegkundigen"}
+_o5 = (W._patch, W._lees_event, W._prive_item_lezen)
+W._prive_item_lezen = lambda eid, tok: dict(ecg, id="o", titel=_st["summary"])
+W._patch = lambda a, body, tok, **kw: _st.update(body)
+W._lees_event = lambda kal, eid, tok: None                  # de teruglezing mislukt
+try:
+    _rr1 = W.whatsapp_antwoorden_verwerken("tok")
+    _open1 = bool(AW.open_antwoorden())
+    W._lees_event = lambda kal, eid, tok: dict(_st)
+    _rr2 = W.whatsapp_antwoorden_verwerken("tok")
+finally:
+    W._patch, W._lees_event, W._prive_item_lezen = _o5
+check("lukt de teruglezing niet, dan geen bevestiging en de volgende ronde opnieuw; daarna wel vastgelegd",
+      _open1 and "volgende ronde opnieuw" in " ".join(_rr1) and any("vastgelegd en teruggelezen" in r for r in _rr2)
+      and not AW.open_antwoorden(), str((_rr1, _rr2)))
+
+# _te_valideren wist nooit de omschrijving als ze niet te lezen is; een blijvende weigering geeft toch een melding
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw5-")) / "agenda-whatsapp.json")
+AW.basislijn([])
+_p6 = []
+_o6 = (W._patch, W._lees_event)
+W._patch = lambda a, body, tok, **kw: _p6.append(body)
+W._lees_event = lambda kal, eid, tok: None
+try:
+    _r6 = W.zorg_whatsapp([dict(ecg, titel="!! [PR] Huisarts - Praktijk Verpleegkundigen"), antwerk], "tok")
+finally:
+    W._patch, W._lees_event = _o6
+check("is de omschrijving niet te lezen, dan schrijf ik niets (geen gewiste praktijkgegevens) en probeer ik later",
+      not _p6 and any("volgende ronde opnieuw" in r for r in _r6) and not any(k.startswith("zorg:ecg:") for k in AW._lees()["meldingen"]))
+_o7 = W._patch
+W._patch = lambda a, body, tok, **kw: (_ for _ in ()).throw(W.TitelVoorstel("door een ander gemaakt"))
+_o7b = W._lees_event
+W._lees_event = lambda kal, eid, tok: {"summary": ecg["titel"], "description": "praktijk"}
+try:
+    _r7 = W.zorg_whatsapp([dict(ecg, titel="!! [PR] Huisarts - Praktijk Verpleegkundigen"), antwerk], "tok")
+finally:
+    W._patch, W._lees_event = _o7, _o7b
+_m7 = next((v for k, v in AW._lees()["meldingen"].items() if k.startswith("zorg:ecg:")), {})
+check("mag ik het blok niet op ?? zetten (niet door mij gemaakt), dan toch de melding, zonder code en met uitleg",
+      _m7.get("status") == "klaar" and _m7.get("vraag") is None and "niet op ?? zetten" in _m7.get("tekst", ""), str(_m7))
+
+# een blok dat naar een vrij uur verschoof, verliest mijn '??'
+AW.WACHTRIJ = str(Path(tempfile.mkdtemp(prefix="aw6-")) / "agenda-whatsapp.json")
+AW.basislijn([])
+AW.klaarzetten(f"zorg:ecg:{ecg['start']}:{ecg['einde']}", "x", {"id": "ecg", "start": ecg["start"], "einde": ecg["einde"]})
+_vrij_uur = dict(ecg, titel="!! ?? [PR] Huisarts - Praktijk Verpleegkundigen", start=f"{d2}T16:00:00+01:00", einde=f"{d2}T16:15:00+01:00")
+_p8, _ev8 = [], {"summary": _vrij_uur["titel"], "description": "Te valideren (27-10-2026): botst met ANTWERK.\n\npraktijk"}
+_o8 = (W._patch, W._lees_event)
+W._patch = lambda a, body, tok, **kw: _p8.append(body) or _ev8.update(body)
+W._lees_event = lambda kal, eid, tok: dict(_ev8)
+try:
+    W.zorg_whatsapp([_vrij_uur, antwerk], "tok")
+finally:
+    W._patch, W._lees_event = _o8
+check("verschuift een blok op ?? naar een vrij uur, dan gaan ?? en de regel 'Te valideren' weg (de praktijkgegevens blijven)",
+      _p8 and "??" not in _p8[0]["summary"] and _p8[0]["description"] == "praktijk", str(_p8))
+
+# de schaduw van dezelfde zorgafspraak op werk is geen botsing
+_sch = item("sch", "Mehdi: kine Praktijk X", ecg["start"], ecg["einde"], kal=W.WERKAGENDA)
+_sch["_zorg_schaduw"] = True
+check("de schaduw van dezelfde zorgafspraak op de werkagenda telt niet als botsing", not W.botst_met(ecg, [ecg, _sch]))
 
 # --- De Bode en het agendasignaal: de draden --------------------------------------------------------------------
 bode = (HIER / "bode.py").read_text(encoding="utf-8")
