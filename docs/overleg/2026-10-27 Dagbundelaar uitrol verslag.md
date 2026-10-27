@@ -26,3 +26,21 @@ faalde op `import bordstand` (P9, PR #100), want de bordimage bevat alleen mijna
   uitdrukkelijke opdracht ging voor). De uitvoerder zette ze rond 08:20; zaad en bord zijn gelijk.
 - Noden voor de ronde van 13:00: 3399 (mail) en 3410 (Dropbox) gesloten; open 3400 en 3401 (fase 2, wacht op Full
   Disk Access), 3419 tot 3421 (bundels).
+
+## Teruglezen na de volgende ronde
+
+- De keten van 13:00 slaat De Dagbundelaar bewust over ("liep vandaag al in een keten"); de volgende ronde in een
+  keten is de nacht. Om 09:24 liep er wel een ronde buiten de keten (geen regel in keten.log; wie of wat ze startte, is
+  niet bewezen). De VM stond toen op ce564df (merge van #107, met #103 erin, getrokken om
+  09:21:57) en het bord gaf werkwijze 3.2 (sinds 08:19). Uitkomst: 0 nieuwe bundels, 2 al bekend; versie 3 voor 21 tot
+  26-10, herzien: Communicatie.
+- Dagbestand 26-10, versie 3: mail 31 binnen, 6 verzonden; hotmail 6 binnen (2 koud, 4 melding), 0 verzonden, nergens
+  "onvolledig". De serverkopie dekt de dag, geen nood over "vanaf wanneer".
+- Noden: 3399 en 3410 blijven gesloten. Open zoals verwacht: 3400 en 3401 (wachten op Full Disk Access op de Mac),
+  3419 (Apple Watch, Gezondheidswacht op de Mac), 3420 (Foto's, iCloud-wacht op de Mac), 3421 (Plaud-routine op
+  claude.ai).
+- Nieuw: 3438 "Dagboek nog niet bevestigd in Dropbox", geopend om 09:24, omdat die ronde zes dagbestanden herschreef
+  en de Mac-sync ze toen nog niet bevestigd had. Om 12:40 kwam het ontvangstbewijs binnen: alle 15 dagbestanden hebben
+  nu dezelfde sha256 als het bewijs. Een geplande ronde die slaagt, geen nieuw Dropbox-verschil vindt en de open noden
+  kan lezen, sluit deze nood, zoals 3410 om 07:05 (een handronde met vlaggen laat hem open). Na te kijken na de
+  nachtronde.
