@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""De Bouwwacht (regie): ziet of de diensten op de VM de code draaien die er na een git pull staat.
+
+Waarom (K5, uitrol van PR #103, 27-10-2026): van 26-10 rond 19:00 tot 27-10 07:56 UTC faalde elke bouw van het bord.
+`docker compose up -d --build` stopt dan voor de container vervangen wordt, dus het bord draaide een oude bouw, deploy.sh
+probeerde het elke 2 minuten opnieuw, en niemand zag het.
+
+Per dienst schrijft deploy.sh de boom van zijn map (`git rev-parse HEAD:<map>`) pas in `<map>-data/.built` na een
+geslaagde bouw. De VM haalt main niet zelf binnen, dus een verschil ontstaat alleen na een `git pull` die nog niet
+gebouwd is. Duurt dat verschil DREMPEL_MIN minuten of langer, dan zet ik een nood met een vaste tekst (N10); zijn ze
+weer gelijk, dan staat de nood niet meer in mijn lijst en sluit het bord hem.
+
+Sinds wanneer het verschil bestaat (driehoeksoverleg 27-10-2026, X2 en K2):
+- het anker is mijn eigen stand (STAND): per dienst de markering en het moment dat ik het verschil voor het eerst zag;
+  verandert de markering of zijn ze gelijk, dan begint dat opnieuw;
+- de reflog van HEAD mag dat moment alleen vroeger zetten, nooit later: het tijdstip van de oudste aaneengesloten stap
+  waarvan de boom niet gelijk is aan de markering. Zo telt de echte pull-tijd, ook in mijn eerste ronde;
+- staat de markering niet in de reflog (ouder dan de reflog, of opgeschoond), of ontbreekt de markering, dan geldt het
+  verschil als ouder dan de drempel: liever een nood te vroeg dan een bouw die stil achterloopt;
+- is de reflog leeg of onleesbaar, dan telt alleen het anker.
+
+Leest alleen wat deploy.sh maakt: git, de markeringen en de laatste regel van het deploylog. Schrijft alleen mijn eigen
+stand. Bouwt nooit, schrijft nooit een markering, haalt nooit binnen.
+
+    bouwwacht.py            een ronde
+    bouwwacht.py --droog    meten en tonen, niets naar het bord en niets in de stand
+
+Cron (oneven minuten, tussen de tikken van deploy.sh):
+    1-59/2 * * * * ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/bouwwacht.py >> ~/agents/bouwwacht.log 2>&1
+"""
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import bord  # noqa: E402
+
+NAAM = "bouwwacht"
+ag = bord.Agent(NAAM)
+
+REPO = os.environ.get("BOUWWACHT_REPO", os.path.expanduser("~/appportal"))
+# waar <map>-data/.built staat; standaard dezelfde map als in deploy.sh ($HOME/appportal)
+MARKERINGEN = os.environ.get("BOUWWACHT_DATA", REPO)
+LOGS = os.environ.get("BOUWWACHT_LOGS", os.path.expanduser("~"))
+STAND = os.environ.get("BOUWWACHT_STAND", os.path.expanduser("~/appportal/mijnagents-data/bouwwacht.json"))
+# De diensten in deze repo met hetzelfde deploypatroon (HEAD:<map> tegenover <map>-data/.built) en zonder eigen
+# bewaking. Niet werfverslag: eigen repo, eigen bewaking (.mislukt, door werfverslag-dashboard gemeld).
+DIENSTEN = ("mijnagents", "agents", "siyanagents")
+DREMPEL_MIN = 10
+REFLOG_MAX = 200
+OUD = 0     # ouder dan de drempel, hoe oud precies is onbekend
+
+
+def noodtekst(dienst):
+    return f"Bouw loopt achter op de code: {dienst}"
+
+
+def onbekendtekst(dienst):
+    return f"Bouwwacht kan {dienst} niet nakijken"
+
+
+class Onleesbaar(RuntimeError):
+    """git gaf geen antwoord over deze dienst. Onbekend is niet gelijk."""
+
+
+def git(*args):
+    """De uitvoer, of None als git een fout gaf. Alleen lezende commando's."""
+    try:
+        r = subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise Onleesbaar(f"git {args[0]}: {type(e).__name__}") from e
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def boom(rev, dienst):
+    return git("rev-parse", "--verify", "-q", f"{rev}:{dienst}")
+
+
+def reflog():
+    """De stappen van HEAD, van nieuw naar oud, als (commit, unix-tijd); leeg als er geen reflog te lezen is."""
+    stappen = []
+    for regel in (git("log", "-g", f"-n{REFLOG_MAX}", "--format=%H %gd", "--date=unix", "HEAD") or "").splitlines():
+        m = re.fullmatch(r"([0-9a-f]{40}) \S*@\{(\d+)\}", regel.strip())
+        if m:
+            stappen.append((m.group(1), int(m.group(2))))
+    return stappen
+
+
+def begin_volgens_reflog(dienst, gebouwd):
+    """Het tijdstip waarop HEAD wegging van de gebouwde boom; OUD als die niet in de reflog staat; None zonder reflog."""
+    stappen = reflog()
+    if not stappen:
+        return None
+    sinds = OUD
+    for commit, ts in stappen:
+        if boom(commit, dienst) == gebouwd:
+            return sinds
+        sinds = ts
+    return OUD
+
+
+def markering(dienst):
+    try:
+        with open(os.path.join(MARKERINGEN, f"{dienst}-data", ".built"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def laatste_logregel(dienst):
+    try:
+        with open(os.path.join(LOGS, f"deploy-{dienst}.log"), "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 4096))
+            regels = [r.strip() for r in f.read().decode("utf-8", "replace").splitlines() if r.strip()]
+    except OSError:
+        return ""
+    return regels[-1][:160] if regels else ""
+
+
+def lees_stand():
+    try:
+        with open(STAND, encoding="utf-8") as f:
+            stand = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return stand if isinstance(stand, dict) else {}
+
+
+def bewaar_stand(stand):
+    os.makedirs(os.path.dirname(STAND) or ".", exist_ok=True)
+    tijdelijk = f"{STAND}.{os.getpid()}.tmp"
+    with open(tijdelijk, "w", encoding="utf-8") as f:
+        json.dump(stand, f, ensure_ascii=False, indent=1, sort_keys=True)
+    os.replace(tijdelijk, STAND)
+
+
+def meet_dienst(dienst, stand, nu):
+    gebouwd = markering(dienst)
+    nu_boom = boom("HEAD", dienst)
+    if nu_boom is None:
+        raise Onleesbaar(f"{dienst} niet gevonden in HEAD")
+    if gebouwd == nu_boom:
+        stand.pop(dienst, None)
+        return {"dienst": dienst, "stand": "gelijk"}
+    if not gebouwd:
+        stand.pop(dienst, None)
+        sinds = OUD
+    else:
+        anker = stand.get(dienst)
+        if not (isinstance(anker, dict) and anker.get("gebouwd") == gebouwd and isinstance(anker.get("sinds"), int)):
+            anker = stand[dienst] = {"gebouwd": gebouwd, "sinds": int(nu)}
+        sinds = begin_volgens_reflog(dienst, gebouwd)
+        sinds = anker["sinds"] if sinds is None else sinds if sinds == OUD else min(sinds, anker["sinds"])
+    minuten = None if sinds == OUD else max(0, int((nu - sinds) // 60))
+    achter = minuten is None or minuten >= DREMPEL_MIN
+    return {"dienst": dienst, "stand": "achter" if achter else "bezig", "minuten": minuten,
+            "gebouwd": gebouwd[:7] or "geen", "nieuw": nu_boom[:7], "log": laatste_logregel(dienst) if achter else ""}
+
+
+def meet(stand, nu=None):
+    """Per dienst: gelijk, bezig (verschil korter dan de drempel), achter, of onbekend. Een dienst die faalt, houdt de
+    andere niet tegen. Werkt `stand` bij; bewaren doet de ronde."""
+    nu = time.time() if nu is None else nu
+    uit = []
+    for dienst in DIENSTEN:
+        try:
+            uit.append(meet_dienst(dienst, stand, nu))
+        except Exception as e:  # noqa: BLE001  onbekend is niet gelijk, en de volgende dienst gaat door
+            uit.append({"dienst": dienst, "stand": "onbekend", "reden": str(e)[:160] or type(e).__name__})
+    return uit
+
+
+def regel(m):
+    if m["stand"] == "gelijk":
+        return f"{m['dienst']} gelijk"
+    if m["stand"] == "onbekend":
+        return f"{m['dienst']} onbekend ({m['reden']})"
+    duur = "ouder dan de drempel" if m["minuten"] is None else f"{m['minuten']} min"
+    wat = "wordt gebouwd" if m["stand"] == "bezig" else "loopt achter"
+    tekst = f"{m['dienst']} {wat}, {duur} ({m['gebouwd']} gebouwd, {m['nieuw']} in HEAD)"
+    return tekst + (f"; deploylog: {m['log']}" if m.get("log") else "")
+
+
+def werk(r, nu=None):
+    nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
+    if not nooit or not mehdi_beslist:
+        # Zonder grenzen geen werk (N2), zoals het sjabloon: de vaste vorm staat in AGENTNORM.md 8.
+        r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
+        r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
+        return []
+    stand = lees_stand()
+    vorig = json.dumps(stand, sort_keys=True)
+    uitslag = meet(stand, nu)
+    if json.dumps(stand, sort_keys=True) != vorig:
+        bewaar_stand(stand)
+    noden = [(m, {"achter": noodtekst, "onbekend": onbekendtekst}[m["stand"]](m["dienst"]))
+             for m in uitslag if m["stand"] in ("achter", "onbekend")]
+    open_ = ag.open_noden() if noden else None
+    for m, tekst in noden:
+        r.nood(tekst, wie="claude-code")
+        # een regel in het werkverslag als de nood nieuw is, niet elke 2 minuten dezelfde; weet het bord niet wat
+        # open staat, dan geen regel (de nood zelf gaat wel mee)
+        if open_ is not None and tekst not in {n["tekst"] for n in open_}:
+            ag.log(m["dienst"], "fout", regel(m))
+    r.detail = "; ".join(regel(m) for m in uitslag)
+    return uitslag
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description="Ziet of de diensten op de VM de code draaien die er na een git pull staat.")
+    p.add_argument("--droog", action="store_true", help="meten en tonen, niets naar het bord en niets in de stand")
+    if p.parse_args(argv).droog:
+        uitslag = meet(lees_stand())
+        for m in uitslag:
+            print(regel(m))
+        return 1 if any(m["stand"] in ("achter", "onbekend") for m in uitslag) else 0
+    try:
+        with ag.ronde("bouw van de diensten nakijken") as r:
+            werk(r)
+    except bord.RondeGestopt as e:
+        # V8: zonder bord kan ik niets melden; dan staat het hier, in het cronlog, met de meting erbij.
+        print(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} ronde gestopt: {e}", file=sys.stderr)
+        for m in meet(lees_stand()):
+            print(f"  {regel(m)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

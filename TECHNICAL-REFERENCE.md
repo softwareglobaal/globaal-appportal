@@ -3069,6 +3069,15 @@ ontwerpronde RZ5 (het privacyproject voor oude items en exportbestanden volgt ap
   de agent, de volledige tekst en het mandaat als parameters; het runbook zet het mandaat van de kaart mee als het
   voorstel het draagt), en het geldt pas na de klik van Mehdi. Volgorde van de uitrol van
   release 1: `~/dev/samenwerking-codex/regie-zoom/uitrolstappen-release1.md`.
+- **Bewaking van de bouw** (De Bouwwacht, `bouwwacht.py`, cron `1-59/2`; K5 van de uitrol van PR #103, driehoeksoverleg
+  27-10-2026): elke 2 minuten per dienst `mijnagents`, `agents` en `siyanagents` de boom `git rev-parse HEAD:<map>` in
+  `~/appportal` tegenover `<map>-data/.built`. Verschillen ze 10 minuten of langer, ontbreekt de markering of staat ze
+  niet in de reflog, dan de nood "Bouw loopt achter op de code: <map>" (claude-code), met minuten, korte boomcodes en
+  de laatste regel van `~/deploy-<map>.log` in het detail; gelijk sluit de nood. Het begin van het verschil is het
+  vroegste van twee: het moment dat de wacht het voor het eerst zag (`mijnagents-data/bouwwacht.json`, per dienst de
+  markering en dat moment) en de reflogstap waarop HEAD wegging van de gebouwde boom. De wacht leest alleen (`git
+  rev-parse`, `git log -g`); `--droog` meet zonder bord en zonder stand. Werfverslag valt erbuiten (eigen bewaking via
+  `.mislukt`). Grendels: `tests/test_bouwwacht.py` in `agentnorm-grendels.yml`.
 - **Grendels**: workflow `regie-grendels.yml`, job bord (`mijnagents/test_gesprekken_api.py`) en job runners
   (`test_bord_lees.py`, `test_zoom_wacht.py`, `test_dagbundelaar.py`, `test_keten.py`, `test_regisseur.py`,
   `test_bode_regie.py` en `test_uitrol_regie.py` in `mijnagents-runner/tests/`). De eerste stap van job runners is
