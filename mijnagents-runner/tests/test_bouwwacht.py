@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import types
 from contextlib import redirect_stderr, redirect_stdout
 
@@ -338,20 +339,66 @@ def test_een_markering_die_even_ontbreekt_is_geen_nieuwe_storing(repo):
 
 
 @proef
-def test_zonder_reflog_en_zonder_bewaarbare_stand_een_vast_signaal(repo):
-    """Een storingsnummer dat elke ronde nieuw is, gaf elke ronde een signaal; dan telt de laatste geslaagde bouw."""
+def test_zonder_reflog_en_zonder_bewaarbare_stand_een_signaal_per_dag(repo):
+    """Codex-resultaattoets 7.2: een storingsnummer dat elke ronde nieuw is, gaf elke ronde een signaal. Zolang de stand
+    kapot is, is het signaal begrensd tot een per dienst per dag, ook als de markering even ontbreekt en terugkomt."""
     repo.git("config", "core.logAllRefUpdates", "false")
     shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
     with open(os.path.join(repo.map, "bestand"), "w") as f:
         f.write("geen map")
     B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
     repo.zet("b", T0)
-    gebouwd = repo.boom("a", "mijnagents")[:7]
     uniek = set()
-    for minuut in (1, 3, 5):
-        _, b = ronde(T0 + minuut * MIN)
+    for minuut in (1, 3, 5, 7, 9):
+        if minuut == 5:
+            os.remove(pad)
+        if minuut == 7:
+            repo.bouw("mijnagents", naam="a")
+        uit, b = ronde(T0 + minuut * MIN)
+        assert uit["mijnagents"]["stand"] == "achter", (minuut, uit["mijnagents"])
         uniek |= {s["uniek"] for s in b.signalen()}
-    assert uniek == {f"bouwwacht-achter-mijnagents-markering-{gebouwd}"}
+    dag = time.strftime("%Y-%m-%d", time.gmtime(T0))
+    assert uniek == {f"bouwwacht-achter-mijnagents-dag-{dag}"}
+
+
+@proef
+def test_een_beschadigde_stand_houdt_de_bouwnood(repo):
+    """Codex-resultaattoets 7.3: een beschadigde stand gold als leeg, en zonder reflog verdween een bouwnood dan tien
+    minuten. Nu: een nood, het verschil telt als oud, en de stand blijft staan voor wie hem nakijkt."""
+    repo.git("config", "core.logAllRefUpdates", "false")
+    shutil.rmtree(os.path.join(repo.repo, ".git", "logs"))
+    repo.zet("b", T0)
+    os.makedirs(os.path.dirname(repo.stand), exist_ok=True)
+    with open(repo.stand, "w") as f:
+        f.write("{kapot")
+    uit, b = ronde(T0 + MIN)
+    assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None
+    assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
+                        "Bouwwacht kan zijn stand niet lezen of bewaren": "claude-code"}
+    assert "stand niet leesbaar" in b.eind()["detail"]
+    assert open(repo.stand).read() == "{kapot", "een beschadigde stand overschrijf ik niet"
+    with open(repo.stand, "w") as f:
+        f.write("[]")                             # leesbaar, maar geen stand
+    _, b = ronde(T0 + 3 * MIN)
+    assert "Bouwwacht kan zijn stand niet lezen of bewaren" in noden(b)
+
+
+@proef
+def test_een_tussentijdse_gelijkheid_na_een_ontbrekende_markering_is_een_nieuwe_storing(repo):
+    """Codex-resultaattoets 7.1: na een ontbrekende markering stond sinds op OUD, en dan werd een latere gelijkheid in de
+    reflog niet meer als nieuwe storing herkend. Het storingsnummer wordt nooit overschreven."""
+    pad = os.path.join(repo.map, "mijnagents-data", ".built")
+    repo.zet("b", T0)
+    _, b = ronde(T0 + 10 * MIN)
+    assert [s["uniek"] for s in b.signalen()] == [f"bouwwacht-achter-mijnagents-{T0}"]
+    os.remove(pad)
+    ronde(T0 + 12 * MIN)
+    repo.bouw("mijnagents", naam="a")            # de markering komt terug
+    repo.zet("a", T0 + 13 * MIN)                 # terug naar de gebouwde code; geen ronde ziet het
+    repo.zet("b", T0 + 20 * MIN)
+    _, b = ronde(T0 + 31 * MIN)
+    assert [s["uniek"] for s in b.signalen()] == [f"bouwwacht-achter-mijnagents-{T0 + 20 * MIN}"]
 
 
 def test_de_signaaltitel_belt_mehdi_niet_op():
@@ -584,14 +631,19 @@ def test_zonder_grenzen_in_de_werkwijze_geen_werk_en_geen_bouwnood_gesloten(repo
 
 @proef
 def test_een_stand_die_niet_te_bewaren_is_houdt_de_bouwnood_niet_tegen(repo):
-    with open(os.path.join(repo.map, "bestand"), "w") as f:
-        f.write("geen map")
-    B.STAND = os.path.join(repo.map, "bestand", "bouwwacht.json")
-    repo.zet("b", T0)
-    _, b = ronde(T0 + 20 * MIN)
+    alleen_lezen = os.path.join(repo.map, "alleen-lezen")
+    os.makedirs(alleen_lezen)
+    B.STAND = os.path.join(alleen_lezen, "bouwwacht.json")
+    os.chmod(alleen_lezen, 0o500)
+    try:
+        repo.zet("b", T0)
+        _, b = ronde(T0 + 20 * MIN)
+    finally:
+        os.chmod(alleen_lezen, 0o700)
     assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
-                        "Bouwwacht kan zijn stand niet bewaren": "claude-code"}
-    assert "stand niet bewaard" in b.eind()["detail"] and b.eind().get("nood_sluiten") is not False
+                        "Bouwwacht kan zijn stand niet lezen of bewaren": "claude-code"}
+    assert "stand niet bewaard, PermissionError" in b.eind()["detail"] and b.eind().get("nood_sluiten") is not False
+    assert os.listdir(alleen_lezen) == [], "geen half bestand"
 
 
 @proef
@@ -607,7 +659,7 @@ def test_zonder_reflog_en_zonder_bewaarbare_stand_telt_het_verschil_als_oud(repo
     assert uit["mijnagents"]["stand"] == "achter" and uit["mijnagents"]["minuten"] is None
     assert uit["agents"]["stand"] == "gelijk"
     assert noden(b) == {"Bouw loopt achter op de code: mijnagents": "claude-code",
-                        "Bouwwacht kan zijn stand niet bewaren": "claude-code"}
+                        "Bouwwacht kan zijn stand niet lezen of bewaren": "claude-code"}
 
 
 def main_met(b, nu):
