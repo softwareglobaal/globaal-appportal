@@ -79,5 +79,16 @@ check("cursief over twee alinea's", "*" not in h and "<p><em>Shell works ongoing
 h = verslag_pdf.md_naar_html("*Nota* de goot\n\nTekst met *nadruk*")
 check("losse cursieve woorden blijven los", "<p><em>Nota</em> de goot</p>" in h and "<p>Tekst met <em>nadruk</em></p>" in h, h)
 
+# 37e review: de PDF van een werfverslag verwijst naar dezelfde fotonummers en bijschriften als Word
+v37 = {"categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "3.1", "titel": "Latei", "fotos": ["IMG_0102.jpg", "IMG_0101.jpg"]},
+                                                      {"nummer": "3.2", "titel": "Dorpel", "fotos": ["IMG_0101.jpg", "x.heic"]}]}]}
+b37 = {"IMG_0102.jpg": b"a", "IMG_0101.jpg": b"b"}
+check("bijschrift zoals Word", [c for c, _ in verslag_pdf.fotolijst_werfverslag(v37, b37)] == ["IMG_0102.jpg   bij punt 3.1 Latei", "IMG_0101.jpg   bij punt 3.1 Latei"],
+      verslag_pdf.fotolijst_werfverslag(v37, b37))
+m37 = verslag_pdf.met_fotonummers("De latei.\nFoto's: IMG_0102.jpg, IMG_0101.jpg\n\nDe dorpel.\nFoto's: IMG_0101.jpg, x.heic\n\nNiets.\nFoto's: x.heic\n", v37, b37)
+check("fotonummers zoals Word, niet-geplaatste foto valt weg", "(foto's 1, 2)" in m37 and "(foto 2)" in m37 and "Foto's:" not in m37 and "heic" not in m37, m37)
+check("tijd uit de bestandsnaam zoals Word", verslag_pdf.fotolijst_werfverslag({"categorieen": [{"punten": [{"nummer": "3.1", "titel": "Latei", "fotos": ["1012_a.jpg"]}]}]},
+                                                                               {"1012_a.jpg": b"x"})[0][0] == "10:12   bij punt 3.1 Latei")
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -156,13 +156,31 @@ def naar_pdf(md, voettekst, fotos=()):
     return HTML(string=naar_html(md, voettekst, fotos)).write_pdf()
 
 
-def fotolijst_werfverslag(verslag, beelden):
-    """[(bijschrift, bytes)] in de volgorde van sjabloon_werfverslag.naar_docx: eerste verwijzing per foto."""
-    gezien, uit = set(), []
+def _fotonummers_werfverslag(verslag, beelden):
+    """({bestandsnaam: volgnummer}, [(bestandsnaam, punt)]) zoals sjabloon_werfverslag.naar_docx: eerste verwijzing per foto."""
+    nummer, lijst = {}, []
     for cat in verslag.get("categorieen", []):
         for pt in cat.get("punten", []):
             for b in pt.get("fotos", []):
-                if b in beelden and b not in gezien:
-                    gezien.add(b)
-                    uit.append((f"{pt.get('nummer', '')} {pt.get('titel', '')}".strip(), beelden[b]))
-    return uit
+                if b in beelden and b not in nummer:
+                    nummer[b] = len(lijst) + 1
+                    lijst.append((b, f"{pt.get('nummer', '')} {pt.get('titel', '')}".strip()))
+    return nummer, lijst
+
+
+def fotolijst_werfverslag(verslag, beelden):
+    """[(bijschrift, bytes)] in de volgorde van Word, met hetzelfde bijschrift: het uur uit de bestandsnaam (1012_... wordt
+    10:12) of anders de bestandsnaam, en het punt (37e review)."""
+    return [((f"{b[:2]}:{b[2:4]}" if b[:4].isdigit() else b) + f"   bij punt {punt}", beelden[b])
+            for b, punt in _fotonummers_werfverslag(verslag, beelden)[1]]
+
+
+def met_fotonummers(md, verslag, beelden):
+    """De werfverslag-md voor de PDF: 'Foto's: IMG_0102.jpg, IMG_0101.jpg' wordt '(foto's 1, 2)', zoals in Word; een foto
+    die niet geplaatst is, valt weg. De bewaarde md houdt de namen, want van_markdown leest ze terug (37e review)."""
+    nummer = _fotonummers_werfverslag(verslag, beelden)[0]
+
+    def vervang(m):
+        nrs = [str(nummer[n.strip()]) for n in m.group(1).split(",") if n.strip() in nummer]
+        return ("(" + ("foto " if len(nrs) == 1 else "foto's ") + ", ".join(nrs) + ")") if nrs else ""
+    return re.sub(r"(?m)^Foto's: (.*)$", vervang, md)

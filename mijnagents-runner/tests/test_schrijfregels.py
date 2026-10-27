@@ -658,5 +658,21 @@ for tekst in ["The contractor is in default.", "The contractor is in default of 
               "The contractor was declared in default by the client."]:
     check(f"juridisch in default blijft S5: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S5"], S.toepassen(tekst))
 
+# Zevenendertigste review 27-10-2026: (1) de Engelse S1 is zo smal als de Nederlandse; (2) een sluitend aanhalingsteken
+# of haakje na de punt blijft bij zijn zin als de volgende zin geschrapt wordt
+for tekst in ["The site office is not present yet; the contractor will place it next week.",
+              "There is no previous inspection of the electrical installation; the client will request one.",
+              "The contractor's site office was never present.", "There is no prior inspection certificate for the boiler."]:
+    check(f"Engelse gewone tekst blijft: {tekst[:35]!r}", S.toepassen(tekst) == (tekst, []), S.toepassen(tekst))
+for tekst in ["The architect has not visited the site before.", "The office was never present on site.", "There were no previous site visits."]:
+    check(f"Engelse S1 blijft: {tekst!r}", [r for r, _ in S.toepassen(tekst)[1]] == ["S1"], S.toepassen(tekst))
+for tekst, behoud in [('De bouwheer meldt: "Het water komt binnen langs de dorpel." De aannemer is aansprakelijk voor de schade.',
+                       'De bouwheer meldt: "Het water komt binnen langs de dorpel."'),
+                      ("De goot lekt aan de achtergevel (zie foto 3.) De aannemer is in gebreke gebleven.", "De goot lekt aan de achtergevel (zie foto 3.)"),
+                      ("(Zie foto 3.) De aannemer is aansprakelijk.", "(Zie foto 3.)")]:
+    t37, ing37 = S.toepassen(tekst)
+    check(f"leesteken blijft bij zijn zin: {behoud[-25:]!r}", t37.startswith(behoud + " ") and ing37 and S.toepassen(t37)[0] == t37, t37)
+check("aanhalingsteken zonder schrapping verandert niets", S.toepassen('Hij zei: "Klaar." Daarna vertrok hij.') == ('Hij zei: "Klaar." Daarna vertrok hij.', []))
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

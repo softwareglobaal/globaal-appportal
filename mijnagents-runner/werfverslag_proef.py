@@ -523,11 +523,11 @@ def voettekst_van(dossier, verslag, bevindingen):
     return f"{dossier} | {soort} {verslag.get('bezoek', '')}".rstrip()
 
 
-def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettekst):
+def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettekst, pdf_md=None):
     """Dezelfde proef als Word, tekst en PDF naast het bord (mijnagents-data/werfbezoek/<rij-id>/), zodat de bezoekpagina
     ze als download kan aanbieden (23-10-2026: Mehdi wil Word en PDF met één klik, zoals in het contractendashboard).
     De bezoekmap in Dropbox blijft de bron; dit is een kopie. Mislukt de PDF (weasyprint ontbreekt), dan blijven Word en
-    tekst staan en meldt het logboek het."""
+    tekst staan en meldt het logboek het. pdf_md: de tekst voor de PDF als die afwijkt van de bewaarde md (fotonummers)."""
     uit = {}
     try:
         map_ = os.path.join(lokale_map(), str(rij["id"]))
@@ -541,7 +541,7 @@ def _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, fotolijst, voettek
             f.write(md)
         uit = {"docx": naam + ".docx", "md": naam + ".md", "map": str(rij["id"])}   # de map blijft die van deze rij, ook na een verhuizing
         try:
-            pdf = verslag_pdf.naar_pdf(md, voettekst, fotolijst)
+            pdf = verslag_pdf.naar_pdf(pdf_md or md, voettekst, fotolijst)
             with open(os.path.join(map_, naam + ".pdf"), "wb") as f:
                 f.write(pdf)
             uit["pdf"] = naam + ".pdf"
@@ -905,6 +905,7 @@ def proef(ag, dossier, volgnr):
     beelden = _fotos_verzamelen(teksten, fotos, verslag)
     ingrepen = _grendel(ag, dossier, volgnr, verslag)   # S1-S5: wat de schrijver toch schreef, komt niet in het concept
     bevindingen = vb.uit_werfproef(verslag) if verslagtype == vb.SOORT else None
+    pdf_md = None
     if bevindingen:
         # md met dezelfde fotonummers als Word en de fotobijlage van de PDF: alleen de foto's die er echt in staan
         docx, md = vb.naar_docx(bevindingen, beelden), vb.naar_markdown(bevindingen, beelden)
@@ -915,9 +916,10 @@ def proef(ag, dossier, volgnr):
         md = sjab.naar_markdown(verslag)
         naam = f"{dossier}-{verslag['bezoek']} {'verslag plaatsbezoek' if verslag['soort_bezoek'] == 'plaatsbezoek' else 'werfverslag'} (concept)"
         pdf_fotos = verslag_pdf.fotolijst_werfverslag(verslag, beelden)
+        pdf_md = verslag_pdf.met_fotonummers(md, verslag, beelden)
     pad_md = bronnen.upload(f"{rij['bezoekmap']}/{naam}.md", md.encode("utf8"))
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
-    bestanden = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, pdf_fotos, voettekst_van(dossier, verslag, bevindingen))
+    bestanden = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, pdf_fotos, voettekst_van(dossier, verslag, bevindingen), pdf_md)
     telling = sjab.telling_open(md)
     n_punten = sum(len(c["punten"]) for c in verslag["categorieen"])
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"proef gezet: {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {n_punten} punten, "
@@ -1064,7 +1066,7 @@ def herlayout(ag, dossier, volgnr):
     pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{naam}.docx", docx)
     info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
     info["bestanden"] = _lokaal_bewaren(ag, rij, dossier, volgnr, naam, docx, md, verslag_pdf.fotolijst_werfverslag(v, beelden),
-                                        voettekst_van(dossier, v, None))
+                                        voettekst_van(dossier, v, None), verslag_pdf.met_fotonummers(md, v, beelden))
     ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak (huisstijl contractmaster): {os.path.basename(pad_docx)} ({len(docx)//1024} kB, {len(beelden)} foto's), zonder Claude")
     # de bewaarde markdown blijft zoals ze was (zoals productie: Word, PDF en werfapp zijn gefilterd); alleen een oude regel
     # 'Herkomst: <bron met tijdstip>' wordt verliesvrij omgezet

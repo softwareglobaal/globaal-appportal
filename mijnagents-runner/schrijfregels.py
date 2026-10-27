@@ -48,8 +48,10 @@ VERBODEN = [
     # dezelfde regels in het Engels, voor de Engelse tekst van een tweetalig verslag (nl+en)
     ("S2", re.compile(r"\b(?:order|chamber)\s+of\s+architects\b", re.I)),
     ("S3", re.compile(r"\b(?:previous|former|other)\s+architect\b[^.]{0,80}\b(?:not|never|poorly|negligent|failed)\b", re.I)),
-    ("S1", re.compile(r"\b(?:no|not)\s+(?:previous|prior|earlier)\s+(?:site\s+)?(?:visits?|inspections?)\b", re.I)),
-    ("S1", re.compile(r"\b(?:architect|office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:visited|present|attended|checked|inspected|supervised)\b", re.I)),
+    # zo smal als de Nederlandse S1 (37e review): alleen een bezoek, en "the office" zoals "het bureau"; "the site office is
+    # not present yet" (de werfkeet) of "no previous inspection of the installation" (een keuring) is gewone tekst
+    ("S1", re.compile(r"\b(?:no|not)\s+(?:previous|prior|earlier)\s+(?:site\s+)?visits?\b", re.I)),
+    ("S1", re.compile(r"\b(?:(?:the\s+)?architect|the\s+office|our\s+office|h-architects)\b[^.]{0,60}\b(?:not|never)\s+(?:visited|present|attended|checked|inspected|supervised)\b", re.I)),
     ("S1", re.compile(r"\b(?:only|at\s+most|a\s+maximum\s+of)\s+(?:one|1)\s+(?:site\s+)?visit\b", re.I)),
     # "liable to rot" of "liable to crack" (vatbaar voor) is gewone technische tekst; "liable for", "held liable", "liable to
     # the client" en "liable to pay" zijn een juridisch oordeel (35e review). Zo ook "in default mode" of "in default
@@ -168,7 +170,9 @@ OPNAME_VOLGENS = re.compile(r"\b(?:volgens|blijkens|uit)\s+de\s+(?:opname\b" + _
 # Een markering is een eigen "zin": zo versmelt ze bij een tweede doorgang niet met de zin erna (idempotent).
 _MARK = re.compile(re.escape(MARKERING).replace(r"\{regel\}", r"S\d") + r"\s*")
 # losse leestekens ("...", "??", een punt vooraan) zijn een eigen stuk: zo gaan ze bij het heropbouwen niet verloren
-_ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*\s*|[.!?]+\s*")
+# een sluitend aanhalingsteken of haakje direct na de punt hoort bij die zin, niet bij de volgende (37e review)
+_SLUIT = r"(?:(?<=[.!?])[\"'\u201d\u2019\u00bb)\]]+)?"
+_ZIN = re.compile(_MARK.pattern + "|" + _Z + r"+[.!?]*" + _SLUIT + r"\s*|[.!?]+" + _SLUIT + r"\s*")
 # Een kaal tijdstip tussen haakjes; telt alleen als opnameverwijzing als de tekst zelf zegt dat zo'n tijdstip naar de
 # opname verwijst (de legende), anders is "(10:15)" gewoon een uur.
 _KAAL_TIJDSTIP = re.compile(r"\s*\(\s*" + _OPNAMETIJDEN + r"\s*\)")   # een schaal (1:50) is geen tijdstip (29e review)
