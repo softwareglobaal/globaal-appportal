@@ -78,6 +78,34 @@ check("een afdeling van een eigen firma is intern: 'AI van EE afdeling' wordt [E
 check("een afspraak zonder code is grafiet, nooit de lichtgroene agendakleur; een hele dag niet",
       W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("Johan Buyse en General")) == "8"
       and W.kleur_gewenst({"kalender": W.WERKAGENDA, "hele_dag": True}, W.lees_titel("Johan Buyse")) == "")
+check("driehoeksoverleg FR-211: Karim is geen Karam, een korte naam lijkt nooit, 'met' scheidt ook",
+      gv("Mehdi en Karim: [EE-KB] werf, Kerkstraat 1, 3000 Leuven") == set()
+      and gv("Mehdi met Catalin: [HA-IN] overleg") == {"harmoniebouw@gmail.com"}
+      and not W._lijkt_op("Karim", "Karam") and W._lijkt_op("Catlain", "Catalin"))
+W.organisatie.agenda_adressen = lambda *a, **k: MENSEN
+check("driehoeksoverleg FR-211: alleen bekende namen in de kop, een bijnaam alleen letterlijk",
+      W.mehdi_kop("Mehdi en Karim: x") == "Mehdi" and W.mehdi_kop("Mehdi + Werf: x") == "Mehdi"
+      and W.mehdi_kop("Mehdi met Catlain: x") == "Mehdi & Catalin" and W.mehdi_kop("Mehdi en Karam: x") == "Mehdi & Karam")
+W.organisatie.agenda_adressen = _org
+check("driehoeksoverleg FR-211: een gewoon woord of een rolwoord met een tikfout is geen boekhouder",
+      W.titel_voorstel("Mehdi: nadeel bespreken EE")[1] == "ENEF"
+      and W.titel_voorstel("Mehdi: boekhouden UB")[1] == "UNAB"
+      and W.titel_voorstel("Mehdi: Nadein kwartaal")[1] == "ALGE")
+_tok, _pt = W.agenda._toegang, W._patch
+_gepatcht = []
+W.agenda._toegang, W._patch = (lambda: "t"), (lambda a, body, tok, **k: _gepatcht.append(a["id"]))
+_vandaag = W.nu_lokaal().date().isoformat()
+W.kleuren_zetten([{"id": "zorg", "kalender": W.WERKAGENDA, "titel": "Tandarts", "start": _vandaag + "T23:00:00+01:00",
+                   "_zorg_schaduw": True, "omschrijving": ""},
+                  {"id": "cal", "kalender": W.WERKAGENDA, "titel": "Johan Buyse en General", "start": _vandaag + "T23:00:00+01:00",
+                   "omschrijving": "Mogelijk gemaakt door Calendly.com", "locatie": "https://calendly.com/x"},
+                  {"id": "rood", "kalender": W.WERKAGENDA, "titel": "zonder code", "start": _vandaag + "T23:00:00+01:00",
+                   "_kleur": "11", "omschrijving": ""},
+                  {"id": "leeg", "kalender": W.WERKAGENDA, "titel": "zonder code", "start": _vandaag + "T23:00:00+01:00",
+                   "omschrijving": ""}])
+W.agenda._toegang, W._patch = _tok, _pt
+check("grafiet alleen op een kleurloze eigen afspraak: niet op een zorgschaduw, Calendly of een kleur van een ander",
+      _gepatcht == ["leeg"], _gepatcht)
 check("een naam die twee mensen aanwijst, of iemand uit dienst, wordt geen gast (geen gok)",
       gv("Mehdi & Luc: [EE-IN] overleg") == set() and gv("Mehdi & Rochelle: [EE-IN] overleg") == set())
 

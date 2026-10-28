@@ -1,7 +1,8 @@
 # Werkwijze van De Agendawacht (Privé)
 
 Aanvulling v8.27 (28-10-2026): vaste contacten, na de fouten op de afspraken van 29-10 (FR-211). Deze mensen herken ik
-altijd, ook met een tikfout van een letter, en ik stel er nooit een vraag 'welke firma' over:
+altijd, ook met een tikfout van een letter (vanaf zes letters, nooit via een bijnaam: Karim is geen Karam), en ik stel
+er nooit een vraag 'welke firma' over:
 
 | Wie | Wat ik doe | Waar het staat |
 |---|---|---|
