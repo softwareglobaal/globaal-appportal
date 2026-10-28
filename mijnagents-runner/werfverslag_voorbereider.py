@@ -647,6 +647,12 @@ def fotobewijs(bezoek, venster):
     return "ok"
 
 
+# Het contractdashboard antwoordde uitdrukkelijk "Geen dossier gevonden": een project van vóór het systeem. Alleen deze
+# W12-onbekend blokkeert de stand niet; onbereikbaar of niet toetsbaar blokkeert wel (overleg 28-10-2026, Codex).
+VOOR_CONTRACTSYSTEEM = ("project niet in het contractdashboard (vermoedelijk van vóór het systeem); "
+                        "bekijk het getekende contract in de projectmap")
+
+
 def contractbewijs(nummer):
     """Groen uitsluitend bij een getekend dossier met expliciete werfopvolging."""
     mcp_ontbreekt = False
@@ -664,13 +670,14 @@ def contractbewijs(nummer):
             if mcp_ontbreekt:
                 # Een project van vóór het contractsysteem (bv. 2173, 2021) staat er nooit in: dat is
                 # onbekend, geen ontbrekend contract. Het getekende contract ligt dan in de projectmap.
-                return "onbekend", "project niet in het contractdashboard (vermoedelijk van vóór het systeem); bekijk het getekende contract in de projectmap"
+                return "onbekend", VOOR_CONTRACTSYSTEEM
             return "onbekend", "contract-dashboard en werfapp niet bereikbaar"
     if not isinstance(d, dict):
         return "onbekend", "contractantwoord is niet toetsbaar"
     metadata = d.get("dossier") if isinstance(d.get("dossier"), dict) else d
     if not any(k in metadata for k in ("stand", "status", "velden", "keuzes")):
-        return "onbekend", "geen contractgegevens in het antwoord"
+        # Een geopend werfdossier zonder contractvelden verandert niets aan het antwoord van het contractdashboard.
+        return "onbekend", VOOR_CONTRACTSYSTEEM if mcp_ontbreekt else "geen contractgegevens in het antwoord"
     velden = d.get("velden") or metadata.get("velden") or metadata
     keuzes = d.get("keuzes") or metadata.get("keuzes") or velden
     if not isinstance(velden, dict) or not isinstance(keuzes, dict):
@@ -811,6 +818,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     # W2 aanwezigheid, W3 de mappen.
     w2_stand, w2_toel = aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster)
     post("W2", "aanwezigheid", w2_stand, w2_toel)
+    if w2_stand == "onbekend" and not LC.bronbeleid.dag_toegestaan(d):
+        c[-1]["voor_meetreeks"] = True
     post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
          f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
     # W4 foto's
@@ -908,23 +917,45 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
          "werfapp bevestigt verzonden verslag" if verzonden else "geen verzendbewijs uit de werfapp")
     contract_stand, contract_toel = contractbewijs(nummer)
     post("W12", "getekend contract en werfopvolging", contract_stand, contract_toel)
+    if contract_stand == "onbekend" and contract_toel == VOOR_CONTRACTSYSTEEM:
+        c[-1]["voor_contractsysteem"] = True
     if bezoek["notities"]:
         post("W10", "notities in de map", "ok", "; ".join(bezoek["notities"])[:160])
     return c, taken, noden
 
 
-def stand_van(controles):
-    s = {x["code"]: x["stand"] for x in controles}
-    bronnen_ok = all(s.get(k) == "ok" for k in ("W2", "W3", "W4", "W5", "W6", "W12", "WERFSTART")) and s.get("W1") in ("ok", "let_op")
-    if s.get("W7") == "ok":
-        return "verslag aanwezig" if bronnen_ok else "verslag aanwezig, bronnen onvolledig"
-    return "klaar voor verslag" if bronnen_ok else "te verzamelen"
+NODIGE_POSTEN = ("W1", "W2", "W3", "W4", "W5", "W6", "W12")
+
+
+def voldaan(x, s):
+    """Eén regel voor de stand en 'Nog te verzamelen' (overleg 28-10-2026). W1 mag let_op zijn (E4). W12 onbekend
+    voor een project van vóór het contractsysteem blijft zichtbaar maar blokkeert niet; onbereikbaar, niet toetsbaar
+    of een contract zonder werfopvolging blokkeert wel. W2 onbekend vóór de GPS-meetreeks telt als W1 de
+    buitenafspraak bewijst (E1b). Een WERFSTART-post bestaat alleen als de werfstart ontbreekt en blokkeert dan."""
+    code, stand = x["code"], x["stand"]
+    if stand == "ok":
+        return True
+    if code == "W1":
+        return stand == "let_op"
+    if code == "W12":
+        return stand == "onbekend" and bool(x.get("voor_contractsysteem"))
+    if code == "W2":
+        return stand == "onbekend" and bool(x.get("voor_meetreeks")) and s.get("W1") == "ok"
+    return False
 
 
 def ontbrekende_posten(controles):
-    nodig = ("W1", "W2", "W3", "W4", "W5", "W6", "W12", "WERFSTART")
+    s = {x["code"]: x["stand"] for x in controles}
     return [f"{x['code']} {x['naam']}" for x in controles
-            if x["code"] in nodig and x["stand"] not in (("ok", "let_op") if x["code"] == "W1" else ("ok",))]
+            if x["code"] in NODIGE_POSTEN + ("WERFSTART",) and not voldaan(x, s)]
+
+
+def stand_van(controles):
+    codes = {x["code"] for x in controles}
+    bronnen_ok = all(k in codes for k in NODIGE_POSTEN) and not ontbrekende_posten(controles)
+    if any(x["code"] == "W7" and x["stand"] == "ok" for x in controles):
+        return "verslag aanwezig" if bronnen_ok else "verslag aanwezig, bronnen onvolledig"
+    return "klaar voor verslag" if bronnen_ok else "te verzamelen"
 
 
 def bezoeksleutel(nummer, bezoek):
@@ -947,6 +978,24 @@ def buiten_bereik_nood(nummer, fout):
                      f"tot het bereik verbreed is: {BEREIK_COMMANDO.format(nummer=nummer)}", "wie": "claude-code"}
 
 
+def werfdossier_openen(nummer):
+    """Opent het werfdossier van een gevolgd dossier in de werfapp, alleen met naam en adres uit H-A Projecten
+    (`alleen_ha`: nooit een vrij project, nooit overschrijven). Zonder dossier kent de werfapp geen nummer N (W8).
+    Bestaat het al (409), dan is er niets te doen. Een fout stopt de ronde niet (overleg 28-10-2026, P4)."""
+    try:
+        werfapp.call("/projecten", {"nummer": str(nummer), "alleen_ha": True})
+        ag.log(str(nummer), "schrijf", f"werfdossier {nummer} geopend in de werfapp uit H-A Projecten")
+        return "geopend"
+    except werfapp.WerfappFout as ex:
+        if ex.status == 409:
+            return "bestaat"
+        ag.log(str(nummer), "fout", f"werfdossier niet geopend ({ex.status}): {ex.fout}"[:200])
+        return "fout"
+    except Exception as ex:  # noqa: BLE001
+        ag.log(str(nummer), "fout", f"werfdossier niet geopend: {type(ex).__name__}")
+        return "fout"
+
+
 # ------------------------------------------------------------- de ronde ---
 def verwerk(nummer, droog=False):
     ag.log(str(nummer), "bron", f"dossier {nummer}: projectmap zoeken")
@@ -956,6 +1005,8 @@ def verwerk(nummer, droog=False):
         return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}], []
     adres = adres_uit_mapnaam(os.path.basename(projectmap))
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
+    if not droog:
+        werfdossier_openen(nummer)
     bezoeken = bezoeken_in(projectmap, nummer)
     bak = klaargezet(nummer)
     terugkijk_taken, bewezen = [], []

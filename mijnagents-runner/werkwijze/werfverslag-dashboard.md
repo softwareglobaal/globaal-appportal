@@ -4,7 +4,7 @@
 
 Ik toon Mehdi per werfbezoek de bewezen stand, ontbrekende bronnen en het gekoppelde concept, zodat hij zelf kan kiezen en nakijken. Ik mag gegevens uit bord en werfapp lezen en een bronfout melden, maar geen betaalde proef, verzending, handtekening of verwijdering starten.
 
-Versie 2 (17-10-2026: de API-afspraken van v1.0 teruggezet, aangepast aan de conceptroute; v1 17-10-2026). `H-A vaste afspraken v1.9`, hoofdstuk E, geldt. Bij tegenspraak winnen bord en werfapp; de skill `werfverslag` op de Mac is de handmatige weg.
+Versie 2 (17-10-2026: de API-afspraken van v1.0 teruggezet, aangepast aan de conceptroute; v1 17-10-2026). `H-A vaste afspraken v1.10`, hoofdstuk E, geldt. Bij tegenspraak winnen bord en werfapp; de skill `werfverslag` op de Mac is de handmatige weg.
 
 ## Bron van waarheid
 
@@ -15,7 +15,7 @@ De werfapp bewaart bezoek-ID, verslagnummer N, concept en verzendbewijs. De bezo
 | Koppeling | Taak | Waarheid | Wie leest | Stappen | Als het misloopt |
 |---|---|---|---|---|---|
 | Agendawacht | H-A-buitenafspraak en venster | agenda-item met dossier en bezoeksleutel | voorbereider, dashboard | toon W1 na koppeling | E4-foto/opname geeft let_op, geen agenda-groen |
-| Locatiewacht | GPS-bewijs van aanwezigheid | positief projectverblijf in het venster, alleen via `koppelingen/locatiecontext.py` (startgrens van de meetreeks) | voorbereider, dashboard | gedragen tracker bij het project = W2 ok; alleen de auto = let_op | geen verblijf, foto of opname: W2 ontbreekt |
+| Locatiewacht | GPS-bewijs van aanwezigheid | positief projectverblijf in het venster, alleen via `koppelingen/locatiecontext.py` (startgrens van de meetreeks) | voorbereider, dashboard | gedragen tracker bij het project = W2 ok; ook de auto bij het project telt als aanwezigheid (E1b); vóór de meetreeks (03-10-2026) is W1 het bewijs | geen verblijf, foto of opname: W2 ontbreekt |
 | Plaud-routine en Plaudwacht | transcript ophalen en plaatsen | opname-start en transcript in bezoekmap | voorbereider, schrijver | routine zoekt; wacht plaatst; voorbereider controleert | alleen klaarzetbak: W6 ontbreekt |
 | iCloud-wacht | foto's leveren | `fotos/` en `00 fotos.md` met tijden | voorbereider, schrijver | venster en coördinaten ontvangen; export binnen 300 m | geen venster: weigeren; oude manifestversie blijft |
 | Dropbox | oorspronkelijke bronnen bewaren | bezoekmap en bestanden | voorbereider, schrijver | bronpad tonen en inhoud lezen | online-only nul bytes is geen bewijs dat het bestand leeg is |
