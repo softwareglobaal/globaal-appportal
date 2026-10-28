@@ -4156,6 +4156,24 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-211",
+   "datum": "28-10-2026",
+   "gevonden_door": "Mehdi, afspraken van 29-10-2026",
+   "fout": "Vier fouten op een dag. 1) '!! Mehdi en Catlain: HA 2605 plaatsbezoek' werd '!! Mehdi: [HA-KB] PL 2605 - Céline Palms': Catalin viel uit de titel en kreeg geen gast en geen uitnodiging. 2) 'Mehdi & Angela: Nandien boekhouder' kreeg VR 'zeg voor welke firma' terwijl de boekhouder voor alle firma's algemeen is. 3) 'Mehdi: Ai van EE afdeling' kreeg dezelfde VR terwijl een afdeling van EE intern is. 4) Afspraken zonder code (ook 'Johan Buyse en General') stonden in de lichtgroene agendakleur en leken intern.",
+   "gevolg": "Catalin was niet uitgenodigd voor het plaatsbezoek van 29-10; twee overbodige vragen in de agenda; kleuren die iets anders zeiden dan de titel.",
+   "waarom_niet_gezien": "Spoor 1 en 2 van titel_uit_onderzoek schreven altijd 'Mehdi:' en gooiden de namen voor de dubbele punt weg; een tikfout in een naam (Catlain, Nandien) werd niet herkend; 'afdeling' telde niet als intern; een collega als agendagast hield elke codecorrectie tegen; zonder code zette de agent geen kleur, zodat Google de agendakleur toonde.",
+   "oorzaak": "Vaste contacten stonden wel in de master (Catalin, Nadien) maar de herkenning was letterlijk en de herschrijfroute bewaarde de namen niet.",
+   "soort_oorzaak": "code",
+   "oplossing": "mehdi_kop() houdt de namen voor de dubbele punt in elke herschreven titel; bekende_naam() herkent een tikfout van een letter als er precies een bekende naam op lijkt (gasten, uitnodiging, externe relaties); de boekhouder is altijd [AL-LO], met !! [AL-LB]; 'afdeling' bij een eigen firma is [..-IN]; een collega als agendagast houdt de code niet meer tegen; zonder code wordt een kleurloze afspraak grafiet. De drie afspraken van 29-10 zijn met de hand rechtgezet zonder mail.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_agendagasten.py",
+    "tekst": "een tikfout van Catalin na 'Mehdi' blijft Catalin"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }

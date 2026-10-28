@@ -1,6 +1,6 @@
 {
- "versie": "5.18",
- "datum": "2026-10-27",
+ "versie": "5.19",
+ "datum": "2026-10-28",
  "waarover": "De vaste afspraken van De Agendawacht: welke agenda's, welke codes, welke kleuren, welke handelingen en welke grendels. Dit bestand is de afspraak; de test tests/test_agenda_taken.py faalt zodra de code er niet meer mee overeenkomt.",
  "annulering": "Een expliciete afzegging in Google of de afspraakomschrijving wordt met het vaste agentnummer gemeld: afgezegd, niet vertrekken. Nooit voor een afspraak van Lara (de agenda van Lara of [LA]) of een rit: een gewiste Lara-afspraak op een schooldag wordt een vraag in de privé-agenda (FR-210). Vlak voor de vijfminutenoproep wordt de afspraak opnieuw gelezen; bij onleesbare agenda geen vertrekoproep maar eenmaal een waarschuwing vanaf het vaste agentnummer. Een mislukte afzegmelding blijft open voor herkansing. Een annuleerlink of een voorwaardelijke zin op zichzelf is geen afzegging; een latere expliciete bevestiging heft een afzegzin op.",
  "thuisafspraak": "Herfstlaan 65, 3010 Leuven is Mehdi's thuis: geen reis van thuis naar thuis, geen buitenconflict of vertrekoproep. Bij Catalin geldt de bekende koppeling met Harmoniebouw; een deal met invulnaam Voornaam Achternaam is geen bewijs voor een klanttitel. Als Mehdi naast de activiteit een naam of inhoudswoord invoerde, mag een andere persoon uit een adresdeal zijn titel niet overschrijven. Bij onvoldoende zekerheid vraagt de agent Mehdi.",
@@ -326,8 +326,8 @@
     },
     {
      "wanneer": "geen firmacode in de titel",
-     "kleur": "",
-     "naam": "FOUT, hij zet geen kleur en meldt het"
+     "kleur": "8",
+     "naam": "grafiet, grijs: FOUT, nog geen code; hij meldt het. Niet de agendakleur, want die is lichtgroen en leest als intern (Mehdi, 28-10-2026). Alleen op een afspraak zonder kleur; een hele dag houdt zijn kleur"
     },
     {
      "wanneer": "buiten: !! of een dienst die per definitie buiten is, of soort KB, PB, LB of AB. Altijd rood, ook met ?? (nog niet bevestigd)",
@@ -1759,6 +1759,7 @@
   "bijnamen": {
    "Karam": "Catalin"
   },
+  "tikfouten": "Een naam na 'Mehdi' die een letter verschilt van een bekende naam (een letter anders, erbij, eraf of twee buren omgewisseld, vanaf vijf letters) is die naam, als er precies een op lijkt: 'Catlain' is Catalin. Een herschreven titel houdt de namen voor de dubbele punt (mehdi_kop). Gezien 28-10-2026: '!! Mehdi en Catlain: HA 2605 plaatsbezoek' werd '!! Mehdi: [HA-KB] PL 2605 - Céline Palms' en Catalin kreeg geen uitnodiging.",
   "waar": "komende afspraken op de werkagenda die Mehdi zelf organiseert; een reeks in de reeks zelf; volledige ronde twee maanden vooruit, de wijzigingsroute de dag die veranderde",
   "zonder_mail": "Normale schrijfroutes gebruiken sendUpdates=none: niemand krijgt daardoor een mail, ook de klant niet; de afspraak verschijnt in de agenda van de gast (Google: 'Uitnodigingen toevoegen aan mijn agenda'). Alleen de eenmalige uitnodiging volgens uitnodigen_regel gebruikt sendUpdates=all.",
   "intern": "een agendagast telt niet als gast: de afspraak blijft een eigen afspraak (titel, projectnummer, ritten, vragen)",
