@@ -10,9 +10,10 @@
 - [ ] Eerste volledige binnenhaal van de bijlagen nakijken: H-Architects
       (48.600 bestanden) duurt door het API-budget ongeveer twee weken, UNABO
       ongeveer een week. Klaar als `uitgesteld` in het manifest 0 is.
-- [ ] Uptime-Kuma heeft geen meldkanaal: monitors 62/63 worden rood, maar
-      niemand krijgt een bericht. 28-10-2026: `scripts/vm-onderhoud.sh` (stap 4)
-      zet een Telegram-melding naar Mehdi op elke monitor; afvinken na de run.
+- [x] Uptime-Kuma heeft geen meldkanaal: monitors 62/63 worden rood, maar
+      niemand krijgt een bericht. GEDAAN 28-10-2026 via `scripts/vm-onderhoud.sh`:
+      melding "Telegram Mehdi" (bot van De Bode) op alle 58 monitors en standaard
+      voor nieuwe; kopie van de databank in `~/kuma.db.backup-20261028-160628`.
 - [ ] Eventueel: wijzigingsgeschiedenis per record incrementeel meenemen
       (alleen records met een nieuwe `update_time`, 20 tokens per record).
 
@@ -1209,7 +1210,8 @@ subdiscipline-statistieken.
       leggen (welke afspraken zijn werkelijk doorgegaan), naast de metadata van
       iPhone-foto's, naast werfbezoeken en facturatie. Zinvol zodra er twee weken
       data ligt.
-- [ ] **`scripts/add-locatie-app.py` staat alleen op de VM, niet in git.**
+- [x] **`scripts/add-locatie-app.py` staat alleen op de VM, niet in git.**
+      GEDAAN 28-10-2026: van de VM gehaald en op main gezet.
       Mehdi heeft het daar op 2026-09-09 zelf weggeschreven en uitgevoerd. Claude
       kon het niet meenemen naar de repo: de beveiligingslaag blokkeert het
       schrijven van scripts die rechten toekennen in een identity provider. Het
@@ -1222,6 +1224,13 @@ subdiscipline-statistieken.
       `docker exec authentik-server`. Alle Authentik-scripts gaan via
       `docker compose exec authentik-server` (de servicenaam, die klopt) of via
       `scripts/ak-exec.sh`.
+- [ ] **Hertoewijzing Authentik-groepen ter goedkeuring** (28-10-2026): inventaris
+      gedraaid, voorstel per persoon staat in de private repo
+      `softwareglobaal/globaal-vm-beheer`, map `authentik/` (namen horen niet in
+      deze publieke repo). Uitvoering pas na akkoord van Mehdi.
+- VM-opdrachten zonder SSH: repo `softwareglobaal/globaal-vm-beheer` (private,
+  sinds 28-10-2026). Wijzig `opdracht.sh` en push, of start de workflow `vm`;
+  de uitvoer staat in het logboek van de run.
 
 ## Schijfruimte op de VM (gemeten 2026-09-12)
 

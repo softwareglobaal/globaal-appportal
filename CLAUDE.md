@@ -53,8 +53,10 @@ auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 mi
   vraagt: migraties via `sh scripts/db-migrate.sh`, compose-wijzigingen via
   `docker compose up -d <service>`, nginx-templates via
   `docker compose up -d --force-recreate nginx`.
-- Claude heeft **geen SSH-toegang tot de VM**: VM-commando's worden aan de
-  gebruiker gegeven, die output terugplakt. Repos aanmaken op GitHub doet de
+- Claude heeft **geen eigen SSH-toegang tot de VM**, maar draait sinds
+  28-10-2026 zelf opdrachten via de private repo `softwareglobaal/globaal-vm-beheer`:
+  `opdracht.sh` wijzigen en pushen (of de workflow `vm` starten), uitvoer in het
+  logboek van de run. Onomkeerbare handelingen blijven eerst langs Mehdi. Repos aanmaken op GitHub doet de
   gebruiker (web-UI); daarna kloont/pusht Claude zelf.
 
 ## Lopend meerstappenwerk
