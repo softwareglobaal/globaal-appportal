@@ -32,19 +32,25 @@ TAKEN = (  # de zeven taken van artikel 20 RBP2022, met de woorden waaraan ze in
     ("schets en voorontwerp", r"schets|voorontwerp"),
     ("het administratief dossier", r"administratief dossier|aanvraag (van de |tot )?(omgevings|stedenbouwkundige )?vergunning|vergunningsaanvraag"),
     ("het dossier voor de bestelling", r"aanbesteding|meetsta|keuze van (de )?aannemer"),
-    ("het uitvoeringsdossier met de controle der werken", r"uitvoeringsdossier.*|controle op de uitvoering"),
+    ("het uitvoeringsdossier met de controle der werken", r"uitvoerings(dossier|ontwerp|plannen)|controle op de uitvoering"),
     ("de bijstand bij de oplevering en het nazicht der rekeningen", r"bijstand bij de oplevering|nazicht van de vorderingsstaten"),
 )
 UITSLUITING = (r"niet belast|niet inbegrepen|valt buiten|vallen buiten|omvat niet|omvat geen|geen deel uit|uitgesloten|"
                r"te beperken tot|beperkt tot|uitsluitend betrekking")
-BEPERKT = r"te beperken tot|beperkt tot|uitsluitend betrekking|omvat geen werfopvolging"
+BEPERKT = r"opdracht[^.\n]{0,80}(te beperken tot|beperkt tot|uitsluitend betrekking)|omvat geen werfopvolging"
+UITVOERING = r"uitvoerings(?:dossier|ontwerp|plannen)"  # artikel 21 zegt "uitvoeringsontwerp", de masters "uitvoeringsdossier"
+NEEN = r"\b(niet|geen)\b|uitgesloten|valt buiten|vallen buiten"
+# Een uitsluiting telt alleen in een zin over de opdracht of de taken, niet bij kosten, ereloon of aansprakelijkheid.
+OVER_TAKEN = r"taak|taken|opdracht|belast|architect"
+NIET_OVER_TAKEN = r"kost|ereloon|bedrag|polis|aansprakelijk"
 
 
 def beperkte_opdracht(tekst):
     """Een voorstudie of regularisatie: de opdracht is uitdrukkelijk beperkt en er is geen uitvoeringsdossier. Of de
     regels over aannemer, begroting en programmawijziging daar gelden, is een keuze van Mehdi (opdrachtkaart,
     ontwerplezing punt 6: welke regel bij welke master hoort). Tot dan wordt zo een fout oranje, niet rood."""
-    return bool(re.search(BEPERKT, tekst, re.I)) and not re.search(r"uitvoeringsdossier", tekst, re.I)
+    return bool(re.search(BEPERKT, tekst, re.I)) and not any(
+        re.search(UITVOERING, z, re.I) and not re.search(NEEN, z, re.I) for z in _zinnen(tekst))
 
 
 def _beperkt(b, tekst):
@@ -69,6 +75,10 @@ def secties(tekst):
     return uit
 
 
+def _zinnen(tekst):
+    return [z.strip() for z in re.split(r"(?<=[.;!?])\s+|\n", tekst) if z.strip()]
+
+
 def _klein(t):
     return re.sub(r"\s+", " ", t).casefold()
 
@@ -85,7 +95,8 @@ def _zoek(secs, patroon):
 def b1_schriftelijk(secs, tekst):
     partijen = re.search(r"\btussen\b", tekst, re.I) and re.search(r"de opdrachtgever", tekst, re.I) \
         and re.search(r"de architect", tekst, re.I)
-    slot = re.search(r"(opgesteld|opgemaakt|gedaan) te [^,\n]+,? op \S+ \S+ \d{4}[^\n]*(onderteken|exempla)", tekst, re.I)
+    slot = re.search(r"(opgesteld|opgemaakt|gedaan) te [^,\n]+,? op (\S+ \S+ \d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})"
+                     r"[^\n]*(onderteken|exempla)", tekst, re.I)
     if partijen and slot:
         return B("B1", V.SLAAGT, "slotbepaling")
     return B("B1", V.FAALT, "slotbepaling" if partijen else "aanhef",
@@ -102,7 +113,8 @@ def b2_taken(secs, tekst):
         ontbreekt.append(naam)
     if not ontbreekt:
         return B("B2", V.SLAAGT, "artikel over de taken van de architect")
-    if re.search(UITSLUITING, tekst, re.I):
+    if any(re.search(UITSLUITING, z, re.I) and re.search(OVER_TAKEN, z, re.I) and not re.search(NIET_OVER_TAKEN, z, re.I)
+           for z in _zinnen(tekst)):
         # Er staat een uitsluiting, maar de controle kan niet lezen of die precies deze taken noemt.
         return B("B2", V.ONBEKEND, "artikel over de taken van de architect",
                  _b2_voorstel(ontbreekt), f"niet teruggevonden: {', '.join(ontbreekt)}; er staat wel een uitsluiting")
@@ -116,20 +128,23 @@ def _b2_voorstel(ontbreekt):
 
 
 def b3_controle(secs, tekst):
-    k = _klein(tekst)
-    if not re.search(r"(opmaak|opmaken|opstellen) van (het )?uitvoeringsdossier", k):
+    # Per zin, zodat "de Architect is niet belast met de controle op de uitvoering" geen controle is (laatste toets).
+    zinnen = [_klein(z) for z in _zinnen(tekst)]
+    uitvoering = [z for z in zinnen if re.search(UITVOERING, z) and not re.search(NEEN, z)]
+    if not uitvoering:
         return B("B3", V.SLAAGT, "", "", "geen uitvoeringsdossier in de opdracht")
+    controle = [z for z in zinnen if "controle op de uitvoering" in z and not re.search(NEEN, z)]
     zonder = [lot for lot in LOTEN
-              if re.search(rf"uitvoeringsdossier voor de {re.escape(lot)}", k)
-              and not re.search(rf"controle op de uitvoering van de {re.escape(lot)}", k)]
-    if not re.search(r"controle op de uitvoering", k):
+              if any(re.search(rf"{UITVOERING} voor de {re.escape(lot)}", z) for z in uitvoering)
+              and not any(f"controle op de uitvoering van de {lot}" in z for z in controle)]
+    if not controle:
         zonder = zonder or ["de werken"]
     if not zonder:
         return B("B3", V.SLAAGT, _zoek(secs, r"controle op de uitvoering") or "")
-    if re.search(r"andere (ingeschreven )?architect.{0,80}controle", k):
-        return B("B3", V.ONBEKEND, _zoek(secs, r"uitvoeringsdossier") or "", "",
+    if re.search(r"andere (ingeschreven )?architect.{0,80}controle", _klein(tekst)):
+        return B("B3", V.ONBEKEND, _zoek(secs, UITVOERING) or "", "",
                  "een andere architect wordt genoemd, nagaan of hij de controle krijgt")
-    return B("B3", V.FAALT, _zoek(secs, r"uitvoeringsdossier") or "",
+    return B("B3", V.FAALT, _zoek(secs, UITVOERING) or "",
              f"Voeg toe: \"Controle op de uitvoering van de {zonder[0]}\", of noem de andere ingeschreven architect "
              "die de controle doet.", f"uitvoeringsdossier zonder controle: {', '.join(zonder)}")
 
@@ -141,15 +156,17 @@ def b4_aannemer(secs, tekst):
     if not kop:
         return B("B4", V.FAALT, "artikel over de taken van de architect", voorstel, "bijstand bij de keuze niet gevonden")
     alineas = dict(secs)[kop] if kop in dict(secs) else []
-    zin = next((a for a in alineas if re.search(patroon, a, re.I)), kop)
-    if re.search(r"\bniet\b|uitgesloten|behalve|\bgeen\b", zin, re.I):
+    zin = next((a for a in alineas if re.search(patroon, a, re.I)), None)
+    if zin is None:  # de bijstand is de kop zelf: een uitsluiting kan in de alinea eronder staan
+        zin = " ".join([kop] + alineas)
+    if re.search(r"\bniet\b|uitgesloten|behalve|\bgeen\b|valt buiten|vallen buiten", zin, re.I):
         return B("B4", V.FAALT, kop, voorstel, "de bijstand staat er met een uitsluiting")
     return B("B4", V.SLAAGT, kop)
 
 
 def b5_budget(secs, tekst):
     plaats = _zoek(secs, r"bouwbudget|begroting") or "artikel over het budget"
-    if re.search(r"geen budgetverantwoordelijkheid|geen (bouw)?budget|zonder (bouw)?budget", tekst, re.I):
+    if re.search(r"geen budgetverantwoordelijkheid|geen (bouw)?budget\b|zonder (bouw)?budget\b", tekst, re.I):
         return B("B5", V.FAALT, plaats, "Schrap de uitsluiting van de budgetverantwoordelijkheid en vermeld: \"Het "
                  "Bouwbudget wordt op [bedrag] euro vooropgesteld.\"", "de budgetverantwoordelijkheid wordt uitgesloten")
     programma = _zoek(secs, r"programma|wenst volgende ruimtes|ruimtes, functies")

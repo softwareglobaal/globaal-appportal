@@ -62,6 +62,8 @@ print("D4: verzekering in het contract")
 check("verzekeraar, polisnummer en tienjarige", G.d4_verzekering(
     "verzekerd bij Verzonnen Verzekeraar, polis nr. VZ123, voor de tienjarige aansprakelijkheid").uitkomst == V.SLAAGT)
 check("zonder polisnummer faalt", G.d4_verzekering("verzekerd bij Verzonnen Verzekeraar, tienjarige").uitkomst == V.FAALT)
+check("een polis zonder nummer faalt", G.d4_verzekering(
+    "een polis voor zijn beroepsaansprakelijkheid, ook de tienjarige").uitkomst == V.FAALT)
 check("zonder verzekering faalt", G.d4_verzekering("Niets over verzekeringen.").uitkomst == V.FAALT)
 
 print(f"\n{ok} goed, {fout} fout")

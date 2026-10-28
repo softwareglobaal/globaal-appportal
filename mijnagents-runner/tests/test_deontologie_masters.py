@@ -108,6 +108,29 @@ f = uitkomst(GOED.replace(", dat de financiele weerslag op het Bouwbudget vermel
     "in een Bijvoegsel", "in een verslag of via e-mail"))
 check("D1: wijziging via mail zonder financiele weerslag", f["D1"].uitkomst == V.FAALT)
 
+print("Ontkenningen en andere woorden (laatste toets 28-10-2026)")
+f = uitkomst(GOED.replace("De opmaak van het uitvoeringsdossier voor de technieken.",
+                          "De Architect maakt het uitvoeringsontwerp op.")
+             .replace("4.2.6. Controle op de uitvoering der werken\nControle op de uitvoering van de technieken.\n", ""))
+check("B3: een uitvoeringsontwerp zonder controle faalt", f["B3"].uitkomst == V.FAALT)
+f = uitkomst(GOED.replace("4.2.6. Controle op de uitvoering der werken\nControle op de uitvoering van de technieken.",
+                          "4.2.6. Werfopvolging\nDe Architect is niet belast met de controle op de uitvoering."))
+check("B3: een uitgesloten controle is geen controle", f["B3"].uitkomst == V.FAALT)
+f = uitkomst(GOED.replace("Bijstand bij de keuze van aannemer(s) en de aanbesteding.",
+                          "4.2.5. Bijstand bij de keuze van de aannemer\nDeze taak valt buiten de opdracht van de Architect."))
+check("B4: een uitsluiting op de regel onder de kop faalt", f["B4"].uitkomst == V.FAALT)
+f = uitkomst(zonder(GOED, "4.3. Het nazicht van de vorderingsstaten en de facturen.",
+                    "4.4. De bijstand bij de oplevering.") +
+             "De kosten van de opmeting zijn niet inbegrepen. De aansprakelijkheid is beperkt tot het bedrag van de polis.\n")
+check("B2: een uitsluiting over kosten maakt een ontbrekende taak niet oranje", f["B2"].uitkomst == V.FAALT)
+check("een beperkte aansprakelijkheid is geen beperkte opdracht",
+      not M.beperkte_opdracht("De aansprakelijkheid van de Architect is beperkt tot het bedrag van de polis."))
+f = uitkomst(GOED + "De Architect waakt erover dat er geen budgetoverschrijding ontstaat.\n")
+check("B5: geen budgetoverschrijding is geen uitsluiting van het budget", f["B5"].uitkomst == V.SLAAGT)
+for datum in ("01/01/2026", "1-1-2026", "01.01.2026"):
+    f = uitkomst(GOED.replace("op 1 januari 2026", f"op {datum}"))
+    check(f"B1: een datum als {datum} telt", f["B1"].uitkomst == V.SLAAGT)
+
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"
            "4. OPDRACHT\nDe opdracht is te beperken tot de studiefase.\nHet verzamelen van de gegevens die nodig zijn.\n"

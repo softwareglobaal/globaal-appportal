@@ -27,11 +27,16 @@ B = V.Bevinding
 ELDERS = ("C4",)  # dossierregel: geef dit mee als `verslag.maak(..., elders=ELDERS)`
 
 WIJZIGING_ZEKER = r"programmawijziging|wijziging van het programma|meerwerk|bijkomende werken|extra werken|wijziging aan het bouwproject"
-WIJZIGING_MISSCHIEN = r"\bwijziging|\bgewijzigd|aanpassing van het ontwerp"
+WIJZIGING_MISSCHIEN = (r"\bwijzig|\bgewijzigd|\baanpass|\bbijkomend|\buitbrei|\bom te bouwen|\bombouw|"
+                       r"\bextra (ruimte|kamer|badkamer|slaapkamer|verdieping|bijgebouw|carport|garage|dakkapel|raam|ramen)")
+GEEN_MEERWERK = (r"\b(geen|niet)\b[^.\n]{0,20}(programmawijziging|meerwerk|bijkomende werken|extra werken)|"
+                 r"(programmawijziging|meerwerk|bijkomende werken|extra werken)\w*\s*:\s*(geen|nihil|n\.?v\.?t)")
+ONTKENNING = r"\b(geen|niet|nog niet)\b"
 ADDENDUM = r"addendum|bijvoegsel"
 FINANCIEEL = r"financi|meerprijs|meerkost|kostprijs|budget|euro|€"
-OVERSCHRIJDING = r"overschrijd|boven (de |het )?(begroting|budget)|duurder dan (de |het )?(begroting|budget|raming)|meerkost"
-MELDING = r"opdrachtgever (is|werd|wordt) (verwittigd|ingelicht|op de hoogte)|melding aan de opdrachtgever|verwittigd"
+OVERSCHRIJDING = (r"overschrijd|boven (de |het )?(begroting|budget|raming)|duurder dan (de |het )?(begroting|budget|raming)|"
+                  r"meerkost|\bstijg\w* met|ten opzichte van (de |het )?(raming|begroting|budget)")
+MELDING = r"(opdrachtgever|bouwheer) (is|werd|wordt) (schriftelijk )?(verwittigd|ingelicht|op de hoogte)|melding aan de (opdrachtgever|bouwheer)"
 INSTRUCTIE = r"\baannemer\b[^.]{0,80}\b(moet|dient|zal|gelieve)\b|\bgelieve\b|\bte herstellen\b|\bop te volgen\b"
 CONFRATER = r"(andere|vorige|vroegere) (architect|ontwerper|bureau)|confrater|architect van (de )?buren"
 
@@ -44,22 +49,28 @@ class Werfverslag:
     eerste: bool = False
 
 
+def _zinnen(tekst):
+    return [z.strip() for z in re.split(r"(?<=[.!?])\s+|\n", tekst) if z.strip()]
+
+
 def _zin(tekst, patroon):
     """De zin waarin het patroon staat, als plaats in het verslag (ingekort)."""
-    for zin in re.split(r"(?<=[.!?])\s+|\n", tekst):
+    for zin in _zinnen(tekst):
         if re.search(patroon, zin, re.I):
-            return zin.strip()[:120]
+            return zin[:120]
     return ""
 
 
 def d1_wijziging(v):
-    t = v.tekst
+    t = re.sub(GEEN_MEERWERK, " ", v.tekst, flags=re.I)  # "Meerwerken: geen." of "geen meerwerk" is geen meerwerk
     zeker = re.search(WIJZIGING_ZEKER, t, re.I)
     if not zeker and not re.search(WIJZIGING_MISSCHIEN, t, re.I):
         return B("D1", V.SLAAGT, "", "", "geen wijziging van het programma in dit verslag")
     patroon = WIJZIGING_ZEKER if zeker else WIJZIGING_MISSCHIEN
     plaats = _zin(t, patroon)
-    if re.search(ADDENDUM, t, re.I) and re.search(FINANCIEEL, _zin(t, ADDENDUM) + " " + plaats, re.I):
+    # Een addendum telt alleen in een zin die het niet ontkent: "er wordt geen addendum opgemaakt" is er geen.
+    addendum = [z for z in _zinnen(t) if re.search(ADDENDUM, z, re.I) and not re.search(ONTKENNING, z, re.I)]
+    if addendum and re.search(FINANCIEEL, " ".join(addendum) + " " + plaats, re.I):
         return B("D1", V.SLAAGT, plaats)
     voorstel = ("Voeg toe: \"Deze wijziging wordt vastgelegd in een addendum bij de architectuurovereenkomst, met de "
                 "financiele weerslag op het budget en het ereloon, ondertekend voor de uitvoering.\"")

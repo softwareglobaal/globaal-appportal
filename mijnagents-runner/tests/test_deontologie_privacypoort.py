@@ -53,7 +53,10 @@ uitvoer = io.StringIO()
 logboek = io.StringIO()
 logging.getLogger().addHandler(logging.StreamHandler(logboek))
 logging.getLogger().setLevel(logging.DEBUG)
-os.environ.pop(P.VERBODEN_ENV, None)
+LEGE_LIJST = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
+LEGE_LIJST.write("# bewust leeg voor deze test\n")
+LEGE_LIJST.close()
+os.environ[P.VERBODEN_ENV] = LEGE_LIJST.name
 
 with contextlib.redirect_stdout(uitvoer), contextlib.redirect_stderr(uitvoer):
     # 1. Wat geen publiek stuk is, gaat niet door
@@ -92,6 +95,16 @@ with contextlib.redirect_stdout(uitvoer), contextlib.redirect_stderr(uitvoer):
         except P.PoortGesloten as e:
             fout5 = e
         os.environ.pop(P.VERBODEN_ENV, None)
+        v8 = Verzender()
+        try:
+            P.stuur([P.Stuk(PUBLIEKE_TEKST, "PUBLIEK")], "codex", v8, verboden=[])
+            fout8 = None
+        except P.PoortGesloten as e:
+            fout8 = e
+        os.environ[P.VERBODEN_ENV] = str(lijst)
+        v9 = Verzender()
+        d9 = P.stuur([P.Stuk(f"Publiek, maar met {KANARIE}.", "PUBLIEK")], "codex", v9, verboden=["iets anders"])
+        os.environ[P.VERBODEN_ENV] = LEGE_LIJST.name
     # 4. Alleen codex en gemini
     v6 = Verzender()
     try:
@@ -115,14 +128,17 @@ check("ook niet als de naam over twee regels gesplitst staat", d3.doorgelaten ==
 check("de lijst buiten git werkt via DEONTOLOGIE_VERBODEN", d4.doorgelaten == 1 and d4.tekst == PUBLIEKE_TEKST
       and d4.tegengehouden == {P.REDEN_VERBODEN: 1})
 check("een gezette maar onleesbare lijst houdt de poort dicht", fout5 is not None and v5.gestuurd == [])
+check("zonder DEONTOLOGIE_VERBODEN blijft de poort dicht, ook met een eigen lege lijst",
+      fout8 is not None and v8.gestuurd == [])
+check("een eigen lijst vult de lijst buiten git aan en vervangt ze niet", d9.doorgelaten == 0 and v9.gestuurd == [])
 check("een andere ontvanger dan codex of gemini krijgt niets", fout6 is not None and v6.gestuurd == [])
 check("niets door: de verzender wordt niet aangeroepen", d7.doorgelaten == 0 and v7.gestuurd == [])
 
 # De kanarie duikt nergens op
-alles_gestuurd = v.gestuurd + v2.gestuurd + v3.gestuurd + v4.gestuurd + v5.gestuurd + v6.gestuurd + v7.gestuurd
+alles_gestuurd = v.gestuurd + v2.gestuurd + v3.gestuurd + v4.gestuurd + v5.gestuurd + v6.gestuurd + v7.gestuurd + v8.gestuurd + v9.gestuurd
 check("de kanarie staat in niets wat naar Codex of Gemini ging", zonder_kanarie(alles_gestuurd))
-check("de kanarie staat in geen enkele doorgang", zonder_kanarie(d1, d2, d3, d4, d7))
-check("de kanarie staat in geen enkele foutmelding", zonder_kanarie(str(fout5), str(fout6)))
+check("de kanarie staat in geen enkele doorgang", zonder_kanarie(d1, d2, d3, d4, d7, d9))
+check("de kanarie staat in geen enkele foutmelding", zonder_kanarie(str(fout5), str(fout6), str(fout8)))
 check("de kanarie staat niet in wat geprint of gelogd werd", zonder_kanarie(uitvoer.getvalue(), logboek.getvalue()))
 dit_bestand = Path(__file__).resolve()
 andere = [p for p in (R.HIER.parent).rglob("*") if p.is_file() and "deontologie" in p.name.lower() + str(p.parent)
@@ -160,6 +176,20 @@ for naam, tekst in (("zonder accent", "Over Jose Muller."), ("in hoofdletters", 
     vx = Verzender()
     dx = P.stuur([P.Stuk(tekst, "PUBLIEK")], "codex", vx, verboden=["José Müller"])
     check(f"verboden term {naam} gaat niet door", dx.doorgelaten == 0 and not vx.gestuurd)
+for naam, tekst in (("zonder streepje", "Over Brabazon Kerckhove."), ("met een ander streepje", "Over Brabazon\u2011Kerckhove."),
+                    ("met een en-streepje", "Over Brabazon\u2013Kerckhove."),
+                    ("afgebroken over twee regels", "Over Brabazon-\nKerckhove.")):
+    vx = Verzender()
+    dx = P.stuur([P.Stuk(tekst, "PUBLIEK")], "codex", vx, verboden=["Brabazon-Kerckhove"])
+    check(f"verboden term {naam} gaat niet door", dx.doorgelaten == 0 and not vx.gestuurd)
+vx = Verzender()
+dx = P.stuur([P.Stuk("Over D\u2019Hondt.", "PUBLIEK")], "codex", vx, verboden=["D'Hondt"])
+check("een gekrulde apostrof omzeilt de lijst niet", dx.doorgelaten == 0 and not vx.gestuurd)
+vx = Verzender()
+dx = P.stuur([P.Stuk("Over J\u043es\u00e9 M\u00fcller.", "PUBLIEK")], "codex", vx, verboden=["José Müller"])
+check("een Cyrillische letter in een naam houdt het stuk tegen",
+      dx.doorgelaten == 0 and dx.tegengehouden == {P.REDEN_SCHRIFT: 1} and not vx.gestuurd)
+os.unlink(LEGE_LIJST.name)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
