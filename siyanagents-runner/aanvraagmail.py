@@ -211,7 +211,8 @@ def als_html(a: dict, deal_url: str = "") -> str:
 </body></html>"""
 
 
-def verstuur(a: dict, deal_id=None, *, instellingen: dict, droog: bool = False):
+def verstuur(a: dict, deal_id=None, *, instellingen: dict, droog: bool = False,
+             voorvoegsel: str = ""):
     """Stuurt de meldingsmail. `instellingen` bevat de SMTP-gegevens.
 
     Een nieuw bericht komt in de mailbox binnen als ongelezen; koppel_mails in
@@ -220,7 +221,7 @@ def verstuur(a: dict, deal_id=None, *, instellingen: dict, droog: bool = False):
     url = dealadres(a.get("bron", ""), deal_id)
     f = firma(a.get("bron", ""))
     bericht = EmailMessage()
-    bericht["Subject"] = onderwerp(a)
+    bericht["Subject"] = voorvoegsel + onderwerp(a)
     van = instellingen["van"]
     bericht["From"] = van if "<" in van else f"Website {f['naam']} <{van}>"
     bericht["To"] = instellingen["naar"]

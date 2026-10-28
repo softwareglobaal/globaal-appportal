@@ -38,9 +38,18 @@ from datetime import datetime, timezone
 import aanvraagmail
 
 DB = os.path.expanduser(os.environ.get("AANVRAAG_DB_HOST", "~/appportal/aanvraag-data/aanvragen.db"))
-MAX_POGINGEN = 5
-SYNC_GEDULD = 600          # seconden wachten op de Google->Pipedrive-sync
-SYNC_INTERVAL = 10
+# Na 5 pogingen gaf dit script vroeger op, zonder mail. Zo raakten tussen 30 sep
+# en 19 okt 2026 vijf aanvragen nooit bij sales: de Google->Pipedrive-sync liep
+# soms tot 15 uur achter. Nu: wachten op de sync zonder het proces te blokkeren,
+# daarna de persoon zelf aanmaken, en een noodmail zodra een aanvraag te lang
+# blijft liggen. Een aanvraag mag nooit meer stil verdwijnen.
+MAX_POGINGEN = 30          # echte fouten (bv. 429), een per minuut
+SYNC_GEDULD = 900          # seconden wachten op de sync, daarna zelf aanmaken
+NOOD_NA = 1800             # seconden: niet klaar na een half uur = noodmail naar sales
+
+
+class WachtOpSync(Exception):
+    """De persoon staat nog niet in Pipedrive; telt niet als mislukte poging."""
 
 
 def _laad_env(pad):
@@ -292,7 +301,7 @@ KOPPEL_GEDULD = 2 * 3600
 def migratie(conn):
     """Voegt de kolommen toe die de mailkoppeling bijhoudt. Mag altijd draaien."""
     bestaand = {r[1] for r in conn.execute("PRAGMA table_info(aanvraag)")}
-    for kolom in ("mail_verstuurd", "mail_onderwerp", "mail_gekoppeld"):
+    for kolom in ("mail_verstuurd", "mail_onderwerp", "mail_gekoppeld", "nood_mail"):
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE aanvraag ADD COLUMN {kolom} TEXT DEFAULT ''")
     conn.commit()
@@ -487,18 +496,19 @@ def verwerk(conn, rij, droog=False):
             conn.execute("UPDATE aanvraag SET google_id=? WHERE id=?", (google_id, rij["id"]))
             conn.commit()
 
-        # 2. wachten tot de sync hem in Pipedrive heeft gezet
+        # 2. Eén keer per ronde kijken of de sync hem in Pipedrive heeft gezet.
+        # Niet blijven wachten: dat hield vroeger tien minuten de hele rij op.
         if not persoon:
-            einde = time.time() + SYNC_GEDULD
-            while time.time() < einde:
-                persoon = zoek_persoon(a.get("email"))
-                if persoon:
-                    break
-                time.sleep(SYNC_INTERVAL)
+            persoon = zoek_persoon(a.get("email"))
             if not persoon:
-                raise TimeoutError(
-                    f"persoon staat na {SYNC_GEDULD // 60} minuten nog niet in Pipedrive "
-                    "(sync van Google Contacts loopt achter of ligt stil)")
+                if leeftijd(rij) < SYNC_GEDULD:
+                    raise WachtOpSync()
+                # De sync is te laat: dan maken wij de persoon zelf aan, met
+                # dezelfde naamvorm als het Google-contact. Een dubbele persoon
+                # is achteraf samen te voegen; een verloren aanvraag niet.
+                persoon = persoon_aanmaken(
+                    dict(a, voornaam=f"PA {a['voornaam']}".strip()), None)
+                print(f"  #{rij['id']} sync te laat, persoon {persoon} zelf aangemaakt")
             conn.execute("UPDATE aanvraag SET persoon_id=? WHERE id=?", (persoon, rij["id"]))
             conn.commit()
 
@@ -550,6 +560,40 @@ def verwerk(conn, rij, droog=False):
           f"({titel}) in pipeline {pipeline}, persoon {persoon}")
 
 
+def leeftijd(rij):
+    """Seconden sinds de aanvraag binnenkwam."""
+    return (datetime.now(timezone.utc) - datetime.fromisoformat(rij["ontvangen"])).total_seconds()
+
+
+def noodmails(conn, droog=False):
+    """Mailt sales elke aanvraag die na een half uur nog geen deal heeft.
+
+    Los van de oorzaak (sync, Pipedrive plat, 429, een bug): sales krijgt de
+    volledige aanvraag in de mailbox. Komt de deal later toch, dan volgt de
+    gewone meldingsmail met de dealknop.
+    """
+    rijen = conn.execute(
+        "SELECT * FROM aanvraag WHERE status IN ('wacht','vast') AND nood_mail='' "
+        "AND ontvangen >= ? ORDER BY id", (MAIL_VANAF,)).fetchall()
+    for rij in rijen:
+        if leeftijd(rij) < NOOD_NA:
+            continue
+        a = json.loads(rij["payload"])
+        a.setdefault("bron", rij["bron"])
+        instellingen = mailinstellingen(firma_van(rij["bron"]))
+        if droog or not instellingen:
+            print(f"  #{rij['id']} {'zou een noodmail krijgen' if droog else 'GEEN SMTP voor noodmail'}")
+            continue
+        try:
+            aanvraagmail.verstuur(a, None, instellingen=instellingen,
+                                  voorvoegsel="LET OP, nog niet in Pipedrive: ")
+            conn.execute("UPDATE aanvraag SET nood_mail=? WHERE id=?", (nu(), rij["id"]))
+            conn.commit()
+            print(f"  #{rij['id']} NOODMAIL naar {instellingen['naar']}: {rij['laatste_fout'][:80]}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  #{rij['id']} noodmail mislukt: {type(e).__name__}: {e}"[:200])
+
+
 def meld_vastgelopen(rij, fout):
     """Een aanvraag die het niet redt hoort op het board, niet in een logbestand."""
     if not AGENTS_TOKEN:
@@ -596,6 +640,7 @@ def main(argv):
         "SELECT * FROM aanvraag WHERE status='wacht' AND pogingen < ? ORDER BY id", (MAX_POGINGEN,)).fetchall()
     if not rijen:
         stuur_mails(conn, droog)
+        noodmails(conn, droog)
         conn.close()
         return 0
 
@@ -603,6 +648,8 @@ def main(argv):
     for rij in rijen:
         try:
             verwerk(conn, rij, droog)
+        except WachtOpSync:
+            print(f"  #{rij['id']} wacht op de sync ({int(leeftijd(rij) // 60)} min)")
         except Exception as e:  # noqa: BLE001
             fout = f"{type(e).__name__}: {e}"[:400]
             pogingen = rij["pogingen"] + 1
@@ -617,6 +664,7 @@ def main(argv):
 
     # Pas nu de meldingsmails: de deals van deze ronde bestaan intussen.
     stuur_mails(conn, droog)
+    noodmails(conn, droog)
     conn.close()
     return 0
 
