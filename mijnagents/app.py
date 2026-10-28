@@ -1947,6 +1947,31 @@ def _bron_dag_cellen(e):
     return {k: {"stand": str(v or "onbekend"), "kleur": bron_kleur(v)} for k, v in standen.items()}
 
 
+def _bron_uit_tekst(tekst):
+    """De cellen van een dag uit het dagbestand zelf (klaarzet vaststelling:<dag>), voor een dag die nog in geen
+    weekoverzicht staat (de lopende week). Leest de regels onder "Over deze vaststelling" (dagbundelaar.py, over)."""
+    deel = tekst.split("## Over deze vaststelling", 1)
+    if len(deel) != 2:
+        return None
+    over = {}
+    for regel in deel[1].splitlines():
+        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon): (.+)$", regel.strip())
+        if m:
+            over[m.group(1).lower()] = m.group(2).strip()
+    if not over:
+        return None
+    if over.get("mail", "").startswith("niet gelezen"):
+        over["mail"] = "niet gelezen"
+    elif "mail" in over:
+        over["mail"] = "onvolledig" if "verzonden (uniek over alle postvakken; onvolledig)" in deel[0] else "volledig"
+    if over.get("locatie", "").startswith("niet gelezen"):
+        over["locatie"] = "niet gelezen"
+    e = {"standen": {k: over.get(k) for k in ("agenda", "zoom", "locatie")},
+         "mail": None if over.get("mail") in (None, "niet gelezen") else {"onvolledig": over["mail"] == "onvolledig"},
+         "whatsapp": {"stand": over.get("whatsapp")}, "telefoon": {"stand": over.get("telefoon")}}
+    return _bron_dag_cellen(e)
+
+
 @app.route("/bronnen")
 def bronnen_pagina():
     if not mag_beslissen():
@@ -1983,6 +2008,14 @@ def bronnen_pagina():
         for e in (d.get("dagen") if isinstance(d, dict) and isinstance(d.get("dagen"), list) else []):
             if isinstance(e, dict) and e.get("vastgesteld") is True:
                 per_dag[str(e.get("dag"))] = _bron_dag_cellen(e)
+    # Een dag van de lopende week staat nog in geen weekoverzicht: dan uit het dagbestand op het bord.
+    for x in dagen:
+        if x.isoformat() not in per_dag:
+            item = conn.execute("SELECT inhoud FROM klaarzet WHERE uniek=? AND soort='dagvaststelling'",
+                                ("vaststelling:" + x.isoformat(),)).fetchone()
+            cellen = _bron_uit_tekst(item["inhoud"] or "") if item else None
+            if cellen:
+                per_dag[x.isoformat()] = cellen
     rijen = [{"dag": x.isoformat(), "label": f"{WEEKDAGEN[x.weekday()]} {x:%d-%m}", "cellen": per_dag.get(x.isoformat())}
              for x in dagen]
     rood = [w for w in wachten if w["kleur"] == "rood"]

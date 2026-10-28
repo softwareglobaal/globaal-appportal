@@ -8,7 +8,8 @@ Deze test legt vast:
 - B03: een open nood maakt de wacht rood en staat in de rij;
 - B04: een vastgestelde dag kleurt per bron: volledig groen, voorlopig oranje, "niet aangesloten" rood;
 - B05: een dag zonder telling zegt "niet vastgesteld"; een weekoverzicht dat geen json is, laat de pagina niet vallen;
-- B06: geen gedachtestreepje; het bord linkt naar de pagina.
+- B06: geen gedachtestreepje; het bord linkt naar de pagina;
+- B07: een dag van de lopende week (nog in geen weekoverzicht) leest de standen uit het dagbestand.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -124,6 +125,26 @@ def b06_stijl():
     check("B06 het bord linkt naar bronnen", 'href="/bronnen"' in r.get_data(as_text=True))
 
 
+def b07_lopende_week():
+    """Een dag die nog in geen weekoverzicht staat, leest de standen uit het dagbestand op het bord."""
+    verse_db("b07")
+    d = gisteren()
+    tekst = ("# Dag x vastgesteld\n\n## Communicatie\n\n- mail: 3 binnen, 1 verzonden (uniek over alle postvakken)\n\n"
+             "## Over deze vaststelling\n\n- versie 1, gemaakt 28-10-2026 08:03\n- agenda: volledig\n- Zoom: voorlopig\n"
+             "- locatie: afgesloten\n- mail: alleen de mappen die de mailwachten lezen\n"
+             "- WhatsApp: stil sinds 28-10 07:17\n- telefoon: aangesloten\n")
+    C.post("/api/klaarzet", headers=K, json={"items": [{
+        "van": "dagbundelaar", "voor": "mehdi", "soort": "dagvaststelling", "sleutel": d.isoformat(), "titel": "Dag",
+        "inhoud": tekst, "uniek": f"vaststelling:{d.isoformat()}"}]})
+    _, html = pagina()
+    r = rij(html, f"{A.WEEKDAGEN[d.weekday()]} {d:%d-%m}")
+    cellen = re.findall(r'stip (\w+)"></span>([^<]*)', r)
+    check("B07 lopende week uit het dagbestand", cellen == [("groen", "volledig"), ("groen", "afgesloten"),
+                                                           ("oranje", "voorlopig"), ("groen", "volledig"),
+                                                           ("rood", "stil sinds 28-10 07:17"),
+                                                           ("groen", "aangesloten")], cellen)
+
+
 if __name__ == "__main__":
     b01_alleen_beheer()
     b02_hartslag()
@@ -131,5 +152,6 @@ if __name__ == "__main__":
     b04_dagkleuren()
     b05_geen_telling()
     b06_stijl()
+    b07_lopende_week()
     print(f"{fout} fout")
     sys.exit(1 if fout else 0)
