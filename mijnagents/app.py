@@ -1909,6 +1909,87 @@ def week_pagina(week):
     )
 
 
+# --- bronnen: per bron van de Dagbundelaar wat werkte en wat niet (Mehdi, 28-10-2026: "een dashboard om te zien wat
+#     gewerkt heeft en wat niet, zodat we een per een kunnen oplossen"). Leest alleen wat er al is: de hartslag en de
+#     noden van de wachten, en de dagtellingen uit de weekoverzichten. Geen nieuwe opslag, geen namen.
+BRON_WACHTEN = (
+    ("agenda-wacht", "Agenda", "VM"), ("locatie-wacht", "Locatie auto", "VM"), ("zoom-wacht", "Zoom", "VM"),
+    ("fathom-wacht", "Fathom", "VM"), ("plaud-wacht", "Plaud", "VM"), ("mail-mch", "Mail mch", "VM"),
+    ("mail-info-harc", "Mail info H-Architects", "VM"), ("mail-hinv", "Mail H-Invest", "VM"),
+    ("mail-melo", "Mail Melodie", "VM"), ("mail-prive", "Mail hotmail", "VM"),
+    ("whatsapp-wacht", "WhatsApp", "laptop"), ("belwacht", "Telefoon iPhone", "laptop"),
+    ("icloud-wacht", "Foto's (alleen tijd en plaats)", "laptop"), ("dagbundelaar", "De Dagbundelaar zelf", "VM"),
+)
+BRON_DAGEN = 14
+BRON_GROEN = ("volledig", "afgesloten", "aangesloten")
+BRON_ORANJE = ("voorlopig", "onvolledig")
+
+
+def bron_kleur(stand):
+    """Groen, oranje of rood voor een stand uit de dagtelling; een ontbrekende stand is nooit groen."""
+    if not isinstance(stand, str) or not stand:
+        return "rood"
+    return "groen" if stand in BRON_GROEN else "oranje" if stand in BRON_ORANJE else "rood"
+
+
+def _bron_dag_cellen(e):
+    """De cellen van één dag uit een dagtelling (weekoverzicht.dag_samenvatting)."""
+    st = e.get("standen") if isinstance(e.get("standen"), dict) else {}
+    mail = e.get("mail")
+    if isinstance(mail, dict):
+        mailstand = "onvolledig" if mail.get("onvolledig") else "volledig"
+    else:
+        mailstand = "niet gelezen"
+    wa = e.get("whatsapp") if isinstance(e.get("whatsapp"), dict) else {}
+    tel = e.get("telefoon") if isinstance(e.get("telefoon"), dict) else {}
+    standen = {"agenda": st.get("agenda"), "locatie": st.get("locatie"), "zoom": st.get("zoom"), "mail": mailstand,
+               "whatsapp": wa.get("stand"), "telefoon": tel.get("stand")}
+    return {k: {"stand": str(v or "onbekend"), "kleur": bron_kleur(v)} for k, v in standen.items()}
+
+
+@app.route("/bronnen")
+def bronnen_pagina():
+    if not mag_beslissen():
+        abort(403)
+    conn = db()
+    st = {r["naam"]: r for r in conn.execute("SELECT * FROM status").fetchall()}
+    agents = {r["naam"]: r for r in conn.execute("SELECT * FROM agent").fetchall()}
+    nood = {}
+    for r in conn.execute("SELECT naam, tekst FROM nood WHERE open=1 ORDER BY id").fetchall():
+        nood.setdefault(r["naam"], []).append(r["tekst"])
+    wachten = []
+    for naam, label, waar in BRON_WACHTEN:
+        s, a = st.get(naam), agents.get(naam)
+        if not s:
+            toestand, leeftijd = "onbekend", None
+        else:
+            leeftijd = leeftijd_min(s["ts"])
+            toestand = toestand_met_cadans(naam, a["cadans"] if a else "", s["status"], leeftijd)
+        kleur = "rood" if toestand in ("fout", "stil", "onbekend") or nood.get(naam) else "groen"
+        wachten.append({"naam": naam, "label": label, "waar": waar, "toestand": STATUS_LABEL.get(toestand, toestand),
+                        "leeftijd": None if leeftijd is None else int(leeftijd), "nood": nood.get(naam, []),
+                        "kleur": kleur, "detail": (s["detail"] if s else "") or ""})
+    # De dagtellingen staan in de weekoverzichten; drie weken dekken altijd veertien dagen.
+    vandaag = datetime.now(BRUSSEL).date()
+    dagen = [vandaag - timedelta(days=i) for i in range(1, BRON_DAGEN + 1)]
+    per_dag = {}
+    for wk in {week_naam(d) for d in dagen}:
+        item = conn.execute("SELECT inhoud FROM klaarzet WHERE uniek=? AND soort='weekoverzicht'",
+                            ("weekoverzicht:" + wk,)).fetchone()
+        try:
+            d = json.loads(item["inhoud"] or "", parse_constant=lambda _c: None) if item else {}
+        except (ValueError, RecursionError):
+            d = {}
+        for e in (d.get("dagen") if isinstance(d, dict) and isinstance(d.get("dagen"), list) else []):
+            if isinstance(e, dict) and e.get("vastgesteld") is True:
+                per_dag[str(e.get("dag"))] = _bron_dag_cellen(e)
+    rijen = [{"dag": x.isoformat(), "label": f"{WEEKDAGEN[x.weekday()]} {x:%d-%m}", "cellen": per_dag.get(x.isoformat())}
+             for x in dagen]
+    rood = [w for w in wachten if w["kleur"] == "rood"]
+    return render_template("bronnen.html", app_naam=APP_NAAM, wachten=wachten, rijen=rijen, rood=rood,
+                           kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon"))
+
+
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
 @app.route("/organogram")
 def organogram():
