@@ -82,7 +82,7 @@ LABEL = {"meetlijn": "meetlijn", "persoonsgegevens": "persoonsgegevens", "eenhei
          "toestanden": "toestanden B, V en N", "bladnummers": "dubbele bladcode", "dxf_maten": "maten DXF",
          "dxf_maatlabels": "maatlabels DXF"}
 VOORSTEL = {
-    "meetlijn": "schaalbalk laten volgen met de schaal van het blad (sjabloonherstel in de TODO van De Tekenaar)",
+    "meetlijn": "een meetlijn met labels 0 en N m zetten die past bij de schaal van het blad",
     "eenheid": "de eenheid (maten in centimeter) op het blad zetten",
     "schaal": "een normschaal vermelden (1/50, 1/100, 1/200 ...)",
     "bestandsnaam": "de naam volgens de loketcodering zetten voor het indienen",
@@ -104,9 +104,14 @@ uitbreiding woning appartement appartementen gebouw grondplan grondplannen situa
 detail details constructie visualisatie wadi regenwater riolering afvoer put kap kapverdieping mezzanine foto fotos
 foto's bestaand bestaande nieuw nieuwe vergund vergunde toestand en met van de het
 """.split()) | set("abcdefghijklmnopqrstuvwxyz")     # een losse letter (toestand, gevelletter) noemt niemand
-# Een fout die uit het sjabloon komt en op bijna elk blad staat: in de titel van het signaal gaan andere fouten voor
-# (ontwerplezing Codex, weekronde 19-10-2026). Per blad blijft ze zichtbaar in het werkverslag.
-SJABLOONFOUT = {"persoonsgegevens"}
+# Fouten die bewezen uit het sjabloon komen, per soort de reden zoals normcontrole.py ze schrijft: alleen het
+# rijksregisternummer op het titelblok, en de vaste meetlijn die bij een andere normschaal hoort (archiefcontrole
+# oktober 2026). Ze geven een keer per project een signaal, daarna niet meer: Mehdi kent ze, het herstel staat in de
+# TODO van de brug. In het werkverslag staan ze per project als een regel, tot het sjabloon hersteld is (doorlichting
+# 28-10-2026, K1, X2). Een andere reden van dezelfde soort (een naam van de bouwheer, geen meetlijn) blijft altijd een
+# gewone fout (Codex, bouwpunt 1).
+SJABLOONFOUT = {"persoonsgegevens": re.compile(r"rijksregisternummer"),
+                "meetlijn": re.compile(r".*; de meetlijn hoort bij 1/\d+.*")}
 
 
 def nu_utc():
@@ -152,6 +157,7 @@ def lees_stand(pad=None):
         raise RuntimeError("stand onleesbaar: onverwachte vorm")
     st.setdefault("te_melden", [])
     st.setdefault("geen_toegang", {})
+    st.setdefault("sjabloon_gemeld", {})
     return st
 
 
@@ -565,6 +571,30 @@ def beoordeel(nc, pdf, pad):
             "fout_soorten": list(fout_reden), "fout_reden": fout_reden}
 
 
+def uit_sjabloon(soort, reden):
+    """Komt deze fout bewezen uit het sjabloon? De hele reden moet passen, niet een stuk ervan."""
+    patroon = SJABLOONFOUT.get(soort)
+    return bool(patroon and patroon.fullmatch(reden or ""))
+
+
+def eigen_fouten(u, gemeld=()):
+    """De fouten van een blad die een signaal geven. Een sjabloonfout alleen als ze voor dit project nog niet gemeld
+    is (gemeld: de soorten die Mehdi voor dit project al kreeg). De reden bewijst niet waar op het blad de fout staat;
+    daarom krijgt Mehdi ze een keer per project, en niet nooit (Codex, bouwpunt 1 ronde 2)."""
+    return {k: v for k, v in (u.get("fout_reden") or {}).items() if not (uit_sjabloon(k, v) and k in gemeld)}
+
+
+def sjabloon_fouten(u):
+    return [k for k, v in (u.get("fout_reden") or {}).items() if uit_sjabloon(k, v)]
+
+
+def oordeel_van(u):
+    """Het oordeel voor het verslag: SJABLOON als elke FOUT van het blad uit het sjabloon komt."""
+    if u.get("oordeel") == "FOUT" and u.get("fout_reden") and not eigen_fouten(u, SJABLOONFOUT):
+        return "SJABLOON"
+    return u.get("oordeel")
+
+
 def onbekend(reden, niet_gecontroleerd=False):
     """Een plan dat niet (volledig) te controleren was. niet_gecontroleerd: te groot of onleesbaar; dat gaat ook naar
     het signaal, want Mehdi moet het zelf bekijken (Codex DT07)."""
@@ -594,10 +624,11 @@ def set_bevindingen(nc, st, meldingen):
     return uit
 
 
-def signaal(meldingen, sets, wk, commit):
+def signaal(meldingen, sets, wk, commit, gemeld=None):
     """Een klaarzet-item voor Mehdi (soort signaal) als er een bruikbare bevinding is: een FOUT op een nieuw blad of in
     de set van zijn map. Anders None. Gebundeld per project en per soort fout, met hoogstens drie voorbeelden; de lijst
-    per blad staat in het werkverslag. Een fout uit het sjabloon (op bijna elk blad) komt in de titel na de andere.
+    per blad staat in het werkverslag. Een fout uit het sjabloon telt alleen de eerste keer per project mee (gemeld:
+    {project: [soorten]} die Mehdi al kreeg); daarna staat ze alleen in het werkverslag.
     Het uniek draagt de week en een vingerafdruk van de gemelde plannen, geen aantal (N10): dezelfde melding twee keer
     klaarzetten (een herhaalde ronde) geeft geen tweede bericht; nieuwe bevindingen wel."""
     projecten, per_project = {}, {}
@@ -607,17 +638,21 @@ def signaal(meldingen, sets, wk, commit):
 
     for m in meldingen:
         nr = projectnummer(m["pad"])[0]
-        per_project[nr] = per_project.get(nr, 0) + 1
+        u = m["uitslag"]
+        # een blad met alleen al gemelde sjabloonfouten telt niet mee: het verandert het signaal niet (Codex)
+        if u.get("oordeel") != "FOUT" or eigen_fouten(u, (gemeld or {}).get(nr, ())) or not u.get("fout_reden"):
+            per_project[nr] = per_project.get(nr, 0) + 1
     for m in meldingen:
         u = m["uitslag"]
         if u.get("niet_gecontroleerd"):          # DT07: te groot of onleesbaar, Mehdi kijkt het zelf na
             p = project(projectnummer(m["pad"])[0])
             p["na_te_kijken"].append(f"{bladcode(os.path.basename(m['pad']))}: {u['onbekend'][0]}")
-        if not u.get("fout_reden"):
+        eigen = eigen_fouten(u, (gemeld or {}).get(projectnummer(m["pad"])[0], ()))
+        if not eigen:
             continue
         p = project(projectnummer(m["pad"])[0])
         p["met_fout"] += 1
-        for soort, reden in u["fout_reden"].items():
+        for soort, reden in eigen.items():
             f = p["fouten"].setdefault(soort, {"wat": LABEL.get(soort, soort), "bladen": 0, "voorbeeld": [], "reden": reden})
             f["bladen"] += 1
             if len(f["voorbeeld"]) < 3:
@@ -634,7 +669,7 @@ def signaal(meldingen, sets, wk, commit):
     for p in projecten.values():
         for k, f in p["fouten"].items():
             gewicht[k] = gewicht.get(k, 0) + max(1, f["bladen"])
-    soorten = sorted(gewicht, key=lambda k: (k in SJABLOONFOUT, -gewicht[k], k))
+    soorten = sorted(gewicht, key=lambda k: (-gewicht[k], k))
     nrs = sorted(projecten)
     wat = "Normfouten in" if soorten else "Na te kijken:"
     titel = f"{wat} nieuwe BA-plannen van {', '.join(nrs[:4])}{' en meer' if len(nrs) > 4 else ''}"
@@ -653,14 +688,17 @@ def signaal(meldingen, sets, wk, commit):
         p = projecten[n]
         uit.append({"project": n, "nieuwe_bladen": per_project.get(n, 0),
                     "met_fout": p["met_fout"],
-                    "fouten": sorted(p["fouten"].values(), key=lambda f: (f["wat"] in SJABLOONFOUT, -f["bladen"])),
+                    "fouten": sorted(p["fouten"].values(), key=lambda f: -f["bladen"]),
                     "set": p["set"], "na_te_kijken": p["na_te_kijken"][:10]})
     inhoud_ = {"projecten": uit,       # geen week of commit: dezelfde bevindingen geven dezelfde inhoud (DT22)
                "voorstel": ["Per project de bladen met een FOUT verbeteren in een kopie in de Teken-agent-map, "
                             "nooit in de projectmap; Mehdi zegt welk project eerst en geeft vrij."]
                + (["Wat na te kijken is (te groot of onleesbaar), bekijkt Mehdi zelf in het origineel."]
                   if any(p["na_te_kijken"] for p in projecten.values()) else [])
-               + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL],
+               + [f"{LABEL.get(s, s)}: {VOORSTEL[s]}" for s in soorten if s in VOORSTEL]
+               # altijd dezelfde zin: een blad met alleen sjabloonfouten verandert inhoud en uniek niet (Codex)
+               + ["Fouten uit het sjabloon (rijksregisternummer op het titelblok, vaste meetlijn) krijg je een keer "
+                  "per project; daarna staan ze alleen in het werkverslag, tot het sjabloon hersteld is."],
                "werkverslag": "de lijst per blad staat in het werkverslag van De Tekenaar op het bord"}
     # DT16: het bord kapt de inhoud af op 60.000 tekens; de laatste projecten gaan dan alleen in het werkverslag.
     weg = 0
@@ -672,8 +710,10 @@ def signaal(meldingen, sets, wk, commit):
     # met de redenen van de sets, zonder week en zonder commit: dezelfde melding nooit twee keer, een andere melding
     # altijd een eigen uniek (N10, DT14, DT32).
     vinger = hashlib.sha256(json.dumps(
-        {"plannen": sorted([m.get("hash") or m["id"], sorted((m["uitslag"].get("fout_reden") or {}).items()),
-                            bool(m["uitslag"].get("niet_gecontroleerd"))] for m in meldingen),
+        {"plannen": sorted([m.get("hash") or m["id"], sorted(eigen.items()), bool(m["uitslag"].get("niet_gecontroleerd"))]
+                           for m in meldingen
+                           for eigen in [eigen_fouten(m["uitslag"], (gemeld or {}).get(projectnummer(m["pad"])[0], ()))]
+                           if eigen or m["uitslag"].get("niet_gecontroleerd")),
          "titel": titel[:110], "inhoud": inhoud_}, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
     return {"voor": "mehdi", "soort": "signaal", "sleutel": wk, "uniek": f"tekenaar-normcontrole-{vinger}",
             "titel": titel[:110], "inhoud": inhoud_}
@@ -733,17 +773,22 @@ def werkverslag(meldingen, sets, blind, merk=""):
     kenmerk = f" (verslag {merk})" if merk else ""
     regels = []
     for nr, lijst in sorted(per_project.items()):
-        tekst = []
+        tekst, sjabloon = [], {}
         for m in lijst:
             u = m["uitslag"]
-            tekst.append(f"{u['oordeel']}  {blad_label(m['pad'])}")
-            tekst += [f"    FOUT {x}" for x in u["fout"]] + [f"    na te kijken: {x}" for x in u["onbekend"]] \
-                + [f"    let op: {x}" for x in u["let_op"]]
+            tekst.append(f"{oordeel_van(u)}  {blad_label(m['pad'])}")
+            tekst += [f"    FOUT {LABEL.get(k, k)}: {r}" for k, r in eigen_fouten(u, SJABLOONFOUT).items()] \
+                + [f"    na te kijken: {x}" for x in u["onbekend"]] + [f"    let op: {x}" for x in u["let_op"]]
+            for k in sjabloon_fouten(u):
+                sjabloon[k] = sjabloon.get(k, 0) + 1
         for map_, fout in sorted(sets.items()):
             if projectnummer(map_ + "/x.pdf")[0] == nr:
                 tekst += [f"set {labels[map_]}: FOUT {LABEL.get(k, k)}: {reden}" for k, reden in fout]
-        telling = ", ".join(f"{s} {sum(1 for m in lijst if m['uitslag']['oordeel'] == s)}"
-                            for s in ("FOUT", "ONBEKEND", "LET OP", "OK"))
+        if sjabloon:
+            tekst.append("sjabloon (bekend, wacht op het sjabloonherstel): "
+                         + ", ".join(f"{LABEL.get(k, k)} op {n} bladen" for k, n in sorted(sjabloon.items())))
+        telling = ", ".join(f"{s} {sum(1 for m in lijst if oordeel_van(m['uitslag']) == s)}"
+                            for s in ("FOUT", "SJABLOON", "ONBEKEND", "LET OP", "OK"))
         commits = ", ".join(sorted({m.get("commit") or "onbekend" for m in lijst}))
         # DT13: het bord kapt het detail af op 20.000 tekens; in stukken onder MAX_DETAIL, niets afknippen
         stukken, stuk = [], []
@@ -777,12 +822,24 @@ def bouw_melding(st, nc, wk, commit):
     projectmap (Codex DT22, DT26)."""
     meldingen = list(st["te_melden"])[:MAX_PER_MELDING]       # DT29: hoogstens zoveel plannen per melding
     sets = set_bevindingen(nc, st, meldingen)
-    item = signaal(meldingen, sets, wk, commit)
+    gemeld = st.get("sjabloon_gemeld") or {}
+    item = signaal(meldingen, sets, wk, commit, gemeld)
+    nu_gemeld = {}
     if item:
         item["van"] = NAAM
         item = ag.maskeer(item)
+        # de sjabloonfouten die met dit signaal voor het eerst naar Mehdi gaan; een project dat wegviel omdat het
+        # signaal te lang werd (DT16), is niet gemeld en krijgt zijn signaal bij een volgend blad (Codex ronde 3)
+        in_signaal = {p["project"] for p in item["inhoud"]["projecten"]}
+        for m in meldingen:
+            nr = projectnummer(m["pad"])[0]
+            if nr not in in_signaal:
+                continue
+            for k in sjabloon_fouten(m["uitslag"]):
+                if k not in gemeld.get(nr, ()):
+                    nu_gemeld[nr] = sorted(set(nu_gemeld.get(nr, [])) | {k})
     merk = hashlib.sha256(json.dumps(sorted(sleutel_van(m) for m in meldingen)).encode()).hexdigest()[:8]
-    return {"sleutels": [sleutel_van(m) for m in meldingen], "merk": merk, "item": item,
+    return {"sleutels": [sleutel_van(m) for m in meldingen], "merk": merk, "item": item, "sjabloon_gemeld": nu_gemeld,
             "regels": ag.maskeer(werkverslag(meldingen, sets, blinde_vlekken(st), merk)), "sets": len(sets)}
 
 
@@ -840,6 +897,9 @@ def meld(st, nc, wk, commit):
         signalen += 1 if st["uitgaand"].get("item") else 0
         sets += st["uitgaand"].get("sets", 0)
         st["te_melden"] = [m for m in st["te_melden"] if sleutel_van(m) not in klaar]
+        gemeld = st.setdefault("sjabloon_gemeld", {})
+        for nr, soorten in (st["uitgaand"].get("sjabloon_gemeld") or {}).items():
+            gemeld[nr] = sorted(set(gemeld.get(nr, [])) | set(soorten))
         st["uitgaand"] = None
         bewaar_stand(st)
     return signalen, sets
@@ -869,10 +929,12 @@ def werk(r, st, wk):
     if verwerkbaar(st):
         # DT07: de ronde is niet af; launchd start me morgen opnieuw en dan gaat de wachtrij verder.
         r.nood("Meer nieuwe plannen dan een ronde aankan; de rest volgt bij de volgende start", wie="claude-code")
-    tel = {s: sum(1 for m in meldingen if m["uitslag"]["oordeel"] == s) for s in ("FOUT", "ONBEKEND", "LET OP", "OK")}
+    tel = {s: sum(1 for m in meldingen if oordeel_van(m["uitslag"]) == s)
+           for s in ("FOUT", "SJABLOON", "ONBEKEND", "LET OP", "OK")}
     blind = blinde_vlekken(st)
     r.detail = (f"week {wk}: {len(meldingen)} nieuwe of gewijzigde BA-plannen gecontroleerd (FOUT {tel['FOUT']}, "
-                f"na te kijken {tel['ONBEKEND']}, let op {tel['LET OP']}, OK {tel['OK']}); {sets} sets met een fout; "
+                f"alleen sjabloonfouten {tel['SJABLOON']}, na te kijken {tel['ONBEKEND']}, let op {tel['LET OP']}, "
+                f"OK {tel['OK']}); {sets} sets met een fout; "
                 f"{'signaal voor Mehdi' if signalen else 'geen signaal'}; {len(verwerkbaar(st))} in de wachtrij, "
                 f"{len(st['wachtrij']) - len(verwerkbaar(st))} wachten op toegang; "
                 f"{len(st['bekend'])} plannen in de projectmappen, {nieuw} met nieuwe inhoud, {weg + verdwenen} weg; "
@@ -917,7 +979,7 @@ def droog(st, sinds=None):
     sets = set_bevindingen(nc, st, meldingen)
     for regel in werkverslag(meldingen, sets, blinde_vlekken(st)):
         print(f"[{regel['onderwerp']}] {regel['tekst']}\n{regel['detail']}")
-    item = signaal(meldingen, sets, week(), commit)
+    item = signaal(meldingen, sets, week(), commit, st.get("sjabloon_gemeld"))
     print("signaal:", json.dumps(item, ensure_ascii=False, indent=1) if item else "geen")
     return 0
 

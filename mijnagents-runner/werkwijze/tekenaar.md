@@ -26,8 +26,11 @@ controleert bestaande sets. Hij bereidt voor en stelt voor; Mehdi kijkt na als a
    is, wordt na te kijken, nooit weggelaten.
 4. Werkverslag per project op het bord, met projectnummer en bladcode; geen mapnamen, adressen of namen. Bij een FOUT
    op een nieuw blad of in de set van zijn map: een signaal voor Mehdi, gebundeld per project en per soort fout, met
-   een voorgesteld vervolg. Een fout uit het sjabloon (het titelblok) komt achteraan. LET OP en na te kijken blijven
-   in het werkverslag. Een melding geldt pas als gedaan als het bord ze ontving; een herhaling stuurt dezelfde melding.
+   een voorgesteld vervolg. Een bewezen fout uit het sjabloon (het rijksregisternummer op het titelblok, de vaste
+   meetlijn van een andere schaal) geeft een keer per project een signaal; daarna staat ze per project als een regel
+   in het werkverslag, tot het sjabloon hersteld is. Een andere fout van dezelfde soort (een naam, geen meetlijn) blijft een signaal. LET OP en na
+   te kijken blijven in het werkverslag. Een melding geldt pas als gedaan als het bord ze ontving; een herhaling stuurt
+   dezelfde melding.
 5. Ritme: zes dagen na de vorige gelukte ronde, of eerder als er nog plannen of meldingen wachten. Ook zonder nieuwe
    plannen een hartslag. Heeft de Mac geslapen, dan haalt hij de ronde in bij de volgende start.
 

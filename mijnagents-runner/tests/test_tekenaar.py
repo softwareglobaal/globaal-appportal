@@ -54,7 +54,7 @@ def plan(i, pad, h, gewijzigd="2026-10-19T08:00:00Z"):
 
 
 class NepNormcontrole:
-    """Zoals normcontrole.py: FOUT voor een blad met _G_ (meetlijn), persoonsgegevens op elk blad uit het sjabloon,
+    """Zoals normcontrole.py: FOUT voor een blad met _G_ (schaal), persoonsgegevens op elk blad uit het sjabloon,
     gewest FOUT voor Brussel. Onthoudt hoe de set gevraagd werd."""
 
     def __init__(self):
@@ -66,7 +66,7 @@ class NepNormcontrole:
         u = {"bestandsnaam": {"status": "OK", "reden": "volgt de code", "artikel": ""},
              "persoonsgegevens": {"status": "FOUT", "reden": "rijksregisternummer", "artikel": "p.4"}}
         if "_G_" in naam:
-            u["meetlijn"] = {"status": "FOUT", "reden": "5 m gemeten 25 mm, bij 1/100 hoort 50 mm", "artikel": "1.3.2"}
+            u["schaal"] = {"status": "FOUT", "reden": "geen normschaal vermeld", "artikel": "1.3.1"}
         if "1000 Brussel" in (naam or ""):
             u["gewest"] = {"status": "FOUT", "reden": "Brussel volgens de postcode", "artikel": "B01"}
         u["eenheid"] = {"status": "LET OP", "reden": "proef", "artikel": ""}
@@ -271,7 +271,7 @@ class Controle(Basis):
         groot = st["te_melden"][2]["uitslag"]
         self.assertEqual(groot["oordeel"], "ONBEKEND")                   # DT07: gemeld, niet weggelaten
         self.assertIn("80 MB", groot["onbekend"][0])
-        self.assertEqual(st["gezien"]["h2"]["fout"], ["persoonsgegevens", "meetlijn"])
+        self.assertEqual(st["gezien"]["h2"]["fout"], ["persoonsgegevens", "schaal"])
         self.assertEqual(st["wachtrij"], [])
         self.assertNotIn("id:proefweg1", st["bekend"])
         self.assertEqual(tk.lees_stand()["te_melden"], st["te_melden"])  # na elk plan bewaard
@@ -296,24 +296,54 @@ class Controle(Basis):
         self.assertTrue(nep.sets[0]["regularisatie"])
         self.assertEqual(list(sets.values()), [[("toestanden", "regularisatie onvolledig: grondplan zonder V")]])
 
-    def test_signaal_alleen_bij_fout_en_sjabloonfout_achteraan(self):
+    def test_signaal_alleen_bij_fout_buiten_het_sjabloon(self):
         ok = {"id": "id:proef0001", "pad": P1, "uitslag": {"oordeel": "LET OP", "fout": [], "fout_reden": {}}}
         self.assertIsNone(tk.signaal([ok], {}, "2026-W43", "abc1234"))
-        fout = {"id": "id:proef0002", "pad": P2, "uitslag": {"oordeel": "FOUT", "fout": ["meetlijn: 25 mm"],
-                "fout_reden": {"persoonsgegevens": "rijksregisternummer", "meetlijn": "5 m gemeten 25 mm"}}}
-        item = tk.signaal([ok, fout], {os.path.dirname(P3): [("bladnummers", "dubbel")]}, "2026-W43", "abc1234")
+        # K1 (doorlichting 28-10-2026): alleen bewezen sjabloonfouten geven geen signaal
+        vaste_meetlijn = "5 m gemeten 25 mm, bij 1/100 hoort 50.0 mm; de meetlijn hoort bij 1/200"
+        sjabloon = {"id": "id:proef0004", "pad": P1, "uitslag": {"oordeel": "FOUT", "fout_reden": {
+            "persoonsgegevens": "rijksregisternummer", "meetlijn": vaste_meetlijn}}}
+        al = {"9901": ["meetlijn", "persoonsgegevens"]}
+        self.assertIsNone(tk.signaal([ok, sjabloon], {}, "2026-W43", "abc1234", al))
+        self.assertEqual(tk.oordeel_van(sjabloon["uitslag"]), "SJABLOON")
+        # X2: de eerste keer in een project krijgt Mehdi de sjabloonfout wel; in een ander project ook
+        eerste = tk.signaal([sjabloon], {}, "2026-W43", "abc1234")
+        self.assertIn("persoonsgegevens", eerste["titel"])
+        self.assertIsNotNone(tk.signaal([sjabloon], {}, "2026-W43", "abc1234", {"9902": ["meetlijn", "persoonsgegevens"]}))
+        self.assertIsNotNone(tk.signaal([sjabloon], {}, "2026-W43", "abc1234", {"9901": ["meetlijn"]}))
+        # Codex: dezelfde soort met een andere reden is een echte fout en geeft wel een signaal
+        for soort, reden in (("persoonsgegevens", "rijksregisternummer, naam bouwheer"),
+                             ("persoonsgegevens", "e-mailadres derde"),
+                             ("meetlijn", "geen meetlijn met labels 0 en N m gevonden"),
+                             ("meetlijn", "5 m gemeten 30 mm, bij 1/100 hoort 50.0 mm; verhouding 0.60, past bij geen normschaal"),
+                             ("eenheid", "geen eenheid (mm, cm of m) vermeld")):
+            echt = {"id": "id:proef0005", "pad": P1, "uitslag": {"oordeel": "FOUT", "fout_reden": {soort: reden}}}
+            item = tk.signaal([echt], {}, "2026-W43", "c", al)
+            self.assertIsNotNone(item, reden)
+            self.assertEqual(tk.oordeel_van(echt["uitslag"]), "FOUT")
+        fout = {"id": "id:proef0002", "pad": P2, "uitslag": {"oordeel": "FOUT", "fout": ["schaal: geen normschaal"],
+                "fout_reden": {"persoonsgegevens": "rijksregisternummer", "meetlijn": vaste_meetlijn,
+                               "schaal": "geen normschaal vermeld"}}}
+        # een blad met alleen sjabloonfouten in een ander project verandert het signaal over dezelfde echte fout niet
+        al = {"9901": ["meetlijn", "persoonsgegevens"], "9902": ["meetlijn", "persoonsgegevens"]}
+        for extra in (dict(sjabloon, pad=P3), dict(sjabloon, id="id:proef0006", pad=P2.replace("voorgevel", "zijgevel"))):
+            # ook in hetzelfde project (Codex ronde 2, middel)
+            self.assertEqual(tk.signaal([fout], {}, "w", "c", al)["uniek"], tk.signaal([fout, extra], {}, "w", "c", al)["uniek"])
+        item = tk.signaal([ok, fout], {os.path.dirname(P3): [("bladnummers", "dubbel")]}, "2026-W43", "abc1234", al)
         self.assertEqual((item["voor"], item["soort"]), ("mehdi", "signaal"))
         self.assertRegex(item["uniek"], r"^tekenaar-normcontrole-[0-9a-f]{12}$")     # zonder week en zonder aantal
         self.assertIn("9901", item["titel"])
         self.assertIn("9902", item["titel"])
-        self.assertTrue(item["titel"].endswith(", persoonsgegevens)"), item["titel"])   # sjabloonfout achteraan
-        self.assertIn("meetlijn", item["titel"])
+        self.assertIn("schaal", item["titel"])
+        for s in ("persoonsgegevens", "meetlijn", "eenheid"):
+            self.assertNotIn(s, item["titel"])
         self.assertNotIn("stil", item["titel"].lower())
         self.assertLessEqual(len(item["titel"]), 110)          # De Bode toont 110 tekens
         self.assertTrue(any("Teken-agent-map" in v for v in item["inhoud"]["voorstel"]))
+        self.assertTrue(any("sjabloon" in v for v in item["inhoud"]["voorstel"]))
         projecten = {p["project"]: p for p in item["inhoud"]["projecten"]}
         self.assertEqual((projecten["9901"]["nieuwe_bladen"], projecten["9901"]["met_fout"]), (2, 1))
-        self.assertEqual([f["wat"] for f in projecten["9901"]["fouten"]], ["meetlijn", "persoonsgegevens"])
+        self.assertEqual([f["wat"] for f in projecten["9901"]["fouten"]], ["schaal"])
         self.assertEqual(projecten["9901"]["fouten"][0]["voorbeeld"], ["G_N_1_A_voorgevel.pdf"])
         self.assertEqual(projecten["9902"]["set"], ["9902 map 1: dubbele bladcode: dubbel"])
         tekst = json.dumps(item, ensure_ascii=False)
@@ -321,14 +351,14 @@ class Controle(Basis):
             self.assertNotIn(adres, tekst)                        # DT10
         # Veel bladen met dezelfde fout: een regel per soort, hoogstens drie voorbeelden; zelfde melding, zelfde uniek.
         veel = [dict(fout, id=f"id:proefv{i:03d}", pad=P2.replace("voorgevel", f"gevel{i}")) for i in range(40)]
-        f = tk.signaal(veel, {}, "2026-W43", "abc1234")["inhoud"]["projecten"][0]["fouten"]
-        self.assertEqual((len(f), f[0]["bladen"], len(f[0]["voorbeeld"])), (2, 40, 3))
+        f = tk.signaal(veel, {}, "2026-W43", "abc1234", al)["inhoud"]["projecten"][0]["fouten"]
+        self.assertEqual((len(f), f[0]["bladen"], len(f[0]["voorbeeld"])), (1, 40, 3))
         self.assertEqual(tk.signaal(veel, {}, "2026-W43", "x")["uniek"], tk.signaal(veel, {}, "2026-W43", "y")["uniek"])
         self.assertNotEqual(tk.signaal(veel, {}, "2026-W43", "x")["uniek"], tk.signaal(veel[:5], {}, "2026-W43", "x")["uniek"])
 
     def test_gewijzigd_blad_met_dezelfde_id_geeft_een_nieuw_signaal(self):
         # DT14: dezelfde Dropbox-id, nieuwe inhoud en een andere fout in dezelfde week: een ander uniek.
-        a = {"id": "id:proef0002", "hash": "h2", "pad": P2, "uitslag": {"fout_reden": {"meetlijn": "x"}}}
+        a = {"id": "id:proef0002", "hash": "h2", "pad": P2, "uitslag": {"fout_reden": {"noordpijl": "x"}}}
         b = {"id": "id:proef0002", "hash": "h2b", "pad": P2, "uitslag": {"fout_reden": {"schaal": "y"}}}
         self.assertNotEqual(tk.signaal([a], {}, "2026-W43", "c")["uniek"], tk.signaal([b], {}, "2026-W43", "c")["uniek"])
 
@@ -342,6 +372,22 @@ class Controle(Basis):
         item = tk.signaal(veel, {}, "2026-W43", "c")
         self.assertLessEqual(len(json.dumps(item["inhoud"], ensure_ascii=False)), tk.MAX_INHOUD)
         self.assertIn("werkverslag", item["inhoud"]["meer_projecten"])
+
+    def test_te_lang_signaal_onthoudt_alleen_gemelde_projecten(self):
+        # Codex ronde 3: een project dat uit een te lang signaal valt, telt niet als gemeld
+        st = self.stand_met_basis()
+        for n in range(150):
+            st["te_melden"].append({"id": f"id:proefl{n:03d}", "hash": f"l{n}", "pad": P2.replace("9901", f"{8000 + n}"),
+                                    "uitslag": {"oordeel": "FOUT", "fout": [], "onbekend": [], "let_op": [],
+                                                "fout_reden": {"persoonsgegevens": "rijksregisternummer",
+                                                               "schaal": "s" * 300, "noordpijl": "n" * 300}}})
+        nep = NepNormcontrole()
+        nep.controleer_set = lambda namen, regularisatie=None, nieuw=None: {"uitkomsten": {}, "oordeel": "OK"}
+        melding = tk.bouw_melding(st, nep, "2026-W43", "c")
+        in_signaal = {p["project"] for p in melding["item"]["inhoud"]["projecten"]}
+        self.assertIn("meer_projecten", melding["item"]["inhoud"])
+        self.assertLess(len(in_signaal), tk.MAX_PER_MELDING)
+        self.assertEqual(set(melding["sjabloon_gemeld"]), in_signaal)
 
     def test_nummer_in_stukjes_is_geen_bladcode(self):
         # DT35: een nummer in korte stukjes mag niet als reeks codevelden doorglippen; de hele naam wordt getoetst.
@@ -561,11 +607,21 @@ class Ronde(Basis):
         self.assertEqual((items[0]["van"], items[0]["soort"]), ("tekenaar", "signaal"))
         verslag = [r for p in self.nep.van("/api/logboek") for r in p["regels"]]
         self.assertTrue(any(r["onderwerp"].startswith("project 9901") for r in verslag))
-        self.assertIn("FOUT 2", self.nep.van("/agent-status")[-1]["detail"])
+        detail = self.nep.van("/agent-status")[-1]["detail"]
+        self.assertIn("FOUT 1, alleen sjabloonfouten 1", detail)       # K1: het blad met alleen het titelblok
+        sjabloon = [r for r in verslag if "sjabloon (bekend" in r["detail"]]
+        self.assertEqual(len(sjabloon), 1)
+        self.assertIn("persoonsgegevens op 2 bladen", sjabloon[0]["detail"])
+        self.assertNotIn("FOUT persoonsgegevens", sjabloon[0]["detail"])
         alles = json.dumps(self.nep.oproepen, ensure_ascii=False)
         for adres in ("Proefstraat", "3120 Tremelo"):
             self.assertNotIn(adres, alles)                        # DT10: niets met een adres naar het bord
         self.assertEqual(tk.lees_stand()["te_melden"], [])
+        # X2: de sjabloonfout ging een keer mee; een volgend blad met alleen die fout geeft geen tweede signaal
+        self.assertEqual(tk.lees_stand()["sjabloon_gemeld"], {"9901": ["persoonsgegevens"]})
+        self.lijst["wijzigingen"] = [plan(3, P1.replace("gelijkvloers", "verdieping"), "h3")]
+        self.assertEqual(self.draai("--nu"), 0)
+        self.assertEqual(len([i for p in self.nep.van("/api/klaarzet") for i in p["items"]]), 1)
 
     def test_melding_blijft_tot_het_bord_ze_bevestigt(self):
         # DT06: het werkverslag haalt het bord niet; de ronde breekt, de melding blijft, en de volgende ronde meldt ze.
@@ -576,6 +632,7 @@ class Ronde(Basis):
         st = tk.lees_stand()
         self.assertTrue(st["herhaal"])
         self.assertEqual([m["id"] for m in st["te_melden"]], ["id:proef0002"])
+        self.assertEqual(st["sjabloon_gemeld"], {})          # pas gemeld als het bord de melding bevestigde
         self.assertIsNone(st["laatste_ronde"])
         self.assertEqual(st["gezien"]["h2"]["status"], "gecontroleerd")
         self.nep.faal = set()
@@ -616,7 +673,11 @@ class Ronde(Basis):
         # DT13: 150 bladen geven meer dan 20.000 tekens; in stukken onder de grens, en een onvolledige ontvangst breekt.
         tk.bewaar_stand(self.stand_met_basis())
         self.lijst["wijzigingen"] = [plan(i, P2.replace("voorgevel", f"gevel{i}"), f"h{i}") for i in range(1, 151)]
-        self.assertEqual(self.draai("--nu"), 0)
+        oud, tk.MAX_DETAIL = tk.MAX_DETAIL, 4000     # zonder sjabloonregels per blad past het anders in een stuk
+        try:
+            self.assertEqual(self.draai("--nu"), 0)
+        finally:
+            tk.MAX_DETAIL = oud
         regels = [r for p in self.nep.van("/api/logboek") for r in p["regels"] if r["onderwerp"].startswith("project 9901")]
         self.assertGreater(len(regels), 1)
         self.assertTrue(all(len(r["detail"]) <= tk.MAX_DETAIL for r in regels))
