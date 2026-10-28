@@ -59,7 +59,7 @@ check("een harde regel die faalt is rood", punt(v, "B1").kleur == V.ROOD)
 check("een harde regel die slaagt is groen", punt(v, "B2").kleur == V.GROEN)
 check("een harde regel zonder gegevens is oranje", punt(v, "B3").kleur == V.ORANJE)
 check("een oordeel dat faalt is hoogstens oranje", punt(v, "A1").kleur == V.ORANJE)
-check("een oordeel dat slaagt is nooit groen", punt(v, "A2").kleur == V.ORANJE)
+check("een oordeel dat slaagt is groen (keuze 28-10-2026)", punt(v, "A2").kleur == V.GROEN)
 check("een regel zonder uitkomst staat er als niet getoetst, oranje",
       punt(v, "B4").kleur == V.ORANJE and punt(v, "B4").uitkomst == V.NIET_GETOETST)
 check("elke regel voor deze soort heeft een punt",
@@ -69,7 +69,12 @@ check("geen waarschuwing met een verse, kloppende bibliotheek", v.waarschuwingen
 
 alles_hard = [B(r["code"], V.SLAAGT) for r in R.regels("contract", REG)]
 v2 = V.maak("contract", alles_hard, vandaag=VANDAAG)
-check("alles geslaagd met oordeelsregels erbij blijft oranje (Mehdi bevestigt)", v2.kleur == V.ORANJE)
+check("alles geslaagd is groen", v2.kleur == V.GROEN)
+V.OORDEEL_IN_ORDE_IS_GROEN = False
+v3 = V.maak("contract", alles_hard, vandaag=VANDAAG)
+check("letterlijk volgens de ontwerplezing blijft alles geslaagd oranje",
+      v3.kleur == V.ORANJE and punt(v3, "A2").kleur == V.ORANJE and punt(v3, "B1").kleur == V.GROEN)
+V.OORDEEL_IN_ORDE_IS_GROEN = True
 check("zonder bevindingen is niets groen", all(p.kleur != V.GROEN for p in V.maak("werfverslag", [], vandaag=VANDAAG).punten))
 
 print("Bibliotheek")

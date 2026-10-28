@@ -57,6 +57,24 @@ vertrekt niets. `stempel.py` gebruikt alleen de standaardbibliotheek: de Contrac
 letterlijk over en roepen `controleer()` aan in hun verzend- en exportfunctie. Dat aansluiten gebeurt pas na een ja van
 Mehdi, want vanaf dan vertrekt zonder stempel niets meer.
 
+## Werfverslagen (stap 6)
+
+`werfverslagen.toets_werfverslag(Werfverslag(tekst, opgesteld_door, bezocht_door, eerste), architecten)` geeft de
+bevindingen voor D1, C1, C3, D3, D5, F1 en G4. Alleen D1 (meerwerk of programmawijziging zonder addendum met de
+financiele weerslag) kan rood worden. De lijst `architecten` komt van organisatie.globaal.be; zonder lijst is C1
+onbekend. C4 is een dossierregel: `verslag.maak("werfverslag", ..., elders=werfverslagen.ELDERS)`.
+
+Een oordeel dat in orde is, telt als groen (`verslag.OORDEEL_IN_ORDE_IS_GROEN`), zodat een gewoon verslag zonder klik
+van Mehdi kan vertrekken. Dat is de aanbevolen keuze aan Mehdi van 28-10-2026; kiest hij dat elk verslag op hem wacht,
+dan wordt het False.
+
+## Budget en verzekering (stap 7)
+
+`budget.d2_begroting(budget, oppervlakte, referentie)` toont de prijs per m² en vergelijkt met een referentie zodra
+Mehdi die vastlegt. `budget.d4_verzekering(tekst)` zoekt verzekeraar, polis en tienjarige aansprakelijkheid in een
+contract (zit ook in `masters.toets_contract`). `budget.overschrijding(budget, kost, gemeld, verzekering_bijgewerkt)`
+geeft D3 en D5 voor een dossier, met een drempel van 15 procent zoals artikel 3.4 van de master. Alles hoogstens oranje.
+
 ## Draaien
 
 ```
@@ -66,6 +84,8 @@ python3 mijnagents-runner/tests/test_deontologie_privacypoort.py
 python3 mijnagents-runner/tests/test_deontologie_verslag.py
 python3 mijnagents-runner/tests/test_deontologie_masters.py
 python3 mijnagents-runner/tests/test_deontologie_stempel.py
+python3 mijnagents-runner/tests/test_deontologie_werfverslagen.py
+python3 mijnagents-runner/tests/test_deontologie_budget.py
 ```
 
-GitHub draait dezelfde zes bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
+GitHub draait dezelfde acht bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).

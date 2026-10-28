@@ -38,7 +38,7 @@ Hierna genoemd "de Architect"
 De Opdrachtgever doet een beroep op de Architect.
 3. HET BOUWPROJECT EN HET BOUWBUDGET
 3.1. Het bouwproject
-Het programma van het Bouwproject: een woning met drie slaapkamers.
+Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.
 3.2. Wijzigingen aan het bouwproject
 Elke wijziging van het programma wordt vastgelegd in een Bijvoegsel, ondertekend door beide Partijen, dat de financiele weerslag op het Bouwbudget vermeldt.
 3.4. Het bouwbudget
@@ -58,6 +58,8 @@ Bijstand bij de keuze van aannemer(s) en de aanbesteding.
 Controle op de uitvoering van de technieken.
 4.3. Het nazicht van de vorderingsstaten en de facturen.
 4.4. De bijstand bij de oplevering.
+9. VERZEKERINGEN
+De Architect is verzekerd bij Verzonnen Verzekeraar, polis nr. VZ123, ook voor de tienjarige aansprakelijkheid.
 17. SLOT
 Opgesteld te Nergenshuizen, op 1 januari 2026, in twee ondertekende exemplaren.
 """
@@ -76,9 +78,11 @@ def zonder(tekst, *regels):
 
 print("Een goed contract")
 u = uitkomst(GOED)
-check("alle zes harde regels slagen", all(b.uitkomst == V.SLAAGT for b in u.values()),
+HARD = ("B1", "B2", "B3", "B4", "B5", "D1")
+check("alle zes harde regels en de verzekering slagen", all(u[c].uitkomst == V.SLAAGT for c in HARD + ("D4",)),
       {c: b.toelichting for c, b in u.items() if b.uitkomst != V.SLAAGT})
-check("de zes controles leveren B1 tot B5 en D1", set(u) == {"B1", "B2", "B3", "B4", "B5", "D1"})
+check("de controles leveren B1 tot B5, D1, D2 en D4", set(u) == set(HARD) | {"D2", "D4"})
+check("D2 toont de prijs per m² zolang er geen referentie is", u["D2"].uitkomst == V.ONBEKEND and "per m²" in u["D2"].toelichting)
 
 print("Elke controle kan falen")
 f = uitkomst(zonder(GOED, "Opgesteld te Nergenshuizen, op 1 januari 2026, in twee ondertekende exemplaren."))

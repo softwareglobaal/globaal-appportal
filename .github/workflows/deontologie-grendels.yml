@@ -23,3 +23,5 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_deontologie_verslag.py
       - run: python3 mijnagents-runner/tests/test_deontologie_masters.py
       - run: python3 mijnagents-runner/tests/test_deontologie_stempel.py
+      - run: python3 mijnagents-runner/tests/test_deontologie_werfverslagen.py
+      - run: python3 mijnagents-runner/tests/test_deontologie_budget.py
