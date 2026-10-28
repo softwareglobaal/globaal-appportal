@@ -35,6 +35,14 @@ auto-merge** - in beide gevallen deployt de VM daarna automatisch via cron (2 mi
 | angela-site | Website merk Angela (angela.sr, §14.8) + beheer-tegel items.globaal.be | `~/appportal/angela-site` | directe push | auto (`deploy-stack.sh`, cron 2 min) |
 | telefoonregister | telefoonregister van de collega - **ongemoeid laten** | eigen checkout | - | - |
 
+## Werk op Mehdi's laptop (afspraak 28-10-2026)
+
+Mehdi logt nooit uit en opnieuw in bij Claude om een toestel te koppelen. Vraag
+dat niet. Is de laptop niet zichtbaar voor een cloud-sessie, stuur dan geen
+toestemmingskaart (die toont dan alleen Deny), maar schrijf een stappendocument in
+de repo dat Mehdi aan Claude 1 op de laptop geeft. Voorbeeld:
+`mijnagents-runner/docs/laptop-inrichten-voor-de-dagbundelaar.md`.
+
 ## Git-workflow: hoe Claude pullt en pusht
 
 - **Claude commit en pusht rechtstreeks naar `main`** vanaf een lokale kloon
