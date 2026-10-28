@@ -11,7 +11,8 @@
       (48.600 bestanden) duurt door het API-budget ongeveer twee weken, UNABO
       ongeveer een week. Klaar als `uitgesteld` in het manifest 0 is.
 - [ ] Uptime-Kuma heeft geen meldkanaal: monitors 62/63 worden rood, maar
-      niemand krijgt een bericht.
+      niemand krijgt een bericht. 28-10-2026: `scripts/vm-onderhoud.sh` (stap 4)
+      zet een Telegram-melding naar Mehdi op elke monitor; afvinken na de run.
 - [ ] Eventueel: wijzigingsgeschiedenis per record incrementeel meenemen
       (alleen records met een nieuwe `update_time`, 20 tokens per record).
 
@@ -1214,11 +1215,13 @@ subdiscipline-statistieken.
       schrijven van scripts die rechten toekennen in een identity provider. Het
       bestand staat in `~/appportal/scripts/` op de VM en hoort alsnog gecommit
       te worden, anders is het weg bij een nieuwe checkout.
-- [ ] **`scripts/add-agenda-app.py` gebruikt een verouderde containernaam.**
-      Het script zegt `docker exec authentik-server`, maar de container heet
-      `appportal-authentik-server-1`. Gevonden op 2026-09-09 toen hetzelfde
-      patroon voor de locatietegel stukliep. Vermoedelijk geldt dit voor meer
-      `add-*-app.py`-scripts; een keer nalopen.
+      28-10-2026: `scripts/vm-onderhoud.sh` (stap 2) pusht het vanaf de VM naar
+      de branch `vm-locatie-script`; daarna naar main overnemen.
+- [x] **`scripts/add-agenda-app.py` gebruikt een verouderde containernaam.**
+      Nagelopen op 28-10-2026: geen enkel script in `scripts/` gebruikt nog
+      `docker exec authentik-server`. Alle Authentik-scripts gaan via
+      `docker compose exec authentik-server` (de servicenaam, die klopt) of via
+      `scripts/ak-exec.sh`.
 
 ## Schijfruimte op de VM (gemeten 2026-09-12)
 
