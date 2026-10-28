@@ -1024,7 +1024,8 @@ def test_r6_drie_uitrollen_en_terug():
         geladen = m / "geladen"
         (stub / "launchctl").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nif [ \"$1\" = print ]; then\n"
                                         f"  case \"$2\" in *wacht) [ -f '{geladen}' ] && exit 0;; esac\n  exit 1\nfi\nexit 0\n")
-        (stub / "codesign").write_text("#!/bin/sh\n[ \"$1\" = -dv ] && echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2\nexit 0\n")
+        # zoals de echte codesign: de CDHash staat pas in de uitvoer van -dvvv, niet bij -dv (gemeten 26-10-2026)
+        (stub / "codesign").write_text("#!/bin/sh\n[ \"$1\" = -dvvv ] && echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2\nexit 0\n")
         (stub / "cc").write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in -o) uit=$2; shift;; *.c) bron=$1;; esac; shift; done\n"
                                  "cp \"$bron\" \"$uit\"; chmod +x \"$uit\"\n")
         for s in stub.iterdir():
@@ -1123,6 +1124,7 @@ def test_r6_drie_uitrollen_en_terug():
         stempel = subprocess.run(["zsh", "-c", f"source <(sed -n '/^stempel()/,/^}}/p' '{script}'); "
                                   f"HELPER='{helper}' WERK='{werk}' CODESIGN='{stub / 'codesign'}' stempel"],
                                  capture_output=True, text=True, check=True).stdout
+        assert re.fullmatch(r"[0-9a-f]{8} [0-9a-f]{40}\n", stempel), stempel        # cdhash en commit, allebei
         (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
