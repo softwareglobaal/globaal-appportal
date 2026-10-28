@@ -647,10 +647,28 @@ def fotobewijs(bezoek, venster):
     return "ok"
 
 
-# Het contractdashboard antwoordde uitdrukkelijk "Geen dossier gevonden": een project van vóór het systeem. Alleen deze
-# W12-onbekend blokkeert de stand niet; onbereikbaar of niet toetsbaar blokkeert wel (overleg 28-10-2026, Codex).
-VOOR_CONTRACTSYSTEEM = ("project niet in het contractdashboard (vermoedelijk van vóór het systeem); "
+# Het contractsysteem bestaat sinds 30-08-2026 (eerste commit van contract-systeem). Een project met een jaar ervoor
+# in zijn nummer (25xx, 55xx = 2025) staat er aantoonbaar nooit in. Alleen dan blokkeert W12-onbekend de stand niet;
+# een jonger project zonder dossier, onbereikbaar of niet toetsbaar blokkeert wel (overleg 28-10-2026, Codex).
+CONTRACTSYSTEEM_SINDS_JAAR = 2026
+VOOR_CONTRACTSYSTEEM = ("project van vóór het systeem (projectjaar vóór het contractdashboard van 2026); "
                         "bekijk het getekende contract in de projectmap")
+
+
+def projectjaar(nummer):
+    """Het jaar in een H-A-projectnummer, zoals H-A Projecten: 25xx en 55xx zijn 2025 (de 5-reeks is jaar plus 30)."""
+    nr = str(nummer).strip()
+    if not re.fullmatch(r"\d{4}", nr):
+        return None
+    jj = int(nr[:2])
+    return 2000 + (jj - 30 if nr[0] == "5" else jj)
+
+
+def geen_contractdossier(nummer):
+    jaar = projectjaar(nummer)
+    if jaar and jaar < CONTRACTSYSTEEM_SINDS_JAAR:
+        return "onbekend", VOOR_CONTRACTSYSTEEM
+    return "onbekend", "geen contractdossier gevonden voor een project van 2026 of later"
 
 
 def contractbewijs(nummer):
@@ -670,14 +688,14 @@ def contractbewijs(nummer):
             if mcp_ontbreekt:
                 # Een project van vóór het contractsysteem (bv. 2173, 2021) staat er nooit in: dat is
                 # onbekend, geen ontbrekend contract. Het getekende contract ligt dan in de projectmap.
-                return "onbekend", VOOR_CONTRACTSYSTEEM
+                return geen_contractdossier(nummer)
             return "onbekend", "contract-dashboard en werfapp niet bereikbaar"
     if not isinstance(d, dict):
         return "onbekend", "contractantwoord is niet toetsbaar"
     metadata = d.get("dossier") if isinstance(d.get("dossier"), dict) else d
     if not any(k in metadata for k in ("stand", "status", "velden", "keuzes")):
         # Een geopend werfdossier zonder contractvelden verandert niets aan het antwoord van het contractdashboard.
-        return "onbekend", VOOR_CONTRACTSYSTEEM if mcp_ontbreekt else "geen contractgegevens in het antwoord"
+        return geen_contractdossier(nummer) if mcp_ontbreekt else ("onbekend", "geen contractgegevens in het antwoord")
     velden = d.get("velden") or metadata.get("velden") or metadata
     keuzes = d.get("keuzes") or metadata.get("keuzes") or velden
     if not isinstance(velden, dict) or not isinstance(keuzes, dict):
@@ -925,6 +943,8 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
 
 
 NODIGE_POSTEN = ("W1", "W2", "W3", "W4", "W5", "W6", "W12")
+# Posten die alleen bestaan als er iets mis is, en dan altijd blokkeren.
+BLOKKERENDE_MELDINGEN = ("WERFSTART", "WERFDOSSIER")
 
 
 def voldaan(x, s):
@@ -947,7 +967,7 @@ def voldaan(x, s):
 def ontbrekende_posten(controles):
     s = {x["code"]: x["stand"] for x in controles}
     return [f"{x['code']} {x['naam']}" for x in controles
-            if x["code"] in NODIGE_POSTEN + ("WERFSTART",) and not voldaan(x, s)]
+            if x["code"] in NODIGE_POSTEN + BLOKKERENDE_MELDINGEN and not voldaan(x, s)]
 
 
 def stand_van(controles):
@@ -987,6 +1007,9 @@ def werfdossier_openen(nummer):
         ag.log(str(nummer), "schrijf", f"werfdossier {nummer} geopend in de werfapp uit H-A Projecten")
         return "geopend"
     except werfapp.WerfappFout as ex:
+        if ex.status == 409 and "prullenbak" in str(ex.fout):
+            ag.log(str(nummer), "fout", "werfdossier staat in de prullenbak van de werfapp; herstel via Herstel en audit")
+            return "prullenbak"
         if ex.status == 409:
             return "bestaat"
         ag.log(str(nummer), "fout", f"werfdossier niet geopend ({ex.status}): {ex.fout}"[:200])
@@ -1005,8 +1028,7 @@ def verwerk(nummer, droog=False):
         return [], [{"tekst": f"Dossier {nummer}: geen projectmap gevonden; Mehdi geeft het pad", "wie": "mehdi"}], []
     adres = adres_uit_mapnaam(os.path.basename(projectmap))
     ag.log(str(nummer), "bron", f"projectmap ({soort}): {projectmap}", {"adres": adres})
-    if not droog:
-        werfdossier_openen(nummer)
+    dossier_in_werfapp = werfdossier_openen(nummer) if not droog else "droog"
     bezoeken = bezoeken_in(projectmap, nummer)
     bak = klaargezet(nummer)
     terugkijk_taken, bewezen = [], []
@@ -1070,6 +1092,9 @@ def verwerk(nummer, droog=False):
     ], [], [], [], set()
     if bereik_nood:
         noden.append(bereik_nood)
+    if dossier_in_werfapp == "prullenbak":
+        noden.append({"tekst": f"Dossier {nummer}: het werfdossier staat in de prullenbak van werf.globaal.be; herstel het "
+                               "via Herstel en audit, anders wordt geen bezoek klaar voor verslag", "wie": "mehdi"})
     # verhuisde projectmap: de rij van het oude pad gaat mee naar het nieuwe, maar alleen als het oude pad echt weg
     # is; staat de bezoekmap op beide plaatsen, dan is het een kopie en beslist Mehdi welke geldt
     verhuisd = verhuisde_rijen(bezoeken, projectmap, alle_rijen)
@@ -1131,6 +1156,9 @@ def verwerk(nummer, droog=False):
                                          **({"verzamelmap": b["map"]} if doel != b["map"] else {})},
                               "verwijzing": doel, "uniek": uniek})
         alle_taken += [t for t in taakrijen if not any(o.get("uniek") == t["uniek"] for o in open_taken.get(t["voor"], []))]
+        if dossier_in_werfapp == "prullenbak":
+            controles.append({"code": "WERFDOSSIER", "naam": "werfdossier in de werfapp", "stand": "ontbreekt",
+                              "toelichting": "werfdossier staat in de prullenbak; herstel het in de werfapp (Herstel en audit)"})
         if not werfstart:
             controles.append({"code": "WERFSTART", "naam": "werfstart", "stand": "onbekend",
                               "toelichting": "werfstart ontbreekt; bezoektype en verslagnummer na te kijken"})

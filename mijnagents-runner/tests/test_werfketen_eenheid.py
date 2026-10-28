@@ -62,6 +62,12 @@ def test_stand_en_nog_te_verzamelen_lopen_nooit_uiteen():
                 assert klaar == (V.ontbrekende_posten(rij) == []), (code, stand, extra)
 
 
+def test_werfdossier_in_de_prullenbak_blokkeert():
+    rij = controles() + [{"code": "WERFDOSSIER", "naam": "werfdossier in de werfapp", "stand": "ontbreekt"}]
+    assert V.stand_van(rij) == "te verzamelen"
+    assert any(x.startswith("WERFDOSSIER ") for x in V.ontbrekende_posten(rij))
+
+
 def test_w7_aanwezig_volgt_dezelfde_regel():
     w7 = ("ok", {})
     assert V.stand_van(controles(W7=w7, W12=("onbekend", {"voor_contractsysteem": True}))) == "verslag aanwezig"
@@ -74,6 +80,11 @@ def test_contract_van_voor_het_systeem_blijft_zo_na_een_geopend_werfdossier(monk
     monkeypatch.setattr(V.contracten_mcp, "call", geen_dossier)
     monkeypatch.setattr(V.werfapp, "call", lambda pad, *a, **k: {"nummer": "2145", "betrokkenen": []})
     assert V.contractbewijs("2145") == ("onbekend", V.VOOR_CONTRACTSYSTEEM)
+    assert V.contractbewijs("5513") == ("onbekend", V.VOOR_CONTRACTSYSTEEM)              # 5-reeks: 2025
+    # een project van 2026 of later zonder contractdossier is geen bewijs van ouderdom en blokkeert
+    for jong in ("2601", "5601", "2701"):
+        stand, toel = V.contractbewijs(jong)
+        assert stand == "onbekend" and toel != V.VOOR_CONTRACTSYSTEEM
 
     def weg(*a, **k):
         raise werfapp.WerfappFout(0, "niet bereikbaar")
@@ -102,6 +113,11 @@ def test_werfdossier_openen_alleen_uit_ha_en_nooit_fataal(monkeypatch):
     assert gezien[-1] == ("/projecten", {"nummer": "2145", "alleen_ha": True})
     monkeypatch.setattr(V.werfapp, "call", antwoord(409))
     assert V.werfdossier_openen(2145) == "bestaat"
+
+    def prullenbak(pad, payload=None, method=None):
+        raise werfapp.WerfappFout(409, "bestaat al in de prullenbak; herstel het in het dashboard (Herstel en audit)")
+    monkeypatch.setattr(V.werfapp, "call", prullenbak)
+    assert V.werfdossier_openen(2145) == "prullenbak"
     for status in (404, 503, 0):
         monkeypatch.setattr(V.werfapp, "call", antwoord(status))
         assert V.werfdossier_openen(2145) == "fout"
@@ -121,4 +137,5 @@ def test_drie_werkwijzen_spreken_dezelfde_taal():
         assert "v1.9`" not in tekst, naam
         assert "auto bij het project telt als aanwezigheid (E1b)" in tekst, naam
         assert "auto alleen" not in tekst.lower(), naam
+        assert "auto bij het project = let_op" not in tekst, naam
     assert "Later: elke afspraak" not in teksten["voorbereider"]
