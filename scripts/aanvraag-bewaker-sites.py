@@ -76,6 +76,7 @@ FIRMA_MAIL = {
     "Regulariseren.be": "info@regulariseren.be",
     "Mijnregularisatie.be": "info@mijnregularisatie.be",
     "Stychin Tyme": "info@elevaitservices.com",
+    "Angela.SR": "info@angela.sr",
 }
 BRON_FIRMA = {"unabo-site": "UNABO", "wpforms": "UNABO", "tkn-site": "TKN-Buro"}
 LEAD_SITE_FIRMA = {
@@ -93,6 +94,8 @@ JSONL_SITES = [
     {"firma": "Harmoniebouw", "container": "harmoniebouw-web", "pad": "/data/aanvragen.jsonl"},
     {"firma": "H-Architects", "container": "harchitects-web", "pad": "/data/leads.jsonl"},
     {"firma": "High Design Studio", "container": "hdssr-web", "pad": "/data/aanvragen.jsonl", "uitkomst": True},
+    # Bestand bestaat pas na de merge van tak fix/contact-opslag in angela-site.
+    {"firma": "Angela.SR", "container": "appportal-app-angela-1", "pad": "/data/contact.jsonl", "uitkomst": True},
 ]
 # Woorden waarmee de sites een mislukte mail of opslag in hun log schrijven.
 LOGFOUT = re.compile(r"(mislukt|niet verstuurd|SMTP niet|EAUTH|ECONNREFUSED|ETIMEDOUT|Invalid login)", re.I)
