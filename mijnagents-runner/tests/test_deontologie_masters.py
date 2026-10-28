@@ -219,6 +219,15 @@ gebroken = master.replace("Die\nbeschrijving", "Die beschrijving").replace(
     "wederzijds\novereengekomen Bouwproject. Die beschrijving geeft de wensen en\nrandvoorwaarden")
 check("B5: de vaste zinnen over twee regels gebroken zijn ook geen programma", uitkomst(gebroken)["B5"].uitkomst == V.FAALT)
 
+print("Zesde tegenlezing (28-10-2026)")
+for punt6, punt7 in (("6. het uitvoeringsdossier", "7. de controle op de uitvoering;"),
+                     ("6. het uitvoeringsdossier;", "7. de controle op de uitvoering; en")):
+    secs = M.secties("4. TAKEN VAN DE ARCHITECT\n1. het ontwerp;\n2. de vergunning;\n3. de voorstudie;\n4. de aanbesteding;\n"
+                     "5. bijstand bij de keuze van de aannemer;\n"
+                     f"{punt6}\n{punt7}\n8. de oplevering.\n9. ERELOON\n")
+    check(f"een lijstpunt zonder hoofdletter of met \"; en\" blijft een lijstpunt: {punt6} / {punt7}",
+          [k for k, _ in secs] == ["aanhef", "4. TAKEN VAN DE ARCHITECT", "9. ERELOON"], str([k for k, _ in secs]))
+
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"
            "4. OPDRACHT\nDe opdracht is te beperken tot de studiefase.\nHet verzamelen van de gegevens die nodig zijn.\n"

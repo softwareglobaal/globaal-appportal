@@ -89,11 +89,13 @@ def secties(tekst):
             continue
         nummer = _hoofdnummer(regel) if re.match(r"\d+\.\s", regel) else 0
         # Een vervolgnummer is toch een kop als het eruitziet als een kop en niet als een lijstpunt: zonder leesteken
-        # op het einde, en in hoofdletters ("4. WIJZIGING") of kort na een lijstpunt dat op een leesteken eindigde
-        # ("5. Bouwbudget" na "4. de controle."). Vierde en vijfde tegenlezing.
-        af = regel.endswith((".", ";", ",", ":"))
+        # op het einde, en in hoofdletters ("4. WIJZIGING") of kort, met een hoofdletter, na een lijstpunt dat op een
+        # leesteken eindigde ("5. Bouwbudget" na "4. de controle.", niet "6. het uitvoeringsdossier"). Vierde tot
+        # zesde tegenlezing.
+        af = bool(re.search(r"([.;,:]|[;,] (en|of))$", regel))
         kopstijl = sum(c.isupper() for c in regel) > 0.6 * max(1, sum(c.isalpha() for c in regel))
-        kopachtig = not af and (kopstijl or (len(regel) < 60 and vorig_af))
+        hoofdletter = bool(re.match(r"\d+\.\s+[A-Z]", regel))
+        kopachtig = not af and (kopstijl or (len(regel) < 60 and vorig_af and hoofdletter))
         lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1 and not kopachtig))
         if KOP.match(regel) and len(regel) < 120 and not lijst:
             uit.append((kop, alineas))
