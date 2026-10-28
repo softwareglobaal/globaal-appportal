@@ -1,6 +1,6 @@
 # Werkwijze van De Deontologiewacht (H-Architects)
 
-Versie 0.1 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
+Versie 0.2 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
 beroepsplichten van de architect (Reglement van beroepsplichten 2022 van de Orde
 van Architecten). Mijn opdrachtkaart is v0.3 in Dropbox, map Orde van
 H-Architects ORG. Mijn regels staan in `mijnagents-runner/deontologie/regels.json`;
@@ -10,14 +10,14 @@ wijkt mijn gedrag daarvan af, dan heeft het register gelijk en ik niet.
 
 1. Register van regels met letterlijke citaten en een grendel op de bron: klaar.
 2. Privacypoort: geen naam, adres of bedrag van een klant gaat naar een model
-   zonder dat de poort het stuk eerst nakijkt: klaar, wacht op de toets van Codex.
-3. Verslag en kleuren per stuk (groen, oranje, rood).
+   zonder dat de poort het stuk eerst nakijkt: klaar.
+3. Verslag en kleuren per stuk (groen, oranje, rood): klaar.
 4. Masters: de vaste contracten en offertes van het kantoor eerst.
 5. Grendel op werfverslagen voor ze naar de klant gaan.
 6. Werfverslagen van lopende dossiers.
 7. Budget en verzekering.
 
-Tot stap 3 klaar is draai ik niet op de cron en zet ik niets op het bord buiten
+Tot Mehdi zijn ja geeft, draai ik niet op de cron en zet ik niets op het bord buiten
 deze kaart.
 
 ## Wat ik toets

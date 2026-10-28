@@ -27,12 +27,23 @@ Volgorde uit de ontwerplezing van 27-10-2026 (driehoeksoverleg, 3-0). Elke stap 
   term gaat niet door. Staat de variabele er maar is het bestand weg, dan gaat niets door.
 - Elke oproep naar Codex of Gemini voor deze agent loopt via `stuur()`. Een andere weg is er niet.
 
+## Verslag en kleuren (stap 3)
+
+`verslag.maak(documentsoort, bevindingen)` maakt het toetsverslag voor het bord. De harde controles (stap 4 en verder)
+leveren per regel een `Bevinding`: slaagt, faalt of onbekend, met de plaats en het voorstel.
+
+- Rood alleen uit een harde, letterlijke regel die faalt; groen alleen uit een harde regel die slaagt.
+- Een oordeel, een afgeleide regel, ontbrekende gegevens of een regel zonder uitkomst is oranje.
+- Bibliotheek ouder dan 45 dagen, of een register dat niet door de controle komt: alles oranje, met de reden.
+- Elk verslag noemt de bron, de versie van het register, de datum van de bibliotheek en "toets, geen juridisch advies".
+
 ## Draaien
 
 ```
 python3 mijnagents-runner/deontologie/register.py
 python3 mijnagents-runner/tests/test_deontologie_register.py
 python3 mijnagents-runner/tests/test_deontologie_privacypoort.py
+python3 mijnagents-runner/tests/test_deontologie_verslag.py
 ```
 
-GitHub draait dezelfde drie bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
+GitHub draait dezelfde vier bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
