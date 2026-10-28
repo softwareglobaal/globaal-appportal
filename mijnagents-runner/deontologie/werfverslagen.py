@@ -28,7 +28,8 @@ ELDERS = ("C4",)  # dossierregel: geef dit mee als `verslag.maak(..., elders=ELD
 
 WIJZIGING_ZEKER = r"programmawijziging|wijziging van het programma|meerwerk|bijkomende werken|extra werken|wijziging aan het bouwproject"
 WIJZIGING_MISSCHIEN = (r"\bwijzig|\bgewijzigd|\baanpass|\bbijkomend|\buitbrei|\bom te bouwen|\bombouw|"
-                       r"\bextra (ruimte|kamer|badkamer|slaapkamer|verdieping|bijgebouw|carport|garage|dakkapel|raam|ramen)")
+                       r"\bextra (ruimte|kamer|badkamer|slaapkamer|verdieping|bijgebouw|carport|garage|dakkapel|raam|ramen|werk|kost)|"
+                       r"\bverhoo?g\w*|volledig nieuwe")
 GEEN_MEERWERK = (r"\b(geen|niet)\b[^.\n]{0,20}(programmawijziging|meerwerk|bijkomende werken|extra werken)|"
                  r"(programmawijziging|meerwerk|bijkomende werken|extra werken)\w*\s*:\s*(geen|nihil|n\.?v\.?t)")
 ONTKENNING = r"\b(geen|niet|nog niet)\b"
@@ -38,6 +39,8 @@ OVERSCHRIJDING = (r"overschrijd|boven (de |het )?(begroting|budget|raming)|duurd
                   r"meerkost|\bstijg\w* met|ten opzichte van (de |het )?(raming|begroting|budget)")
 MELDING = r"(opdrachtgever|bouwheer) (is|werd|wordt) (schriftelijk )?(verwittigd|ingelicht|op de hoogte)|melding aan de (opdrachtgever|bouwheer)"
 INSTRUCTIE = r"\baannemer\b[^.]{0,80}\b(moet|dient|zal|gelieve)\b|\bgelieve\b|\bte herstellen\b|\bop te volgen\b"
+# Een werfverslag spreekt een aannemer vaak aan met zijn afkorting: "KV dient ...", "ODB zal ..." (proef 28-10-2026).
+INSTRUCTIE_AFKORTING = re.compile(r"\b[A-Z]{2,4}\b\s+(dient|moet|zal)\b")
 CONFRATER = r"(andere|vorige|vroegere) (architect|ontwerper|bureau)|confrater|architect van (de )?buren"
 
 
@@ -46,7 +49,7 @@ class Werfverslag:
     tekst: str
     opgesteld_door: str = ""
     bezocht_door: tuple = ()
-    eerste: bool = False
+    eerste: bool = None  # None: niet bekend of dit het eerste verslag is, dan is C3 onbekend en nooit stil groen
 
 
 def _zinnen(tekst):
@@ -96,6 +99,8 @@ def c1_architect(v, architecten):
 
 
 def c3_werfbord(v):
+    if v.eerste is None:
+        return B("C3", V.ONBEKEND, "", "", "niet bekend of dit het eerste verslag van de werf is")
     if not v.eerste:
         return B("C3", V.SLAAGT, "", "", "niet het eerste verslag van de werf")
     if re.search(r"werfbord", v.tekst, re.I):
@@ -118,9 +123,9 @@ def d3_d5_overschrijding(v):
 
 
 def f1_instructies(v, architecten):
-    if not re.search(INSTRUCTIE, v.tekst, re.I):
+    if not re.search(INSTRUCTIE, v.tekst, re.I) and not INSTRUCTIE_AFKORTING.search(v.tekst):
         return B("F1", V.SLAAGT, "", "", "geen instructies aan aannemers")
-    plaats = _zin(v.tekst, INSTRUCTIE)
+    plaats = _zin(v.tekst, INSTRUCTIE) or _zin(v.tekst, INSTRUCTIE_AFKORTING.pattern)
     if architecten is None or not v.opgesteld_door:
         return B("F1", V.ONBEKEND, plaats, "", "niet na te gaan of de schrijver architect is")
     if _is_architect(v.opgesteld_door, architecten):
@@ -139,5 +144,6 @@ def g4_confrater(v):
 
 def toets_werfverslag(v, architecten=None):
     """De bevindingen voor een werfverslag. `architecten`: namen van wie als architect of stagiair ingeschreven is."""
+    v = Werfverslag(re.sub(r"[^\S\n]+", " ", v.tekst), v.opgesteld_door, v.bezocht_door, v.eerste)
     return [d1_wijziging(v), c1_architect(v, architecten), c3_werfbord(v), *d3_d5_overschrijding(v),
             f1_instructies(v, architecten), g4_confrater(v)]

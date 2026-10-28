@@ -31,7 +31,7 @@ ARCHITECTEN = ["Ada Verzonnen", "Bert Bedacht"]
 VANDAAG = date.fromisoformat(R.laad()["stand"]) + timedelta(days=1)
 GEWOON = W.Werfverslag(
     "Werfbezoek bij de ruwbouw. De funderingen liggen volgens plan. De wapening is nagekeken. Volgende bezoek bij de "
-    "dakwerken.", opgesteld_door="Ada Verzonnen", bezocht_door=("Ada Verzonnen",))
+    "dakwerken.", opgesteld_door="Ada Verzonnen", bezocht_door=("Ada Verzonnen",), eerste=False)
 
 
 def toets(v, architecten=ARCHITECTEN):
@@ -109,6 +109,16 @@ f = toets(met(GEWOON.tekst + " De totale kostprijs stijgt met 40.000 euro ten op
               "De aannemer werd verwittigd."))
 check("een stijging tegen de raming is een overschrijding, een verwittigde aannemer geen melding",
       f["D3"].uitkomst == V.FAALT)
+
+check("zonder te weten of het het eerste verslag is, is C3 onbekend en nooit groen (tegenlezing na de proef)",
+      toets(met(eerste=None))["C3"].uitkomst == V.ONBEKEND)
+check("een instructie aan een aannemer met zijn afkorting telt (KV dient ...)",
+      toets(met(GEWOON.tekst + " KV dient de dakgoot te herstellen.", opgesteld_door="Carla Medewerker"))["F1"].uitkomst
+      == V.FAALT)
+check("een verhoogde dakopstand is een mogelijke wijziging, oranje",
+      toets(met("Afspraak: extra werk door de verhoogde dakopstand."))["D1"].uitkomst == V.ONBEKEND)
+f = toets(met("Bijkomende\twerken:\teen\tdakkapel\tmet\tmeerprijs."))
+check("een pdf met tabs tussen de woorden toetst als het origineel (proef 28-10-2026)", f["D1"].uitkomst == V.FAALT)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
