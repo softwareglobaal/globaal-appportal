@@ -30,8 +30,8 @@ ERNST = {GROEN: 0, ORANJE: 1, ROOD: 2}
 SLAAGT, FAALT, ONBEKEND = "slaagt", "faalt", "onbekend"
 NIET_GETOETST = "niet getoetst"
 # Een oordeel of afgeleide regel die slaagt (of niet van toepassing is), telt als groen; oranje blijft voor twijfel en
-# voor een oordeel dat faalt. Aanbevolen keuze aan Mehdi op 28-10-2026: letterlijk volgens de ontwerplezing ("groen
-# alleen uit een harde regel") werd elk werfverslag oranje en wachtte het op zijn klik. Kiest Mehdi daarvoor, dan False.
+# voor een oordeel dat faalt. Gekozen door Mehdi op 28-10-2026 ("alleen bij een probleem"): letterlijk volgens de
+# ontwerplezing ("groen alleen uit een harde regel") werd elk werfverslag oranje en wachtte het op zijn klik.
 OORDEEL_IN_ORDE_IS_GROEN = True
 BIBLIOTHEEK_MAX_DAGEN = 45
 VOORBEHOUD = "Dit is een toets, geen juridisch advies."

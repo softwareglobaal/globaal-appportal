@@ -65,8 +65,7 @@ financiele weerslag) kan rood worden. De lijst `architecten` komt van organisati
 onbekend. C4 is een dossierregel: `verslag.maak("werfverslag", ..., elders=werfverslagen.ELDERS)`.
 
 Een oordeel dat in orde is, telt als groen (`verslag.OORDEEL_IN_ORDE_IS_GROEN`), zodat een gewoon verslag zonder klik
-van Mehdi kan vertrekken. Dat is de aanbevolen keuze aan Mehdi van 28-10-2026; kiest hij dat elk verslag op hem wacht,
-dan wordt het False.
+van Mehdi kan vertrekken. Zo gekozen door Mehdi op 28-10-2026: alleen een verslag met een probleem wacht op hem.
 
 ## Budget en verzekering (stap 7)
 
