@@ -40,7 +40,7 @@ sudo ufw allow from 172.16.0.0/12 to any port 8120 proto tcp
 ```
 
 Toegang in Authentik: `sh scripts/ak-exec.sh scripts/add-claude-manager.py`
-(groep `claude-manager`, alleen shaniel). De client-gegevens komen in
+(groep `claude-manager`, alleen akadmin). De client-gegevens komen in
 `/tmp/claude-manager-client.env` in de container authentik-server en gaan van
 daar naar `manager.env` op de laptop, niet via de chat.
 

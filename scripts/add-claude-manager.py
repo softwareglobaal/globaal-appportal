@@ -10,8 +10,8 @@ Anders dan add-portal-mcp.py drukt dit script de client-gegevens NIET af: die
 gaan naar /tmp/claude-manager-client.env in de container, en de aanroeper
 haalt ze daar op en wist ze. Zo komen ze niet in een terminal- of chatlog.
 
-Toegang: alleen de groep `claude-manager`. De dienst zelf laat daarbovenop
-alleen de namen in MANAGER_GEBRUIKERS toe.
+Toegang: alleen de groep `claude-manager`, met als enig lid akadmin. De dienst
+zelf laat daarbovenop alleen de namen in MANAGER_GEBRUIKERS toe.
 """
 import os
 
@@ -28,7 +28,7 @@ SLUG = "claude-manager"
 NAAM = "Claude Code Manager"
 TERUG = "https://manager.globaal.be/oauth/terug"
 GROEP = "claude-manager"
-LEDEN = ("shaniel",)
+LEDEN = ("akadmin",)
 SCOPES = ("openid", "profile", "email")
 UIT = "/tmp/claude-manager-client.env"
 
@@ -67,12 +67,11 @@ print(f"app {SLUG}: {'aangemaakt' if app_nieuw else 'bijgewerkt'}")
 groep, _ = Group.objects.get_or_create(name=GROEP)
 PolicyBinding.objects.get_or_create(target=app, group=groep,
                                     defaults=dict(order=0))
-for naam in LEDEN:
-    gebruiker = User.objects.filter(username=naam).first()
-    if gebruiker is None:
-        print(f"LET OP: gebruiker {naam} bestaat niet")
-        continue
-    groep.users.add(gebruiker)
+# De groep is precies LEDEN: wie er niet in staat, gaat eruit.
+leden = list(User.objects.filter(username__in=LEDEN))
+for naam in set(LEDEN) - {g.username for g in leden}:
+    print(f"LET OP: gebruiker {naam} bestaat niet")
+groep.users.set(leden)
 print(f"groep {GROEP}: {', '.join(groep.users.values_list('username', flat=True))}")
 
 with open(UIT, "w") as f:
