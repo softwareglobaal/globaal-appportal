@@ -47,6 +47,16 @@ aannemer, begroting en programmawijziging oranje tot Mehdi zegt of die regels da
 
 De masters zelf zijn Jinja-sjablonen: toets ze gerenderd met de testdossiers van het contractsysteem.
 
+## Grendel met stempel (stap 5)
+
+`stempel.maak(bytes, verslag)` geeft een ondertekende stempel voor het exacte bestand; `stempel.controleer(bytes,
+stempel)` zegt of het mag vertrekken. Groen vertrekt, oranje na `bevestig(..., "oranje", "mehdi")`, rood alleen als
+Mehdi elk rood punt bevestigt met een reden. Een stempel vervalt na 7 dagen. De sleutel staat buiten git in
+`DEONTOLOGIE_STEMPELSLEUTEL` (minstens 32 tekens, dezelfde in de Wacht en in de apps die controleren); zonder sleutel
+vertrekt niets. `stempel.py` gebruikt alleen de standaardbibliotheek: de Contractmaker en de werfverslag-apps nemen het
+letterlijk over en roepen `controleer()` aan in hun verzend- en exportfunctie. Dat aansluiten gebeurt pas na een ja van
+Mehdi, want vanaf dan vertrekt zonder stempel niets meer.
+
 ## Draaien
 
 ```
@@ -55,6 +65,7 @@ python3 mijnagents-runner/tests/test_deontologie_register.py
 python3 mijnagents-runner/tests/test_deontologie_privacypoort.py
 python3 mijnagents-runner/tests/test_deontologie_verslag.py
 python3 mijnagents-runner/tests/test_deontologie_masters.py
+python3 mijnagents-runner/tests/test_deontologie_stempel.py
 ```
 
-GitHub draait dezelfde vijf bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
+GitHub draait dezelfde zes bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
