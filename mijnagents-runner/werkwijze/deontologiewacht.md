@@ -13,7 +13,8 @@ wijkt mijn gedrag daarvan af, dan heeft het register gelijk en ik niet.
    zonder dat de poort het stuk eerst nakijkt: klaar.
 3. Verslag en kleuren per stuk (groen, oranje, rood): klaar.
 4. Masters: harde controles B1 tot B5 en D1 op de contractmasters: klaar (eerste toets 28-10-2026).
-5. Grendel op werfverslagen voor ze naar de klant gaan.
+5. Grendel: een stempel per stuk, met vingerafdruk, vervaldatum en de bevestiging van Mehdi
+   voor oranje en rood: klaar. Aansluiten op de Contractmaker en de werfverslag-apps na de ja van Mehdi.
 6. Werfverslagen van lopende dossiers.
 7. Budget en verzekering.
 
