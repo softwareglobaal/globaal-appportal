@@ -38,7 +38,7 @@ TAKEN = (  # de zeven taken van artikel 20 RBP2022, met de woorden waaraan ze in
     ("de bijstand bij de oplevering en het nazicht der rekeningen", r"bijstand bij de oplevering|nazicht van de vorderingsstaten"),
 )
 UITSLUITING = (r"niet belast|niet inbegrepen|valt buiten|vallen buiten|omvat niet|omvat geen|geen deel uit|uitgesloten|"
-               r"te beperken tot|beperkt tot(?! de overeenstemming)|uitsluitend betrekking")
+               r"te beperken (zijn )?tot|beperkt tot(?! de overeenstemming)|uitsluitend betrekking")
 BEPERKT = (r"(opdracht|overeenkomst)[^.\n]{0,80}(te beperken (zijn )?tot|beperkt (is )?tot(?! de overeenstemming)|uitsluitend betrekking)|"
            r"omvat geen werfopvolging")
 UITVOERING = r"uitvoerings(?:dossier|ontwerp|plannen)"  # artikel 21 zegt "uitvoeringsontwerp", de masters "uitvoeringsdossier"
@@ -49,6 +49,11 @@ WETSTEKST_KOP = r"wet op de bescherming|wettelijke opdracht"
 # Een uitsluiting telt alleen in een zin over de opdracht of de taken, niet bij kosten, ereloon of aansprakelijkheid.
 OVER_TAKEN = r"\btaak\b|\btaken\b|\bopdracht\b|\bbelast\b|\barchitect\b"  # niet "Opdrachtgever" (proef 28-10-2026)
 NIET_OVER_TAKEN = r"kost|ereloon|bedrag|polis|aansprakelijk|gegevens"
+# De aanloopzinnen van de master bij het programma; wat erna komt, is de eigen beschrijving.
+VASTE_PROGRAMMAZINNEN = (r"het programma van het bouwproject,? zoals hierna beschreven[^.:]*[.:]?|"
+                         r"het bouwproject bestaat in de realisatie van de volgende werken op de bouwplaats\s*:?|"
+                         r"de opdrachtgever wenst dat het project van de architect omvat wat volgt\s*:?|"
+                         r"het (bouw)?project omvat\s*:|\{[%{#].*?[%}#]\}|•")
 
 
 def beperkte_opdracht(tekst):
@@ -73,17 +78,21 @@ def _hoofdnummer(kop):
 
 def secties(tekst):
     """De tekst per artikel: [(kop, [alinea's])]. Wat voor de eerste kop staat, heet 'aanhef'. Een genummerde lijst in
-    een artikel ("1. ..." in artikel 5) is geen nieuwe kop: het nummer ligt lager dan dat van het lopende artikel."""
-    uit, kop, alineas = [], "aanhef", []
+    een artikel ("1. ..." in artikel 5) is geen nieuwe kop: het nummer ligt lager dan dat van het lopende artikel, of
+    volgt op het vorige lijstpunt ("2." na "1."), zodat een lijst 1 tot 5 in artikel 2 artikel 3 niet opslokt."""
+    uit, kop, alineas, vorig = [], "aanhef", [], 0
     for regel in (r.strip() for r in tekst.replace("\r", "").split("\n")):
         if not regel:
             continue
-        lijst = re.match(r"\d+\.\s", regel) and _hoofdnummer(regel) < _hoofdnummer(kop)
+        nummer = _hoofdnummer(regel) if re.match(r"\d+\.\s", regel) else 0
+        lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1))
         if KOP.match(regel) and len(regel) < 120 and not lijst:
             uit.append((kop, alineas))
-            kop, alineas = regel, []
+            kop, alineas, vorig = regel, [], 0
         else:
             alineas.append(regel)
+            if lijst:
+                vorig = nummer
     uit.append((kop, alineas))
     return uit
 
@@ -122,7 +131,7 @@ def b1_schriftelijk(secs, tekst):
     partijen = re.search(r"\btussen\b", tekst, re.I) and re.search(r"de (opdrachtgever|bouwheer)", tekst, re.I) \
         and re.search(r"de architect", tekst, re.I)
     slot = re.search(r"(opgesteld|opgemaakt|gedaan) te [^,]{1,60},? op (\S+ \S+ \d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})"
-                     r"[^.]{0,160}?(onderteken|exempla)", re.sub(r"\s+", " ", tekst), re.I)
+                     r".{0,200}?(onderteken|exempla)", re.sub(r"\s+", " ", tekst), re.I)
     if partijen and slot:
         return B("B1", V.SLAAGT, "slotbepaling")
     return B("B1", V.FAALT, "slotbepaling" if partijen else "aanhef",
@@ -226,11 +235,17 @@ def b5_budget(secs, tekst):
 
 
 def _programma(secs):
-    """Het artikel dat het programma beschrijft. De standaardzin "Het programma van het Bouwproject, zoals hierna
-    beschreven" telt niet: er moet een eigen beschrijving van minstens 40 tekens staan (tegenlezing na de proef)."""
+    """Het artikel dat het programma beschrijft. De vaste zinnen van de master tellen niet, en ook niet de lijst "Het
+    Bouwproject omvat niet": er moet een eigen beschrijving van minstens 40 tekens staan (tegenlezingen na de proef)."""
     for kop, alineas in secs:
-        eigen = [a for a in alineas if not re.search(r"zoals hierna beschreven", a, re.I)]
-        if re.search(r"\d\.?\s+het (bouw)?project\s*$", kop, re.I) and len(" ".join(eigen)) >= 40:
+        if not re.search(r"\d\.?\s+het (bouw)?project\s*$", kop, re.I):
+            continue
+        eigen = []
+        for a in alineas:
+            if re.search(r"omvat niet", a, re.I):
+                break
+            eigen.append(re.sub(VASTE_PROGRAMMAZINNEN, "", a, flags=re.I))
+        if len(re.sub(r"\s+", " ", " ".join(eigen)).strip()) >= 40:
             return kop
     return _zoek(secs, r"wenst volgende ruimtes|ruimtes, functies|programma van het bouwproject\s*:\s*\S")
 

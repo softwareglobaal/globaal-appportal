@@ -120,5 +120,11 @@ check("een verhoogde dakopstand is een mogelijke wijziging, oranje",
 f = toets(met("Bijkomende\twerken:\teen\tdakkapel\tmet\tmeerprijs."))
 check("een pdf met tabs tussen de woorden toetst als het origineel (proef 28-10-2026)", f["D1"].uitkomst == V.FAALT)
 
+f = toets(met(GEWOON.tekst + " De BH dient een partij aan te stellen.", opgesteld_door="Carla Medewerker"))
+check("BH is de bouwheer, geen aannemer: geen instructie (derde tegenlezing)", f["F1"].uitkomst == V.SLAAGT,
+      f["F1"].toelichting)
+f = toets(met("Het plan zal herzien worden. KV zal de dakgoot herstellen.", opgesteld_door="Carla Medewerker"))
+check("de plaats van F1 is de zin met de afkorting in hoofdletters", f["F1"].plaats.startswith("KV zal"), f["F1"].plaats)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

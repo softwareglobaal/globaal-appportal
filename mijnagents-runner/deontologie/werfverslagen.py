@@ -40,7 +40,8 @@ OVERSCHRIJDING = (r"overschrijd|boven (de |het )?(begroting|budget|raming)|duurd
 MELDING = r"(opdrachtgever|bouwheer) (is|werd|wordt) (schriftelijk )?(verwittigd|ingelicht|op de hoogte)|melding aan de (opdrachtgever|bouwheer)"
 INSTRUCTIE = r"\baannemer\b[^.]{0,80}\b(moet|dient|zal|gelieve)\b|\bgelieve\b|\bte herstellen\b|\bop te volgen\b"
 # Een werfverslag spreekt een aannemer vaak aan met zijn afkorting: "KV dient ...", "ODB zal ..." (proef 28-10-2026).
-INSTRUCTIE_AFKORTING = re.compile(r"\b[A-Z]{2,4}\b\s+(dient|moet|zal)\b")
+# BH en OG zijn de bouwheer en de opdrachtgever, geen aannemer (derde tegenlezing).
+INSTRUCTIE_AFKORTING = re.compile(r"\b(?!BH\b|OG\b)[A-Z]{2,4}\b\s+(dient|moet|zal)\b")
 CONFRATER = r"(andere|vorige|vroegere) (architect|ontwerper|bureau)|confrater|architect van (de )?buren"
 
 
@@ -57,9 +58,10 @@ def _zinnen(tekst):
 
 
 def _zin(tekst, patroon):
-    """De zin waarin het patroon staat, als plaats in het verslag (ingekort)."""
+    """De zin waarin het patroon staat, als plaats in het verslag (ingekort). Een gecompileerd patroon houdt zijn
+    eigen vlaggen: de afkorting van een aannemer telt alleen in hoofdletters."""
     for zin in _zinnen(tekst):
-        if re.search(patroon, zin, re.I):
+        if (patroon.search(zin) if isinstance(patroon, re.Pattern) else re.search(patroon, zin, re.I)):
             return zin[:120]
     return ""
 
@@ -125,7 +127,7 @@ def d3_d5_overschrijding(v):
 def f1_instructies(v, architecten):
     if not re.search(INSTRUCTIE, v.tekst, re.I) and not INSTRUCTIE_AFKORTING.search(v.tekst):
         return B("F1", V.SLAAGT, "", "", "geen instructies aan aannemers")
-    plaats = _zin(v.tekst, INSTRUCTIE) or _zin(v.tekst, INSTRUCTIE_AFKORTING.pattern)
+    plaats = _zin(v.tekst, INSTRUCTIE) or _zin(v.tekst, INSTRUCTIE_AFKORTING)
     if architecten is None or not v.opgesteld_door:
         return B("F1", V.ONBEKEND, plaats, "", "niet na te gaan of de schrijver architect is")
     if _is_architect(v.opgesteld_door, architecten):

@@ -170,6 +170,26 @@ secs = M.secties("5. ERELOON\n5.1. Erelonen\n1. Opmeting van de bestaande toesta
 check("een genummerde lijst in een artikel is geen nieuwe kop", [k for k, _ in secs] ==
       ["aanhef", "5. ERELOON", "5.1. Erelonen", "6. VERZEKERING"], str([k for k, _ in secs]))
 
+print("Derde tegenlezing na de proef (28-10-2026)")
+voorstudie = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n4. OPDRACHT\n"
+              "De opdracht van de Architect zal te beperken zijn tot de studiefase.\n"
+              "Het verzamelen van de gegevens die nodig zijn.\n"
+              "8. SLOT\nOpgesteld te Nergenshuizen, op 1 januari 2026, in twee ondertekende exemplaren.\n")
+check("B2: een voorstudie \"te beperken zijn tot\" is onbekend, geen rood", uitkomst(voorstudie)["B2"].uitkomst == V.ONBEKEND)
+secs = M.secties("2. VOORWERP\n1. een\n2. twee\n3. drie\n4. vier\n5. vijf\n3. TAKEN VAN DE ARCHITECT\nTekst\n")
+check("een lijst 1 tot 5 in artikel 2 slokt artikel 3 niet op", [k for k, _ in secs] ==
+      ["aanhef", "2. VOORWERP", "3. TAKEN VAN DE ARCHITECT"], str([k for k, _ in secs]))
+f = uitkomst(GOED.replace("in twee ondertekende exemplaren.",
+                          "\nElke partij erkent een ondertekend exemplaar ontvangen te hebben.").replace(
+    "op 1 januari 2026,", "op 1 januari 2026."))
+check("B1: een punt na de datum, de ondertekening in de volgende zin, is in orde", f["B1"].uitkomst == V.SLAAGT,
+      f["B1"].toelichting)
+vast = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                    "Het Bouwproject bestaat in de realisatie van de volgende werken op de Bouwplaats:\n"
+                    "Het Bouwproject omvat niet:\nDe opmeting van het terrein, de stabiliteitsstudie, de EPB-verslaggeving "
+                    "en de veiligheidscoordinatie.")
+check("B5: alleen de vaste zinnen en de lijst \"omvat niet\" zijn geen programma", uitkomst(vast)["B5"].uitkomst == V.FAALT)
+
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"
            "4. OPDRACHT\nDe opdracht is te beperken tot de studiefase.\nHet verzamelen van de gegevens die nodig zijn.\n"
