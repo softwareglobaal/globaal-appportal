@@ -1224,10 +1224,14 @@ subdiscipline-statistieken.
       `docker exec authentik-server`. Alle Authentik-scripts gaan via
       `docker compose exec authentik-server` (de servicenaam, die klopt) of via
       `scripts/ak-exec.sh`.
-- [ ] **Hertoewijzing Authentik-groepen ter goedkeuring** (28-10-2026): inventaris
-      gedraaid, voorstel per persoon staat in de private repo
-      `softwareglobaal/globaal-vm-beheer`, map `authentik/` (namen horen niet in
-      deze publieke repo). Uitvoering pas na akkoord van Mehdi.
+- [x] **Hertoewijzing Authentik-groepen, fase 1** (28-10-2026, akkoord Mehdi):
+      voor alle 86 apps `app-{slug}-read` en `-edit` aangemaakt, gebonden en gevuld
+      (170 groepen, 292 lidmaatschappen), alleen toegevoegd. Grendel: toegang van
+      27 gebruikers x 86 apps voor en na gelijk. Back-up in `~/backups/`. Plan en
+      script in de private repo `softwareglobaal/globaal-vm-beheer`, map `authentik/`.
+- [ ] **Hertoewijzing fase 2**: apps laten kijken naar de nieuwe edit-groepen
+      (helper `appportal_auth`, plan stap 5; o.a. EDITOR_GROUPS van communicatie en
+      vermogen), daarna oude groepen, `admin` en `manager` op `state: absent`.
 - VM-opdrachten zonder SSH: repo `softwareglobaal/globaal-vm-beheer` (private,
   sinds 28-10-2026). Wijzig `opdracht.sh` en push, of start de workflow `vm`;
   de uitvoer staat in het logboek van de run.
