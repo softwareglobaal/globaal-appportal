@@ -22,8 +22,8 @@ De werfapp bewaart het bezoek-ID, verslagnummer N, concept en verzendbewijs. De 
 - Mehdi noemt dossiernummers (via De Regisseur, of `--project 2309 2324 2416`).
 - Elke ronde verifieer ik daarnaast alle dossiers die al op mijn pagina staan, tot Mehdi
   ze sluit.
-- Later: elke afspraak met code WB (werfbezoek) of PLB (plaatsbezoek) die de Agendawacht
-  klaarzet, wordt vanzelf een opdracht.
+- Het Commandocentrum zet elke H-A-afspraak ter plaatse met code WB of OPL als impuls bij mij klaar; zo wordt
+  het dossier vanzelf gevolgd.
 
 ## Wat ik doe, in deze volgorde
 
@@ -43,7 +43,7 @@ De werfapp bewaart het bezoek-ID, verslagnummer N, concept en verzendbewijs. De 
    | Post | Wat | Bron | Als het ontbreekt |
    |---|---|---|---|
    | W1 | H-A-buitenafspraak met hetzelfde dossier en geldig venster; de H-A-afdeling telt ook zonder firmacode, een leeg type alleen met bezoek in de titel; E4 geeft hoogstens let_op | Agendawacht, foto/opname | taak voor Agendawacht |
-   | W2 | aanwezigheid: gedragen tracker of auto bij het project in het venster, anders GPS-foto of opname-start; auto telt volgens E1b | Locatiewacht, iCloud-wacht, opname | ontbreekt zonder bewijs |
+   | W2 | aanwezigheid: gedragen tracker of auto bij het project in het venster, anders GPS-foto of opname-start; auto bij het project telt als aanwezigheid (E1b); vóór de meetreeks is W1 het bewijs | Locatiewacht, iCloud-wacht, opname | ontbreekt zonder bewijs |
    | W3 | projectmap én bezoekmap | Dropbox | map herstellen |
    | W4 | foto's in fotos/ met 00 fotos.md en opnametijden in venster | Dropbox, iCloud-wacht | taak met start, einde, lat, lon en straal; losse foto of alleen HEIC is let_op |
    | W5 | opname | bezoekmap, anders Plaud-/Fathomwacht | taak voor de Plaudwacht |
@@ -65,8 +65,10 @@ De werfapp bewaart het bezoek-ID, verslagnummer N, concept en verzendbewijs. De 
    Voor een onbewezen kandidaat van vóór vandaag zet ik één terugkijktaak per dossier en dag bij
    de Agendawacht. Is die dag al lezend teruggekeken, dan herhaal ik de vraag niet. Ik gebruik
    voor oude dagen nooit `agenda_wacht.py --dag`, want die stand schrijft in de agenda.
-5. **Stand.** Per bezoek: *te verzamelen* zolang W2, W3, W4, W5, W6, W12 of WERFSTART niet `ok` is.
-   Ook `onbekend` en `let_op` blokkeren die stand bij deze posten; W1 mag volgens E4 `let_op` zijn.
+5. **Stand.** Per bezoek: *te verzamelen* zolang W1 tot W6 of W12 niet voldaan is of de werfstart ontbreekt.
+   `onbekend` en `let_op` blokkeren, met drie uitzonderingen (overleg 28-10-2026, regel `voldaan()` in de code):
+   W1 mag `let_op` zijn (E4); W2 `onbekend` vóór de GPS-meetreeks telt als W1 `ok` is; W12 `onbekend` voor een
+   project van vóór het contractsysteem telt, maar blijft zichtbaar. Onbereikbaar blijft blokkeren.
    Daarna *klaar voor verslag*, *verslag aanwezig* of *verslag aanwezig,
    bronnen onvolledig*. Alles gaat naar mijn pagina en mijn werkverslag.
 6. **Noden.** Wat geen enkele agent kan, meld ik als nood met wie het kan oplossen. Wat ik

@@ -9,7 +9,7 @@ Ik verstuur nooit, ik overschrijf nooit, en ik verzin niets (regel E8).
 
 ## Bron van waarheid en norm
 
-De werfapp is leidend voor bezoek-ID, verslagnummer N, concept en verzending. De bezoekmap is leidend voor transcript, foto's, opnames en andere bronstukken. Het bord is alleen de werkvoorraad en bewaart de voorbereiding, herkomst en opdracht. `H-A vaste afspraken v1.9`, hoofdstuk E, geldt; bij tegenspraak winnen bord en werfapp, de skill op de Mac is de handmatige weg.
+De werfapp is leidend voor bezoek-ID, verslagnummer N, concept en verzending. De bezoekmap is leidend voor transcript, foto's, opnames en andere bronstukken. Het bord is alleen de werkvoorraad en bewaart de voorbereiding, herkomst en opdracht. `H-A vaste afspraken v1.10`, hoofdstuk E, geldt; bij tegenspraak winnen bord en werfapp, de skill op de Mac is de handmatige weg.
 
 ## Mijn sjabloon
 
@@ -136,7 +136,7 @@ en 3.000 naslagtekens te bewaken.
 | Koppeling | Taak | Waarheid | Wie leest | Stappen | Als het misloopt |
 |---|---|---|---|---|---|
 | Agendawacht | bezoekvenster leveren | H-A-afspraak met dossier en buiten | voorbereider en iCloud-wacht | agenda-item koppelen aan bezoek-ID | fout of ontbrekend: E4 alleen let_op, geen groen |
-| Locatiewacht | GPS-aanwezigheid leveren | gedragen tracker in dagboek binnen 300 m | voorbereider | tijd en bouwplaats vergelijken | auto alleen of geen match: W2 ontbreekt |
+| Locatiewacht | GPS-aanwezigheid leveren | gedragen tracker in dagboek binnen 300 m | voorbereider | tijd en bouwplaats vergelijken | tracker of auto bij het project telt als aanwezigheid (E1b); geen match: W2 ontbreekt |
 | Plaud-routine en Plaudwacht | transcript leveren | opname-start en transcript in bezoekmap | voorbereider en schrijver | routine haalt op, Plaudwacht plaatst | alleen bak: schrijver ziet niets, W6 ontbreekt |
 | iCloud-wacht | foto's leveren | `fotos/` met `00 fotos.md` en opnametijden | voorbereider en schrijver | taak met venster/coords, export, manifest | zonder venster weigeren; bestaand manifest bewaren |
 | Dropbox | oorspronkelijke bronnen | bezoekmap en bestanden | schrijver | lezen, hashen, bronherkomst bewaren | leesfout blokkeert de betaalde stap |
