@@ -37,6 +37,16 @@ leveren per regel een `Bevinding`: slaagt, faalt of onbekend, met de plaats en h
 - Bibliotheek ouder dan 45 dagen, of een register dat niet door de controle komt: alles oranje, met de reden.
 - Elk verslag noemt de bron, de versie van het register, de datum van de bibliotheek en "toets, geen juridisch advies".
 
+## Harde controles op contracten (stap 4)
+
+`masters.toets_contract(tekst)` toetst een contract aan B1 tot B5 en D1 en geeft de bevindingen voor `verslag.maak`.
+Wat de controle niet terugvindt, faalt. Bij een uitdrukkelijk beperkte opdracht (voorstudie, regularisatie) worden
+aannemer, begroting en programmawijziging oranje tot Mehdi zegt of die regels daar gelden.
+
+    cd mijnagents-runner && python3 -m deontologie.masters contract.docx
+
+De masters zelf zijn Jinja-sjablonen: toets ze gerenderd met de testdossiers van het contractsysteem.
+
 ## Draaien
 
 ```
@@ -44,6 +54,7 @@ python3 mijnagents-runner/deontologie/register.py
 python3 mijnagents-runner/tests/test_deontologie_register.py
 python3 mijnagents-runner/tests/test_deontologie_privacypoort.py
 python3 mijnagents-runner/tests/test_deontologie_verslag.py
+python3 mijnagents-runner/tests/test_deontologie_masters.py
 ```
 
-GitHub draait dezelfde vier bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
+GitHub draait dezelfde vijf bij elke wijziging (`.github/workflows/deontologie-grendels.yml`).
