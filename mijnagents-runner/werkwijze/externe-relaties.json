@@ -11,10 +11,15 @@
    "soort": "leverancier",
    "firma": "ALGE",
    "contact": "Angela",
-   "opmerking": "boekhouding voor alle bedrijven, dus overkoepelend -> ALGE (Mehdi schrijft ook 'Nadine')",
+   "opmerking": "boekhouding voor alle bedrijven, dus overkoepelend -> ALGE (Mehdi schrijft ook 'Nadine'). Nooit een vraag welke firma: altijd [AL-LO], of [AL-LB] met !! (Mehdi, 28-10-2026). Een tikfout van een letter telt ook.",
    "ook_geschreven": [
-    "Nadine"
-   ]
+    "Nadine",
+    "Nandien",
+    "Nadeen",
+    "boekhouder",
+    "boekhouding"
+   ],
+   "standaard_waar": "O"
   },
   {
    "naam": "Wally",

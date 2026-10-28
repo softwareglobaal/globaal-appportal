@@ -52,6 +52,32 @@ check("een afspraak van Harmoniebouw brengt Catalin mee, ook als hij 'Karam' hee
       gv("Mehdi: [HB-IN] planning werf") == {"harmoniebouw@gmail.com"} and gv("Mehdi en Karam: [HA-IN] overleg") == {"harmoniebouw@gmail.com"})
 check("een klant met de voornaam van een collega, niet na 'Mehdi', wordt geen gast",
       gv("Mehdi: [UB-PO] Matthew Janssens - ST") == set() and gv("Matthew Janssens: H-Architects prospectie") == set())
+check("een tikfout van Catalin na 'Mehdi' blijft Catalin (28-10-2026: 'Mehdi en Catlain', 'Katalin')",
+      gv("!! Mehdi en Catlain: [HA-KB] PL 2605 - Céline Palms, Van der Nootstraat 88, 3012 Leuven") == {"harmoniebouw@gmail.com"}
+      and gv("Mehdi & Katalin: [HA-IN] overleg") == {"harmoniebouw@gmail.com"}
+      and gv("Mehdi & Lux: [EE-IN] overleg") == set())
+_org = W.organisatie.agenda_adressen
+W.organisatie.agenda_adressen = lambda *a, **k: MENSEN
+check("een herschreven titel houdt de namen voor de dubbele punt, met de juiste schrijfwijze",
+      W.mehdi_kop("!! Mehdi en Catlain: HA 2605 plaatsbezoek") == "Mehdi & Catalin"
+      and W.mehdi_kop("Mehdi, Matthew en Katalin: x") == "Mehdi, Matthew & Catalin"
+      and W.mehdi_kop("Mehdi: 2605") == "Mehdi" and W.mehdi_kop("Mehdi bellen: x") == "Mehdi")
+_kaart, _klant = W.projectadressen.index, W.klant_van_nummer
+W.projectadressen.index = lambda *a, **k: {"2605": {"adres": "Van der Nootstraat 88, 3012 Leuven"}}
+W.klant_van_nummer = lambda n: "Céline Palms"
+_nieuw, _ = W.titel_uit_onderzoek({"titel": "!! Mehdi en Catlain: HA 2605 plaatsbezoek",
+                                   "locatie": "Van der Nootstraat 88, 3012 Leuven"})
+check("spoor 1 (projectnummer) laat Catalin niet meer weg: dan volgen gast en uitnodiging",
+      (_nieuw or "").startswith("!! Mehdi & Catalin: [HA-KB]") and "2605 - Céline Palms" in (_nieuw or ""), _nieuw)
+W.projectadressen.index, W.klant_van_nummer, W.organisatie.agenda_adressen = _kaart, _klant, _org
+check("de boekhouder is algemeen, ook met een tikfout, en nooit een vraag welke firma (28-10-2026)",
+      W.titel_voorstel("VR Mehdi & Angela: Nandien boekhouder")[:3] == ("VR Mehdi & Angela: [AL-LO] Nandien boekhouder", "ALGE", "LO")
+      and W.titel_voorstel("!! Mehdi: Nadine jaarafsluiting")[2] == "LB")
+check("een afdeling van een eigen firma is intern: 'AI van EE afdeling' wordt [EE-IN] (28-10-2026)",
+      W.titel_voorstel("VR Mehdi: Ai van EE afdeling")[:3] == ("VR Mehdi: [EE-IN] Ai van EE afdeling", "ENEF", "IN"))
+check("een afspraak zonder code is grafiet, nooit de lichtgroene agendakleur; een hele dag niet",
+      W.kleur_gewenst({"kalender": W.WERKAGENDA}, W.lees_titel("Johan Buyse en General")) == "8"
+      and W.kleur_gewenst({"kalender": W.WERKAGENDA, "hele_dag": True}, W.lees_titel("Johan Buyse")) == "")
 check("een naam die twee mensen aanwijst, of iemand uit dienst, wordt geen gast (geen gok)",
       gv("Mehdi & Luc: [EE-IN] overleg") == set() and gv("Mehdi & Rochelle: [EE-IN] overleg") == set())
 

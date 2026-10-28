@@ -202,7 +202,7 @@ proeven = [
     (WERK, "Mehdi: [ELEV-IN] intern", "10", "groen"),
     (WERK, "Mehdi: [UNAB-KO] EPB online", "7", "EPB is niet automatisch buiten"),
     (WERK, "Mehdi: !! [UNAB-KO] VC op de werf, Kerkstraat 1", "11", "met !! wel buiten"),
-    (WERK, "Mehdi: afspraak zonder code", "", "geen kleur, dat is een fout"),
+    (WERK, "Mehdi: afspraak zonder code", "8", "grafiet: een fout, nooit lichtgroen zoals intern (28-10-2026)"),
 ]
 for kal, titel, verwacht, waarom in proeven:
     i = W.lees_titel(titel)

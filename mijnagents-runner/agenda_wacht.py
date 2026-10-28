@@ -1206,6 +1206,34 @@ def _plat(t):
     return re.sub(r"[^a-z0-9]", "", (t or "").lower())
 
 
+def _lijkt_op(a, b):
+    """Een tikfout van een letter: een letter anders, erbij, eraf of twee buren omgewisseld ('Catlain', 'Katalin'
+    voor Catalin). Alleen vanaf vijf letters, zodat korte namen nooit op elkaar lijken (Mehdi, 28-10-2026)."""
+    a, b = _plat(a), _plat(b)
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 5 or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        verschil = [i for i in range(len(a)) if a[i] != b[i]]
+        return (len(verschil) == 1 or len(verschil) == 2 and verschil[1] == verschil[0] + 1
+                and a[verschil[0]] == b[verschil[1]] and a[verschil[1]] == b[verschil[0]])
+    kort, lang = (a, b) if len(a) < len(b) else (b, a)
+    return any(lang[:i] + lang[i + 1:] == kort for i in range(len(lang)))
+
+
+def bekende_naam(naam, namen):
+    """De bekende schrijfwijze van een naam: exact, of de enige bekende naam die er een tikfout van is. Twee kandidaten
+    is geen naam (geen gok)."""
+    if not naam:
+        return ""
+    for n in namen:
+        if _plat(n) == _plat(naam):
+            return n
+    kandidaten = {n for n in namen if _lijkt_op(n, naam)}
+    return next(iter(kandidaten)) if len(kandidaten) == 1 else ""
+
+
 def firma_aliassen():
     """Elke schrijfwijze van een firma die Mehdi typt -> de vierletterige code."""
     uit = {}
@@ -1237,13 +1265,14 @@ def titel_voorstel(titel, online=None):
         return None, None, None, ""
     kop, rest = titel.split(":", 1)
     alias = firma_aliassen()
-    relaties = {}
+    relaties, standaard_waar = {}, {}
     for r in EXTERNE_RELATIES:
         for nm in [r.get("naam") or ""] + list(r.get("ook_geschreven") or []):
             if nm:
                 relaties[_plat(nm)] = r.get("firma") or "ALGE"
+                standaard_waar[_plat(nm)] = r.get("standaard_waar")
     firma, soort_code, rol, waar = None, None, None, None
-    weg = []
+    weg, afdeling, relatie_waar = [], False, None
     for tok in re.split(r"[\s,;()\[\]/]+", rest):
         if not tok:
             continue
@@ -1256,6 +1285,15 @@ def titel_voorstel(titel, online=None):
                 firma = alias[pd]; weg.append(tok if d == tok else d)
             elif pd in relaties and firma in (None, relaties[pd]):
                 firma = relaties[pd]; rol = rol or "L"          # de naam blijft in de titel staan
+                relatie_waar = relatie_waar or standaard_waar.get(pd)
+            elif ((k := bekende_naam(pd, [r for r in relaties if len(r) >= 5]))
+                  and firma in (None, relaties[k])):
+                # een tikfout in een vaste relatie ('Nandien' voor Nadien): dezelfde relatie (Mehdi, 28-10-2026)
+                firma = relaties[k]; rol = rol or "L"
+                relatie_waar = relatie_waar or standaard_waar.get(k)
+            elif pd in ("afdeling", "afd"):
+                # 'AI van EE afdeling': een afdeling van een eigen firma is intern (Mehdi, 28-10-2026)
+                afdeling = True
             elif d.upper() in SOORT_CODES:
                 soort_code = d.upper(); weg.append(d)
             elif pd.startswith("klant"):
@@ -1274,8 +1312,13 @@ def titel_voorstel(titel, online=None):
                 waar = "B"; weg.append(d)
     if not firma:
         return None, None, None, ""
+    if afdeling and not rol and firma not in EXTERNE_FIRMAS:
+        rol = "IN"
+        weg = [w for w in weg if _plat(w) not in alias]     # 'EE afdeling' blijft leesbaar in de titel
     if not waar:
         waar = "B" if "!!" in titel else ({True: "O", False: "B"}.get(online))
+    if not waar and rol == "L" and relatie_waar in ("O", "B"):
+        waar = relatie_waar                 # vaste relatie: de boekhouder is online tenzij !! (externe-relaties.json)
     if soort_code == "B2B":
         rol, soort_code = "X", None
     soort = soort_code or ("IN" if rol == "IN" else (rol + waar if rol and waar else None))
@@ -1367,7 +1410,11 @@ def titels_normaliseren(items, alleen_dag=None):
                     regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{kandidaat[:70]}' (twee letters; met gasten verander ik de titel niet)")
         else:
             nieuw, firma, soort, uitleg = titel_voorstel(titel, _online(a))
-            if nieuw and not (firma and soort and _van_mehdi(a) and not a.get("_terugkerend") and not is_calendly(a)):
+            # Een collega als agendagast houdt de code niet tegen: zij zien dezelfde afspraak, nu met de juiste code
+            # ('Mehdi & Angela: Nandien boekhouder' bleef op 28-10-2026 een vraag terwijl de boekhouder bekend is).
+            eigen = (_van_mehdi(a) or (a.get("_agendagasten") and not a.get("deelnemers")
+                                       and (a.get("maker") or "").lower() in ("", WERKAGENDA)))
+            if nieuw and not (firma and soort and eigen and not a.get("_terugkerend") and not is_calendly(a)):
                 regels.append(f"{a['start'][:16]} {titel[:50]}: VOORSTEL '{nieuw[:70]}' ({uitleg})")
                 nieuw = None
         if nieuw and nieuw != titel:
@@ -1679,6 +1726,33 @@ def _deal_op_adres(firma, adres):
     return uit
 
 
+def mehdi_kop(titel):
+    """'Mehdi' plus de namen die Mehdi voor de dubbele punt schreef: '!! Mehdi en Catlain: HA 2605 plaatsbezoek' wordt
+    'Mehdi & Catalin'. Een herschreven titel verliest die namen nooit, want daar hangen de agendagast en de uitnodiging
+    aan (28-10-2026: bij 2605 viel Catalin weg en kreeg hij geen uitnodiging). Een tikfout van een bekende naam wordt
+    die naam; een ander los woord met een hoofdletter blijft staan zoals Mehdi het schreef."""
+    t = re.sub(r"^[!?\s]+", "", zonder_zl(re.sub(r"^\s*VR\s+", "", titel or "")))
+    m = re.match(r"\s*Mehdi\b(.*)$", t.split(":", 1)[0], re.I) if ":" in t else None
+    if not m:
+        return "Mehdi"
+    regels = _gastregels()
+    bekend = (list(regels.get("bijnamen") or {}) + list((regels.get("bijnamen") or {}).values())
+              + [n for namen in (regels.get("firma_gasten") or {}).values() for n in namen])
+    try:
+        bekend += [p.get("voornaam") for p in (organisatie.agenda_adressen() or {}).values() if p.get("voornaam")]
+    except Exception:  # noqa: BLE001
+        pass
+    namen = []
+    for deel in re.split(r"[,&+/]|\ben\b|\band\b", m.group(1), flags=re.I):
+        deel = deel.strip(" !?.-")
+        naam = bekende_naam(deel, bekend) or (deel if re.fullmatch(r"[A-ZÀ-Ý][\wÀ-ÿ'-]*", deel) else "")
+        if naam and naam not in namen:
+            namen.append(naam)
+    if not namen:
+        return "Mehdi"
+    return "Mehdi & " + namen[0] if len(namen) == 1 else "Mehdi, " + ", ".join(namen[:-1]) + " & " + namen[-1]
+
+
 def titel_uit_onderzoek(a):
     """Een korte titel zonder firmacode ('mehdi; barsten en scheuren') met een adres, zelf uitzoeken:
     de activiteit uit de woorden, de firma uit de activiteit (alleen als die code bij precies een firma hoort),
@@ -1714,7 +1788,7 @@ def titel_uit_onderzoek(a):
             code = next((c for rx, c in ACTIVITEIT_WOORDEN["HARC"] if re.search(rx, titel, re.I)), "")
             buiten = info["buiten"] or code in BUITEN_TYPES
             adres = ((a.get("locatie") or "").strip() or kaart.get("adres", "")) if buiten else ""
-            nieuw = (f"{'!! ' if buiten else ''}Mehdi: [{titelcode('HARC')}-K{'B' if buiten else 'O'}] {code + ' ' if code else ''}{info['nummer']} - {klant}"
+            nieuw = (f"{'!! ' if buiten else ''}{mehdi_kop(titel)}: [{titelcode('HARC')}-K{'B' if buiten else 'O'}] {code + ' ' if code else ''}{info['nummer']} - {klant}"
                      + (f", {re.sub(r',\s*(Belgi[eë]|Belgium)\s*$', '', adres)}" if adres else ""))
             return nieuw, f"uitgezocht: {info['nummer']} is een H-Architects-project met een projectmap, klant {klant}"
     # Spoor 2: een activiteit met een adres
@@ -1743,6 +1817,8 @@ def titel_uit_onderzoek(a):
     # Schreef Mehdi daarnaast een naam/ander inhoudswoord, dan mag een andere
     # persoon uit een deal op hetzelfde adres zijn woorden niet overschrijven.
     eigen_woorden = re.sub(r"^\s*(?:!!\s*)?mehdi\s*[:;,]?\s*", "", titel, flags=re.I)
+    if ":" in titel and re.match(r"\s*(?:!!\s*)?mehdi\b", titel, re.I):
+        eigen_woorden = titel.split(":", 1)[1]      # de namen voor de dubbele punt blijven via mehdi_kop staan
     for rx, _ in ACTIVITEIT_WOORDEN[firma]:
         eigen_woorden = re.sub(rx, "", eigen_woorden, flags=re.I)
     eigen_woorden = re.sub(r"\b(?:en|met|voor|de|het|een)\b", "", eigen_woorden, flags=re.I)
@@ -1750,7 +1826,7 @@ def titel_uit_onderzoek(a):
         return None, ""
     buiten = code in BUITEN_TYPES or info["buiten"]
     soort = ("K" if gewonnen else "P") + ("B" if buiten else "O")
-    nieuw = f"{'!! ' if buiten else ''}Mehdi: [{titelcode(firma)}-{soort}] {code} - {klant}, {adres}"
+    nieuw = f"{'!! ' if buiten else ''}{mehdi_kop(titel)}: [{titelcode(firma)}-{soort}] {code} - {klant}, {adres}"
     return nieuw, f"uitgezocht: activiteit {code}, firma {firma}, klant {klant} ({'getekend' if gewonnen else 'nog niet getekend'}) uit de deal op dit adres"
 
 
@@ -2051,7 +2127,9 @@ def kleur_gewenst(a, info):
     if info["reistijd"]:
         return "11"
     if not info.get("firma"):
-        return ""   # geen code: fout, wordt gemeld
+        # geen code: fout, wordt gemeld. Grafiet en niet de agendakleur: die is lichtgroen en las als intern
+        # (28-10-2026, 'Johan Buyse', 'Nandien boekhouder'). Een hele dag houdt zijn kleur.
+        return "" if a.get("hele_dag") else "8"
     if info["buiten"] or info["soort"] in BUITEN_SOORTEN:
         return "11"   # buiten is altijd rood, ook als het nog niet bevestigd is (Mehdi, 29-09-2026, FR-67)
     if info["onzeker"]:
@@ -2099,6 +2177,9 @@ def kleuren_zetten(items, alleen_dag=None):
             geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
         actie = kleur_actie(a, wens)
+        if wens == "8" and actie == "herstellen":
+            geen += 1          # zonder code laat ik een kleur van een ander staan; grafiet alleen op een kleurloze afspraak
+            continue
         regel = None
         if actie == "herstellen":
             # Iets buiten de agent zette een andere kleur. Ik zet ze terug en meld het, met het
@@ -4907,6 +4988,9 @@ def agendagasten_voor(titel, regels=None, mensen=None):
         if m:
             for naam in re.split(r"[,&+/]|\ben\b|\band\b", m.group(1), flags=re.I):
                 naam = naam.strip(" !?").lower()
+                if naam and naam not in per_naam:
+                    # een tikfout van een bekende naam ('Catlain', 'Katalin'): alleen als er precies een op lijkt
+                    naam = bekende_naam(naam, list(per_naam)) or naam
                 if naam and len(per_naam.get(naam, ())) == 1:
                     uit |= per_naam[naam]
     for naam in (regels.get("firma_gasten") or {}).get(lees_titel(titel or "").get("firma") or "", []):

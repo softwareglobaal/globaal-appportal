@@ -1,5 +1,19 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.27 (28-10-2026): vaste contacten, na de fouten op de afspraken van 29-10 (FR-211). Deze mensen herken ik
+altijd, ook met een tikfout van een letter, en ik stel er nooit een vraag 'welke firma' over:
+
+| Wie | Wat ik doe | Waar het staat |
+|---|---|---|
+| Catalin (partner Harmoniebouw, ook Katalin, Catlain, Karam) | Blijft voor de dubbele punt staan als ik een titel herschrijf, komt als gast op de afspraak en krijgt bij een afspraak ter plaatse eenmaal een uitnodiging met mail | `agenda-taken.json`, agendagasten |
+| Nadien, de boekhouder van alle firma's (ook Nadine, Nandien, Nadeen, 'boekhouder') | Altijd algemeen: `[AL-LO]`, met `!!` `[AL-LB]`; nooit een VR | `externe-relaties.json` |
+| Een afdeling van een eigen firma ('AI van EE afdeling') | Intern: `[EE-IN]`, groen | code, `titel_voorstel` |
+| Leen | Leest en schrijft mee op de agenda van Lara; daar hoeft niets bij | `agenda-taken.json`, agenda's |
+
+Een afspraak zonder code zet ik op grafiet (grijs), nooit in de lichtgroene agendakleur: die leek intern. Een collega
+als agendagast (Angela) houdt de juiste code niet meer tegen. Een nieuw vast contact komt in deze tabel en in het
+bestand ernaast, in dezelfde push.
+
 Aanvulling v8.26 (27-10-2026): driehoeksoverleg, punten L5 en M6, goedgekeurd door Mehdi. Een afspraak op de agenda
 van Lara en een afspraak uit een reeks worden nooit gewist, ook niet door Claude: de hook claude-hooks/wisgrendel.py
 weigert het voor het gebeurt (master 5.18). Alleen mijn eigen ritten (ID rit en 32 hexadecimale tekens) mogen weg.
