@@ -1229,6 +1229,16 @@ subdiscipline-statistieken.
       (170 groepen, 292 lidmaatschappen), alleen toegevoegd. Grendel: toegang van
       27 gebruikers x 86 apps voor en na gelijk. Back-up in `~/backups/`. Plan en
       script in de private repo `softwareglobaal/globaal-vm-beheer`, map `authentik/`.
+- [ ] **Contractmasters aanpassen na de toets van De Deontologiewacht** (geparkeerd door
+      Mehdi op 28-10-2026, eerst de agent afbouwen). Verslag:
+      `deontologie/toets-masters-2026-10-28.md` in de projectbestanden. (1) Artikel 3.2 van de
+      Architectuurovereenkomst: een programmawijziging mag nu ook per mail of verslag, zonder
+      financiele weerslag (D1, rood). Voorstel: "Elke wijziging van het programma wordt
+      vastgelegd in een Bijvoegsel, ondertekend door beide Partijen, dat de financiele weerslag
+      op het Bouwbudget en op het ereloon vermeldt." (2) Scenario maximaal bouwvolume: geen
+      begroting in euro bij ondertekening (B5, rood). (3) Scenario prijs per m²: totaal in euro
+      toevoegen (oranje). (4) Beslissen welke regels gelden voor voorstudie en regularisatie.
+      (5) Het Addendum heeft nog geen testdossier en is niet getoetst.
 - [ ] **Hertoewijzing fase 2**: apps laten kijken naar de nieuwe edit-groepen
       (helper `appportal_auth`, plan stap 5), daarna oude groepen, `admin` en
       `manager` op `state: absent` (pas na akkoord Mehdi).
