@@ -76,7 +76,7 @@ def onderwerp(a: dict) -> str:
     diensten = a.get("diensten") or []
     dienst = diensten[0] if diensten else "Offerteaanvraag"
     wie = (a.get("adres") or "").strip() or f"{a.get('voornaam','')} {a.get('achternaam','')}".strip()
-    return f"Offerteaanvraag {dienst}" + (f" · {wie}" if wie else "")
+    return ("SPOED · " if a.get("spoed") else "") + f"Offerteaanvraag {dienst}" + (f" · {wie}" if wie else "")
 
 
 def _moment(a: dict) -> str:
@@ -121,6 +121,13 @@ def velden(a: dict) -> list:
         ("E-mail", email, f"mailto:{email}" if email else ""),
         ("Telefoon", a.get("telefoon"), f"tel:{tel}" if tel else ""),
         ("Adres van het project", a.get("adres"), ""),
+        # Kwalificatievragen van de EPB-SEA-pagina's (28 okt 2026).
+        ("SPOED", "Werken bezig of af, of een brief of deadline van het VEKA: vandaag bellen" if a.get("spoed") else "", ""),
+        ("Postcode", a.get("postcode"), ""),
+        ("Vergunning of melding ingediend", a.get("vergunning"), ""),
+        ("Fase van het project", a.get("fase"), ""),
+        ("Brief van het VEKA of deadline", a.get("veka_brief"), ""),
+        ("Datum van de brief of deadline", a.get("deadline"), ""),
         ("Type gebouw", a.get("gebouwtype"), ""),
         ("Aard van de werken", a.get("type_aanvraag"), ""),
         ("Bericht van de klant", a.get("omschrijving"), ""),

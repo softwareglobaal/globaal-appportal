@@ -471,6 +471,10 @@ def verwerk(conn, rij, droog=False):
     else:
         (pipeline, fase), label = kies_pipeline(a.get("diensten"))
     titel = (a.get("adres") or "").strip() or f"{a['voornaam']} {a['achternaam']}".strip() or "Aanvraag via website"
+    # EPB-SEA-formulier (28 okt 2026): werken bezig/af of een VEKA-brief = SPOED,
+    # zodat sales die deal in de pijplijn meteen ziet staan.
+    if a.get("spoed"):
+        titel = "SPOED · " + titel
 
     if droog:
         waar = firma["naam"] if firma else "UNABO (standaard)"
@@ -545,6 +549,13 @@ def verwerk(conn, rij, droog=False):
                 regels.append(f"{lab}: {a[k]}")
     if a.get("diensten"):
         regels.append("Gevraagde diensten: " + ", ".join(a["diensten"]))
+    if a.get("spoed"):
+        regels.append("SPOED: de werken zijn bezig of af, of er is een brief of deadline van het VEKA. Vandaag bellen.")
+    for k, lab in (("postcode", "Postcode"), ("vergunning", "Vergunning of melding ingediend"),
+                   ("fase", "Fase van het project"), ("veka_brief", "Brief van het VEKA of deadline"),
+                   ("deadline", "Datum van de brief of deadline")):
+        if a.get(k):
+            regels.append(f"{lab}: {a[k]}")
     for k, lab in (("gevonden_via", "Gevonden via"), ("herkomst", "Herkomst"),
                    ("instap", "Binnengekomen op pagina"), ("gclid", "Google-klik (gclid)"),
                    ("telefoon", "Telefoon"), ("email", "E-mail")):
