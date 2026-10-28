@@ -57,7 +57,7 @@ De stand per bezoek (wat er is en wat ontbreekt) staat niet in Dropbox maar op h
 
 ## 5. De software die we zelf maakten
 
-**a. Het bord Mehdi Agents, pagina Werfverslagen** (mijnagents.globaal.be/werfverslagen, tegel "Werfverslagen").
+**a. Het bord Mehdi Agents, pagina Werfverslagen** (mijnagents.globaal.be/werfverslagen; sinds 28-10-2026 geen eigen tegel meer, bereikbaar via het menu-item Werfverslagen in de werfapp).
 Het overzicht per dossier, in dezelfde logica als het contractendashboard: per bezoek een rij met Openen, Keuzes,
 Bijlagen, Proef, Herkomst en Controle. De bezoekpagina heeft drie tabbladen in jouw volgorde: 1 Analyse (wat
 gevonden is, wat ontbreekt), 2 Keuzes (verslagtype, alleen eigen bronnen, taal, naslag ja of nee, aanwezigen),

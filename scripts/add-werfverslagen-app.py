@@ -1,6 +1,9 @@
 """Tegel Werfverslagen in de Authentik-bibliotheek: een koppeling zonder eigen provider (een proxy hoort bij één
 tegel), opent /werfverslagen; de forward-auth van mijnagents bewaakt de toegang.
-Alleen admin en manager (de pagina zelf laat de groep agents ook niet toe)."""
+Alleen admin en manager (de pagina zelf laat de groep agents ook niet toe).
+
+Uitgefaseerd op 28-10-2026 (Mehdi: één tegel, Werfverslag op werf.globaal.be): de tegel gaat weg met
+scripts/remove-werfverslagen-app.py. Dit script dient alleen nog om hem terug te zetten."""
 import os
 from authentik.core.models import Application, Group
 from authentik.policies.models import PolicyBinding
