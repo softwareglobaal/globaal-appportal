@@ -1,0 +1,63 @@
+# Claude Code Manager: Claude in de app stuurt Claude Code-sessies op Shaniels
+# laptop aan. De dienst draait NIET op deze VM maar op de laptop; hij komt hier
+# binnen via een SSH-tunnel (zie claude-manager-brug/README.md):
+#
+#   nginx -> 172.17.0.1:8120 (systemd-socket-proxyd)
+#         -> 127.0.0.1:8121 (tunnel-ingang, alleen loopback)
+#         -> laptop 127.0.0.1:8120 (server.py, repo claude-manager)
+#
+# Staat de laptop uit of is de tunnel weg, dan geeft deze vhost 502. Dat is
+# zo bedoeld: er is geen kopie van de manager op de VM.
+#
+# Geen forward-auth, zelfde opzet als 71-portal-mcp: de dienst is zelf
+# OIDC-client van Authentik met prompt=login, en laat daarna alleen de namen
+# in MANAGER_GEBRUIKERS binnen. Alles wat hier niet openstaat geeft 404.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name manager.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    resolver 127.0.0.11 valid=30s;
+    set $app_upstream http://172.17.0.1:8120;
+
+    proxy_buffers 8 16k;
+    proxy_buffer_size 32k;
+
+    location ^~ /mcp {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+        proxy_read_timeout 30s;
+    }
+
+    location ^~ /oauth/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass $app_upstream;
+    }
+
+    location ^~ /.well-known/oauth- {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+    location = /.well-known/openid-configuration {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass $app_upstream;
+    }
+
+    # Voor Uptime-Kuma: zegt alleen of laptop + tunnel bereikbaar zijn.
+    location = /gezond {
+        proxy_set_header Host $host;
+        proxy_pass $app_upstream;
+    }
+
+    location / {
+        return 404;
+    }
+}

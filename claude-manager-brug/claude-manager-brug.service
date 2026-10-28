@@ -1,0 +1,9 @@
+[Unit]
+Description=Claude Code Manager: brug naar de SSH-tunnel van de laptop
+Requires=claude-manager-brug.socket
+After=claude-manager-brug.socket
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd 127.0.0.1:8121
+DynamicUser=yes
+PrivateTmp=yes

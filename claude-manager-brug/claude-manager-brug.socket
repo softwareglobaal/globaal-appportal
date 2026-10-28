@@ -1,0 +1,12 @@
+[Unit]
+Description=Claude Code Manager: brug van de docker-brug naar de SSH-tunnel (ingang)
+
+[Socket]
+# nginx (container) bereikt de host op 172.17.0.1; de tunnel luistert alleen
+# op 127.0.0.1:8121. FreeBind zodat de socket ook opkomt als docker0 er bij
+# het opstarten nog niet is.
+ListenStream=172.17.0.1:8120
+FreeBind=yes
+
+[Install]
+WantedBy=sockets.target

@@ -1096,6 +1096,17 @@ gereedschap voor; een deal sluiten gaat via `deal_bijwerken` met status `lost`.
 Tests: `pipedrive-mcp/test_firma.py` (de poort) en `test_koppeling.py` (de
 OAuth-redirects en de rechten). Uitrollen en koppelen: `pipedrive-mcp/README.md`.
 
+### 13.2c Claude Code Manager - MCP op `manager.globaal.be` (28-10-2026)
+Claude in de app (ook live mode) stuurt hiermee Claude Code-sessies op Shaniels
+laptop aan. **De dienst draait op de laptop, niet op de VM**; de VM is alleen de
+voordeur. Weg: nginx (`87-claude-manager.conf.template`) -> `172.17.0.1:8120`
+(systemd-socket-proxyd, `claude-manager-brug/`) -> `127.0.0.1:8121` (SSH-tunnel
+vanaf de laptop, eigen sleutel met `restrict,permitlisten`) -> laptop. Laptop
+uit = 502, zo bedoeld. OAuth-opzet gelijk aan portal-mcp (OIDC-client van
+Authentik met `prompt=login`, `scripts/add-claude-manager.py`, groep
+`claude-manager`), plus een namenlijst op de laptop. Uitrollen:
+`claude-manager-brug/README.md`.
+
 ### 13.3 CI/CD - automatische check, merge & deploy
 Doel: de handmatige stap "PR op GitHub goedkeuren + op de VM `git pull` doen"
 wegnemen, zodat de lus van wens → live volledig automatisch verloopt.
