@@ -99,8 +99,10 @@ def bevindingen(items, van, tot, nu):
         buitenachtig = info["buiten"] or info["soort"] in W.BUITEN_SOORTEN
         if toekomst and not a.get("hele_dag") and kal not in vaste:
             wens = W.kleur_gewenst(a, info)
-            if wens and (a.get("_kleur") or "") != wens:
-                actie = W.kleur_actie(a, wens)
+            actie = W.kleur_actie(a, wens) if wens else ""
+            # zonder code laat de agent een kleur van een ander staan; dan ook geen melding (driehoeksoverleg FR-211)
+            if wens and (a.get("_kleur") or "") != wens and not (wens == "8" and (
+                    actie == "herstellen" or W.is_zorgschaduw(a) or W.is_calendly(a))):
                 meld("kleur", a,
                      f"kleur {W.KLEURNAAM.get(a.get('_kleur'), a.get('_kleur') or 'agenda')}, regel zegt {W.KLEURNAAM.get(wens, wens)}")
             if info.get("firma") == "HARC" and info["soort"] in ("PO", "PB") and info["nummer"] in projecten:

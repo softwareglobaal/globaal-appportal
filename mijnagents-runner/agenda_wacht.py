@@ -1208,11 +1208,12 @@ def _plat(t):
 
 def _lijkt_op(a, b):
     """Een tikfout van een letter: een letter anders, erbij, eraf of twee buren omgewisseld ('Catlain', 'Katalin'
-    voor Catalin). Alleen vanaf vijf letters, zodat korte namen nooit op elkaar lijken (Mehdi, 28-10-2026)."""
+    voor Catalin). Alleen vanaf zes letters, zodat korte namen nooit op elkaar lijken: Karim is geen Karam
+    (driehoeksoverleg FR-211, 28-10-2026)."""
     a, b = _plat(a), _plat(b)
     if a == b:
         return True
-    if min(len(a), len(b)) < 5 or abs(len(a) - len(b)) > 1:
+    if min(len(a), len(b)) < 6 or abs(len(a) - len(b)) > 1:
         return False
     if len(a) == len(b):
         verschil = [i for i in range(len(a)) if a[i] != b[i]]
@@ -1257,6 +1258,19 @@ def _van_mehdi(a):
             and not a.get("_agendagasten"))
 
 
+def _relatie_tikfout(woord):
+    """De schrijfwijze van een vaste relatie waar dit woord een tikfout van is ('Nandien' voor Nadien). Alleen
+    persoonsnamen met een hoofdletter, geen rolwoorden zoals 'boekhouder', en precies een relatie: twee schrijfwijzen van
+    dezelfde boekhouder tellen als een (driehoeksoverleg FR-211). Een gewoon woord ('nadeel') komt hier niet: de
+    aanroeper laat alleen een woord met een hoofdletter door."""
+    gevonden = {}
+    for i, r in enumerate(EXTERNE_RELATIES):
+        for nm in [r.get("naam") or ""] + list(r.get("ook_geschreven") or []):
+            if nm[:1].isupper() and _lijkt_op(nm, woord):
+                gevonden.setdefault(i, _plat(nm))
+    return next(iter(gevonden.values())) if len(gevonden) == 1 else ""
+
+
 def titel_voorstel(titel, online=None):
     """Leest vrije tekst en geeft (nieuwe titel of None, firma, soort, uitleg). Buiten of online komt uit de tekst
     ('online', 'buiten', '!!') of uit de afspraak zelf (online: True/False/None). Staat het nergens, dan geen soort
@@ -1286,7 +1300,7 @@ def titel_voorstel(titel, online=None):
             elif pd in relaties and firma in (None, relaties[pd]):
                 firma = relaties[pd]; rol = rol or "L"          # de naam blijft in de titel staan
                 relatie_waar = relatie_waar or standaard_waar.get(pd)
-            elif ((k := bekende_naam(pd, [r for r in relaties if len(r) >= 5]))
+            elif (d[:1].isupper() and (k := _relatie_tikfout(d))
                   and firma in (None, relaties[k])):
                 # een tikfout in een vaste relatie ('Nandien' voor Nadien): dezelfde relatie (Mehdi, 28-10-2026)
                 firma = relaties[k]; rol = rol or "L"
@@ -1726,26 +1740,31 @@ def _deal_op_adres(firma, adres):
     return uit
 
 
+GASTSCHEIDING = r"[,&+/]|\ben\b|\band\b|\bmet\b"     # 'Mehdi met Catalin:' telt ook (driehoeksoverleg FR-211)
+
+
 def mehdi_kop(titel):
     """'Mehdi' plus de namen die Mehdi voor de dubbele punt schreef: '!! Mehdi en Catlain: HA 2605 plaatsbezoek' wordt
     'Mehdi & Catalin'. Een herschreven titel verliest die namen nooit, want daar hangen de agendagast en de uitnodiging
     aan (28-10-2026: bij 2605 viel Catalin weg en kreeg hij geen uitnodiging). Een tikfout van een bekende naam wordt
-    die naam; een ander los woord met een hoofdletter blijft staan zoals Mehdi het schreef."""
+    die naam; alleen bekende namen komen in de kop, een bijnaam alleen letterlijk (driehoeksoverleg: Karim is geen
+    Karam, 'Werf' is geen naam)."""
     t = re.sub(r"^[!?\s]+", "", zonder_zl(re.sub(r"^\s*VR\s+", "", titel or "")))
     m = re.match(r"\s*Mehdi\b(.*)$", t.split(":", 1)[0], re.I) if ":" in t else None
     if not m:
         return "Mehdi"
     regels = _gastregels()
-    bekend = (list(regels.get("bijnamen") or {}) + list((regels.get("bijnamen") or {}).values())
+    bijnamen = list(regels.get("bijnamen") or {})
+    bekend = (list((regels.get("bijnamen") or {}).values())
               + [n for namen in (regels.get("firma_gasten") or {}).values() for n in namen])
     try:
         bekend += [p.get("voornaam") for p in (organisatie.agenda_adressen() or {}).values() if p.get("voornaam")]
     except Exception:  # noqa: BLE001
         pass
     namen = []
-    for deel in re.split(r"[,&+/]|\ben\b|\band\b", m.group(1), flags=re.I):
+    for deel in re.split(GASTSCHEIDING, m.group(1), flags=re.I):
         deel = deel.strip(" !?.-")
-        naam = bekende_naam(deel, bekend) or (deel if re.fullmatch(r"[A-ZÀ-Ý][\wÀ-ÿ'-]*", deel) else "")
+        naam = next((b for b in bijnamen if _plat(b) == _plat(deel)), "") or bekende_naam(deel, bekend)
         if naam and naam not in namen:
             namen.append(naam)
     if not namen:
@@ -2177,9 +2196,9 @@ def kleuren_zetten(items, alleen_dag=None):
             geen += 1          # geen code in de titel: dat is een fout, geen uitzondering
             continue
         actie = kleur_actie(a, wens)
-        if wens == "8" and actie == "herstellen":
-            geen += 1          # zonder code laat ik een kleur van een ander staan; grafiet alleen op een kleurloze afspraak
-            continue
+        if wens == "8" and (actie == "herstellen" or is_zorgschaduw(a) or is_calendly(a)):
+            geen += 1          # zonder code laat ik een kleur van een ander staan; grafiet alleen op een kleurloze eigen
+            continue           # afspraak, niet op een zorgschaduw of een Calendly-boeking (driehoeksoverleg FR-211)
         regel = None
         if actie == "herstellen":
             # Iets buiten de agent zette een andere kleur. Ik zet ze terug en meld het, met het
@@ -4986,11 +5005,13 @@ def agendagasten_voor(titel, regels=None, mensen=None):
     if ":" in t:
         m = re.match(r"\s*Mehdi\b(.*)$", t.split(":", 1)[0], re.I)
         if m:
-            for naam in re.split(r"[,&+/]|\ben\b|\band\b", m.group(1), flags=re.I):
+            for naam in re.split(GASTSCHEIDING, m.group(1), flags=re.I):
                 naam = naam.strip(" !?").lower()
                 if naam and naam not in per_naam:
-                    # een tikfout van een bekende naam ('Catlain', 'Katalin'): alleen als er precies een op lijkt
-                    naam = bekende_naam(naam, list(per_naam)) or naam
+                    # een tikfout van een bekende naam ('Catlain', 'Katalin'): alleen als er precies een op lijkt, en
+                    # nooit via een bijnaam (Karim is geen Karam, driehoeksoverleg FR-211)
+                    bijnamen = {b.lower() for b in regels.get("bijnamen") or {}}
+                    naam = bekende_naam(naam, [n for n in per_naam if n not in bijnamen]) or naam
                 if naam and len(per_naam.get(naam, ())) == 1:
                     uit |= per_naam[naam]
     for naam in (regels.get("firma_gasten") or {}).get(lees_titel(titel or "").get("firma") or "", []):
