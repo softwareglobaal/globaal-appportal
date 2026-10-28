@@ -58,7 +58,7 @@ services:
       WERF_DATA: /data
       WERF_DB: /data/werf.db
       WERF_SECRET: ${WERF_SECRET:-}
-      TOEGANG_GROEPEN: admin,manager,werfverslag,contracten
+      TOEGANG_GROEPEN: admin,manager,werfverslag,contracten,app-werfverslag-read,app-werfverslag-edit
       ADMIN_GROEPEN: admin,manager
       BORD_URL: http://app-mijnagents:3022
       # Mail: pas wanneer Mehdi de afzender kiest (bv. standaard@h-architects.be).
@@ -373,7 +373,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: "3011"
-      EDITOR_GROUPS: ${PROJECTEN_EDITOR_GROUPS:-projecten-editors,admin}
+      EDITOR_GROUPS: ${PROJECTEN_EDITOR_GROUPS:-projecten-editors,admin,app-projecten-edit}
       VIEW_GROUPS: ${PROJECTEN_VIEW_GROUPS:-projecten,manager}
     volumes:
       - projecten-data:/app/data
@@ -639,7 +639,7 @@ services:
       DATABASE_URL: ${COMMUNICATIE_DB_URL:-}
       PORT: "3008"
       # Wie mag bewerken (komma-gescheiden Authentik-groepen).
-      EDITOR_GROUPS: communicatie-editors,admin
+      EDITOR_GROUPS: communicatie-editors,admin,app-communicatie-edit
       # Xelion-koppeling (migratie 028): poller spiegelt de belvolgorde.
       # Credentials in .env op de VM (nooit in git); zonder waarden blijft
       # de Xelion-kolom leeg. XELION_DEBUG mag uit na de eerste verificatie.
@@ -728,7 +728,7 @@ services:
       BASE_DOMAIN: ${BASE_DOMAIN}
       DATABASE_URL: ${COMMUNICATIE_DB_URL:-}
       PORT: "3018"
-      EDITOR_GROUPS: communicatie-editors,admin
+      EDITOR_GROUPS: communicatie-editors,admin,app-communicatie-proef-edit
       # Proefvlag: banner in de app en bewerkknoppen uit tot de eigenaar akkoord is.
       PROEF: "1"
       XELION_ENABLED: "false"
@@ -788,7 +788,7 @@ services:
       DATABASE_URL: ${DRAAIBOEK_DB_URL:-}
       PORT: "3010"
       # Wie de app mag gebruiken (komma-gescheiden Authentik-groepen).
-      TOEGANG_GROEPEN: admin,manager,draaiboek
+      TOEGANG_GROEPEN: admin,manager,draaiboek,app-draaiboek-read,app-draaiboek-edit
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3010/healthz')"]
       interval: 2m
@@ -1090,7 +1090,7 @@ services:
     environment:
       BASE_DOMAIN: ${BASE_DOMAIN}
       PORT: "3022"
-      TOEGANG_GROEPEN: admin,manager,contracten
+      TOEGANG_GROEPEN: admin,manager,contracten,app-contracten-read,app-contracten-edit
       # Hergebruikt de bestaande sleutel; niet nog eens apart zetten.
       PIPEDRIVE_API_TOKEN: ${PIPEDRIVE_TOKEN_HARCHITECTS:-}
       PANDADOC_API_KEY: ${CONTRACTEN_PANDADOC_KEY:-}
