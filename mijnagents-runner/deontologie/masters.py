@@ -50,7 +50,8 @@ WETSTEKST_KOP = r"wet op de bescherming|wettelijke opdracht"
 OVER_TAKEN = r"\btaak\b|\btaken\b|\bopdracht\b|\bbelast\b|\barchitect\b"  # niet "Opdrachtgever" (proef 28-10-2026)
 NIET_OVER_TAKEN = r"kost|ereloon|bedrag|polis|aansprakelijk|gegevens"
 # De aanloopzinnen van de master bij het programma; wat erna komt, is de eigen beschrijving.
-VASTE_PROGRAMMAZINNEN = (r"het programma van het bouwproject,? zoals hierna beschreven[^.:]*[.:]?|"
+VASTE_PROGRAMMAZINNEN = (r"het programma van het bouwproject,? zoals hierna beschreven[^.]*\.?|"
+                         r"die beschrijving geeft de wensen en randvoorwaarden[^.]*\.?|"
                          r"het bouwproject bestaat in de realisatie van de volgende werken op de bouwplaats\s*:?|"
                          r"de opdrachtgever wenst dat het project van de architect omvat wat volgt\s*:?|"
                          r"het (bouw)?project omvat\s*:|\{[%{#].*?[%}#]\}|•")
@@ -85,7 +86,10 @@ def secties(tekst):
         if not regel:
             continue
         nummer = _hoofdnummer(regel) if re.match(r"\d+\.\s", regel) else 0
-        lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1))
+        # Een kop staat (bijna) helemaal in hoofdletters, een lijstpunt niet: "4. WIJZIGING" na een lijst 1 tot 3 in
+        # artikel 3 blijft een kop (vierde tegenlezing).
+        kopstijl = sum(c.isupper() for c in regel) > 0.6 * max(1, sum(c.isalpha() for c in regel))
+        lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1 and not kopstijl))
         if KOP.match(regel) and len(regel) < 120 and not lijst:
             uit.append((kop, alineas))
             kop, alineas, vorig = regel, [], 0

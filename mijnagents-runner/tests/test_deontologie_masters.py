@@ -190,6 +190,18 @@ vast = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van h
                     "en de veiligheidscoordinatie.")
 check("B5: alleen de vaste zinnen en de lijst \"omvat niet\" zijn geen programma", uitkomst(vast)["B5"].uitkomst == V.FAALT)
 
+print("Vierde tegenlezing (28-10-2026)")
+secs = M.secties("3. ERELOON\n1. een\n2. twee\n3. drie\n4. WIJZIGING VAN HET PROGRAMMA\nTekst\n5. SLOT\nTekst\n")
+check("een lijst 1 tot 3 in artikel 3 slokt de volgende artikels niet op", [k for k, _ in secs] ==
+      ["aanhef", "3. ERELOON", "4. WIJZIGING VAN HET PROGRAMMA", "5. SLOT"], str([k for k, _ in secs]))
+master = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                      "Het Bouwproject bestaat in de realisatie van de volgende werken op de Bouwplaats: . Het programma "
+                      "van het Bouwproject, zoals hierna beschreven, vormt het wederzijds overeengekomen Bouwproject. Die "
+                      "beschrijving geeft de wensen en randvoorwaarden van de Opdrachtgever weer en is geen vastgelegd "
+                      "ontwerp: het effectieve ontwerp wordt in overleg met de Opdrachtgever uitgewerkt en besproken.")
+check("B5: de vaste zinnen van de master zonder eigen beschrijving zijn geen programma",
+      uitkomst(master)["B5"].uitkomst == V.FAALT)
+
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"
            "4. OPDRACHT\nDe opdracht is te beperken tot de studiefase.\nHet verzamelen van de gegevens die nodig zijn.\n"
