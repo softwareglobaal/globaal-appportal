@@ -19,3 +19,4 @@ jobs:
           python-version: "3.12"
       - run: python3 mijnagents-runner/deontologie/register.py
       - run: python3 mijnagents-runner/tests/test_deontologie_register.py
+      - run: python3 mijnagents-runner/tests/test_deontologie_privacypoort.py
