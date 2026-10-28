@@ -19,6 +19,7 @@ aangeroepen als er niets doorging.
 import hashlib
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -65,6 +66,10 @@ def uit_bibliotheek(code, register=None, basis=R.HIER):
 
 
 def _normaal(tekst):
+    """Hoofdletters, accenten, onzichtbare tekens en witruimte tellen niet: "Müller" vangt ook "MULLER" en "Mul\u200bler"
+    (eigen toets 28-10-2026, de Codex-toets kon niet draaien)."""
+    tekst = unicodedata.normalize("NFKD", tekst)
+    tekst = "".join(t for t in tekst if not unicodedata.combining(t) and unicodedata.category(t) != "Cf")
     return re.sub(r"\s+", " ", tekst).strip().casefold()
 
 

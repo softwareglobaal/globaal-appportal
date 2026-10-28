@@ -153,5 +153,13 @@ except P.PoortGesloten:
     gesloten = True
 check("een bron die niet in het register staat is niet publiek", gesloten)
 
+# Accenten en onzichtbare tekens omzeilen de lijst niet
+for naam, tekst in (("zonder accent", "Over Jose Muller."), ("in hoofdletters", "Over JOSÉ MÜLLER."),
+                    ("met een onzichtbaar teken", "Over Jos\u00e9 M\u00fcl\u200bler."),
+                    ("ontleed accent", "Over Jose\u0301 Mu\u0308ller.")):
+    vx = Verzender()
+    dx = P.stuur([P.Stuk(tekst, "PUBLIEK")], "codex", vx, verboden=["José Müller"])
+    check(f"verboden term {naam} gaat niet door", dx.doorgelaten == 0 and not vx.gestuurd)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
