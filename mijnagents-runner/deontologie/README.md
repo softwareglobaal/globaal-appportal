@@ -89,6 +89,14 @@ Mehdi die vastlegt. `budget.d4_verzekering(tekst)` zoekt verzekeraar, polis en t
 contract (zit ook in `masters.toets_contract`). `budget.overschrijding(budget, kost, gemeld, verzekering_bijgewerkt)`
 geeft D3 en D5 voor een dossier, met een drempel van 15 procent zoals artikel 3.4 van de master. Alles hoogstens oranje.
 
+## Afgeschermde proef
+
+`python3 -m deontologie.proef MAP --soort contract|werfverslag [--uitleg]` toetst elk stuk in een map en vraagt de
+grendel met wegwerpsleutels of het zou vertrekken. Er vertrekt niets. De tabel noemt alleen bestandsnaam, kleur,
+regelcodes en het antwoord van de grendel, nooit tekst uit het stuk. `--uitleg` zet de reden per punt erbij, met elk
+getal vervangen door #; ook die uitvoer blijft lokaal. Eerste proef op 28-10-2026 met echte contracten en
+werfverslagen uit Dropbox: zie het verslag in de projectbestanden (niet in git, want het gaat over klanten).
+
 ## Draaien
 
 ```

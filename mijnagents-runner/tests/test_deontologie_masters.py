@@ -123,6 +123,11 @@ f = uitkomst(zonder(GOED, "4.3. Het nazicht van de vorderingsstaten en de factur
                     "4.4. De bijstand bij de oplevering.") +
              "De kosten van de opmeting zijn niet inbegrepen. De aansprakelijkheid is beperkt tot het bedrag van de polis.\n")
 check("B2: een uitsluiting over kosten maakt een ontbrekende taak niet oranje", f["B2"].uitkomst == V.FAALT)
+check("de zin uit de master Voorstudie is een beperkte opdracht (proef 28-10-2026)", M.beperkte_opdracht(
+    "Partijen zijn het uitdrukkelijk eens dat de opdracht en duurtijd van deze overeenkomst te beperken zijn tot de "
+    "studiefase van het project."))
+check("de zin uit de master Regularisatie ook", M.beperkte_opdracht(
+    "Deze Regularisatieovereenkomst heeft uitsluitend betrekking op de opmaak van een regularisatiedossier."))
 check("een beperkte aansprakelijkheid is geen beperkte opdracht",
       not M.beperkte_opdracht("De aansprakelijkheid van de Architect is beperkt tot het bedrag van de polis."))
 f = uitkomst(GOED + "De Architect waakt erover dat er geen budgetoverschrijding ontstaat.\n")
@@ -130,6 +135,98 @@ check("B5: geen budgetoverschrijding is geen uitsluiting van het budget", f["B5"
 for datum in ("01/01/2026", "1-1-2026", "01.01.2026"):
     f = uitkomst(GOED.replace("op 1 januari 2026", f"op {datum}"))
     check(f"B1: een datum als {datum} telt", f["B1"].uitkomst == V.SLAAGT)
+
+print("Echte contracten (proef 28-10-2026)")
+u = uitkomst(GOED.replace(" ", "\t "))
+check("een pdf met tabs tussen de woorden toetst als het origineel", all(u[c].uitkomst == V.SLAAGT for c in HARD),
+      {c: b.toelichting for c, b in u.items() if b.uitkomst != V.SLAAGT})
+oud = GOED.replace("de Opdrachtgever", "de Bouwheer").replace(
+    "Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+    "Het Bouwproject bestaat in de transformatie van een handelsruimte naar drie appartementen.")
+u = uitkomst(oud)
+check("een oud contract met Bouwheer en een beschreven Bouwproject: B1 en B5 groen",
+      u["B1"].uitkomst == V.SLAAGT and u["B5"].uitkomst == V.SLAAGT, {c: u[c].toelichting for c in ("B1", "B5")})
+
+print("Tweede tegenlezing na de proef (28-10-2026)")
+f = uitkomst(GOED.replace("op 1 januari 2026, in twee", "op 1 januari 2026,\nin twee"))
+check("B1: een slot over twee regels telt", f["B1"].uitkomst == V.SLAAGT)
+f = uitkomst(GOED.replace("Het Bouwbudget wordt op 250.000,00 euro vooropgesteld.",
+                          "Het Bouwbudget wordt op\n250.000,00 euro vooropgesteld."))
+check("B5: een bedrag aan het begin van een afgebroken regel is geen artikelkop", f["B5"].uitkomst == V.SLAAGT,
+      f["B5"].toelichting)
+f = uitkomst(GOED + "De aanbesteding en de keuze van de aannemer maken geen deel uit van deze opdracht.\n")
+check("B4 en B2: een andere zin die de keuze van de aannemer uitsluit, is nooit groen",
+      f["B4"].uitkomst == V.ONBEKEND and f["B2"].uitkomst == V.ONBEKEND)
+f = uitkomst(GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                          "Het programma van het Bouwproject, zoals hierna beschreven."))
+check("B5: alleen de standaardzin over het programma is geen programma", f["B5"].uitkomst == V.FAALT)
+f = uitkomst(zonder(GOED, "4.3. Het nazicht van de vorderingsstaten en de facturen.",
+                    "4.4. De bijstand bij de oplevering.")
+             + "De persoonsgegevens zijn beperkt tot de identificatie van de Opdrachtgever.\n")
+check("B2: een zin over persoonsgegevens van de Opdrachtgever is geen uitsluiting van taken", f["B2"].uitkomst == V.FAALT)
+check("een zin over technische studies is geen beperkte opdracht", not M.beperkte_opdracht(
+    "De opdracht van de Architect is beperkt tot de overeenstemming van deze technische studies met de plannen."))
+secs = M.secties("5. ERELOON\n5.1. Erelonen\n1. Opmeting van de bestaande toestand\n6. VERZEKERING\n")
+check("een genummerde lijst in een artikel is geen nieuwe kop", [k for k, _ in secs] ==
+      ["aanhef", "5. ERELOON", "5.1. Erelonen", "6. VERZEKERING"], str([k for k, _ in secs]))
+
+print("Derde tegenlezing na de proef (28-10-2026)")
+voorstudie = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n4. OPDRACHT\n"
+              "De opdracht van de Architect zal te beperken zijn tot de studiefase.\n"
+              "Het verzamelen van de gegevens die nodig zijn.\n"
+              "8. SLOT\nOpgesteld te Nergenshuizen, op 1 januari 2026, in twee ondertekende exemplaren.\n")
+check("B2: een voorstudie \"te beperken zijn tot\" is onbekend, geen rood", uitkomst(voorstudie)["B2"].uitkomst == V.ONBEKEND)
+secs = M.secties("2. VOORWERP\n1. een\n2. twee\n3. drie\n4. vier\n5. vijf\n3. TAKEN VAN DE ARCHITECT\nTekst\n")
+check("een lijst 1 tot 5 in artikel 2 slokt artikel 3 niet op", [k for k, _ in secs] ==
+      ["aanhef", "2. VOORWERP", "3. TAKEN VAN DE ARCHITECT"], str([k for k, _ in secs]))
+f = uitkomst(GOED.replace("in twee ondertekende exemplaren.",
+                          "\nElke partij erkent een ondertekend exemplaar ontvangen te hebben.").replace(
+    "op 1 januari 2026,", "op 1 januari 2026."))
+check("B1: een punt na de datum, de ondertekening in de volgende zin, is in orde", f["B1"].uitkomst == V.SLAAGT,
+      f["B1"].toelichting)
+vast = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                    "Het Bouwproject bestaat in de realisatie van de volgende werken op de Bouwplaats:\n"
+                    "Het Bouwproject omvat niet:\nDe opmeting van het terrein, de stabiliteitsstudie, de EPB-verslaggeving "
+                    "en de veiligheidscoordinatie.")
+check("B5: alleen de vaste zinnen en de lijst \"omvat niet\" zijn geen programma", uitkomst(vast)["B5"].uitkomst == V.FAALT)
+
+print("Vierde tegenlezing (28-10-2026)")
+secs = M.secties("3. ERELOON\n1. een\n2. twee\n3. drie\n4. WIJZIGING VAN HET PROGRAMMA\nTekst\n5. SLOT\nTekst\n")
+check("een lijst 1 tot 3 in artikel 3 slokt de volgende artikels niet op", [k for k, _ in secs] ==
+      ["aanhef", "3. ERELOON", "4. WIJZIGING VAN HET PROGRAMMA", "5. SLOT"], str([k for k, _ in secs]))
+master = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                      "Het Bouwproject bestaat in de realisatie van de volgende werken op de Bouwplaats: . Het programma "
+                      "van het Bouwproject, zoals hierna beschreven, vormt het wederzijds overeengekomen Bouwproject. Die "
+                      "beschrijving geeft de wensen en randvoorwaarden van de Opdrachtgever weer en is geen vastgelegd "
+                      "ontwerp: het effectieve ontwerp wordt in overleg met de Opdrachtgever uitgewerkt en besproken.")
+check("B5: de vaste zinnen van de master zonder eigen beschrijving zijn geen programma",
+      uitkomst(master)["B5"].uitkomst == V.FAALT)
+
+print("Vijfde tegenlezing (28-10-2026)")
+secs = M.secties("4. Taken van de architect\n1. het ontwerp;\n2. de vergunning;\n3. de aanbesteding;\n"
+                 "4. de controle op de uitvoering.\n5. Bouwbudget\nTekst\n")
+check("een gewone kop na een lijst die op een leesteken eindigt, blijft een kop", [k for k, _ in secs][-1] == "5. Bouwbudget",
+      str([k for k, _ in secs]))
+secs = M.secties("3. ERELOON\n1. Studie.\n2. Ontwerp.\n3. BTW (21%).\n4. VERZEKERING\n")
+check("een lijstpunt in hoofdletters met een punt op het einde is geen kop", [k for k, _ in secs] ==
+      ["aanhef", "3. ERELOON", "4. VERZEKERING"], str([k for k, _ in secs]))
+eigen = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                     "Het programma van het Bouwproject, zoals hierna beschreven: een nieuwbouwwoning met drie "
+                     "slaapkamers, open keuken, twee badkamers en een carport.")
+check("B5: een eigen beschrijving na \"zoals hierna beschreven:\" is een programma", uitkomst(eigen)["B5"].uitkomst == V.SLAAGT)
+gebroken = master.replace("Die\nbeschrijving", "Die beschrijving").replace(
+    "wederzijds overeengekomen Bouwproject. Die beschrijving geeft de wensen en randvoorwaarden",
+    "wederzijds\novereengekomen Bouwproject. Die beschrijving geeft de wensen en\nrandvoorwaarden")
+check("B5: de vaste zinnen over twee regels gebroken zijn ook geen programma", uitkomst(gebroken)["B5"].uitkomst == V.FAALT)
+
+print("Zesde tegenlezing (28-10-2026)")
+for punt6, punt7 in (("6. het uitvoeringsdossier", "7. de controle op de uitvoering;"),
+                     ("6. het uitvoeringsdossier;", "7. de controle op de uitvoering; en")):
+    secs = M.secties("4. TAKEN VAN DE ARCHITECT\n1. het ontwerp;\n2. de vergunning;\n3. de voorstudie;\n4. de aanbesteding;\n"
+                     "5. bijstand bij de keuze van de aannemer;\n"
+                     f"{punt6}\n{punt7}\n8. de oplevering.\n9. ERELOON\n")
+    check(f"een lijstpunt zonder hoofdletter of met \"; en\" blijft een lijstpunt: {punt6} / {punt7}",
+          [k for k, _ in secs] == ["aanhef", "4. TAKEN VAN DE ARCHITECT", "9. ERELOON"], str([k for k, _ in secs]))
 
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"

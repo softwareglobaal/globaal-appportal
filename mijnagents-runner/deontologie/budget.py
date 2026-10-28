@@ -59,10 +59,12 @@ def d2_begroting(budget, oppervlakte, referentie=None, marge_procent=25):
     return B("D2", V.SLAAGT, "artikel over het budget", "", cijfers)
 
 
-def d4_verzekering(tekst):
+def d4_verzekering(tekst, tienjarig_nodig=True):
+    """Verzekeraar, polisnummer en, bij een opdracht met uitvoering, de tienjarige aansprakelijkheid. Een voorstudie of
+    regularisatie bouwt niets, dus daar is de tienjarige niet nodig (proef op echte contracten, 28-10-2026)."""
     plaats = "artikel over de verzekeringen"
     verzekeraar = re.search(r"verzekeraar|verzekerd bij|verzekeringsmaatschappij|\bpolis", tekst, re.I)
-    tienjarig = re.search(r"tienjarig", tekst, re.I)
+    tienjarig = re.search(r"tienjarig", tekst, re.I) or not tienjarig_nodig
     if verzekeraar and tienjarig and re.search(r"(polis|polisnummer)\s*(nr\.?|nummer)?\s*[:\-]?\s*[A-Z]{0,4}[\-./]?\d", tekst, re.I):
         return B("D4", V.SLAAGT, plaats)
     return B("D4", V.FAALT, plaats, "Vermeld: \"De Architect is voor zijn beroepsaansprakelijkheid, met inbegrip van de "
