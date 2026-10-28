@@ -7,3 +7,6 @@
 *.jpg binary
 *.ico binary
 *.xlsx binary
+
+# Bronnen van De Deontologiewacht: byte voor byte bewaren, hun sha256 staat in deontologie/regels.json.
+mijnagents-runner/deontologie/bronnen/** -text

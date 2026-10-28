@@ -1,0 +1,21 @@
+# De Deontologiewacht (opdrachtkaart v0.3, driehoeksoverleg 27-10-2026, 3-0): het regelregister. Elk citaat staat
+# letterlijk in het artikel dat de regel noemt, rood kan alleen bij een harde en letterlijke regel, en een gewijzigde
+# bron laat de grendel falen tot de citaten opnieuw nagekeken zijn.
+name: deontologie-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/deontologie/**", "mijnagents-runner/tests/test_deontologie_*.py", ".github/workflows/deontologie-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/deontologie/**", "mijnagents-runner/tests/test_deontologie_*.py", ".github/workflows/deontologie-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/deontologie/register.py
+      - run: python3 mijnagents-runner/tests/test_deontologie_register.py
