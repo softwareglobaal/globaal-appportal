@@ -96,5 +96,19 @@ check("alle oordeelsfouten samen blijven oranje",
       kleur(met(GEWOON.tekst + " De vorige architect tekende slecht. Kosten boven het budget.",
                 opgesteld_door="Carla Medewerker", eerste=True)).kleur == V.ORANJE)
 
+print("Ontkenningen en andere woorden (laatste toets 28-10-2026)")
+for tekst in ("Meerwerk: een extra dakkapel met meerprijs 4.000 euro. Er wordt geen addendum opgemaakt.",
+              "Meerwerk: een dakkapel, meerprijs 4.000 euro. Addendum nog niet besproken."):
+    check(f"een ontkend addendum telt niet: {tekst[-35:]}", toets(met(tekst))["D1"].uitkomst == V.FAALT)
+for tekst in ("De opdrachtgever wil bijkomend een carport en een extra badkamer op zolder.",
+              "De garage om te bouwen tot een bureau."):
+    check(f"een wijziging in andere woorden is nooit groen: {tekst[:30]}", toets(met(tekst))["D1"].uitkomst == V.ONBEKEND)
+for tekst in ("Meerwerken: geen.", "Geen meerwerk deze week."):
+    check(f"geen meerwerk is geen rood: {tekst}", toets(met(GEWOON.tekst + " " + tekst))["D1"].uitkomst == V.SLAAGT)
+f = toets(met(GEWOON.tekst + " De totale kostprijs stijgt met 40.000 euro ten opzichte van de raming. "
+              "De aannemer werd verwittigd."))
+check("een stijging tegen de raming is een overschrijding, een verwittigde aannemer geen melding",
+      f["D3"].uitkomst == V.FAALT)
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

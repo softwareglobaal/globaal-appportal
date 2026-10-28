@@ -63,7 +63,7 @@ def d4_verzekering(tekst):
     plaats = "artikel over de verzekeringen"
     verzekeraar = re.search(r"verzekeraar|verzekerd bij|verzekeringsmaatschappij|\bpolis", tekst, re.I)
     tienjarig = re.search(r"tienjarig", tekst, re.I)
-    if verzekeraar and tienjarig and re.search(r"(polis|polisnummer)\s*(nr\.?|nummer)?\s*[:\-]?\s*[A-Z0-9]", tekst, re.I):
+    if verzekeraar and tienjarig and re.search(r"(polis|polisnummer)\s*(nr\.?|nummer)?\s*[:\-]?\s*[A-Z]{0,4}[\-./]?\d", tekst, re.I):
         return B("D4", V.SLAAGT, plaats)
     return B("D4", V.FAALT, plaats, "Vermeld: \"De Architect is voor zijn beroepsaansprakelijkheid, met inbegrip van de "
              "tienjarige aansprakelijkheid, verzekerd bij [verzekeraar], polis [nummer].\"",

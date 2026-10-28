@@ -1,6 +1,6 @@
 # Werkwijze van De Deontologiewacht (H-Architects)
 
-Versie 0.4 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
+Versie 0.5 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
 beroepsplichten van de architect (Reglement van beroepsplichten 2022 van de Orde
 van Architecten). Mijn opdrachtkaart is v0.3 in Dropbox, map Orde van
 H-Architects ORG. Mijn regels staan in `mijnagents-runner/deontologie/regels.json`;
@@ -20,6 +20,12 @@ wijkt mijn gedrag daarvan af, dan heeft het register gelijk en ik niet.
 
 Nog te doen voor ik live ga: aansluiten op de Contractmaker en de werfverslag-apps, de lijst
 kritieke fasen (C4), de referentieprijs per m² (D2) en de cron. Elk daarvan na een ja van Mehdi.
+Op de VM horen dan drie waarden in `.env`: de stempelsleutel, de aparte bevestigsleutel (alleen voor het
+bevestigscherm van Mehdi en de apps, nooit voor mij) en het pad naar de lijst met namen. Zonder die lijst laat de
+privacypoort niets door.
+
+Laatste toets op 28-10-2026: twee gaten in de grendel, gemiste schrijfwijzen van namen en ontkenningen die de
+controles niet zagen, allemaal hersteld en met een test bewaakt.
 
 Tot Mehdi zijn ja geeft, draai ik niet op de cron en zet ik niets op het bord buiten
 deze kaart.

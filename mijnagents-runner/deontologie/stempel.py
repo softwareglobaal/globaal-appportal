@@ -9,6 +9,11 @@ met `controleer()`. Geen stempel, een gewijzigd bestand, een vervallen stempel o
 - Groen vertrekt. Oranje vertrekt pas na een zichtbare bevestiging van Mehdi. Rood vertrekt alleen als Mehdi elk rood
   punt apart bevestigt, met een reden die in de stempel bewaard blijft (beslissing van Mehdi, 27-10-2026). Het rode
   punt blijft in het verslag staan; er is geen andere weg langs de grendel.
+- De kleur van de stempel wordt uit de punten van het verslag nagerekend: een verslag dat groen zegt met een rood punt
+  erin, krijgt geen stempel (laatste toets 28-10-2026).
+- Een bevestiging van Mehdi draagt een eigen handtekening met een tweede sleutel (`DEONTOLOGIE_BEVESTIGSLEUTEL`). Die
+  staat alleen in het bevestigscherm achter de login van Mehdi en in de apps die controleren, nooit bij de Wacht zelf:
+  de Wacht kan dus een stempel maken, maar geen oranje of rood stuk laten vertrekken (laatste toets 28-10-2026).
 - Een stempel vervalt na GELDIG_DAGEN. Een Wacht die stilvalt, maakt geen nieuwe stempels, dus na de vervaldatum
   vertrekt niets meer.
 
@@ -21,11 +26,13 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-VERSIE = 1
+VERSIE = 2  # 2: kleur nagerekend, bevestiging met eigen sleutel (28-10-2026)
 GELDIG_DAGEN = 7
 SLEUTEL_ENV = "DEONTOLOGIE_STEMPELSLEUTEL"
+BEVESTIG_ENV = "DEONTOLOGIE_BEVESTIGSLEUTEL"
 BEVESTIGERS = ("mehdi",)  # alleen Mehdi laat oranje of rood vertrekken
 KLEUREN = ("groen", "oranje", "rood")
+ERNST = {k: i for i, k in enumerate(KLEUREN)}
 ORANJE_BEVESTIGING = "oranje"  # sleutel in `bevestigd` voor het hele stuk; rode punten staan onder hun code
 
 
@@ -33,13 +40,27 @@ class GrendelDicht(Exception):
     """De grendel kan niet veilig beslissen en laat niets vertrekken."""
 
 
-def _sleutel(sleutel=None):
-    sleutel = sleutel if sleutel is not None else os.environ.get(SLEUTEL_ENV, "")
+def _sleutel(sleutel=None, env=SLEUTEL_ENV):
+    sleutel = sleutel if sleutel is not None else os.environ.get(env, "")
     if isinstance(sleutel, str):
         sleutel = sleutel.encode("utf-8")
     if len(sleutel) < 32:
-        raise GrendelDicht(f"{SLEUTEL_ENV} ontbreekt of is te kort (minstens 32 tekens)")
+        raise GrendelDicht(f"{env} ontbreekt of is te kort (minstens 32 tekens)")
     return sleutel
+
+
+def _bevestigsleutel(bevestigsleutel, sleutel):
+    b = _sleutel(bevestigsleutel, BEVESTIG_ENV)
+    if hmac.compare_digest(b, sleutel):
+        raise GrendelDicht(f"{BEVESTIG_ENV} moet een andere sleutel zijn dan {SLEUTEL_ENV}")
+    return b
+
+
+def _teken_bevestiging(stempel, wat, b, bevestigsleutel):
+    gegevens = {"sha256": stempel["sha256"], "gemaakt": stempel["gemaakt"], "wat": wat,
+                "door": b["door"], "reden": b["reden"], "ts": b["ts"]}
+    tekst = json.dumps(gegevens, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hmac.new(bevestigsleutel, tekst, hashlib.sha256).hexdigest()
 
 
 def _nu(nu=None):
@@ -58,8 +79,11 @@ def vingerafdruk(inhoud):
 
 def maak(inhoud, verslag, sleutel=None, nu=None, geldig_dagen=GELDIG_DAGEN):
     """Een nieuwe stempel voor de exacte bytes van een stuk en het verslag van de Wacht daarover."""
-    if verslag.kleur not in KLEUREN:
+    if verslag.kleur not in KLEUREN or any(p.kleur not in KLEUREN for p in verslag.punten):
         raise GrendelDicht(f"onbekende kleur {verslag.kleur!r}")
+    nagerekend = max((p.kleur for p in verslag.punten), key=ERNST.get, default="oranje")
+    if verslag.kleur != nagerekend:
+        raise GrendelDicht(f"het verslag zegt {verslag.kleur}, maar de punten geven {nagerekend}")
     sleutel = _sleutel(sleutel)
     nu = _nu(nu)
     gegevens = {
@@ -77,12 +101,15 @@ def maak(inhoud, verslag, sleutel=None, nu=None, geldig_dagen=GELDIG_DAGEN):
     return gegevens
 
 
-def bevestig(stempel, wat, door, reden="", sleutel=None, nu=None):
+def bevestig(stempel, wat, door, reden="", sleutel=None, nu=None, bevestigsleutel=None):
     """Mehdi laat een oranje stuk (`wat` = "oranje") of een rood punt (`wat` = de regelcode) toch vertrekken.
 
-    Geeft een nieuwe, opnieuw ondertekende stempel; de oude blijft ongewijzigd. Een rood punt vraagt een reden."""
+    Geeft een nieuwe, opnieuw ondertekende stempel; de oude blijft ongewijzigd. Een rood punt vraagt een reden. Alleen
+    het bevestigscherm achter de login van Mehdi heeft de bevestigsleutel."""
     sleutel = _sleutel(sleutel)
-    if not hmac.compare_digest(str(stempel.get("handtekening", "")), _handtekening(stempel, sleutel)):
+    bevestigsleutel = _bevestigsleutel(bevestigsleutel, sleutel)
+    if not hmac.compare_digest(str(stempel.get("handtekening", "")).encode("utf-8"),
+                               _handtekening(stempel, sleutel).encode("utf-8")):
         raise GrendelDicht("de stempel is niet echt of gewijzigd")
     if door not in BEVESTIGERS:
         raise GrendelDicht("alleen Mehdi kan een oranje stuk of een rood punt laten vertrekken")
@@ -94,13 +121,16 @@ def bevestig(stempel, wat, door, reden="", sleutel=None, nu=None):
     elif not reden.strip():
         raise GrendelDicht("een rood punt laten vertrekken vraagt een reden")
     nieuw = json.loads(json.dumps(stempel))
-    nieuw["bevestigd"][wat] = {"door": door, "reden": reden.strip(), "ts": _nu(nu).isoformat()}
+    b = {"door": door, "reden": reden.strip(), "ts": _nu(nu).isoformat()}
+    b["teken"] = _teken_bevestiging(stempel, wat, b, bevestigsleutel)
+    nieuw["bevestigd"][wat] = b
     nieuw["handtekening"] = _handtekening(nieuw, sleutel)
     return nieuw
 
 
-def controleer(inhoud, stempel, sleutel=None, nu=None):
-    """(True, "") als dit exacte stuk mag vertrekken, anders (False, reden). Twijfel is altijd False."""
+def controleer(inhoud, stempel, sleutel=None, nu=None, bevestigsleutel=None):
+    """(True, "") als dit exacte stuk mag vertrekken, anders (False, reden). Twijfel is altijd False. Een stempel met een
+    bevestiging vraagt ook de bevestigsleutel."""
     try:
         sleutel = _sleutel(sleutel)
     except GrendelDicht as e:
@@ -108,7 +138,8 @@ def controleer(inhoud, stempel, sleutel=None, nu=None):
     if not isinstance(stempel, dict) or not stempel:
         return False, "geen stempel van De Deontologiewacht"
     try:
-        if not hmac.compare_digest(str(stempel.get("handtekening", "")), _handtekening(stempel, sleutel)):
+        if not hmac.compare_digest(str(stempel.get("handtekening", "")).encode("utf-8"),
+                                   _handtekening(stempel, sleutel).encode("utf-8")):
             return False, "de stempel is niet echt of gewijzigd"
         if stempel.get("versie") != VERSIE:
             return False, "onbekende versie van de stempel"
@@ -122,6 +153,8 @@ def controleer(inhoud, stempel, sleutel=None, nu=None):
         kleur, bevestigd = stempel.get("kleur"), stempel.get("bevestigd") or {}
         if kleur not in KLEUREN:
             return False, "onbekende kleur"
+        if stempel.get("rood") and kleur != "rood":
+            return False, "rode punten in een stempel die niet rood is"
         if kleur == "oranje" and ORANJE_BEVESTIGING not in bevestigd:
             return False, "oranje: wacht op de bevestiging van Mehdi"
         if kleur == "rood":
@@ -132,6 +165,15 @@ def controleer(inhoud, stempel, sleutel=None, nu=None):
                 return False, f"rood: {', '.join(open_)} wacht op Mehdi"
         if any((b or {}).get("door") not in BEVESTIGERS for b in bevestigd.values()):
             return False, "een bevestiging komt niet van Mehdi"
-    except (KeyError, TypeError, ValueError):
+        if bevestigd:
+            try:
+                b_sleutel = _bevestigsleutel(bevestigsleutel, sleutel)
+            except GrendelDicht as e:
+                return False, str(e)
+            for wat, b in bevestigd.items():
+                if not hmac.compare_digest(str(b.get("teken", "")).encode("utf-8"),
+                                           _teken_bevestiging(stempel, wat, b, b_sleutel).encode("utf-8")):
+                    return False, "een bevestiging is niet door Mehdi ondertekend"
+    except (AttributeError, KeyError, TypeError, ValueError):
         return False, "de stempel is onleesbaar"
     return True, ""

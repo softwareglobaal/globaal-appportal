@@ -8,8 +8,8 @@ klagers niet. Deze module is de enige uitgaande weg naar die twee. Ze moet er st
   ander label of een tikfout ("publiek", "PUBLIC") houdt de poort tegen.
 - De bronnen uit het regelregister zijn publiek via `uit_bibliotheek()`, en alleen als hun sha256 klopt.
 - Een publiek stuk met een verboden term (de namen uit het dossier) gaat ook niet door. De lijst staat buiten git, in
-  het bestand waar `DEONTOLOGIE_VERBODEN` naar wijst. Is die variabele gezet maar het bestand niet leesbaar, dan blijft
-  de poort dicht.
+  het bestand waar `DEONTOLOGIE_VERBODEN` naar wijst. Zonder die variabele of zonder leesbaar bestand blijft de poort
+  dicht. Een publiek stuk met letters buiten het Latijnse schrift gaat ook niet door.
 - Wat de poort tegenhoudt, verschijnt nergens: niet in de doorgang, niet in een foutmelding, niet in een log. De
   doorgang telt alleen hoeveel stukken om welke reden achterbleven.
 
@@ -32,6 +32,7 @@ VERBODEN_ENV = "DEONTOLOGIE_VERBODEN"
 REDEN_GEEN_STUK = "geen stuk met label"
 REDEN_PRIVE = "zonder label of privé"
 REDEN_VERBODEN = "bevat een verboden term"
+REDEN_SCHRIFT = "letters buiten het Latijnse schrift"
 
 
 class PoortGesloten(Exception):
@@ -66,37 +67,48 @@ def uit_bibliotheek(code, register=None, basis=R.HIER):
 
 
 def _normaal(tekst):
-    """Hoofdletters, accenten, onzichtbare tekens en witruimte tellen niet: "Müller" vangt ook "MULLER" en "Mul\u200bler"
-    (eigen toets 28-10-2026, de Codex-toets kon niet draaien)."""
+    """Hoofdletters, accenten, onzichtbare tekens, witruimte, streepjes en leestekens tellen niet: "Müller" vangt ook
+    "MULLER" en een onzichtbaar teken in de naam, "Brabazon-Kerckhove" ook "Brabazon Kerckhove" en een afbreking over
+    twee regels, "D'Hondt" ook "D’Hondt" (eigen toets en laatste toets, 28-10-2026)."""
     tekst = unicodedata.normalize("NFKD", tekst)
     tekst = "".join(t for t in tekst if not unicodedata.combining(t) and unicodedata.category(t) != "Cf")
-    return re.sub(r"\s+", " ", tekst).strip().casefold()
+    return re.sub(r"[\W_]+", "", tekst.casefold())
+
+
+def _vreemd_schrift(tekst):
+    """Letters buiten het Latijnse schrift: een Cyrillische o in een naam lijkt op een Latijnse en ontsnapt anders aan
+    de lijst. Een publiek stuk met zo een letter gaat niet door."""
+    tekst = unicodedata.normalize("NFKD", tekst)
+    return any(t.isalpha() and not unicodedata.name(t, "").startswith("LATIN") for t in tekst)
 
 
 def verboden_termen():
-    """De verboden termen uit het bestand buiten git. Geen variabele: geen extra termen. Variabele zonder leesbaar
-    bestand: de poort blijft dicht."""
+    """De verboden termen uit het bestand buiten git. Zonder variabele of zonder leesbaar bestand blijft de poort dicht:
+    een cron zonder .env mag geen namen laten passeren. Een leeg bestand is een bewuste lege lijst."""
     pad = os.environ.get(VERBODEN_ENV, "").strip()
     if not pad:
-        return []
+        raise PoortGesloten(f"{VERBODEN_ENV} is niet gezet, de poort blijft dicht")
     try:
         regels = Path(pad).read_text(encoding="utf-8").splitlines()
     except OSError:
         raise PoortGesloten(f"{VERBODEN_ENV} is gezet maar het bestand is niet leesbaar") from None
-    return [t for t in (_normaal(r) for r in regels) if t and not t.startswith("#")]
+    return [t for t in (_normaal(r) for r in regels if not r.strip().startswith("#")) if t]
 
 
 def poort(stukken, ontvanger, verboden=None):
-    """Laat alleen publieke stukken zonder verboden term door, voor Codex of Gemini."""
+    """Laat alleen publieke stukken zonder verboden term door, voor Codex of Gemini. `verboden` vult de lijst buiten
+    git aan, het vervangt ze nooit."""
     if ontvanger not in ONTVANGERS:
         raise PoortGesloten("onbekende ontvanger, alleen codex of gemini")
-    termen = verboden_termen() if verboden is None else [t for t in (_normaal(v) for v in verboden) if t]
+    termen = verboden_termen() + [t for t in (_normaal(v) for v in verboden or ()) if t]
     door, tegen = [], {}
     for stuk in stukken:
         if not isinstance(stuk, Stuk):
             reden = REDEN_GEEN_STUK
         elif stuk.label != PUBLIEK or not isinstance(stuk.tekst, str):
             reden = REDEN_PRIVE
+        elif _vreemd_schrift(stuk.tekst):
+            reden = REDEN_SCHRIFT
         elif any(t in _normaal(stuk.tekst) for t in termen):
             reden = REDEN_VERBODEN
         else:
