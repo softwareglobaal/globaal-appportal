@@ -126,8 +126,12 @@ def velden(a: dict) -> list:
         ("Bericht van de klant", a.get("omschrijving"), ""),
         ("Bijlagen (apart gemaild)", bijlagen, ""),
         ("Gevonden via", a.get("gevonden_via"), ""),
-        ("Herkomst", herkomst, ""),
+        # herkomst/instap/gclid zet de UNABO-site sinds 28 okt 2026 zelf mee
+        # (components/Herkomst.astro); oudere aanvragen vallen terug op de URL.
+        ("Herkomst", a.get("herkomst") or herkomst, ""),
+        ("Binnengekomen op", a.get("instap"), ""),
         ("Ingevuld op pagina", pagina, ""),
+        ("Google-klik (gclid)", a.get("gclid"), ""),
         ("Ingediend op", _moment(a), ""),
     ]
 

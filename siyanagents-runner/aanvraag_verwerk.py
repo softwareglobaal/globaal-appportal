@@ -545,7 +545,9 @@ def verwerk(conn, rij, droog=False):
                 regels.append(f"{lab}: {a[k]}")
     if a.get("diensten"):
         regels.append("Gevraagde diensten: " + ", ".join(a["diensten"]))
-    for k, lab in (("gevonden_via", "Gevonden via"), ("telefoon", "Telefoon"), ("email", "E-mail")):
+    for k, lab in (("gevonden_via", "Gevonden via"), ("herkomst", "Herkomst"),
+                   ("instap", "Binnengekomen op pagina"), ("gclid", "Google-klik (gclid)"),
+                   ("telefoon", "Telefoon"), ("email", "E-mail")):
         if a.get(k):
             regels.append(f"{lab}: {a[k]}")
     if a.get("omschrijving"):
