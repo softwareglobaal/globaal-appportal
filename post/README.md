@@ -94,8 +94,16 @@ Regels die in de code zitten, niet in een afspraak:
 eerste aanroep verstuurt niets: de server stelt het bericht samen en geeft het
 concept terug (van, aan, cc, onderwerp, tekst) met een bevestigingscode. Pas
 een tweede aanroep met `bevestig: <code>` verstuurt, en dan precies dat
-concept: `verstuur` bouwt het opnieuw op en weigert als ontvangers, onderwerp
-of tekst afwijken. Een code is persoonlijk, eenmalig en een half uur geldig.
+concept: `verstuur` bouwt het opnieuw op en weigert als ontvangers, onderwerp,
+tekst of bijlagen afwijken. Een code is persoonlijk, eenmalig en een half uur geldig.
+
+**Bijlagen** (`concept_opslaan` en `versturen`): met `bijlagen_van` (uid),
+`bijlagen_map` en eventueel `bijlage_namen` gaan de bijlagen van een bestaand
+bericht in dezelfde mailbox mee, samen hoogstens 20 MB. Het concept van
+`versturen` toont ze met naam en grootte en bewaart per bijlage een sha256;
+bij bevestigen vertrekt alleen exact die inhoud. Een bestand uit de chat kan
+niet mee (het model ziet de inhoud, niet het originele bestand): wat mee moet,
+mail je eerst naar de mailbox zelf.
 De instructies aan het model zeggen het concept altijd volledig te tonen en op
 een uitdrukkelijk ja te wachten. Dat laatste kan de server zelf niet
 afdwingen; zet daarom in claude.ai bij de connector de tools `versturen` en
@@ -112,7 +120,8 @@ volgens een vaste regel naar een vaste bestemming. Test: `post/test_bevestigen.p
 | `markeren` | gelezen/ongelezen, ster aan/uit, beantwoord aan/uit | ja |
 | `verplaatsen` | bericht naar een andere map, bijvoorbeeld archiveren | ja |
 | `map_aanmaken` | nieuwe map, inclusief abonnement zodat hij in de webmail verschijnt | ja |
-| `concept_opslaan` | zet een concept in de conceptenmap, met `antwoord_op` netjes in de conversatie | ja |
+| `concept_opslaan` | zet een concept in de conceptenmap, met `antwoord_op` netjes in de conversatie en met `bijlagen_van` de bijlagen van een bestaand bericht | ja |
+| `versturen` | verstuurt een vrij bericht (twee stappen), ook met bijlagen via `bijlagen_van` | verstuurt |
 | `doorsturen` | stuurt een bericht uit de mailbox naar een toegestaan adres, origineel als bijlage | verstuurt |
 
 `doorsturen` is de enige tool die iets de deur uit doet. Ze weigert een

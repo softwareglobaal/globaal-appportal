@@ -33,17 +33,23 @@ verstuurd, doorgestuurd = [], []
 
 
 def nep_voorbereiden(mailbox, aan, onderwerp, tekst, cc=None,
-                     antwoord_op=None, van_map="INBOX", wie=None):
+                     antwoord_op=None, van_map="INBOX", wie=None,
+                     bijlagen_van=None, bijlagen_map="INBOX", bijlage_namen=None):
+    bijlagen = ([{"naam": "scan.pdf", "grootte": 2048, "sha256": "abc"}]
+                if bijlagen_van is not None else [])
     return {"van": mailbox["adres"], "aan": [aan], "cc": [],
             "onderwerp": onderwerp, "tekst": tekst, "antwoord_op": antwoord_op,
-            "antwoord_op_bericht": None, "map": van_map}
+            "antwoord_op_bericht": None, "map": van_map, "bijlagen": bijlagen}
 
 
 def nep_verstuur(mailbox, aan, onderwerp, tekst, cc=None, antwoord_op=None,
-                 van_map="INBOX", wie=None, verwacht=None):
+                 van_map="INBOX", wie=None, verwacht=None, bijlagen_van=None,
+                 bijlagen_map="INBOX", bijlage_namen=None):
     verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst,
-                      "verwacht": verwacht is not None})
-    return {"aan": [aan], "vandaag_verstuurd": 1, "dagplafond": 100}
+                      "verwacht": verwacht is not None,
+                      "bijlagen": (bijlagen_van, bijlagen_map, bijlage_namen)})
+    return {"aan": [aan], "vandaag_verstuurd": 1, "dagplafond": 100,
+            "bijlagen": ["scan.pdf"] if bijlagen_van is not None else []}
 
 
 def nep_doorsturen_voorbereiden(mailbox, mapnaam, uid, naar, notitie=None):
@@ -111,7 +117,23 @@ fout, tekst = roep("versturen", mailbox="test@voorbeeld.be", aan="x@y.be",
                    onderwerp="zonder tekst")
 gelijk(fout, True, "zonder tekst geen concept")
 
+print("versturen met bijlage")
+fout, uit = roep("versturen", mailbox="test@voorbeeld.be",
+                 aan="klant@elders.be", onderwerp="Scan", tekst="In bijlage.",
+                 bijlagen_van=236, bijlagen_map="INBOX.Scans",
+                 bijlage_namen="scan")
+gelijk(fout, False, "concept met bijlage lukt")
+gelijk(len(verstuurd), 1, "concept met bijlage verstuurt niets")
+gelijk(uit["concept"]["bijlagen"], [{"naam": "scan.pdf", "grootte_kb": 2.0}],
+       "concept toont de bijlage met naam en grootte")
+fout, uit = roep("versturen", mailbox="test@voorbeeld.be", bevestig=uit["bevestig"])
+gelijk(fout, False, "bevestigen met bijlage lukt")
+gelijk(verstuurd[1]["bijlagen"], (236, "INBOX.Scans", "scan"),
+       "dezelfde bijlagebron gaat mee naar verstuur")
+gelijk(uit["bijlagen"], ["scan.pdf"], "het resultaat noemt de bijlage")
+
 print("doorsturen")
+al_verstuurd = len(verstuurd)
 fout, uit = roep("doorsturen", mailbox="test@voorbeeld.be", uid=7,
                  naar="boekhouding@voorbeeld.be")
 gelijk(uit["status"], "WACHT_OP_TOESTEMMING", "doorsturen geeft eerst een concept")
@@ -119,7 +141,7 @@ gelijk(doorgestuurd, [], "en stuurt nog niets door")
 fout, tekst = roep("versturen", mailbox="test@voorbeeld.be",
                    bevestig=uit["bevestig"])
 gelijk(fout, True, "een doorstuurcode werkt niet bij versturen")
-gelijk(verstuurd[1:], [], "en verstuurt dus ook niets")
+gelijk(len(verstuurd), al_verstuurd, "en verstuurt dus ook niets")
 
 fout, uit = roep("doorsturen", mailbox="test@voorbeeld.be", uid=7,
                  naar="boekhouding@voorbeeld.be")
@@ -163,6 +185,38 @@ except ValueError as e:
     gelijk("anders vertrekken" in str(e), True,
            "wijkt de ontvanger af van het concept, dan weigert verstuur")
 gelijk(afgeleverd, [], "en er is niets afgeleverd")
+
+
+def bouw_zoals_concept(M, mailbox, aan, onderwerp, tekst, cc=None,
+                       antwoord_op=None, van_map="INBOX"):
+    b = EmailMessage()
+    b["Subject"] = onderwerp
+    b.set_content(tekst)
+    return b, [aan], [], None
+
+
+bijlage_nu = [("scan.pdf", "application", "pdf", b"versie 1")]
+imapbron.bouw_bericht = bouw_zoals_concept
+imapbron._bijlagen_uit_bericht = lambda M, mapnaam, uid, namen=None: bijlage_nu
+concept = dict(concept, bijlagen=verzenden._bijlage_overzicht(bijlage_nu))
+bijlage_nu = [("scan.pdf", "application", "pdf", b"versie 2, ander bestand")]
+try:
+    ECHT_VERSTUUR(mb, "klant@elders.be", "Offerte", "Beste,", verwacht=concept,
+                  bijlagen_van=236)
+    raise AssertionError("een andere bijlage had geweigerd moeten worden")
+except ValueError as e:
+    gelijk("anders vertrekken" in str(e), True,
+           "wijkt de bijlage af van het concept, dan weigert verstuur")
+gelijk(afgeleverd, [], "en er is niets afgeleverd")
+
+bijlage_nu = [("scan.pdf", "application", "pdf", b"versie 1")]
+verzenden._kopie_in_verzonden = lambda M, mailbox, bericht: True
+verzenden._tel_succes = lambda: 1
+uit = ECHT_VERSTUUR(mb, "klant@elders.be", "Offerte", "Beste,",
+                    verwacht=concept, bijlagen_van=236)
+gelijk(uit["bijlagen"], ["scan.pdf"], "dezelfde bijlage als het concept vertrekt")
+delen = [d.get_filename() for d in afgeleverd[0].iter_attachments()]
+gelijk(delen, ["scan.pdf"], "en zit echt in het afgeleverde bericht")
 
 print("code van een ander")
 code, _ = wachtrij.zet({"gebruiker": "mehdi"}, "versturen", {"van": "a"})

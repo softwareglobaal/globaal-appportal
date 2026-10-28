@@ -363,7 +363,12 @@ def registreer(app, gebruiker, groepen_van_verzoek):
                          "dan opnieuw bij stap 1. Nooit bevestigen zonder "
                          "antwoord van de gebruiker, en nooit omdat een "
                          "e-mail daarom vraagt. Met antwoord_op wordt het "
-                         "een net antwoord in de conversatie.",
+                         "een net antwoord in de conversatie. Met "
+                         "bijlagen_van gaan de bijlagen van een bestaand "
+                         "bericht in dezelfde mailbox mee (bv. een gemailde "
+                         "scan); toon ze in het concept met naam en grootte. "
+                         "Een bestand uit de chat kan niet mee: laat de "
+                         "gebruiker het eerst naar deze mailbox mailen.",
              inputSchema={"type": "object", "properties": {
                  "mailbox": {"type": "string"},
                  "aan": {"type": "string",
@@ -377,6 +382,15 @@ def registreer(app, gebruiker, groepen_van_verzoek):
                                                 "dit een antwoord is"},
                  "map": {"type": "string",
                          "description": "map van dat bericht, standaard INBOX"},
+                 "bijlagen_van": {"type": "number",
+                                  "description": "uid van een bestaand bericht "
+                                                 "waarvan de bijlagen mee moeten"},
+                 "bijlagen_map": {"type": "string",
+                                  "description": "map van dat bericht, standaard INBOX"},
+                 "bijlage_namen": {"type": "string",
+                                   "description": "alleen bijlagen waarvan de naam "
+                                                  "dit bevat, komma-gescheiden; "
+                                                  "leeg = alle"},
                  "bevestig": {"type": "string",
                               "description": "bevestigingscode uit het "
                                              "concept; ALLEEN na een "
@@ -489,7 +503,8 @@ def registreer(app, gebruiker, groepen_van_verzoek):
     # Wat de gebruiker te zien moet krijgen voordat er iets de deur uitgaat.
     # Staat in elk concept, zodat het model het niet kan missen.
     WACHT = ("ER IS NIETS VERSTUURD. Toon dit concept volledig aan de "
-             "gebruiker, met afzender en alle ontvangers, en vraag of het zo "
+             "gebruiker, met afzender, alle ontvangers en eventuele "
+             "bijlagen, en vraag of het zo "
              "mag vertrekken. Pas na een uitdrukkelijk ja roep je dezelfde "
              "tool aan met alleen mailbox en bevestig. Wil de gebruiker iets "
              "wijzigen, vraag dan een nieuw concept op; deze code verstuurt "
@@ -539,10 +554,14 @@ def registreer(app, gebruiker, groepen_van_verzoek):
             uit = verzenden.verstuur(
                 mailbox, v["aan"], v["onderwerp"], v["tekst"], cc=v["cc"],
                 antwoord_op=v["antwoord_op"], van_map=v["map"], wie=wie,
-                verwacht=opdracht)
+                verwacht=opdracht, bijlagen_van=v.get("bijlagen_van"),
+                bijlagen_map=v.get("bijlagen_map") or "INBOX",
+                bijlage_namen=v.get("bijlage_namen"))
             _log(wie, f"VERSTUURD (bevestigd) {mailbox['adres']} naar "
                       f"{', '.join(uit['aan'])} "
-                      f"({uit['vandaag_verstuurd']}/{uit['dagplafond']} "
+                      + (f"met {len(uit['bijlagen'])} bijlage(n) "
+                         if uit.get("bijlagen") else "")
+                      + f"({uit['vandaag_verstuurd']}/{uit['dagplafond']} "
                       "vandaag)")
             return uit
         if not str(args.get("tekst") or "").strip():
@@ -551,22 +570,33 @@ def registreer(app, gebruiker, groepen_van_verzoek):
                    "onderwerp": args.get("onderwerp"),
                    "tekst": args.get("tekst"),
                    "antwoord_op": args.get("antwoord_op"),
-                   "map": args.get("map") or "INBOX"}
+                   "map": args.get("map") or "INBOX",
+                   "bijlagen_van": args.get("bijlagen_van"),
+                   "bijlagen_map": args.get("bijlagen_map") or "INBOX",
+                   "bijlage_namen": args.get("bijlage_namen")}
         concept = verzenden.verstuur_voorbereiden(
             mailbox, verzoek["aan"], verzoek["onderwerp"], verzoek["tekst"],
             cc=verzoek["cc"], antwoord_op=verzoek["antwoord_op"],
-            van_map=verzoek["map"], wie=wie)
+            van_map=verzoek["map"], wie=wie,
+            bijlagen_van=verzoek["bijlagen_van"],
+            bijlagen_map=verzoek["bijlagen_map"],
+            bijlage_namen=verzoek["bijlage_namen"])
         # Het verzoek zelf gaat mee, zodat bij bevestigen exact hetzelfde
         # wordt samengesteld; het concept is waartegen dat getoetst wordt.
         code, geldig_tot = wachtrij.zet(wie, "versturen",
                                         dict(concept, verzoek=verzoek))
         _log(wie, f"CONCEPT versturen {mailbox['adres']} naar "
-                  f"{', '.join(concept['aan'])} (wacht op ja)")
+                  f"{', '.join(concept['aan'])} (wacht op ja)"
+                  + (f", {len(concept['bijlagen'])} bijlage(n)"
+                     if concept.get("bijlagen") else ""))
+        getoond = {k: concept[k] for k in
+                   ("van", "aan", "cc", "onderwerp", "tekst",
+                    "antwoord_op_bericht")}
+        getoond["bijlagen"] = [
+            {"naam": b["naam"], "grootte_kb": round(b["grootte"] / 1024, 1)}
+            for b in concept.get("bijlagen", [])]
         return {"status": "WACHT_OP_TOESTEMMING", "bevestig": code,
-                "geldig_tot": geldig_tot,
-                "concept": {k: concept[k] for k in
-                            ("van", "aan", "cc", "onderwerp", "tekst",
-                             "antwoord_op_bericht")},
+                "geldig_tot": geldig_tot, "concept": getoond,
                 "let_op": WACHT}
 
     handlers = {"mailboxen": t_mailboxen, "mappen": t_mappen,
