@@ -50,11 +50,13 @@ WETSTEKST_KOP = r"wet op de bescherming|wettelijke opdracht"
 OVER_TAKEN = r"\btaak\b|\btaken\b|\bopdracht\b|\bbelast\b|\barchitect\b"  # niet "Opdrachtgever" (proef 28-10-2026)
 NIET_OVER_TAKEN = r"kost|ereloon|bedrag|polis|aansprakelijk|gegevens"
 # De aanloopzinnen van de master bij het programma; wat erna komt, is de eigen beschrijving.
-VASTE_PROGRAMMAZINNEN = (r"het programma van het bouwproject,? zoals hierna beschreven[^.]*\.?|"
+VASTE_PROGRAMMAZINNEN = (r"het programma van het bouwproject,? zoals hierna beschreven[^.:]*[.:]?|"
                          r"die beschrijving geeft de wensen en randvoorwaarden[^.]*\.?|"
                          r"het bouwproject bestaat in de realisatie van de volgende werken op de bouwplaats\s*:?|"
                          r"de opdrachtgever wenst dat het project van de architect omvat wat volgt\s*:?|"
-                         r"het (bouw)?project omvat\s*:|\{[%{#].*?[%}#]\}|•")
+                         r"het (bouw)?project omvat\s*:|\{[%{#].*?[%}#]\}|•|"
+                         r"wind- en waterdicht( \+ technieken)?|volledige opdracht inclusief afwerking|"
+                         r",?\s*met ca\.\s*(m²|m2)\s*oppervlakte\.?")
 
 
 def beperkte_opdracht(tekst):
@@ -81,22 +83,25 @@ def secties(tekst):
     """De tekst per artikel: [(kop, [alinea's])]. Wat voor de eerste kop staat, heet 'aanhef'. Een genummerde lijst in
     een artikel ("1. ..." in artikel 5) is geen nieuwe kop: het nummer ligt lager dan dat van het lopende artikel, of
     volgt op het vorige lijstpunt ("2." na "1."), zodat een lijst 1 tot 5 in artikel 2 artikel 3 niet opslokt."""
-    uit, kop, alineas, vorig = [], "aanhef", [], 0
+    uit, kop, alineas, vorig, vorig_af = [], "aanhef", [], 0, False
     for regel in (r.strip() for r in tekst.replace("\r", "").split("\n")):
         if not regel:
             continue
         nummer = _hoofdnummer(regel) if re.match(r"\d+\.\s", regel) else 0
-        # Een kop staat (bijna) helemaal in hoofdletters, een lijstpunt niet: "4. WIJZIGING" na een lijst 1 tot 3 in
-        # artikel 3 blijft een kop (vierde tegenlezing).
+        # Een vervolgnummer is toch een kop als het eruitziet als een kop en niet als een lijstpunt: zonder leesteken
+        # op het einde, en in hoofdletters ("4. WIJZIGING") of kort na een lijstpunt dat op een leesteken eindigde
+        # ("5. Bouwbudget" na "4. de controle."). Vierde en vijfde tegenlezing.
+        af = regel.endswith((".", ";", ",", ":"))
         kopstijl = sum(c.isupper() for c in regel) > 0.6 * max(1, sum(c.isalpha() for c in regel))
-        lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1 and not kopstijl))
+        kopachtig = not af and (kopstijl or (len(regel) < 60 and vorig_af))
+        lijst = nummer and (nummer < _hoofdnummer(kop) or (vorig and nummer == vorig + 1 and not kopachtig))
         if KOP.match(regel) and len(regel) < 120 and not lijst:
             uit.append((kop, alineas))
             kop, alineas, vorig = regel, [], 0
         else:
             alineas.append(regel)
             if lijst:
-                vorig = nummer
+                vorig, vorig_af = nummer, af
     uit.append((kop, alineas))
     return uit
 
@@ -248,8 +253,10 @@ def _programma(secs):
         for a in alineas:
             if re.search(r"omvat niet", a, re.I):
                 break
-            eigen.append(re.sub(VASTE_PROGRAMMAZINNEN, "", a, flags=re.I))
-        if len(re.sub(r"\s+", " ", " ".join(eigen)).strip()) >= 40:
+            eigen.append(a)
+        # Eerst de regels samenvoegen: een pdf breekt de vaste zinnen over twee regels af (vijfde tegenlezing).
+        eigen = re.sub(VASTE_PROGRAMMAZINNEN, "", re.sub(r"\s+", " ", " ".join(eigen)), flags=re.I)
+        if len(re.sub(r"\s+", " ", eigen).strip()) >= 40:
             return kop
     return _zoek(secs, r"wenst volgende ruimtes|ruimtes, functies|programma van het bouwproject\s*:\s*\S")
 

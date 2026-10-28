@@ -202,6 +202,23 @@ master = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van
 check("B5: de vaste zinnen van de master zonder eigen beschrijving zijn geen programma",
       uitkomst(master)["B5"].uitkomst == V.FAALT)
 
+print("Vijfde tegenlezing (28-10-2026)")
+secs = M.secties("4. Taken van de architect\n1. het ontwerp;\n2. de vergunning;\n3. de aanbesteding;\n"
+                 "4. de controle op de uitvoering.\n5. Bouwbudget\nTekst\n")
+check("een gewone kop na een lijst die op een leesteken eindigt, blijft een kop", [k for k, _ in secs][-1] == "5. Bouwbudget",
+      str([k for k, _ in secs]))
+secs = M.secties("3. ERELOON\n1. Studie.\n2. Ontwerp.\n3. BTW (21%).\n4. VERZEKERING\n")
+check("een lijstpunt in hoofdletters met een punt op het einde is geen kop", [k for k, _ in secs] ==
+      ["aanhef", "3. ERELOON", "4. VERZEKERING"], str([k for k, _ in secs]))
+eigen = GOED.replace("Een woning met ca. 150 m² oppervlakte. Het programma van het Bouwproject: drie slaapkamers.",
+                     "Het programma van het Bouwproject, zoals hierna beschreven: een nieuwbouwwoning met drie "
+                     "slaapkamers, open keuken, twee badkamers en een carport.")
+check("B5: een eigen beschrijving na \"zoals hierna beschreven:\" is een programma", uitkomst(eigen)["B5"].uitkomst == V.SLAAGT)
+gebroken = master.replace("Die\nbeschrijving", "Die beschrijving").replace(
+    "wederzijds overeengekomen Bouwproject. Die beschrijving geeft de wensen en randvoorwaarden",
+    "wederzijds\novereengekomen Bouwproject. Die beschrijving geeft de wensen en\nrandvoorwaarden")
+check("B5: de vaste zinnen over twee regels gebroken zijn ook geen programma", uitkomst(gebroken)["B5"].uitkomst == V.FAALT)
+
 print("Beperkte opdracht")
 beperkt = ("Overeenkomst\nTUSSEN\nVerzonnen\nde Opdrachtgever\nEN\nde Architect\n"
            "4. OPDRACHT\nDe opdracht is te beperken tot de studiefase.\nHet verzamelen van de gegevens die nodig zijn.\n"
