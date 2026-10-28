@@ -19,6 +19,7 @@ import re
 import sys
 from pathlib import Path
 
+from . import budget as G
 from . import verslag as V
 
 B = V.Bevinding
@@ -190,7 +191,9 @@ def toets_contract(tekst):
     """De bevindingen voor de harde regels; de andere regels blijven 'niet getoetst' (oranje) in het verslag."""
     secs = secties(tekst)
     uit = [c(secs, tekst) for c in CONTROLES]
-    return [_beperkt(b, tekst) if b.code in ("B4", "B5", "D1") else b for b in uit]
+    uit = [_beperkt(b, tekst) if b.code in ("B4", "B5", "D1") else b for b in uit]
+    # Stap 7: budget tegen oppervlakte (D2, alleen cijfers zolang er geen referentie is) en de verzekering (D4).
+    return uit + [G.d2_begroting(*G.uit_contract(tekst)), G.d4_verzekering(tekst)]
 
 
 def lees(pad):

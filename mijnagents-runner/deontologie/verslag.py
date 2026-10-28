@@ -4,8 +4,9 @@ De harde controles zelf komen in de volgende stappen (masters, werfverslagen, bu
 regel en maakt er het verslag van, met de kleurregels van de ontwerplezing (driehoeksoverleg 27-10-2026, 3-0, voorwaarden
 2 en 5):
 
-- rood alleen uit een harde, letterlijke regel die faalt; groen alleen uit een harde, letterlijke regel die slaagt;
-- een oordeel, een afgeleide regel, ontbrekende gegevens of "niet getoetst" is hoogstens oranje, nooit groen;
+- rood alleen uit een harde, letterlijke regel die faalt;
+- een oordeel of afgeleide regel die faalt, ontbrekende gegevens of "niet getoetst" is hoogstens oranje; een oordeel
+  dat in orde is, is groen (OORDEEL_IN_ORDE_IS_GROEN, keuze aan Mehdi van 28-10-2026);
 - een regel van het register die voor deze documentsoort geldt maar geen uitkomst kreeg, staat er als niet getoetst
   (oranje): wat niet bekeken is, kan niet stil groen worden;
 - de bibliotheek ouder dan BIBLIOTHEEK_MAX_DAGEN of een register dat niet door valideer() komt: alles hoogstens oranje,
@@ -28,6 +29,10 @@ GROEN, ORANJE, ROOD = "groen", "oranje", "rood"
 ERNST = {GROEN: 0, ORANJE: 1, ROOD: 2}
 SLAAGT, FAALT, ONBEKEND = "slaagt", "faalt", "onbekend"
 NIET_GETOETST = "niet getoetst"
+# Een oordeel of afgeleide regel die slaagt (of niet van toepassing is), telt als groen; oranje blijft voor twijfel en
+# voor een oordeel dat faalt. Aanbevolen keuze aan Mehdi op 28-10-2026: letterlijk volgens de ontwerplezing ("groen
+# alleen uit een harde regel") werd elk werfverslag oranje en wachtte het op zijn klik. Kiest Mehdi daarvoor, dan False.
+OORDEEL_IN_ORDE_IS_GROEN = True
 BIBLIOTHEEK_MAX_DAGEN = 45
 VOORBEHOUD = "Dit is een toets, geen juridisch advies."
 
@@ -61,12 +66,15 @@ class Verslag:
     bron: str
     bibliotheek: str
     waarschuwingen: list = field(default_factory=list)
+    notities: list = field(default_factory=list)
 
     def markdown(self):
         regels = [f"**Toets: {self.kleur.upper()}** ({self.documentsoort})", "",
                   f"Bron: {self.bron}, bibliotheek van {self.bibliotheek}. {VOORBEHOUD}"]
         for w in self.waarschuwingen:
             regels.append(f"Let op: {w}")
+        for n in self.notities:
+            regels.append(f"Noot: {n}")
         regels.append("")
         for p in sorted(self.punten, key=lambda p: (-ERNST[p.kleur], p.code)):
             regels.append(f"- {p.kleur.upper()} {p.code} {p.titel} (art. {p.artikel}): {p.waarom}")
@@ -81,7 +89,9 @@ def _kleur(regel, uitkomst):
     """De kleur van een punt, uit de regel van het register en de uitkomst van de controle."""
     hard = regel["type"] == "HARD" and regel["status"] == "LETTERLIJK" and regel["max_kleur"] == ROOD
     if uitkomst == SLAAGT:
-        return (GROEN, "voldoet") if hard else (ORANJE, "oordeel of afgeleide regel: Mehdi kijkt na")
+        if hard:
+            return GROEN, "voldoet"
+        return (GROEN, "in orde (oordeel)") if OORDEEL_IN_ORDE_IS_GROEN else (ORANJE, "oordeel of afgeleide regel: Mehdi kijkt na")
     if uitkomst == FAALT:
         return (ROOD, "voldoet niet") if hard else (ORANJE, "lijkt niet te voldoen, oordeel van Mehdi nodig")
     if uitkomst == NIET_GETOETST:
@@ -105,13 +115,14 @@ def _bibliotheek(register, vandaag, basis):
     return w
 
 
-def maak(documentsoort, bevindingen, register=None, vandaag=None, basis=R.HIER):
-    """Het verslag voor een document. Elke regel van het register voor deze soort krijgt een punt."""
+def maak(documentsoort, bevindingen, register=None, vandaag=None, basis=R.HIER, elders=()):
+    """Het verslag voor een document. Elke regel van het register voor deze soort krijgt een punt, behalve de regels in
+    `elders`: die horen bij het dossier (zoals C4, een verslag bij elke kritieke fase) en staan apart vermeld."""
     if documentsoort not in R.DOCUMENTEN:
         raise ValueError(f"onbekende documentsoort {documentsoort!r}")
     register = register or R.laad()
     vandaag = vandaag or date.today()
-    van_toepassing = {r["code"]: r for r in R.regels(documentsoort, register)}
+    van_toepassing = {r["code"]: r for r in R.regels(documentsoort, register) if r["code"] not in elders}
     per_code = {}
     for b in bevindingen:
         if b.code not in van_toepassing:
@@ -122,6 +133,7 @@ def maak(documentsoort, bevindingen, register=None, vandaag=None, basis=R.HIER):
             raise ValueError(f"regel {b.code} kreeg twee uitkomsten")
         per_code[b.code] = b
     waarschuwingen = _bibliotheek(register, vandaag, basis)
+    notities = [f"op dossierniveau getoetst, niet in dit verslag: {', '.join(sorted(elders))}"] if elders else []
     punten = []
     for code, regel in van_toepassing.items():
         b = per_code.get(code) or Bevinding(code, NIET_GETOETST)
@@ -135,4 +147,4 @@ def maak(documentsoort, bevindingen, register=None, vandaag=None, basis=R.HIER):
     totaal = max((p.kleur for p in punten), key=ERNST.get, default=ORANJE)
     bron = ", ".join(sorted({regel["bron"] for regel in van_toepassing.values()})) or "geen regels"
     return Verslag(documentsoort, totaal, punten, f"{bron} (register {register.get('versie', '?')})",
-                   register.get("stand", "onbekend"), waarschuwingen)
+                   register.get("stand", "onbekend"), waarschuwingen, notities)

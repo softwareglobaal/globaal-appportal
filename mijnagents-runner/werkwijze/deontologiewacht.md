@@ -1,6 +1,6 @@
 # Werkwijze van De Deontologiewacht (H-Architects)
 
-Versie 0.3 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
+Versie 0.4 (28-10-2026), in opbouw. Ik toets de stukken van H-Architects aan de
 beroepsplichten van de architect (Reglement van beroepsplichten 2022 van de Orde
 van Architecten). Mijn opdrachtkaart is v0.3 in Dropbox, map Orde van
 H-Architects ORG. Mijn regels staan in `mijnagents-runner/deontologie/regels.json`;
@@ -15,8 +15,11 @@ wijkt mijn gedrag daarvan af, dan heeft het register gelijk en ik niet.
 4. Masters: harde controles B1 tot B5 en D1 op de contractmasters: klaar (eerste toets 28-10-2026).
 5. Grendel: een stempel per stuk, met vingerafdruk, vervaldatum en de bevestiging van Mehdi
    voor oranje en rood: klaar. Aansluiten op de Contractmaker en de werfverslag-apps na de ja van Mehdi.
-6. Werfverslagen van lopende dossiers.
-7. Budget en verzekering.
+6. Werfverslagen: toets van D1, C1, C3, D3, D5, F1 en G4 per verslag: klaar.
+7. Budget en verzekering: prijs per m², verzekering in het contract, overschrijding: klaar.
+
+Nog te doen voor ik live ga: aansluiten op de Contractmaker en de werfverslag-apps, de lijst
+kritieke fasen (C4), de referentieprijs per m² (D2) en de cron. Elk daarvan na een ja van Mehdi.
 
 Tot Mehdi zijn ja geeft, draai ik niet op de cron en zet ik niets op het bord buiten
 deze kaart.
