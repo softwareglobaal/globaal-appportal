@@ -2,6 +2,7 @@
 Sleutel(s) bij naam uit ~/appportal/.env: FATHOM_API_KEYS (komma-gescheiden). Mehdi's eigen account: de adressen in
 FATHOM_MEHDI_ADRESSEN (komma-gescheiden, geen sleutel), in de code MEHDI_FATHOM_ADRESSEN.
 Zelfde API als het contract-dashboard (webapp/fathom_api.py)."""
+import http.client
 import json
 import os
 import time
@@ -45,7 +46,9 @@ def beschikbaar():
 
 def _haal(sleutel, pad, params=None):
     """Een GET met herkansing bij 429 (Fathom: circa 30 zware calls per minuut).
-    Wacht de Retry-After af, anders oplopend 10, 20, 40, 80 s; daarna pas de fout doorgeven."""
+    Wacht de Retry-After af, anders oplopend 10, 20, 40, 80 s; daarna pas de fout doorgeven.
+    Een afgebroken antwoord of verbinding (29-10-2026: IncompleteRead midden in een pagina van 600 kB) krijgt
+    dezelfde herkansing, met de oplopende pauze."""
     url = f"{BASIS}{pad}" + ("?" + urllib.parse.urlencode(params) if params else "")
     req = urllib.request.Request(url, headers={"X-Api-Key": sleutel, "Accept": "application/json"})
     wacht = 10
@@ -61,6 +64,11 @@ def _haal(sleutel, pad, params=None):
             except ValueError:
                 pauze = wacht
             time.sleep(min(pauze, 120))
+            wacht *= 2
+        except (http.client.IncompleteRead, ConnectionError, TimeoutError, urllib.error.URLError):
+            if poging == POGINGEN - 1:
+                raise
+            time.sleep(wacht)
             wacht *= 2
 
 
