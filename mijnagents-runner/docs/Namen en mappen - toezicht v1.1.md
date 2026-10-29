@@ -13,7 +13,7 @@ Alle drie roots én de dagelijkse H-A-regelbron gebruiken de reeds ingestelde **
 | `/Work All` | accountroot van de bestaande OMV-v2-koppeling | `omv-v2` |
 | `/Data uit Mehdi` | dezelfde accountroot | `omv-v2` |
 | `/0 Chegini Mehdi/Prive met Claude` | afzonderlijke bestaande teamnamespace | `omv-v2` |
-| H-A-afsprakenboek v1.7 onder Work All | dezelfde OMV-v2-accountroot | `omv-v2` |
+| H-A-afsprakenboek (nieuwste versie, vastgepind v1.10) onder Work All | dezelfde OMV-v2-accountroot | `omv-v2` |
 
 De bevestigde namespace-identifiers staan expliciet in `werkwijze/naamstructuur-regels.json` en het live overzicht. Voor gedeelde namespaces gebruikt de Dropbox-header `namespace_id`, niet een willekeurige accountroot. Namen en paden gelden steeds binnen de genoemde verbinding en namespace.
 
@@ -35,7 +35,9 @@ Andere firma's hebben zonder bevestigd boek geen verzonnen structuurprofiel. Age
 
 ## Regelbron
 
-Bevestigde bron: **H-A vaste afspraken v1.7**, `/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.7.md`. De machinevertaling bevat bronpad, verbinding, namespace, versie en SHA-256. V1.5 is gelezen als voorgeschiedenis. Volledige fasepaden voorkomen dat `0 Fathom`, numerieke opnamemappen of proefmappen als project worden bestempeld.
+Bevestigde bron: **H-A vaste afspraken v1.10**, `/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.10.md`. De machinevertaling bevat bronpad, verbinding, namespace, versie, de hoofdstukken die ze vertaalt (A en B) en de SHA-256 van die twee hoofdstukken. V1.5 en v1.7 zijn gelezen als voorgeschiedenis.
+
+Sinds 29-10-2026 (T-0028) leest de agent elke dag de nieuwste versie van het boek in die map. Zijn hoofdstuk A en B gelijk aan het vastgepinde, dan blijft de toetsing lopen, ook als oudere versies naar `archief/` verhuisd zijn en andere hoofdstukken (zoals E) veranderden. Wijzigt A of B, dan pauzeert de H-A-toetsing tot de machinevertaling nagekeken en opnieuw vastgepind is. Aanleiding: op 18-10 verhuisde v1.7 naar `archief/` en kwam v1.10 erbij; de agent pauzeerde, terwijl A en B voor zijn toetsen niet veranderd waren (v1.8 voegde alleen uitleg over de mailexport en bijlagen in A14 toe). Volledige fasepaden voorkomen dat `0 Fathom`, numerieke opnamemappen of proefmappen als project worden bestempeld.
 
 De bron wordt dagelijks gelezen en aan de bevestigde vingerafdruk getoetst. Wijziging of onleesbaarheid pauzeert H-A-toetsing; eerdere punten blijven open totdat een daadwerkelijke brontoets het herstel bevestigt. De proceswerkwijze staat op het bord, met versie 1.1. Een afwijkende bestaande bordtekst wordt door de installer niet overschreven. Firmacodes blijven uit het bestaande `kern`-register en de bestaande nummerlezer komen.
 

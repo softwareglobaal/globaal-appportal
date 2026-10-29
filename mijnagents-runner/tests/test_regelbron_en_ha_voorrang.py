@@ -262,30 +262,98 @@ class RegelbronEnHATest(unittest.TestCase):
         self.assertIn("USING INDEX item_ha_naam_vuil", toets_plan)
         self.assertNotIn("SCAN item", toets_plan)
 
-    def test_regelbron_download_eenmaal_binnen_24_uur(self):
-        inhoud = b"bevestigde testbron"
-        self.regels["regelbron"]["sha256"] = hashlib.sha256(inhoud).hexdigest()
-        aanroepen = []
+    @staticmethod
+    def boek(a="A1 Eén map per dossier", e="E1 De agenda is het anker"):
+        return ("# H-Architects vaste afspraken\n\n## Register\n| A1 | samenvatting |\n\n"
+                f"## A. Mappen en benamingen\n### A1\n{a}\n\n## B. Het verslag\n```\n# 2145 bezoek\n"
+                "## Beslissingen\ngeen\n```\n\n## C. De dossierfiche\nC1\n\n"
+                f"## E. Werkwijze\n{e}\n\n## Versiehistoriek\nv1\n").encode("utf-8")
+
+    def pin(self, inhoud):
+        deel = N.hoofdstukken(inhoud.decode("utf-8"), ["A", "B"])
+        self.regels["regelbron"]["hoofdstukken_sha256"] = hashlib.sha256(deel.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def map_met(*namen, inhoud=b"", gelezen=None):
         def rpc(route, data):
             if route == "files/list_folder":
-                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.7.md"}],
+                return {"entries": [{".tag": "file", "name": n} for n in namen],
                         "cursor": "klaar", "has_more": False}
+            if gelezen is not None:
+                gelezen.append(data["path"])
             return {".tag": "file", "size": len(inhoud), "rev": "r1"}
+        return rpc
+
+    def test_hoofdstukken_volgen_de_letterkoppen(self):
+        deel = N.hoofdstukken(self.boek().decode(), ["A", "B"])
+        self.assertIn("## A. Mappen", deel)
+        self.assertIn("## Beslissingen", deel)
+        self.assertNotIn("Register", deel)
+        self.assertNotIn("## C.", deel)
+        self.assertNotIn("De agenda", deel)
+        with self.assertRaises(ValueError):
+            N.hoofdstukken("## A. Mappen\nA1\n", ["A", "B"])
+        self.assertEqual(deel, N.hoofdstukken(self.boek().decode().replace("\n", "\r\n"), ["A", "B"]))
+
+    def test_vastgepinde_bron_in_regels_is_volledig(self):
+        bron = N.lees_regels(str(RUNNER / "werkwijze" / "naamstructuur-regels.json"))["regelbron"]
+        self.assertEqual(bron["hoofdstukken"], ["A", "B"])
+        self.assertRegex(bron["hoofdstukken_sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue(bron["pad"].endswith("/" + bron["versie"] + ".md"))
+
+    def test_regelbron_download_eenmaal_binnen_24_uur(self):
+        inhoud = self.boek()
+        self.pin(inhoud)
+        aanroepen = []
         def download(*args, **kwargs):
             aanroepen.append(1)
             return inhoud
+        rpc = self.map_met("H-A vaste afspraken v1.10.md", inhoud=inhoud)
         for _ in range(2):
-            self.assertTrue(N.controleer_regelbron(self.c, self.regels, rpc, download, force=False)["geldig"])
+            stand = N.controleer_regelbron(self.c, self.regels, rpc, download, force=False)
+            self.assertTrue(stand["geldig"])
+            self.assertEqual(stand["status"], "bevestigde bron gelezen")
         self.assertEqual(len(aanroepen), 1)
-        def rpc_nieuwe_versie(route, data):
-            if route == "files/list_folder":
-                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.8.md"}],
-                        "cursor": "klaar", "has_more": False}
-            self.fail("nieuwere versie moet vóór een download ontdekt worden")
-        stand = N.controleer_regelbron(self.c, self.regels, rpc_nieuwe_versie, download, force=False)
+        # Een nieuwere versie wordt altijd gelezen, ook binnen 24 uur.
+        nieuw = self.map_met("H-A vaste afspraken v1.10.md", "H-A vaste afspraken v1.11.md", inhoud=inhoud)
+        stand = N.controleer_regelbron(self.c, self.regels, nieuw, download, force=False)
+        self.assertTrue(stand["geldig"])
+        self.assertEqual(stand["gelezen"], "H-A vaste afspraken v1.11")
+        self.assertEqual(len(aanroepen), 2)
+
+    def test_oude_versie_naar_archief_breekt_niets(self):
+        # Zo brak het op 18-10-2026: v1.7 naar archief/, v1.10 erbij, alleen hoofdstuk E en A14-uitleg anders.
+        oud, nieuw = self.boek(), self.boek(e="E1 De agenda H-Architects is het anker; E10 nieuw")
+        self.pin(oud)
+        gelezen = []
+        rpc = self.map_met("H-A vaste afspraken v1.12.md", "H-A grote lijnen v0.1.md", inhoud=nieuw, gelezen=gelezen)
+        stand = N.controleer_regelbron(self.c, self.regels, rpc, lambda *a, **k: nieuw, force=True)
+        self.assertTrue(stand["geldig"])
+        self.assertNotIn("gevonden", stand)
+        self.assertIn("v1.12 gelezen; hoofdstuk A en B gelijk aan vastgepinde", stand["status"])
+        self.assertTrue(gelezen and all(p.endswith("/H-A vaste afspraken v1.12.md") for p in gelezen))
+        self.assertTrue(stand["pad"].endswith("/H-A vaste afspraken v1.12.md"))
+
+    def test_geen_of_alleen_oudere_versie_pauzeert(self):
+        inhoud = self.boek()
+        self.pin(inhoud)
+        for namen in [(), ("H-A vaste afspraken v1.7.md",), ("H-A vaste afspraken v1.10.md.bak",)]:
+            stand = N.controleer_regelbron(self.c, self.regels, self.map_met(*namen, inhoud=inhoud),
+                                           lambda *a, **k: inhoud, force=True)
+            self.assertFalse(stand["geldig"], namen)
+            self.assertIn("gepauzeerd", stand["status"])
+        stand = N.controleer_regelbron(self.c, self.regels, self.map_met("H-A vaste afspraken v1.10.md", inhoud=inhoud),
+                                       lambda *a, **k: "## A. kapot \udcff".encode("utf-8", "surrogatepass"), force=True)
         self.assertFalse(stand["geldig"])
-        self.assertIn("v1.8", stand["status"])
-        self.assertEqual(len(aanroepen), 1)
+
+    def test_vastgepinde_versie_zelf_gewijzigd_pauzeert(self):
+        self.pin(self.boek())
+        anders = self.boek(a="A1 Twee mappen per dossier")
+        stand = N.controleer_regelbron(self.c, self.regels, self.map_met("H-A vaste afspraken v1.10.md", inhoud=anders),
+                                       lambda *a, **k: anders, force=True)
+        self.assertFalse(stand["geldig"])
+        self.assertNotIn("gevonden", stand)
+        self.assertIn("gepauzeerd", stand["status"])
 
     def test_profielwijziging_herclassificeert_alleen_geraakte_prefix(self):
         self.scope(self.root["id"], self.root["pad"], 1, 0)
@@ -305,39 +373,34 @@ class RegelbronEnHATest(unittest.TestCase):
         self.assertEqual(stand["ander"], ("algemeen", 0))
 
     def test_nieuwere_versie_pauzeert_en_bewaar_bevinding(self):
-        bron = self.regels["regelbron"]
-        inhoud = b"bevestigde testbron"
-        bron["sha256"] = hashlib.sha256(inhoud).hexdigest()
+        inhoud = self.boek()
+        anders = self.boek(a="A1 Een nieuwe naamregel")
+        self.pin(inhoud)
         self.scope(self.root["id"], self.root["pad"], 1, 0)
         self.item("ha", self.ha + "/foute:map")
         self.c.execute("INSERT INTO bevinding(agent,scope,identiteit,regel,status) VALUES(?,?,?,'HA A1','open')",
                        ("benamingen-wacht", self.root["id"], "ha"))
         self.c.commit()
-        def rpc_oud(route, data):
-            if route == "files/list_folder":
-                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.7.md"}],
-                        "cursor": "klaar", "has_more": False}
-            return {".tag": "file", "size": len(inhoud), "rev": "r1"}
+        rpc_oud = self.map_met("H-A vaste afspraken v1.10.md", inhoud=inhoud)
         self.assertTrue(N.controleer_regelbron(self.c, self.regels, rpc_oud, lambda *a, **k: inhoud, force=True)["geldig"])
-        def rpc_nieuw(route, data):
-            if route == "files/list_folder":
-                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.8.md"}],
-                        "cursor": "klaar", "has_more": False}
-            return {".tag": "file", "size": len(inhoud), "rev": "r1"}
-        stand = N.controleer_regelbron(self.c, self.regels, rpc_nieuw, lambda *a, **k: inhoud, force=True)
+        rpc_nieuw = self.map_met("H-A vaste afspraken v1.10.md", "H-A vaste afspraken v1.11.md", inhoud=anders)
+        stand = N.controleer_regelbron(self.c, self.regels, rpc_nieuw, lambda *a, **k: anders, force=True)
         self.assertFalse(stand["geldig"])
-        self.assertIn("v1.8 gevonden, niet bevestigd; vastgepind", stand["status"])
+        self.assertEqual(stand["gevonden"], "H-A vaste afspraken v1.11")
+        self.assertIn("v1.11 gevonden, niet bevestigd; vastgepind", stand["status"])
         self.assertEqual(N.toets_index(self.c, "benamingen-wacht", self.regels), 0)
         self.assertEqual(self.c.execute("SELECT status FROM bevinding").fetchone()[0], "open")
         def rpc_later(route, data):
             if route == "files/list_folder":
                 return {"entries": [], "cursor": "vervolg", "has_more": True}
             if route == "files/list_folder/continue":
-                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.8.md"}],
+                return {"entries": [{".tag": "file", "name": "H-A vaste afspraken v1.11.md"}],
                         "cursor": "klaar", "has_more": False}
-            self.fail("gepagineerde nieuwe versie moet de download voorkomen")
-        self.assertFalse(N.controleer_regelbron(self.c, self.regels, rpc_later,
-                                                 lambda *a, **k: inhoud, force=True)["geldig"])
+            self.assertTrue(data["path"].endswith("v1.11.md"))
+            return {".tag": "file", "size": len(anders), "rev": "r2"}
+        stand = N.controleer_regelbron(self.c, self.regels, rpc_later, lambda *a, **k: anders, force=True)
+        self.assertFalse(stand["geldig"])
+        self.assertEqual(stand["gevonden"], "H-A vaste afspraken v1.11")
         def fout(*a):
             raise OSError("map niet leesbaar")
         stand = N.controleer_regelbron(self.c, self.regels, fout, lambda *a, **k: inhoud, force=True)

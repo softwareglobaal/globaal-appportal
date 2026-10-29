@@ -18,9 +18,10 @@
   "regelbron": {
     "verbinding": "omv-v2",
     "namespace": "2560492595",
-    "versie": "H-A vaste afspraken v1.7",
-    "pad": "/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.7.md",
-    "sha256": "6a8ceafef1520bc0e55a9ed256053bb01b40c6fc51c7ddb8bb6a3ed8527821d0"
+    "versie": "H-A vaste afspraken v1.10",
+    "pad": "/Work All/01. H-A WORK/_0 Claude reorganisatie/H-A vaste afspraken v1.10.md",
+    "hoofdstukken": ["A", "B"],
+    "hoofdstukken_sha256": "d956de369b3495fe89c3e54fbc062e3abed2570352d8a7fc2d22581082a6ef8c"
   },
   "ha": {
     "projectfasen": [
