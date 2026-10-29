@@ -1772,6 +1772,39 @@ def mehdi_kop(titel):
     return "Mehdi & " + namen[0] if len(namen) == 1 else "Mehdi, " + ", ".join(namen[:-1]) + " & " + namen[-1]
 
 
+def collega_titel(titel):
+    """'VR Mehdi en Tom' of 'Mehdi; Tom, Aqib: planning' als overleg met collega's lezen. Geeft (collega's, rest) als
+    elke naam na 'Mehdi' een gekende collega is (organisatie.globaal.be), anders None. Zonder dubbele punt is alles
+    na 'Mehdi' de namenlijst; ';' scheidt ook (FR-212, 29-10-2026: de agent vroeg 'welke firma' bij Tom en Aqib)."""
+    t = re.sub(r"^(?:\s*(?:VR|ZL|!!|\?\?)\s+)+", "", titel or "")
+    m = re.match(r"\s*Mehdi\b\s*[;:,]?\s*(.*)$", t, re.I)
+    if not m:
+        return None
+    namen_deel, rest = (m.group(1).split(":", 1) + [""])[:2]
+    if ":" not in m.group(1) and re.match(r"\s*Mehdi\s*:", t, re.I):
+        return None                     # 'Mehdi: planning' heeft geen namen
+    delen = [d.strip(" !?.-") for d in re.split(GASTSCHEIDING + r"|;", namen_deel, flags=re.I)]
+    delen = [d for d in delen if d]
+    if not delen:
+        return None
+    collegas = []
+    for d in delen:
+        try:
+            p = organisatie.herken(d)
+        except Exception:  # noqa: BLE001
+            return None
+        if not p:
+            return None
+        if p not in collegas:
+            collegas.append(p)
+    return collegas, rest.strip(" ,:-")
+
+
+def _collega_kop(collegas):
+    namen = [p.get("voornaam") or p["naam"].split(" (")[0] for p in collegas]
+    return "Mehdi & " + namen[0] if len(namen) == 1 else "Mehdi, " + ", ".join(namen[:-1]) + " & " + namen[-1]
+
+
 def titel_uit_onderzoek(a):
     """Een korte titel zonder firmacode ('mehdi; barsten en scheuren') met een adres, zelf uitzoeken:
     de activiteit uit de woorden, de firma uit de activiteit (alleen als die code bij precies een firma hoort),
@@ -1781,6 +1814,22 @@ def titel_uit_onderzoek(a):
     info = lees_titel(titel)
     if info.get("firma") or info["firma_conflict"] or info["reistijd"] or a.get("hele_dag"):
         return None, ""
+    # Spoor 0: alleen collega's na 'Mehdi' en geen buitenafspraak. 'Diensten voor' op organisatie.globaal.be zegt
+    # voor welke firma ze werken; is dat precies een firma, dan is het intern overleg van die firma (FR-212).
+    loc = (a.get("locatie") or "").strip()
+    if not info["nummer"] and not info["buiten"] and (not loc or loc.lower().startswith("http") or is_thuis_adres(loc)):
+        gelezen = collega_titel(titel)
+        if gelezen:
+            collegas, rest = gelezen
+            try:
+                firmas = organisatie.firma_van([p["naam"] for p in collegas])
+            except Exception:  # noqa: BLE001
+                firmas = []
+            if len(firmas) == 1:
+                rest = rest[:1].upper() + rest[1:] if rest else "overleg"
+                namen = ", ".join(p["naam"] for p in collegas)
+                return (f"{_collega_kop(collegas)}: [{titelcode(firmas[0])}-IN] {rest}",
+                        f"collega's {namen} werken voor {firmas[0]} (organisatie.globaal.be): intern overleg")
     # Een bekende partner op het thuisadres is geen prospect van een willekeurige deal
     # die toevallig hetzelfde adres bevat. De koppeling partner -> firma staat in de master.
     if is_thuis_adres(a.get("locatie") or "") and not info["nummer"]:
@@ -7004,7 +7053,12 @@ def _vastgelopen(items, nu=None, uren=48):
         kort = re.sub(r"[^\w ]", " ", a["titel"])[:40].strip()
         if not info.get("firma") and a.get("kalender") == WERKAGENDA and not is_zorg_titel(a["titel"]):
             # een kine- of tandartsafspraak is privé, geen zakelijke vraag: de zorgstap zet ze op de privé-agenda
-            uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: zeg voor welke firma en welke klant.", [a["id"]]))
+            vraag = "zeg voor welke firma en welke klant."
+            gelezen = collega_titel(a["titel"])
+            if gelezen:                 # collega's: noem wat organisatie.globaal.be weet, vraag alleen de firma (FR-212)
+                vraag = "; ".join(f"{p.get('voornaam') or p['naam']} werkt voor {', '.join(p.get('diensten_voor') or []) or 'geen firma'}"
+                                  for p in gelezen[0]) + ". Voor welke firma is dit overleg?"
+            uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: {vraag}", [a["id"]]))
     uit.extend(_adresvragen(items, nu, uren, projecten))
     # Twee klanten tegelijk: een zin per paar, wat Mehdi moet doen
     for a, b in dubbele_boekingen(items, nu, uren):

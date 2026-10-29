@@ -4174,6 +4174,24 @@
    },
    "controle": [],
    "status": "opgelost"
+  },
+  {
+   "id": "FR-212",
+   "datum": "29-10-2026",
+   "gevonden_door": "Mehdi, afspraken van 30-10-2026",
+   "fout": "'VR Mehdi en Tom' en 'VR Mehdi; Tom, Aqib' kregen de vraag 'zeg voor welke firma en welke klant', terwijl Tom en Aqib op organisatie.globaal.be voor TKN-Buro werken.",
+   "gevolg": "Twee overbodige vragen in de agenda; Mehdi moest uitleggen wat de agent zelf kon weten.",
+   "waarom_niet_gezien": "Elke route die namen leest, vroeg een dubbele punt; deze titels hadden er geen of gebruikten ';'. De firma uit 'diensten voor' (organisatie.firma_van) werd alleen als hint in de dagcontrole gebruikt, nooit om de titel zelf aan te vullen.",
+   "oorzaak": "Geen route voor een titel met alleen collega's: de agent viel terug op de algemene vraag.",
+   "soort_oorzaak": "code",
+   "oplossing": "collega_titel() leest 'Mehdi' plus namen, met of zonder dubbele punt, ';' scheidt ook. Zijn het allemaal gekende collega's en delen ze precies een firma, dan maakt titel_uit_onderzoek 'Mehdi, Tom & Aqib: [TK-IN] overleg' en valt de VR weg. Niet bij !! of een fysiek adres. Anders noemt de vraag per collega de firma en vraagt alleen welke firma.",
+   "grendel": {
+    "soort": "test",
+    "waar": "tests/test_collegatitel.py",
+    "tekst": "'VR Mehdi en Tom' wordt intern overleg van TKN-Buro"
+   },
+   "controle": [],
+   "status": "opgelost"
   }
  ]
 }
