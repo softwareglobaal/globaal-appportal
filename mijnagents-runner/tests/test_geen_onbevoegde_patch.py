@@ -532,7 +532,7 @@ dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen"
          "kort_items": [], "rit_items": [], "niet_op_kaart": set(),
          "adres_vraag_noden": lambda _items, **_kwargs: [], "items": [], "archief": [],
          "vandaag": "2026-10-17", "DAG_ARG": None,
-         "geplande_start": lambda: True, "HANDKLEUREN": [], "open_na": [], "ROUTES_GESTOPT": False,
+         "geplande_start": lambda: True, "HANDKLEUREN": [], "DOOR_KLEURSCRIPT": [], "open_na": [], "ROUTES_GESTOPT": False,
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
          "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": []}
 # fase 1 (overleg 27-10-2026): de weeknood en de noodlijst van een dagronde staan nu ook aan het einde van de ronde
