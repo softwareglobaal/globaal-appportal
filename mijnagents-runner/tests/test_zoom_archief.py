@@ -36,6 +36,11 @@ from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
 ECHT_RONDE_GESLAAGD = ZA_ACC.archief_ronde_geslaagd
 
+
+def wachtend():
+    """De plaatshouders in een groep in verwerking die nog niet opgelost is."""
+    return {p for g in ZA.lees_staat()["voorlopig"].values() if not g.get("opgelost") for p in g["plaatshouders"]}
+
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
 os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
                   DROPBOX_PRIVE_ACCOUNT_ID="dbid:proef-eigen")
@@ -1172,6 +1177,305 @@ def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
     finally:
         ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
     assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
+
+
+# ---------------------------------------------------------- gemeten op de VM (27-10-2026): voorlopige ids ---
+def test_een_voorlopig_id_in_verwerking_dat_vervangen_wordt_is_geen_verlies():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "shared_screen_with_speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    r, uit = ronde()
+    assert not uit["dekking"] and not r.noden
+    # Zoom vervangt het voorlopige bestand door de definitieve bestanden, met nieuwe ids
+    m["bestanden"] = []
+    for i, (soort, opnametype, data) in enumerate([("MP4", "shared_screen_with_speaker_view", b"video"),
+                                                    ("TRANSCRIPT", "audio_transcript", b"WEBVTT\n")]):
+        z.inhoud[f"definitief{i}"] = data
+        m["bestanden"].append({"id": f"definitief{i}", "soort": soort, "status": "completed", "start": m["start"],
+                               "einde": m["start"], "grootte": len(data), "opnametype": opnametype, "extensie": soort,
+                               "link": True})
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert not ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+    assert uit["gedaan"] == 2 and not VOORSTELLEN, "geen vals verlies en geen voorstel voor Mehdi"
+
+
+def test_een_bestand_in_verwerking_waarvan_de_meeting_verdwijnt_is_wel_een_verlies():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    ronde()
+    del z.meetings["u1"]
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
+
+
+def test_codex_verwerking_39_een_voorlopig_id_zonder_vervanger_wordt_na_een_dag_een_verlies():
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("M4A", "audio_only", b"geluid")])
+    m["bestanden"].append({"id": "voorlopig", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z",
+                           "einde": "", "grootte": 0, "opnametype": "shared_screen_with_speaker_view", "extensie": "MP4",
+                           "link": False})
+    ronde()
+    m["bestanden"].pop()  # de MP4 verdwijnt zonder vervanger; de meeting blijft met alleen het geluid
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in wachtend() and not ZA.lees_staat()["verdwenen"] and not r.noden
+    assert not uit["dekking"], "wachten op een vervanger houdt de dekking tegen (een recente groep raakt de wisregel niet)"
+    assert ZA.mapnaam(m) + "/opname.json" not in d.bestanden, "zolang een vervanger kan komen, nog geen beschrijving"
+    r, uit = ronde(nu=NU + timedelta(hours=26))
+    assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
+
+
+def test_codex_verwerking_39_een_vervanger_van_een_andere_soort_telt_niet():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "shared_screen_with_speaker_view", b"")])
+    m["bestanden"][0].update(id="voorlopig", status="processing", grootte=0, link=False)
+    ronde()
+    z.inhoud["tl"] = b"{}"
+    m["bestanden"] = [{"id": "tl", "soort": "TIMELINE", "status": "completed", "start": m["start"], "einde": "",
+                       "grootte": 2, "opnametype": "timeline", "extensie": "JSON", "link": True}]
+    ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in wachtend(), "een tijdlijn vervangt geen video als de plaatshouder al een soort heeft"
+
+
+def test_codex_verwerking_41_een_bestand_dat_er_al_was_is_geen_vervanger():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("MP4", "shared_screen_with_speaker_view", b"oud")])
+    m["bestanden"][0]["start"] = "2026-10-27T12:01:51Z"
+    m["bestanden"].append({"id": "voorlopig", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z",
+                           "einde": "", "grootte": 0, "opnametype": "shared_screen_with_speaker_view", "extensie": "MP4",
+                           "link": False})
+    ronde()
+    m["bestanden"].pop()  # de voorlopige MP4 verdwijnt; de MP4 die er al was, met hetzelfde type en begin, blijft
+    ronde(nu=NU + timedelta(hours=1))
+    assert "voorlopig" in wachtend(), "een bestand dat er al was, vervangt het voorlopige niet"
+    r, _ = ronde(nu=NU + timedelta(hours=26))
+    assert "voorlopig" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r)
+
+
+def test_codex_verwerking_41_een_nieuw_bestand_vervangt_hoogstens_een_voorlopig_id():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    for v in ("v1", "v2"):
+        m["bestanden"].append({"id": v, "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z",
+                               "einde": "", "grootte": 0, "opnametype": "speaker_view", "extensie": "MP4", "link": False})
+    ronde()
+    z.inhoud["definitief"] = b"video"
+    m["bestanden"] = [{"id": "definitief", "soort": "MP4", "status": "completed", "start": "2026-10-27T12:01:51Z",
+                       "einde": "", "grootte": 5, "opnametype": "speaker_view", "extensie": "MP4", "link": True}]
+    ronde(nu=NU + timedelta(hours=1))
+    g = next(iter(ZA.lees_staat()["voorlopig"].values()))
+    assert not g["opgelost"] and len(g["plaatshouders"]) == 2 and len(g["kandidaten"]) == 1, \
+        "een definitief bestand heft hoogstens een voorlopig id op"
+    ronde(nu=NU + timedelta(hours=27))
+    assert len(ZA.lees_staat()["verdwenen"]) == 1, "na een dag is het tweede voorlopige id een verlies"
+
+
+def test_codex_verwerking_42_een_teruggekeerd_id_wacht_niet_langer():
+    for terug in ("processing", "completed"):
+        z, _, _ = opzet()
+        m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("M4A", "audio_only", b"g")])
+        voorlopig = {"id": "voorlopig", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z",
+                     "einde": "", "grootte": 0, "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+        m["bestanden"].append(dict(voorlopig))
+        ronde()
+        m["bestanden"].pop()
+        ronde(nu=NU + timedelta(hours=1))
+        assert "voorlopig" in wachtend()
+        z.inhoud["voorlopig"] = b"video"
+        m["bestanden"].append({**voorlopig, "status": terug, "grootte": 5 if terug == "completed" else 0,
+                               "link": terug == "completed"})
+        ronde(nu=NU + timedelta(hours=2))
+        s = ZA.lees_staat()
+        assert "voorlopig" not in s["verdwenen"], terug
+        if terug == "completed":
+            assert "voorlopig" not in wachtend() and "voorlopig" in s["bestanden"], "afgerond: een gewoon bestand"
+        ronde(nu=NU + timedelta(hours=30))
+        assert "voorlopig" not in ZA.lees_staat()["verdwenen"], terug
+
+
+def test_codex_verwerking_43_een_oude_regel_in_gezien_zonder_meeting_blijft_voorzichtig():
+    z, _, _ = opzet()
+    os.makedirs(ZA.DATA, exist_ok=True)
+    s = ZA.lees_staat()
+    s["gezien"]["oud-id"] = {"start": "2026-10-27T12:01:51Z", "grootte": 0}  # de vorm van de vorige versie
+    ZA.schrijf_staat(s)
+    r, _ = ronde()
+    assert "oud-id" in ZA.lees_staat()["verdwenen"], "een oude regel zonder meeting wordt zoals vroeger een verlies"
+
+
+def test_codex_verwerking_44_een_vervanger_die_verschijnt_terwijl_het_voorlopige_id_nog_zichtbaar_is_telt():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    voorlopig = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z", "einde": "",
+                 "grootte": 0, "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    definitief = {**voorlopig, "id": "B", "status": "completed", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    m["bestanden"] = [dict(voorlopig)]
+    ronde()                                                    # eerst alleen het voorlopige A
+    m["bestanden"] = [dict(voorlopig), dict(definitief)]
+    ronde(nu=NU + timedelta(hours=1))                          # dan A en het definitieve B samen
+    m["bestanden"] = [dict(definitief)]
+    ronde(nu=NU + timedelta(hours=2))                          # dan alleen B
+    r, _ = ronde(nu=NU + timedelta(hours=27))
+    s = ZA.lees_staat()
+    assert "A" not in s["verdwenen"] and "A" not in wachtend() and "B" in s["bestanden"], s["verdwenen"]
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+
+
+def test_codex_verwerking_45_een_apart_deel_een_minuut_later_is_geen_vervanger():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:00:00Z", bestanden=[])
+    A = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:00:00Z", "einde": "", "grootte": 0,
+         "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    B = {**A, "id": "B", "status": "completed", "start": "2026-10-27T12:01:00Z", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    m["bestanden"] = [dict(A)]
+    ronde()
+    m["bestanden"] = [dict(A), dict(B)]
+    ronde(nu=NU + timedelta(hours=1))
+    m["bestanden"] = [dict(B)]
+    ronde(nu=NU + timedelta(hours=2))
+    r, _ = ronde(nu=NU + timedelta(hours=27))
+    assert "A" in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" in teksten(r), \
+        "een deel dat een minuut later begint, is een ander deel: A blijft een verlies"
+
+
+def test_codex_verwerking_46_een_bewezen_vervanger_die_eerst_uit_zoom_verdwijnt_telt_nog():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[("M4A", "audio_only", b"g")])
+    A = {"id": "A", "soort": "MP4", "status": "processing", "start": "2026-10-27T12:01:51Z", "einde": "", "grootte": 0,
+         "opnametype": "speaker_view", "extensie": "MP4", "link": False}
+    B = {**A, "id": "B", "status": "completed", "grootte": 5, "link": True}
+    z.inhoud["B"] = b"video"
+    geluid = m["bestanden"][0]
+    m["bestanden"] = [geluid, dict(A)]
+    ronde()
+    m["bestanden"] = [geluid, dict(A), dict(B)]
+    ronde(nu=NU + timedelta(hours=1))                       # B wordt gekopieerd en bewezen
+    m["bestanden"] = [geluid, dict(A)]
+    ronde(nu=NU + timedelta(hours=2))                       # B verdwijnt uit Zoom voor A
+    m["bestanden"] = [geluid]
+    r, _ = ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert "B" in s["bestanden"] and "A" not in s["verdwenen"] and "A" not in wachtend(), s["verdwenen"]
+
+
+def test_gemeten_een_plaatshouder_zonder_soort_wordt_vervangen_door_de_bestanden_met_hetzelfde_begin():
+    """Gemeten op de VM, 27-10-2026: een bestand in verwerking heeft file_type, file_extension en recording_type leeg,
+    recording_end leeg, grootte 0. Het wordt vervangen door video, transcript en tijdlijn met hetzelfde begin."""
+    z, d, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T14:22:16Z", bestanden=[])
+    m["bestanden"] = [{"id": "plaatshouder", "soort": "", "status": "processing", "start": "2026-10-27T14:22:17Z",
+                       "einde": "", "grootte": 0, "opnametype": "", "extensie": "", "link": True}]
+    r, _ = ronde()
+    assert not r.noden
+    m["bestanden"] = []
+    for i, (soort, opnametype, data) in enumerate([("MP4", "shared_screen_with_speaker_view", b"video"),
+                                                    ("TIMELINE", "timeline", b"{}"), ("TRANSCRIPT", "audio_transcript", b"W")]):
+        z.inhoud[f"def{i}"] = data
+        m["bestanden"].append({"id": f"def{i}", "soort": soort, "status": "completed", "start": "2026-10-27T14:22:17Z",
+                               "einde": "", "grootte": len(data), "opnametype": opnametype, "extensie": soort,
+                               "link": True})
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    r, uit = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert not s["verdwenen"] and not wachtend() and len(s["bestanden"]) == 3, s["verdwenen"]
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r) and not VOORSTELLEN
+
+
+# -------------------------------------------- Codex-controle verwerking 5: het groepsmodel (27-10-2026) ---
+def _plaatshouder(i, start="2026-10-27T12:01:51Z"):
+    return {"id": i, "soort": "", "status": "processing", "start": start, "einde": "", "grootte": 0, "opnametype": "",
+            "extensie": "", "link": True}
+
+
+def _definitief(z, i, soort="MP4", start="2026-10-27T12:01:51Z"):
+    z.inhoud[i] = i.encode()
+    return {"id": i, "soort": soort, "status": "completed", "start": start, "einde": "", "grootte": len(i),
+            "opnametype": "speaker_view", "extensie": soort, "link": True}
+
+
+def test_codex_verwerking_47_twee_plaatshouders_twee_vervangers_ook_als_een_vervanger_verdwijnt():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2")]
+    ronde()
+    B, C = _definitief(z, "B"), _definitief(z, "C", soort="TIMELINE")
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2"), B, C]
+    ronde(nu=NU + timedelta(hours=1))                       # B en C gekopieerd en bewezen
+    m["bestanden"] = [_plaatshouder("A2"), B]               # A1 weg, C verdwijnt uit Zoom
+    ronde(nu=NU + timedelta(hours=2))
+    m["bestanden"] = [B]                                    # A2 weg
+    r, _ = ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    s = ZA.lees_staat()
+    assert not s["verdwenen"] and not wachtend() and {"B", "C"} <= set(s["bestanden"]), s["verdwenen"]
+
+
+def test_codex_verwerking_48_een_plaatshouder_die_terugkomt_na_de_koppeling_houdt_haar_vervanger():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A")]
+    ronde()
+    B = _definitief(z, "B")
+    m["bestanden"] = [B]
+    ronde(nu=NU + timedelta(hours=1))                       # A weg, B bewezen: opgelost
+    m["bestanden"] = [_plaatshouder("A"), B]                # A komt even terug
+    ronde(nu=NU + timedelta(hours=2))
+    m["bestanden"] = [B]                                    # en verdwijnt opnieuw
+    ronde(nu=NU + timedelta(hours=3))
+    r, _ = ronde(nu=NU + timedelta(hours=30))
+    assert "A" not in ZA.lees_staat()["verdwenen"] and "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
+
+
+def test_een_oude_groep_in_verwerking_telt_als_niet_veilig():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("oud", start="2026-08-01T09:00:01Z")]
+    _, uit = ronde()
+    assert not uit["veilig"] and not uit["dekking"], "een opname van drie maanden die Zoom nog verwerkt, is niet veilig"
+
+
+# --------------------------------------------------------- Codex-controle verwerking 6 (27-10-2026) ---
+def test_codex_verwerking_49_een_bestand_dekt_hoogstens_een_groep():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1", start="2026-10-27T12:01:50Z"), _plaatshouder("A2", start="2026-10-27T12:01:54Z")]
+    ronde()
+    m["bestanden"] = [_definitief(z, "B", start="2026-10-27T12:01:51Z")]
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    assert len(ZA.lees_staat()["verdwenen"]) == 1, "twee plaatshouders, een vervanger: een verlies"
+
+
+def test_codex_verwerking_50_een_plaatshouder_die_onder_haar_id_afrondt_vervangt_geen_andere():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A1"), _plaatshouder("A2")]
+    ronde()
+    z.inhoud["A1"] = b"klaar"
+    m["bestanden"] = [{**_plaatshouder("A1"), "status": "completed", "grootte": 5, "soort": "MP4"}]
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    s = ZA.lees_staat()
+    assert "A1" in s["bestanden"] and "A2" in s["verdwenen"], s["verdwenen"]
+
+
+def test_codex_verwerking_51_een_late_vervanger_trekt_het_verlies_in():
+    z, _, _ = opzet()
+    m = z.meeting("u1", "2026-10-27T12:01:49Z", bestanden=[])
+    m["bestanden"] = [_plaatshouder("A")]
+    ronde()
+    m["bestanden"] = []
+    ronde(nu=NU + timedelta(hours=1))
+    ronde(nu=NU + timedelta(hours=27))
+    assert "A" in ZA.lees_staat()["verdwenen"]
+    m["bestanden"] = [_definitief(z, "B")]
+    r, _ = ronde(nu=NU + timedelta(hours=28))
+    s = ZA.lees_staat()
+    assert "B" in s["bestanden"] and "A" not in s["verdwenen"], "het verlies is ingetrokken"
+    assert "Zoom-opname verdwenen voor ze in Dropbox stond" not in teksten(r)
 
 if __name__ == "__main__":
     goed = fout = 0
