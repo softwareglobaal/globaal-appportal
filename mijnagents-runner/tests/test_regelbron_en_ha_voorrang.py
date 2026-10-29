@@ -295,6 +295,32 @@ class RegelbronEnHATest(unittest.TestCase):
             N.hoofdstukken("## A. Mappen\nA1\n", ["A", "B"])
         self.assertEqual(deel, N.hoofdstukken(self.boek().decode().replace("\n", "\r\n"), ["A", "B"]))
 
+    def test_codeblok_en_kop_zonder_letter_zijn_geen_verrassing(self):
+        # Overleg 29-10 (X1, K2): een voorbeeldkop in een codeblok knipt niets af,
+        # een gewone '## '-kop onder B is wel een grens.
+        tekst = self.boek().decode()
+        met_voorbeeld = tekst.replace("### A1\n", "### A1\n~~~~\n## C. voorbeeld\n~~~ niet dicht\n~~~~\n")
+        deel = N.hoofdstukken(met_voorbeeld, ["A", "B"])
+        self.assertIn("## C. voorbeeld", deel)
+        self.assertIn("## Beslissingen", deel)
+        met_log = tekst.replace("## C. De dossierfiche", "## Wijzigingslog\nv1.11 nieuw\n\n## C. De dossierfiche")
+        self.assertEqual(N.hoofdstukken(met_log, ["A", "B"]), N.hoofdstukken(tekst, ["A", "B"]))
+        with self.assertRaises(ValueError):
+            N.hoofdstukken(tekst.replace("## A. Mappen", "```\n## A. Mappen"), ["A", "B"])
+        with self.assertRaises(ValueError):
+            N.hoofdstukken(tekst.replace("## B. Het verslag", "## B Het verslag"), ["A", "B"])
+
+    def test_v1_10_is_hoger_dan_v1_9(self):
+        inhoud = self.boek()
+        self.pin(inhoud)
+        gelezen = []
+        rpc = self.map_met("H-A vaste afspraken v1.9.md", "H-A vaste afspraken v1.10.md", "H-A vaste afspraken v1.2.md",
+                           inhoud=inhoud, gelezen=gelezen)
+        stand = N.controleer_regelbron(self.c, self.regels, rpc, lambda *a, **k: inhoud, force=True)
+        self.assertTrue(stand["geldig"])
+        self.assertEqual(stand["gelezen"], "H-A vaste afspraken v1.10")
+        self.assertTrue(gelezen[-1].endswith("/H-A vaste afspraken v1.10.md"))
+
     def test_vastgepinde_bron_in_regels_is_volledig(self):
         bron = N.lees_regels(str(RUNNER / "werkwijze" / "naamstructuur-regels.json"))["regelbron"]
         self.assertEqual(bron["hoofdstukken"], ["A", "B"])
@@ -425,30 +451,38 @@ class RegelbronEnHATest(unittest.TestCase):
         forces = []
         def bron(c, regels, rpc, download, force=False):
             forces.append(force)
-            stand = {"geldig": False, "gevonden": "H-A vaste afspraken v1.8",
-                     "versie": regels["regelbron"]["versie"],
-                     "status": "H-A vaste afspraken v1.8 gevonden, niet bevestigd; vastgepind v1.7"}
+            stand = {"geldig": False, "gevonden": "H-A vaste afspraken v1.11",
+                     "versie": regels["regelbron"]["versie"], "hoofdstukken_sha256": "f" * 64,
+                     "status": "H-A vaste afspraken v1.11 gevonden, niet bevestigd; vastgepind v1.10"}
             with c:
                 N.instelling(c, "regelbron", stand)
             return stand
-        with (patch.object(R.organisatie, "firmas", return_value=[]),
-              patch.object(N, "lezer_van", return_value=client),
-              patch.object(N, "controleer_regelbron", side_effect=bron),
-              patch.object(N, "synchroniseer", return_value=0),
-              patch.object(N, "lees_lokale_metadata", return_value=0),
-              patch.object(N, "dagelijkse_dekking")):
-            uitvoer = io.StringIO()
-            with contextlib.redirect_stdout(uitvoer):
-                R.werk("benamingen-wacht", r, self.regels, self.tmp.name)
+        noden = []
+        for _ in range(2):
+            r = Ronde()
+            with (patch.object(R.organisatie, "firmas", return_value=[]),
+                  patch.object(N, "lezer_van", return_value=client),
+                  patch.object(N, "controleer_regelbron", side_effect=bron),
+                  patch.object(N, "synchroniseer", return_value=0),
+                  patch.object(N, "lees_lokale_metadata", return_value=0),
+                  patch.object(N, "dagelijkse_dekking")):
+                uitvoer = io.StringIO()
+                with contextlib.redirect_stdout(uitvoer):
+                    R.werk("benamingen-wacht", r, self.regels, self.tmp.name)
+            noden.append(r.noden)
         regels = uitvoer.getvalue().splitlines()
         self.assertEqual(len(regels), 1)
         self.assertIn("gelezen", regels[0])
         self.assertIn("getoetst", regels[0])
         self.assertIn("open punten", regels[0])
-        self.assertIn("v1.8", regels[0])
-        self.assertTrue(any(voor == "mehdi" and "v1.8" in tekst and "Welke versie geldt?" in tekst
+        self.assertIn("v1.11", regels[0])
+        # Overleg 29-10 (K5): naar Claude, niet naar Mehdi; K4: elke ronde dezelfde tekst, dus geen nieuwe nood.
+        self.assertTrue(any(voor == "claude-code" and "v1.11" in tekst and "Vertaling nakijken" in tekst
+                            and self.regels["regelbron"]["hoofdstukken_sha256"][:12] in tekst and "ffffffffffff" in tekst
                             for tekst, voor in r.noden))
-        self.assertEqual(forces, [False])
+        self.assertFalse(any(voor == "mehdi" for _, voor in r.noden))
+        self.assertEqual(noden[0], noden[1])
+        self.assertEqual(forces, [False, False])
 
 
 if __name__ == "__main__":

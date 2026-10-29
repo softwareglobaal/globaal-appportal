@@ -448,15 +448,23 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None, opslag_scope=Non
 def hoofdstukken(tekst, letters):
     """De tekst van de hoofdstukken die deze agents vertalen, bv. A en B.
 
-    Een hoofdstuk loopt van '## A. ' tot de volgende kop '## <letter>. '.
+    Een hoofdstuk loopt van '## A. ' tot de volgende '## '-kop. Koppen in een
+    codeblok (``` of ~~~) tellen niet, zodat een sjabloon geen grens maakt.
     Ontbreekt een gevraagd hoofdstuk, dan is de bron niet bruikbaar.
     """
-    uit, huidig, gezien = [], None, set()
+    uit, huidig, gezien, hek = [], None, set(), ""
     for regel in tekst.splitlines():
-        kop = re.match(r"## ([A-Z])\. ", regel)
-        if kop:
-            huidig = kop[1]
-            gezien.add(huidig)
+        rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
+        if hek:
+            if rand and rand[1][0] == hek[0] and len(rand[1]) >= len(hek) and not regel.strip(" `~"):
+                hek = ""
+        elif rand:
+            hek = rand[1]
+        elif regel.startswith("## "):
+            kop = re.match(r"## ([A-Z])\. ", regel)
+            huidig = kop[1] if kop else None
+            if kop:
+                gezien.add(huidig)
         if huidig in letters:
             uit.append(regel.rstrip())
     if not set(letters) <= gezien:
