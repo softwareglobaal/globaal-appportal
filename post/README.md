@@ -88,6 +88,24 @@ Regels die in de code zitten, niet in een afspraak:
 - Wachtwoorden staan alleen in dit bestand. Ze komen nooit in git, nooit in de
   webpagina en nooit in een tool-antwoord.
 
+## Toegang laten beheren (`beheer:` en /toegang)
+
+Zet bij een mailbox `beheer: [naam]` (alleen een lijst; `ja` telt als
+niemand). Die persoon krijgt op de Postbus-pagina de knop **Toegang beheren**
+en kan op `/toegang` voor die mailbox `personen`, `groepen`, `schrijven`
+(ordenen) en `verwijderen` aanpassen. Niet: `verzenden`, `doorsturen`,
+wachtwoord, server, mappen of `beheer` zelf.
+
+- De wijzigingen staan in `/toegang/toegang.yaml` (volume `post-toegang`) en
+  liggen over `mailboxen.yaml` heen. Het wachtwoordbestand blijft read-only.
+- Elke wijziging staat met oud en nieuw in `/toegang/wijzigingen.jsonl`; de
+  beheersectie toont de laatste en per mailbox wie hem het laatst wijzigde.
+- `beheer:` weghalen zet de laag voor die mailbox buiten werking: dan geldt
+  weer alleen `mailboxen.yaml`. Een onleesbare laag wordt genegeerd (staat bij
+  de aandachtspunten) en niet overschreven.
+- Formulier: alleen vanaf de site zelf (Origin/Referer-toets tegen CSRF).
+  Tests: `python post/test_toegang.py`.
+
 ## De tools
 
 **Versturen en doorsturen gaan altijd in twee stappen** (`wachtrij.py`). De

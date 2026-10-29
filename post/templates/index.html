@@ -74,6 +74,10 @@
       </table>
       </div>
       <p class="hint">Toegang volgt je Authentik-groepen: {{ wie.groepen | join(", ") or "geen" }}.</p>
+      {% if toegang_beheer %}
+      <p style="margin-top:12px"><a class="btn" href="/toegang">Toegang beheren</a>
+         <span class="muted">bepaal wie bij jouw mailboxen mag</span></p>
+      {% endif %}
       <p class="hint">
         Wat de rechten betekenen. <strong>Lezen</strong>: zoeken en berichten
         opvragen, zonder iets te veranderen. <strong>Ordenen</strong>:
@@ -109,7 +113,7 @@
       <h2>Beheer: alle mailboxen in {{ pad }}</h2>
       <div class="schuif">
       <table class="tbl">
-        <thead><tr><th>Mailbox</th><th>Server</th><th>Groepen</th><th>Personen</th><th>Mappen</th><th>Rechten</th><th>Doorsturen naar</th></tr></thead>
+        <thead><tr><th>Mailbox</th><th>Server</th><th>Groepen</th><th>Personen</th><th>Mappen</th><th>Rechten</th><th>Doorsturen naar</th><th>Toegang beheerd door</th></tr></thead>
         <tbody>
           {% for m in alle %}
           <tr>
@@ -120,14 +124,23 @@
             <td>{{ m.mappen | join(", ") if m.mappen else "alle" }}</td>
             <td>{{ rechten(m) | join(", ") }}</td>
             <td>{% if m.doorsturen %}{% for a in m.doorsturen %}<code>{{ a }}</code>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">-</span>{% endif %}</td>
+            <td>{% if m.beheer %}{{ m.beheer | join(", ") }}{% if m.aangepast %}<br><span class="muted">gewijzigd {{ m.aangepast.op }} door {{ m.aangepast.door }}</span>{% endif %}{% else %}<span class="muted">-</span>{% endif %}</td>
           </tr>
           {% else %}
-          <tr><td class="leeg" colspan="7">Er staat nog geen enkele mailbox in het bestand.</td></tr>
+          <tr><td class="leeg" colspan="8">Er staat nog geen enkele mailbox in het bestand.</td></tr>
           {% endfor %}
         </tbody>
       </table>
       </div>
-      <p class="hint">Wachtwoorden staan alleen in dat bestand op de VM en worden hier nooit getoond.</p>
+      <p class="hint">Wachtwoorden staan alleen in dat bestand op de VM en worden hier nooit getoond.
+        Bij een mailbox met <code>beheer:</code> gaan de wijzigingen via /toegang voor op dat bestand
+        (personen, groepen, ordenen, verwijderen); <code>beheer:</code> weghalen zet ze weer buiten werking.</p>
+      {% if wijzigingen %}
+      <h2 style="margin-top:16px">Laatste wijzigingen via /toegang</h2>
+      <ul style="margin-left:18px">
+        {% for w in wijzigingen %}<li>{{ w.op }} {{ w.door }}: <code>{{ w.mailbox }}</code></li>{% endfor %}
+      </ul>
+      {% endif %}
       <p style="margin-top:14px"><button class="btn" id="controleer">Verbinding testen</button>
          <span id="uitslag" class="muted"></span></p>
       <div id="uitslagen"></div>

@@ -973,6 +973,9 @@ services:
       # met doorsturen (POSTBUS_DOORSTUREN_DAGPLAFOND).
       POSTBUS_VERWIJDEREN: ${POSTBUS_VERWIJDEREN:-}
       POSTBUS_VERZENDEN: ${POSTBUS_VERZENDEN:-}
+      # Wijzigingen van mailbox-beheerders (beheer: in mailboxen.yaml) via
+      # /toegang; liggen over mailboxen.yaml heen. Logboek ernaast.
+      POSTBUS_TOEGANG: /toegang/toegang.yaml
     volumes:
       # De mailboxen met hun wachtwoorden: één bestand op de VM, buiten git,
       # read-only aangekoppeld. Bewerken met: nano ~/post-config/mailboxen.yaml
@@ -981,6 +984,9 @@ services:
       # (oauth_ms.py). Microsoft vervangt die tokens bij gebruik, dus ze kunnen
       # niet in het read-only mailboxenbestand. Koppelen: oauth_koppel.py.
       - post-oauth:/oauth
+      # Schrijfbaar: toegang.yaml + wijzigingen.jsonl van /toegang. Geen
+      # wachtwoorden; die blijven alleen in het read-only bestand hierboven.
+      - post-toegang:/toegang
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3017/healthz')"]
       interval: 2m
@@ -1226,6 +1232,7 @@ volumes:
   contracten-input:
   post-agent-state:
   post-oauth:
+  post-toegang:
   telefoonregister-data:
   sales-data:
   projecten-data:

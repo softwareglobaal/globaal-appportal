@@ -2501,7 +2501,7 @@ de wijzigfuncties openen een map schrijfbaar.
 - **App in deze repo** (`post/`, zoals `angela/`). Flask, service
   **`app-post`**:3017, nginx `58-post.conf.template`, Authentik via
   `scripts/add-post-app.py` (tegel-groepen admin/manager/postbus). Geen
-  database: de app heeft geen eigen staat.
+  database; eigen staat alleen in volumes (`post-oauth`, `post-toegang`).
 - **Toegang volgt de Authentik-login.** De tegel-groep bepaalt alleen wie de
   pagina ziet en wie een connector mag koppelen. Welke mailboxen daarna
   leesbaar zijn staat per mailbox in `~/post-config/mailboxen.yaml` op de VM
@@ -2512,6 +2512,12 @@ de wijzigfuncties openen een map schrijfbaar.
   gefilterd. **Dicht tenzij opengezet**: een mailbox zonder groepen en zonder
   personen is voor niemand zichtbaar. Het bestand wordt elke vijf seconden
   opnieuw ingelezen, dus wijzigen vraagt geen herstart.
+- **Toegang gedelegeerd beheren** (sinds 2026-10-29): `beheer: [naam]` bij een
+  mailbox laat die persoon op `/toegang` personen, groepen, ordenen en
+  verwijderen wijzigen (niet verzenden/doorsturen). Wijzigingen in volume
+  `post-toegang` (`toegang.yaml` over `mailboxen.yaml` heen, logboek
+  `wijzigingen.jsonl`); `beheer:` weghalen zet ze buiten werking. Eerste:
+  mukesh voor info@, oa.epb@ en office@energie-efficient.be.
 - **MCP-mantel is die van §14.6** (vermogen): streamable HTTP op `/mcp`,
   minimale OAuth-server met DCR + PKCE voor claude.ai-connectors,
   `POSTBUS_MCP_SECRET`/`POSTBUS_MCP_TOKEN` in de stack-`.env` (beide leeg =

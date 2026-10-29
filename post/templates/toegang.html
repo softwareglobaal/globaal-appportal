@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Toegang beheren · Postbus</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body { font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; color: #1d2733; }
+    .topbar { display: flex; align-items: center; gap: 22px; background: #10263f; color: #fff; padding: 0 22px; height: 52px; }
+    .brand { font-weight: 700; letter-spacing: 0.3px; flex: 1; }
+    .brand a { color: #fff; text-decoration: none; }
+    .userbox { font-size: 12.5px; color: #b9c6d4; }
+    main { max-width: min(900px, 96vw); margin: 1.6rem auto; padding: 0 1.4rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 6px; }
+    .muted { color: #6b7885; }
+    .hint { color: #6b7885; font-size: 12.5px; margin-top: 8px; }
+    .kaart { background: #fff; border: 1px solid #e1e5e9; border-radius: 6px; padding: 18px 20px; margin-top: 20px; }
+    .kaart h2 { font-size: 1rem; margin-bottom: 4px; }
+    code { background: #eef2f6; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+    label.veld { display: block; font-weight: 600; margin-top: 14px; margin-bottom: 4px; }
+    input[type=text] { width: 100%; padding: 7px 9px; border: 1px solid #cdd5dc; border-radius: 5px; font: inherit; }
+    .keuzes label { display: block; margin: 2px 0; }
+    .keuzes input[type=text] { margin-top: 4px; }
+    .btn { display: inline-block; margin-top: 16px; padding: 8px 14px; border: 1px solid #10263f; border-radius: 5px;
+           background: #10263f; color: #fff; font: inherit; cursor: pointer; }
+    .melding { background: #e9f6ee; border: 1px solid #b7dfc5; border-radius: 6px; padding: 10px 14px; margin-top: 16px; }
+    .fout { background: #fdecea; border: 1px solid #f1b8b2; border-radius: 6px; padding: 10px 14px; margin-top: 16px; }
+    .vast { margin-top: 14px; font-size: 12.5px; color: #6b7885; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .tbl th { text-align: left; padding: 7px 10px; background: #f8fafc; border-bottom: 1px solid #e1e5e9;
+              font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.4px; color: #5a6774; }
+    .tbl td { padding: 7px 10px; vertical-align: top; border-top: 1px solid #eceff1; }
+    .schuif { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand"><a href="/">Postbus</a></span>
+    <span class="userbox">{{ wie.gebruiker or "onbekend" }}</span>
+  </header>
+  <main>
+    <h1>Toegang beheren</h1>
+    <p class="muted">Hier bepaal je wie de mailboxen hieronder via Claude mag lezen, ordenen en opruimen.</p>
+
+    {% if melding %}<div class="melding">{{ melding }}</div>{% endif %}
+    {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
+
+    {% for r in rijen %}
+    {% set m = r.m %}{% set nu = r.nu %}
+    <form class="kaart" method="post" action="/toegang">
+      <h2><code>{{ m.adres }}</code></h2>
+      <p class="hint">
+        {% if m.aangepast %}Laatst gewijzigd door {{ m.aangepast.door }} op {{ m.aangepast.op }}.
+        {% else %}Nog niet gewijzigd via dit scherm.{% endif %}
+      </p>
+      <input type="hidden" name="adres" value="{{ m.adres }}" />
+
+      <label class="veld" for="p-{{ loop.index }}">Personen die de mailbox zien</label>
+      <input type="text" id="p-{{ loop.index }}" name="personen" value="{{ nu.personen | join(', ') }}" />
+      <label class="veld" for="g-{{ loop.index }}">Groepen die de mailbox zien</label>
+      <input type="text" id="g-{{ loop.index }}" name="groepen" value="{{ nu.groepen | join(', ') }}" />
+      <p class="hint">Authentik-gebruikersnamen en -groepen, gescheiden door komma's.</p>
+
+      {% for veld, etiket, uitleg in [("schrijven", "Ordenen", "markeren, verplaatsen, mappen, concepten"),
+                                      ("verwijderen", "Verwijderen", "naar de prullenbak van de mailbox, terug te zetten")] %}
+      {% set v = nu[veld] %}
+      <div class="keuzes">
+        <span class="veld" style="display:block;font-weight:600;margin-top:14px">{{ etiket }} <span class="muted" style="font-weight:400">({{ uitleg }})</span></span>
+        <label><input type="radio" name="{{ veld }}" value="nee" {% if v == "nee" %}checked{% endif %} /> niemand</label>
+        <label><input type="radio" name="{{ veld }}" value="ja" {% if v == "ja" %}checked{% endif %} /> iedereen die de mailbox ziet</label>
+        <label><input type="radio" name="{{ veld }}" value="namen" {% if v is not string %}checked{% endif %} /> alleen deze namen:</label>
+        <input type="text" name="{{ veld }}_namen" aria-label="{{ etiket }}: alleen deze namen"
+               value="{{ v | join(', ') if v is not string else '' }}" />
+      </div>
+      {% endfor %}
+
+      <p class="vast">
+        Versturen: {{ "aan" if m.verzenden else "uit" }}. Doorsturen: {{ m.doorsturen | join(", ") if m.doorsturen else "uit" }}.
+        Daarmee gaat er post naar buiten; dat wijzigt alleen de VM-beheerder.
+      </p>
+      <button class="btn" type="submit">Opslaan</button>
+    </form>
+    {% else %}
+    <div class="kaart">
+      Je beheert de toegang van geen enkele mailbox. Vraag de beheerder om je
+      naam bij <code>beheer:</code> van de mailbox te zetten.
+    </div>
+    {% endfor %}
+
+    {% if wijzigingen %}
+    <div class="kaart">
+      <h2>Laatste wijzigingen</h2>
+      <div class="schuif">
+      <table class="tbl">
+        <thead><tr><th>Wanneer (UTC)</th><th>Door</th><th>Mailbox</th><th>Wat</th></tr></thead>
+        <tbody>
+          {% for w in wijzigingen %}
+          <tr>
+            <td>{{ w.op }}</td>
+            <td>{{ w.door }}</td>
+            <td><code>{{ w.mailbox }}</code></td>
+            <td>
+              {% for veld in ["personen", "groepen", "schrijven", "verwijderen"] %}
+              {% if w.oud[veld] != w.nieuw[veld] %}
+              <div>{{ veld }}: {{ w.oud[veld] | join(", ") if w.oud[veld] is not string else w.oud[veld] }}
+                → {{ w.nieuw[veld] | join(", ") if w.nieuw[veld] is not string else w.nieuw[veld] }}</div>
+              {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+  </main>
+</body>
+</html>

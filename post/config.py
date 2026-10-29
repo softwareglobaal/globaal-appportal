@@ -34,21 +34,47 @@ kent. Bij doorsturen gaat alleen post uit die al in de mailbox stond, naar een
 adres uit de lijst; bij verzenden mag de agent een bericht opstellen en naar
 een zelfgekozen adres sturen. Dat laatste is de meest ingrijpende bevoegdheid
 en staat daarom alleen open waar hij expliciet is aangezet.
+
+Toegang laten beheren door iemand anders dan de VM-beheerder: zet bij een
+mailbox `beheer: [naam]`. Die persoon kan dan op /toegang de velden in
+BEWERKBAAR van die mailbox wijzigen. Die wijzigingen komen in een apart,
+schrijfbaar bestand (TOEGANG_PAD) dat over mailboxen.yaml heen wordt gelegd;
+het bestand met de wachtwoorden blijft read-only. Haalt de VM-beheerder
+`beheer:` weg, dan vervalt die laag voor die mailbox en geldt weer alleen
+mailboxen.yaml. Verzenden en doorsturen zitten bewust niet in BEWERKBAAR:
+daarmee gaat er post naar buiten, dat blijft bij de VM-beheerder.
 """
+import json
 import os
+import re
 import threading
 import time
 
 import yaml
 
+try:
+    import fcntl
+except ImportError:  # Windows (lokaal testen); in de container is het Linux
+    fcntl = None
+
 PAD = os.environ.get("POSTBUS_CONFIG", "/config/mailboxen.yaml")
+TOEGANG_PAD = os.environ.get("POSTBUS_TOEGANG", "/toegang/toegang.yaml")
+LOG_PAD = os.path.join(os.path.dirname(TOEGANG_PAD), "wijzigingen.jsonl")
 
 # Alleen deze sleutels mogen per mailbox voorkomen; een typefout in het
 # bestand is anders een stille beperking (of erger, een stille verruiming).
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
             "wachtwoord", "groepen", "personen", "mappen", "schrijven",
             "smtp_host", "smtp_poort", "doorsturen", "verwijderen", "verzenden",
-            "auth", "oauth_client_id"}
+            "auth", "oauth_client_id", "beheer"}
+
+# Wat een mailbox-beheerder op /toegang mag wijzigen. De rest van de mailbox
+# (wachtwoord, server, mappen, doorsturen, verzenden, beheer zelf) niet.
+BEWERKBAAR = ("groepen", "personen", "schrijven", "verwijderen")
+RECHT_VELDEN = ("schrijven", "verwijderen")
+
+# Authentik-gebruikers- en groepsnamen zoals ze in de headers binnenkomen.
+NAAM = re.compile(r"^[a-z0-9][a-z0-9._@-]{0,63}$")
 
 # Inlogmanieren. Standaard een wachtwoord; 'microsoft' = OAuth2 (XOAUTH2) met
 # een refresh token uit oauth_koppel.py, omdat Microsoft op IMAP geen
@@ -120,8 +146,28 @@ def _lijst(waarde, veld, fouten, waar):
     return [w.strip() for w in waarde]
 
 
-def _ontleed(ruw):
-    """YAML-inhoud naar (mailboxen, fouten). Fouten blokkeren nooit de rest."""
+def _beheer(waarde, fouten, waar):
+    """Wie de toegang van deze mailbox mag beheren: alleen een namenlijst.
+
+    'ja' zou betekenen: iedereen die de mailbox ziet mag ook bepalen wie hem
+    ziet. Dat is nooit de bedoeling, dus dat telt als niemand.
+    """
+    if waarde is None or waarde is False:
+        return []
+    if not isinstance(waarde, list):
+        fouten.append(f"{waar}: beheer moet een lijst namen zijn, genegeerd")
+        return []
+    return _recht(waarde, "beheer", fouten, waar) or []
+
+
+def _ontleed(ruw, laag=None):
+    """YAML-inhoud naar (mailboxen, fouten). Fouten blokkeren nooit de rest.
+
+    laag = de wijzigingen van mailbox-beheerders uit TOEGANG_PAD, per adres
+    (kleine letters). Ze gelden alleen bij een mailbox met beheer: in
+    mailboxen.yaml, en alleen voor de velden in BEWERKBAAR.
+    """
+    laag = laag or {}
     fouten = []
     if not isinstance(ruw, dict):
         return [], ["Het bestand moet met 'mailboxen:' beginnen (YAML-object)"]
@@ -166,6 +212,14 @@ def _ontleed(ruw):
         if adres.lower() in gezien:
             fouten.append(f"{waar}: dit adres staat er al in, tweede negeerd")
             continue
+        beheer = _beheer(rij.get("beheer"), fouten, waar)
+        aangepast = None
+        if beheer and adres.lower() in laag:
+            aangepast = laag[adres.lower()]
+            rij = dict(rij)
+            for veld in BEWERKBAAR:
+                if veld in aangepast["waarden"]:
+                    rij[veld] = aangepast["waarden"][veld]
 
         host = str(rij.get("imap_host") or standaard.get("imap_host") or "").strip()
         poort = rij.get("imap_poort", standaard.get("imap_poort", 993))
@@ -269,34 +323,79 @@ def _ontleed(ruw):
             "verzenden": verzenden,
             "auth": auth,
             "oauth_client_id": oauth_client_id,
+            "beheer": beheer,
+            # Wie de toegang het laatst via /toegang wijzigde, en wanneer;
+            # None = alles komt nog uit mailboxen.yaml.
+            "aangepast": ({"door": aangepast.get("door"),
+                           "op": aangepast.get("op")} if aangepast else None),
         })
     return uit, fouten
 
 
+def _lees_laag():
+    """(laag, fouten) uit TOEGANG_PAD. Geen bestand = geen wijzigingen.
+
+    Is de laag onleesbaar, dan geldt mailboxen.yaml zonder laag: liever de
+    toegang zoals de VM-beheerder hem zette dan een half gelezen wijziging.
+    """
+    try:
+        with open(TOEGANG_PAD, "r", encoding="utf-8") as f:
+            ruw = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}, []
+    except (OSError, yaml.YAMLError) as e:
+        return {}, [f"Wijzigingen van mailbox-beheerders ({TOEGANG_PAD}) "
+                    f"niet gelezen, mailboxen.yaml geldt: {e}"]
+    rijen = ruw.get("mailboxen") if isinstance(ruw, dict) else None
+    if not isinstance(rijen, dict):
+        return {}, []
+    laag = {}
+    for adres, inhoud in rijen.items():
+        if (isinstance(inhoud, dict)
+                and isinstance(inhoud.get("waarden"), dict)):
+            laag[str(adres).strip().lower()] = inhoud
+    return laag, []
+
+
+def _stempel(pad):
+    try:
+        return os.stat(pad).st_mtime_ns
+    except FileNotFoundError:
+        return None
+
+
 def _laad():
-    """Leest het bestand opnieuw als het gewijzigd is; anders uit de cache."""
+    """Leest de bestanden opnieuw als ze gewijzigd zijn; anders uit de cache."""
     nu = time.time()
     with _slot:
         if _cache["gelezen_op"] and nu - _cache["gelezen_op"] < HERLEES_NA:
             return _cache["mailboxen"], _cache["fouten"]
         try:
-            stempel = os.stat(PAD).st_mtime_ns
+            stempel = (os.stat(PAD).st_mtime_ns, _stempel(TOEGANG_PAD))
         except OSError as e:
             _cache.update(stempel=None, gelezen_op=nu, mailboxen=[],
                           fouten=[f"Kan {PAD} niet lezen: {e.strerror}"])
             return _cache["mailboxen"], _cache["fouten"]
         if stempel != _cache["stempel"]:
+            laag, laagfouten = _lees_laag()
             try:
                 with open(PAD, "r", encoding="utf-8") as f:
                     ruw = yaml.safe_load(f)
-                mailboxen, fouten = _ontleed(ruw)
+                mailboxen, fouten = _ontleed(ruw, laag)
             except yaml.YAMLError as e:
                 mailboxen, fouten = [], [f"YAML-fout in {PAD}: {e}"]
             except OSError as e:
                 mailboxen, fouten = [], [f"Kan {PAD} niet lezen: {e.strerror}"]
-            _cache.update(stempel=stempel, mailboxen=mailboxen, fouten=fouten)
+            _cache.update(stempel=stempel, mailboxen=mailboxen,
+                          fouten=laagfouten + fouten)
         _cache["gelezen_op"] = nu
         return _cache["mailboxen"], _cache["fouten"]
+
+
+def _vergeet():
+    """Na een eigen wijziging meteen opnieuw lezen, niet pas na HERLEES_NA."""
+    with _slot:
+        _cache["gelezen_op"] = 0.0
 
 
 def alles():
@@ -317,6 +416,154 @@ def voor(wie):
     for m in mailboxen:
         if (groepen & set(m["groepen"])) or (naam and naam in m["personen"]):
             uit.append(m)
+    return uit
+
+
+def beheerbaar(wie):
+    """De mailboxen waarvan deze gebruiker de toegang mag wijzigen.
+
+    Los van voor(): wie zichzelf uit personen haalt, blijft de mailbox
+    beheren zolang die in beheer: staat.
+    """
+    mailboxen, _ = _laad()
+    return [m for m in mailboxen if m["beheer"] and mag(m, "beheer", wie)]
+
+
+def _als_waarde(recht):
+    """Een geparst recht terug naar de vorm van het bestand."""
+    if isinstance(recht, list):
+        return list(recht)
+    return "ja" if recht else "nee"
+
+
+def huidige_toegang(mailbox):
+    """De velden uit BEWERKBAAR zoals ze nu gelden, in bestandsvorm."""
+    uit = {"groepen": list(mailbox["groepen"]),
+           "personen": list(mailbox["personen"])}
+    for veld in RECHT_VELDEN:
+        uit[veld] = _als_waarde(mailbox[veld])
+    return uit
+
+
+def _namen(waarde, veld):
+    if isinstance(waarde, str):
+        waarde = waarde.replace("\n", ",").split(",")
+    if not isinstance(waarde, list):
+        raise ValueError(f"{veld}: geef namen, gescheiden door komma's")
+    uit = []
+    for n in waarde:
+        n = str(n).strip().lower()
+        if not n:
+            continue
+        if not NAAM.match(n):
+            raise ValueError(f"{veld}: '{n}' is geen geldige Authentik-naam "
+                             "(kleine letters, cijfers, punt, streep)")
+        if n not in uit:
+            uit.append(n)
+    return uit
+
+
+def normaliseer(invoer):
+    """Invoer van het formulier naar de vorm van het bestand, of ValueError.
+
+    invoer: groepen en personen als lijst of komma-tekst; schrijven en
+    verwijderen als 'nee', 'ja' of een lijst namen.
+    """
+    onbekend = set(invoer) - set(BEWERKBAAR)
+    if onbekend:
+        raise ValueError("Dit mag je hier niet wijzigen: "
+                         + ", ".join(sorted(onbekend)))
+    uit = {"groepen": _namen(invoer.get("groepen") or [], "groepen"),
+           "personen": _namen(invoer.get("personen") or [], "personen")}
+    if not uit["groepen"] and not uit["personen"]:
+        raise ValueError("Laat minstens een persoon of groep staan, anders "
+                         "kan niemand de mailbox nog lezen")
+    for veld in RECHT_VELDEN:
+        v = invoer.get(veld, "nee")
+        if isinstance(v, str) and v.strip().lower() in ("ja", "nee"):
+            uit[veld] = v.strip().lower()
+        else:
+            namen = _namen(v, veld)
+            uit[veld] = namen if namen else "nee"
+    return uit
+
+
+class _Slot:
+    """Bestandsslot over de gunicorn-workers heen (aparte processen)."""
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(TOEGANG_PAD), exist_ok=True)
+        self.f = open(TOEGANG_PAD + ".slot", "a")
+        if fcntl:
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *_):
+        if fcntl:
+            fcntl.flock(self.f, fcntl.LOCK_UN)
+        self.f.close()
+
+
+def zet_toegang(adres, invoer, wie):
+    """Wijzigt de toegang van een mailbox namens een mailbox-beheerder.
+
+    Toetst opnieuw of wie deze mailbox mag beheren, schrijft de laag atomair
+    weg en logt oud en nieuw. Geeft (oud, nieuw) terug.
+    """
+    gezocht = str(adres or "").strip().lower()
+    mailbox = next((m for m in beheerbaar(wie)
+                    if m["adres"].lower() == gezocht), None)
+    if mailbox is None:
+        raise ValueError(f"Je beheert de toegang van '{adres}' niet")
+    nieuw = normaliseer(invoer)
+    oud = huidige_toegang(mailbox)
+    if nieuw == oud:
+        return oud, nieuw
+    nu = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    door = str(wie.get("gebruiker") or "").strip().lower() or "onbekend"
+    with _Slot():
+        laag, fouten = _lees_laag()
+        if fouten:
+            # Een kapotte laag niet overschrijven: dan gaan eerdere
+            # wijzigingen ongemerkt verloren.
+            raise ValueError("Het wijzigingenbestand is onleesbaar; vraag de "
+                             "beheerder het te herstellen")
+        laag[gezocht] = {"door": door, "op": nu, "waarden": nieuw}
+        tijdelijk = TOEGANG_PAD + ".nieuw"
+        with open(tijdelijk, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"mailboxen": laag}, f, allow_unicode=True,
+                           sort_keys=True)
+        os.replace(tijdelijk, TOEGANG_PAD)
+        with open(LOG_PAD, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"op": nu, "door": door,
+                                "mailbox": mailbox["adres"],
+                                "oud": oud, "nieuw": nieuw},
+                               ensure_ascii=False) + "\n")
+    _vergeet()
+    return oud, nieuw
+
+
+def wijzigingen(aantal=50, adressen=None):
+    """De laatste wijzigingen uit het logboek, nieuwste eerst.
+
+    adressen: alleen deze mailboxen (kleine letters); None = alle.
+    """
+    try:
+        with open(LOG_PAD, "r", encoding="utf-8") as f:
+            regels = f.readlines()
+    except FileNotFoundError:
+        return []
+    uit = []
+    for regel in reversed(regels):
+        try:
+            w = json.loads(regel)
+        except ValueError:
+            continue
+        if adressen is not None and str(w.get("mailbox", "")).lower() not in adressen:
+            continue
+        uit.append(w)
+        if len(uit) >= aantal:
+            break
     return uit
 
 

@@ -11,8 +11,9 @@ Lezen gebeurt in imapbron.py, de toegangsregels staan in config.py, het
 MCP-endpoint in mcp_server.py.
 """
 import os
+from urllib.parse import urlsplit
 
-from flask import Flask, render_template, request
+from flask import Flask, redirect, render_template, request, url_for
 
 import config
 import imapbron
@@ -72,6 +73,8 @@ def index():
         # de rest zou dat een lijst zijn van adressen die hen niets aangaan.
         alle=alle if beheer else [],
         fouten=fouten if beheer else [],
+        wijzigingen=config.wijzigingen(20) if beheer else [],
+        toegang_beheer=bool(config.beheerbaar(wie)),
         pad=config.PAD,
         basis=mcp_server._basis(),
         oauth_aan=bool(mcp_server._secret()),
@@ -98,6 +101,59 @@ def controle():
             uit.append({"mailbox": m["adres"], "ok": False,
                         "melding": f"{type(e).__name__}: {e}"})
     return {"gecontroleerd": len(uit), "resultaten": uit}
+
+
+def _zelfde_herkomst():
+    """Een formulier mag alleen van deze site zelf komen (geen CSRF).
+
+    De forward-auth-cookie gaat bij elk verzoek mee; zonder deze toets kan een
+    andere site een ingelogde beheerder ongemerkt een wijziging laten posten.
+    """
+    bron = request.headers.get("Origin") or request.headers.get("Referer")
+    if not bron:
+        return False
+    return urlsplit(bron).netloc.lower() == request.host.lower()
+
+
+def _toegang_pagina(wie, melding=None, fout=None, status=200):
+    mijn = config.beheerbaar(wie)
+    rijen = [{"m": m, "nu": config.huidige_toegang(m)} for m in mijn]
+    return render_template(
+        "toegang.html", wie=wie, rijen=rijen, melding=melding, fout=fout,
+        wijzigingen=config.wijzigingen(
+            30, {m["adres"].lower() for m in mijn}),
+    ), status
+
+
+@app.get("/toegang")
+def toegang():
+    """Mailbox-beheerders (beheer: in mailboxen.yaml) wijzigen hier wie erbij mag."""
+    wie = _wie()
+    if not config.beheerbaar(wie):
+        return _toegang_pagina(wie, status=403)
+    return _toegang_pagina(wie, melding=request.args.get("ok"))
+
+
+@app.post("/toegang")
+def toegang_wijzigen():
+    wie = _wie()
+    if not _zelfde_herkomst():
+        return _toegang_pagina(wie, fout="Geweigerd: dit formulier kwam niet "
+                               "van post.globaal.be zelf", status=403)
+    adres = request.form.get("adres", "")
+    invoer = {"groepen": request.form.get("groepen", ""),
+              "personen": request.form.get("personen", "")}
+    for veld in config.RECHT_VELDEN:
+        keuze = request.form.get(veld, "nee")
+        invoer[veld] = (request.form.get(veld + "_namen", "")
+                        if keuze == "namen" else keuze)
+    try:
+        oud, nieuw = config.zet_toegang(adres, invoer, wie)
+    except ValueError as e:
+        return _toegang_pagina(wie, fout=f"{adres}: {e}", status=400)
+    tekst = ("niets veranderd" if oud == nieuw
+             else "opgeslagen, geldt binnen enkele seconden")
+    return redirect(url_for("toegang", ok=f"{adres}: {tekst}"), code=303)
 
 
 mcp_server.registreer(app, _gebruiker, _groepen)
