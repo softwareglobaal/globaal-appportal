@@ -448,11 +448,16 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None, opslag_scope=Non
 def hoofdstukken(tekst, letters):
     """De tekst van de hoofdstukken die deze agents vertalen, bv. A en B.
 
-    Een hoofdstuk loopt van '## A. ' tot de volgende '## '-kop. Koppen in een
-    codeblok (``` of ~~~) tellen niet, zodat een sjabloon geen grens maakt.
-    Ontbreekt een gevraagd hoofdstuk, dan is de bron niet bruikbaar.
+    Een hoofdstuk loopt van een kop 'A. ...' van niveau 1 of 2 tot de volgende
+    kop van niveau 1 of 2, met de Markdown-regels: tot drie spaties ervoor, een
+    spatie of tab erna. Koppen in een codeblok (``` of ~~~) tellen niet, zodat
+    een sjabloon geen grens maakt. Een gevraagd hoofdstuk dat ontbreekt of twee
+    keer voorkomt, of een regel die op een hoofdstukkop lijkt maar er geen is
+    (ingesprongen, in een citaat, een onderstreepte kop), maakt de bron
+    onbruikbaar: dan pauzeert de toetsing liever dan iets te missen.
     """
-    uit, huidig, gezien, hek = [], None, set(), ""
+    uit, huidig, gezien, hek, vorige = [], None, [], "", ""
+    letterkop = re.compile(r"([A-Z])\.(?:[ \t]|$)")
     for regel in tekst.splitlines():
         rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
         if hek:
@@ -460,15 +465,22 @@ def hoofdstukken(tekst, letters):
                 hek = ""
         elif rand:
             hek = rand[1]
-        elif regel.startswith("## "):
-            kop = re.match(r"## ([A-Z])\. ", regel)
-            huidig = kop[1] if kop else None
-            if kop:
-                gezien.add(huidig)
+        else:
+            kop = re.match(r" {0,3}(#{1,6})(?:[ \t]+(.*))?$", regel)
+            if kop and len(kop[1]) <= 2:
+                letter = letterkop.match((kop[2] or "").strip())
+                huidig = letter[1] if letter else None
+                if huidig:
+                    gezien.append(huidig)
+            elif re.match(r"#{1,6}[ \t]+[A-Z]\.(?:[ \t]|$)", regel.lstrip(" \t>")):
+                raise ValueError("onduidelijke hoofdstukkop in het regelboek")
+            elif re.match(r" {0,3}(=+|-+)[ \t]*$", regel) and letterkop.match(vorige.strip()):
+                raise ValueError("onduidelijke hoofdstukkop in het regelboek")
+        vorige = regel if not hek else ""
         if huidig in letters:
             uit.append(regel.rstrip())
-    if not set(letters) <= gezien:
-        raise ValueError("hoofdstuk ontbreekt in het regelboek")
+    if any(gezien.count(x) != 1 for x in letters):
+        raise ValueError("hoofdstuk ontbreekt of staat dubbel in het regelboek")
     return "\n".join(uit)
 
 

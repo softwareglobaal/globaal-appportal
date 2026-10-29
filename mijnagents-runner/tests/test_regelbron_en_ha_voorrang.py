@@ -310,6 +310,24 @@ class RegelbronEnHATest(unittest.TestCase):
         with self.assertRaises(ValueError):
             N.hoofdstukken(tekst.replace("## B. Het verslag", "## B Het verslag"), ["A", "B"])
 
+    def test_verborgen_hoofdstuk_kan_geen_regel_wegsteken(self):
+        # Codex-test 29-10 (hoog): een geldige maar andere kopvorm mag geen nieuwe A- of B-regel verbergen.
+        tekst = self.boek().decode()
+        vast = N.hoofdstukken(tekst, ["A", "B"])
+        # Geldige Markdown-koppen tellen gewoon mee: de wijziging is zichtbaar of het boek is dubbel.
+        for kop in ("  ## B. Het verslag", "##\tB. Het verslag", "# B. Het verslag", "## B.  Het verslag ##"):
+            ander = tekst.replace("## B. Het verslag", kop).replace("geen\n```", "geen\nB6 nieuw\n```")
+            self.assertNotEqual(N.hoofdstukken(ander, ["A", "B"]), vast, kop)
+        achteraan = tekst + "\n  ## B. Het verslag\nB2 nieuwe regel\n"
+        for extra in ("\n  ## B. Het verslag\n", "\n    ## B. Het verslag\n", "\n> ## B. Het verslag\n",
+                      "\n### B. Het verslag\n", "\nB. Het verslag\n---\n", "\nB. Het verslag\n===\n"):
+            with self.assertRaises(ValueError, msg=repr(extra)):
+                N.hoofdstukken(tekst + extra + "B2 nieuwe regel\n", ["A", "B"])
+        with self.assertRaises(ValueError):
+            N.hoofdstukken(achteraan, ["A", "B"])
+        # Een gewone horizontale lijn na tekst blijft gewoon tekst.
+        self.assertEqual(N.hoofdstukken(tekst.replace("C1\n", "C1\n\n---\n"), ["A", "B"]), vast)
+
     def test_v1_10_is_hoger_dan_v1_9(self):
         inhoud = self.boek()
         self.pin(inhoud)
