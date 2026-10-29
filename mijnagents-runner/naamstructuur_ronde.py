@@ -52,12 +52,12 @@ def werk(agent, r, regels, data):
             if not bron.get("geldig"):
                 if bron.get("gevonden"):
                     # T-0028, overleg 29-10 (K5): Mehdi keurt het boek zelf goed; de
-                    # vertaling nakijken en de pin bijwerken is werk voor Claude.
-                    oud = regels["regelbron"].get("hoofdstukken_sha256", "")[:12]
-                    nieuw = str(bron.get("hoofdstukken_sha256", ""))[:12]
-                    r.nood(f"{bron['gevonden']}: hoofdstuk A of B gewijzigd tegenover vastgepinde "
-                           f"{bron['versie']} ({oud} wordt {nieuw}). Vertaling nakijken en pin bijwerken",
-                           "claude-code")
+                    # vertaling nakijken en de pin bijwerken is werk voor Claude. Tot
+                    # 29-10 ging hier "Welke versie geldt?" naar Mehdi en lag de
+                    # H-A-toetsing van 18-10 tot 29-10 stil.
+                    r.nood(f"{bron['gevonden']} gevonden, nog niet vastgepind (nu {bron['versie']}). "
+                           "Hoofdstuk A en B vergelijken, vertaling in naamstructuur-regels.json nakijken "
+                           "en versie, pad en sha256 bijwerken", "claude-code")
                 else:
                     r.nood("Bevestigd H-A-regelboek niet beschikbaar of gewijzigd", "claude-code")
             ha_bereiken = N.ha_bereiken(regels)

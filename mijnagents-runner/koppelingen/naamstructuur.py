@@ -10,7 +10,6 @@ import os
 import re
 import sqlite3
 import time
-import unicodedata
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -446,65 +445,21 @@ def synchroniseer(c, root, namespace, rpc, regels, budget=None, opslag_scope=Non
     return aantal
 
 
-def hoofdstukken(tekst, letters):
-    """De tekst van de hoofdstukken die deze agents vertalen, bv. A en B.
-
-    Een hoofdstuk loopt van een kop 'A. ...' van niveau 1 of 2 tot de volgende
-    kop van niveau 1 of 2, met de Markdown-regels: tot drie spaties ervoor, een
-    spatie of tab erna. Koppen in een codeblok (``` of ~~~) tellen niet, zodat
-    een sjabloon geen grens maakt. Alleen een kop die precies 'B. tekst' is,
-    telt als hoofdstuk. Een gevraagd hoofdstuk dat ontbreekt of twee keer
-    voorkomt, een andere kop met 'B.' erin, of een gewone regel die na het
-    weghalen van HTML en tekens vooraan met 'B.' begint, maakt de bron
-    onbruikbaar: dan pauzeert de toetsing liever dan een regel te missen. Het
-    boek heeft zulke regels alleen als hoofdstukkop.
-    """
-    uit, huidig, gezien, hek = [], None, [], ""
-    # Elke letter in elk schrift (ook een Griekse of brede B), niet in een afkorting als 'o.a.'.
-    verdacht = re.compile(r"(?<![\w.])[^\W\d_]\.(?![\w.])")
-    for regel in tekst.splitlines():
-        rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
-        if hek:
-            if rand and rand[1][0] == hek[0] and len(rand[1]) >= len(hek) and not regel.strip(" `~"):
-                hek = ""
-        elif rand:
-            hek = rand[1]
-        else:
-            vorm = unicodedata.normalize("NFKC", regel)
-            kop = re.match(r" {0,3}(#{1,2})(?:[ \t]+(.*))?$", vorm)
-            if kop:
-                letter = re.fullmatch(r"([A-Z])\.[ \t]+\S.*", (kop[2] or "").strip())
-                huidig = letter[1] if letter else None
-                if huidig:
-                    gezien.append(huidig)
-                elif verdacht.search(re.sub(r"<[^>]*>", "", kop[2] or "")):
-                    raise ValueError("onduidelijke hoofdstukkop in het regelboek")
-            elif verdacht.match(re.sub(r"^[\W_]+", "", re.sub(r"<[^>]*>", "", vorm))):
-                raise ValueError("onduidelijke hoofdstukkop in het regelboek")
-        if huidig in letters:
-            uit.append(regel.rstrip())
-    if any(gezien.count(x) != 1 for x in letters):
-        raise ValueError("hoofdstuk ontbreekt of staat dubbel in het regelboek")
-    return "\n".join(uit)
-
-
 def controleer_regelbron(c, regels, rpc, download, force=False):
     vorige = instelling(c, "regelbron") or {}
     bron = regels["regelbron"]
     stand = {"ts": time.time(), "versie": bron["versie"], "pad": bron["pad"], "geldig": False,
              "verbinding": bron.get("verbinding"), "namespace": bron.get("namespace")}
     try:
-        # T-0028, 29-10-2026: de agents vertalen alleen hoofdstuk A en B. Een
-        # nieuwere versie van het boek is geldig zolang die hoofdstukken gelijk
-        # zijn aan wat vastgepind is; wijzigen ze, dan pauzeert de H-A-toetsing.
-        # Zo breekt een verhuizing van de oude versie naar archief/ niets meer.
+        # H1-4, driehoeksoverleg C2, 17-10-2026: een nieuwere versie naast
+        # het vastgepinde boek maakt de inhoudelijke keuze onbevestigd.
         map_pad = str(PurePosixPath(bron["pad"]).parent)
         naam = PurePosixPath(bron["pad"]).name
         match = re.fullmatch(r"(.+ v)(\d+(?:\.\d+)*)\.md", naam, re.I)
         if not match:
             raise ValueError("vastgepinde versie niet herkenbaar")
         gepind = tuple(int(x) for x in match[2].split("."))
-        hoogste = None
+        hoogste = gepind
         vervolg = None
         while True:
             pagina = (rpc("files/list_folder/continue", {"cursor": vervolg}) if vervolg else
@@ -517,41 +472,32 @@ def controleer_regelbron(c, regels, rpc, download, force=False):
                 kandidaat = re.fullmatch(re.escape(match[1]) + r"(\d+(?:\.\d+)*)\.md", n, re.I)
                 if e.get(".tag") == "file" and kandidaat:
                     versie = tuple(int(x) for x in kandidaat[1].split("."))
-                    if hoogste is None or versie > hoogste[0]:
-                        hoogste = (versie, n)
+                    if versie > hoogste:
+                        hoogste = versie
             if not pagina["has_more"]:
                 break
             vervolg = pagina.get("cursor")
             if not vervolg:
                 raise RuntimeError("regelboekmapcursor ontbreekt")
-        if hoogste is None or hoogste[0] < gepind:
-            raise ValueError("regelboek niet beschikbaar")
-        gelezen = match[1] + ".".join(str(x) for x in hoogste[0])
-        pad = map_pad + "/" + hoogste[1]
-        stand.update({"gelezen": gelezen, "pad": pad})
-        meta = rpc("files/get_metadata", {"path": pad})
+        if hoogste > gepind:
+            gevonden = match[1] + ".".join(str(x) for x in hoogste)
+            stand["gevonden"] = gevonden
+            stand["status"] = f"{gevonden} gevonden, niet bevestigd; vastgepind {bron['versie']}"
+            with c:
+                instelling(c, "regelbron", stand)
+            return stand
+        meta = rpc("files/get_metadata", {"path": bron["pad"]})
         if not meta or meta.get(".tag") != "file" or meta.get("size", 0) > 500000:
             raise ValueError("regelboek niet beschikbaar")
         if (not force and vorige.get("geldig") and vorige.get("rev") and
-                vorige["rev"] == meta.get("rev") and vorige.get("pad") == pad and
-                vorige.get("hoofdstukken_sha256") == bron["hoofdstukken_sha256"] and
-                time.time() - vorige.get("ts", 0) < 86400):
+                vorige["rev"] == meta.get("rev") and vorige.get("pad") == bron["pad"] and
+                vorige.get("sha256") == bron["sha256"] and time.time() - vorige.get("ts", 0) < 86400):
             return vorige
-        inhoud = download(pad, maximum=500001)
+        inhoud = download(bron["pad"], maximum=500001)
         stand["sha256"] = hashlib.sha256(inhoud).hexdigest()
         stand["rev"] = meta.get("rev", "")
-        deel = hoofdstukken(inhoud.decode("utf-8"), bron["hoofdstukken"])
-        stand["hoofdstukken_sha256"] = hashlib.sha256(deel.encode("utf-8")).hexdigest()
-        stand["geldig"] = stand["hoofdstukken_sha256"] == bron["hoofdstukken_sha256"]
-        letters = " en ".join(bron["hoofdstukken"])
-        if stand["geldig"]:
-            stand["status"] = ("bevestigde bron gelezen" if hoogste[0] == gepind else
-                               f"{gelezen} gelezen; hoofdstuk {letters} gelijk aan vastgepinde {bron['versie']}")
-        elif hoogste[0] > gepind:
-            stand["gevonden"] = gelezen
-            stand["status"] = f"{gelezen} gevonden, niet bevestigd; vastgepind {bron['versie']}; hoofdstuk {letters} gewijzigd"
-        else:
-            stand["status"] = "regelboek gewijzigd; H-A-toetsing gepauzeerd"
+        stand["geldig"] = stand["sha256"] == bron["sha256"]
+        stand["status"] = "bevestigde bron gelezen" if stand["geldig"] else "regelboek gewijzigd; H-A-toetsing gepauzeerd"
     except Exception as e:
         stand["status"] = type(e).__name__ + ": regelboek niet leesbaar; H-A-toetsing gepauzeerd"
     with c:
