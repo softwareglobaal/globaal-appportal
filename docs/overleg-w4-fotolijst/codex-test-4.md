@@ -1,0 +1,5 @@
+Voor Mehdi: **niet akkoord met live zetten**. De twee fouten uit ronde 3 zijn voor een zuivere oude tabel verholpen, maar W4 kan nog ten onrechte `ok` worden.
+Voor Claude en Shaniel: **hoog:** gemengde nieuwe tijdregels omzeilen de oude tabelcontrole, zelfs bij een andere werf of 450 m ([regel 674](/Users/user2025/dev/_wt-w4/mijnagents-runner/werfverslag_voorbereider.py:674)). **Middel:** een afwijkende regel zonder `|` of een ongeldige extra tijd wordt genegeerd ([regels 641–654](/Users/user2025/dev/_wt-w4/mijnagents-runner/werfverslag_voorbereider.py:641)). Wijs zulke lijsten volledig af en voeg leesproeven toe.
+Gedaan: alleen gelezen en getest; niets gewijzigd of gepusht.
+Nagekeken: 96 tests en 14 subtests geslaagd. Twee integratietests konden geen tijdelijke map maken door het schrijfverbod. Open: de twee onterechte `ok`-uitkomsten.
+NIET AKKOORD: een gemengde of afwijkende fotolijst kan W4 nog ten onrechte goedkeuren.

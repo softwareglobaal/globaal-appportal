@@ -625,7 +625,41 @@ def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
     return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
 
 
-def fotobewijs(bezoek, venster):
+OUDE_TABELKOP = ("| tijd | bestand | lat, lon | afstand |", "|---|---|---|---|")
+OUDE_TABELRIJ = re.compile(r"\| (\d{2}:\d{2}) \| ([^|]+?) \| -?\d+(?:\.\d+)?, -?\d+(?:\.\d+)? \| (\d+) m \|")
+
+
+def oude_fototabel(inhoud, datum, nummer):
+    """De iCloud-export van vóór 21-10-2026 schreef een tabel met Brusselse uurtijd per foto onder een titel met dossier
+    en bezoekdag. Alleen exact dat formaat telt: één titel met hetzelfde dossier en dezelfde dag als eerste regel, één
+    tabel, elke foto één keer. Wijkt één regel af, dan is de hele lijst geen bewijs. Per foto telt de tijd alleen binnen
+    300 m en bij een geldig, niet dubbelzinnig uur (overleg 29-10-2026, Codex rondes 1 tot 3)."""
+    regels = [r.rstrip() for r in inhoud.splitlines() if r.strip()]
+    kop = re.fullmatch(r"# Foto's (\S+) (\d{4}-\d{2}-\d{2})", regels[0]) if regels else None
+    if not kop or kop.group(1) != str(nummer) or kop.group(2) != datum:
+        return {}
+    # titel, één beschrijvende regel, de tabelkop en daarna alleen fotorijen
+    if len(regels) < 5 or "|" in regels[1] or regels[1].lstrip().startswith(("#", "-")) or tuple(regels[2:4]) != OUDE_TABELKOP:
+        return {}
+    rijen = [OUDE_TABELRIJ.fullmatch(r) for r in regels[4:]]
+    # dezelfde foto (naam zonder extensie, hoofdletters gelijk) mag maar één rij hebben
+    if not all(rijen) or len({os.path.splitext(m.group(2))[0].casefold() for m in rijen}) != len(rijen):
+        return {}
+    brussel, tijden = ZoneInfo("Europe/Brussels"), {}
+    for m in rijen:
+        uur, naam, afstand = m.groups()
+        try:
+            t = datetime.fromisoformat(f"{datum}T{uur}").replace(tzinfo=brussel)
+        except ValueError:
+            return {}
+        if t.utcoffset() != t.replace(fold=1).utcoffset():
+            return {}
+        if int(afstand) <= 300:
+            tijden[naam] = t
+    return tijden
+
+
+def fotobewijs(bezoek, venster, nummer=None):
     paden = bezoek.get("foto_bestanden") or []
     in_map = [p for p in paden if p.lower().startswith(bezoek["map"].lower() + "/fotos/")]
     bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
@@ -634,11 +668,17 @@ def fotobewijs(bezoek, venster):
     if not bruikbaar or not canoniek or not venster:
         return "let_op" if paden else "ontbreekt"
     try:
-        inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8")
+        inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8-sig")
     except (OSError, UnicodeError, ValueError, AttributeError, TypeError):
         return "let_op"
     # De iCloud-wacht schrijft per geleverd bestand de opnametijd; een vensterregel alleen bewijst dat niet.
     tijden = {naam: tijdstip(t) for t, naam in re.findall(r"(?m)^- (\S+T\S+) \| ([^\r\n|]+)$", inhoud)}
+    # Een teken van het oude formaat (titel of tabelkop, ook met BOM of andere opmaak): alleen het oude formaat telt,
+    # een gemengde lijst telt niet (Codex 29-10 rondes 4 en 5).
+    if re.search(r"(?im)^\W*#\s*foto'?s\b|\|\s*tijd\s*\|\s*bestand\s*\|", inhoud):
+        tijden = {} if tijden or re.search(r"(?m)^\s*- ", inhoud) or not nummer else oude_fototabel(inhoud, bezoek["datum"], nummer)
+        # de oude export bewaarde ook HEIC zonder JPG: bij dit formaat moet elke foto in fotos/ binnen het venster vallen
+        bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".heic"))]
     def opname_tijd(p):
         naam = os.path.basename(p)
         return tijden.get(naam) or tijden.get(os.path.splitext(naam)[0] + ".HEIC") or tijden.get(os.path.splitext(naam)[0] + ".heic")
@@ -841,7 +881,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
          f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
     # W4 foto's
-    foto_stand = fotobewijs(bezoek, venster)
+    foto_stand = fotobewijs(bezoek, venster, nummer)
     if foto_stand != "ontbreekt":
         post("W4", "foto's", foto_stand, f"{bezoek['fotos']} foto('s); alleen fotos/ met tijdsbewijs in 00 fotos.md is volledig")
     else:
