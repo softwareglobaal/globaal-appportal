@@ -5,7 +5,10 @@ organisatie.globaal.be ('Mehdi en Tom', 'Mehdi; Tom, Aqib', met of zonder dubbel
 voor' allemaal voor dezelfde firma, dan is het intern overleg van die firma: 'Mehdi, Tom & Aqib: [TK-IN] overleg'. Geen
 vraag. Elke naam is een losse voornaam of de volledige naam ('Tom Janssens' is een klant), na de dubbele punt alleen
 woorden als overleg of planning. Niet bij `!!`, ZL, ?? of een fysiek adres. Anders noemt mijn vraag per collega
-de firma en vraag ik firma en klant. Grendel: `test_collegatitel.py`.
+de firma en vraag ik firma en klant. Wie voor meer firma's werkt (Raisha, Chesron, Siyan, Shaniel, Angela): de firma
+die alle namen samen hebben beslist ('Mehdi, Angela & Tom' is TKN-Buro). Hebben ze er samen meer dan een, dan noemt mijn
+vraag precies die keuze; bij veel firma's (Angela alleen) geen lange lijst. De namen en firma's onthoud ik niet zelf: ze
+staan op organisatie.globaal.be, kolom 'diensten voor'. Een nieuwe collega of firma zet je daar. Grendel: `test_collegatitel.py`.
 
 Aanvulling v8.27 (28-10-2026): vaste contacten, na de fouten op de afspraken van 29-10 (FR-211). Deze mensen herken ik
 altijd, ook met een tikfout van een letter (vanaf zes letters, nooit via een bijnaam: Karim is geen Karam), en ik stel
