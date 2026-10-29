@@ -23,8 +23,9 @@ on:
 
 jobs:
   # De ophaler en het manifest draaien op de Mac met /usr/bin/python3 (3.9).
+  # ubuntu-latest werd 26.04 en heeft geen Python 3.9 meer (29-10-2026): vastgezet op 24.04.
   mac:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
