@@ -2784,8 +2784,10 @@ voor deze cadans na 45 minuten als ontbrekend getoond en door de Agentnorm afgek
 Dropbox-metadata uit expliciete roots, met pagineringbudget, transactionele
 cursor, stabiele bevindingidentiteit en gezamenlijke procesvergrendeling.
 Dagelijks worden rootbereikbaarheid, volledige basis plus alle delta-pagina's
-en de bevestigde H-A-bronvingerafdruk gecontroleerd. H-A-regelbron v1.7 staat
-in `werkwijze/naamstructuur-regels.json`; bronwijziging pauzeert H-A-toetsing.
+en de bevestigde H-A-bronvingerafdruk gecontroleerd. H-A-regelbron v1.10 staat
+in `werkwijze/naamstructuur-regels.json` (sinds 29-10-2026, T-0028; daarvoor v1.7);
+bronwijziging of een nieuwere versie pauzeert H-A-toetsing en geeft een nood aan
+claude-code om de vertaling na te kijken en de pin bij te werken.
 Andere firma's zonder regelboek blijven onbekend. Agenda en Fathom/Plaud
 betreffen bestaande indexmetadata; geen claim van volledige externe accountscan.
 Sinds v1.1 (06-10-2026) gebruiken alle drie bevestigde roots en de H-A-regelbron
