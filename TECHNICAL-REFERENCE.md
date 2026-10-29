@@ -1876,6 +1876,21 @@ volledig gelinkt aan de centrale lijsten. De app van de collega
   (relatie-ID, grootboek, ons klantnummer); personen overal als
   **displaynaam** (Zoom-formaat, of kaal bij `afdeling_in_naam = false`).
 
+- **Gemiste oproepen (migratie 198, 29-10-2026):** tabblad dat per gemiste
+  oproep zegt waarom hij gemist werd: buiten de openingsuren (de beller kreeg
+  het gesloten-bericht), beller hing meteen op, niemand aangemeld, iedereen in
+  gesprek, of rinkelde bij wie vrij was en nam niet op. Vraag van Siyan: krijgen
+  de collega's de oproep niet, of nemen ze niet op? Xelion bewaart alleen de
+  toestand van nu, dus de poller legt elke minuut vast wiens belsoftware
+  aangemeld is (`/phones/<oid>`: `isRegistered`, apart voor computer en gsm-app)
+  en wat `/presence` zegt, als tijdvakken in **`communicatie.xelion_aanwezigheid`**.
+  **`communicatie.xelion_lijn`** spiegelt per lijn het belbeleid, de wachttijd per
+  persoon, het dag/nacht-schema (openingsuren), terugval, voicemail en de belrij
+  zoals Xelion ze afwerkt: bij `skillBased` op skill en niet op `lineOrder`, en
+  zonder wie `incoming = false` heeft. Sindsdien bouwt ook `xelion_belvolgorde`
+  de positie zo op. "In gesprek" komt uit het archief zelf (beantwoorde
+  gesprekken met `gebruiker_oid`). Aanmelding bestaat pas vanaf de eerste meting;
+  oudere gemiste oproepen tonen "aanmelding niet gemeten".
 - **Transcripties (migratie 138, 31-08-2026):** opgenomen Xelion-gesprekken
   laten uitschrijven door **Plaud**. De poller
   (`communicatie/src/transcriptie-sync.js`) haalt de mp3 op met
