@@ -7067,8 +7067,22 @@ def _vastgelopen(items, nu=None, uren=48):
             vraag = "zeg voor welke firma en welke klant."
             gelezen = collega_titel(a["titel"])
             if gelezen:                 # collega's: noem wat organisatie.globaal.be weet, vraag alleen de firma (FR-212)
-                vraag = "; ".join(f"{p.get('voornaam') or p['naam']} werkt voor {', '.join(p.get('diensten_voor') or []) or 'geen firma'}"
-                                  for p in gelezen[0]) + ". Zeg voor welke firma, en welke klant als er een is."
+                # Iemand die voor meer firma's werkt (Raisha: HDSS en ORVA): de firma's die ze samen hebben zijn de keuze;
+                # bij veel firma's (Angela) geen lange lijst (FR-212, Mehdi 29-10-2026).
+                try:
+                    gemeen = organisatie.firma_van([p["naam"] for p in gelezen[0]])
+                except Exception:  # noqa: BLE001
+                    gemeen = []
+                wie = " en ".join(p.get("voornaam") or p["naam"] for p in gelezen[0])
+                if 1 < len(gemeen) <= 4:
+                    vraag = (f"{wie} {'werkt' if len(gelezen[0]) == 1 else 'werken samen'} voor "
+                             + " of ".join(f"{titelcode(f)} ({f})" for f in gemeen)
+                             + ". Welke firma, en welke klant als er een is?")
+                elif len(gemeen) > 4:
+                    vraag = f"{wie} {'werkt' if len(gelezen[0]) == 1 else 'werken'} voor veel firma's. Welke firma, en welke klant als er een is?"
+                else:
+                    vraag = "; ".join(f"{p.get('voornaam') or p['naam']} werkt voor {', '.join(p.get('diensten_voor') or []) or 'geen firma'}"
+                                      for p in gelezen[0]) + ". Zeg voor welke firma, en welke klant als er een is."
             uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: {vraag}", [a["id"]]))
     uit.extend(_adresvragen(items, nu, uren, projecten))
     # Twee klanten tegelijk: een zin per paar, wat Mehdi moet doen

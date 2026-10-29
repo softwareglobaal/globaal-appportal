@@ -35,7 +35,9 @@ def persoon(voornaam, naam, diensten):
 
 
 COLLEGAS = [persoon("Tom", "Tom (P-Engineering)", ["TKNB"]), persoon("Aqib", "Aqib Khan", ["TKNB"]),
-            persoon("Leen", "Leen Peeters", ["HARC"])]
+            persoon("Leen", "Leen Peeters", ["HARC"]), persoon("Raisha", "Raisha (Architecture)", ["HDSS", "ORVA"]),
+            persoon("Chesron", "Chesron (Architecture)", ["HDSS", "ORVA"]),
+            persoon("Angela", "Angela", ["BFUT", "CONT", "ENEF", "HARC", "HDSS", "ORVA", "TKNB", "UNAB"])]
 _oud = W.organisatie.collegas
 W.organisatie.collegas = lambda *a, **k: COLLEGAS
 
@@ -91,6 +93,13 @@ try:
     v = vraag("VR Mehdi, Tom en Leen")
     check("de vraag noemt per collega de firma en vraagt verder",
           "Tom werkt voor TKNB" in v and "Leen werkt voor HARC" in v and "Zeg voor welke firma" in v, v)
+    check("iemand van meer firma's samen met een collega van een firma: die gedeelde firma, geen vraag",
+          onderzoek("Mehdi en Angela, Tom") == "Mehdi, Angela & Tom: [TK-IN] overleg", onderzoek("Mehdi en Angela, Tom"))
+    v = vraag("VR Mehdi, Raisha en Chesron")
+    check("twee gedeelde firma's: de vraag geeft precies die keuze",
+          "werken samen voor" in v and "(HDSS)" in v and "(ORVA)" in v and " of " in v, v)
+    v = vraag("VR Mehdi en Angela")
+    check("iemand van veel firma's: geen lange lijst", "voor veel firma's" in v and "BFUT" not in v, v)
     v = vraag("VR Mehdi en Jan")
     check("zonder gekende collega's blijft de algemene vraag", "zeg voor welke firma en welke klant" in v, v)
 finally:
