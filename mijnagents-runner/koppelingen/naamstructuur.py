@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import time
+import unicodedata
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -459,7 +460,8 @@ def hoofdstukken(tekst, letters):
     boek heeft zulke regels alleen als hoofdstukkop.
     """
     uit, huidig, gezien, hek = [], None, [], ""
-    verdacht = re.compile(r"(?<![0-9A-Za-z])[A-Z]\.(?![0-9A-Za-z])")
+    # Elke letter in elk schrift (ook een Griekse of brede B), niet in een afkorting als 'o.a.'.
+    verdacht = re.compile(r"(?<![\w.])[^\W\d_]\.(?![\w.])")
     for regel in tekst.splitlines():
         rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
         if hek:
@@ -468,8 +470,8 @@ def hoofdstukken(tekst, letters):
         elif rand:
             hek = rand[1]
         else:
-            zonder_html = re.sub(r"<[^>]*>", "", regel)
-            kop = re.match(r" {0,3}(#{1,2})(?:[ \t]+(.*))?$", regel)
+            vorm = unicodedata.normalize("NFKC", regel)
+            kop = re.match(r" {0,3}(#{1,2})(?:[ \t]+(.*))?$", vorm)
             if kop:
                 letter = re.fullmatch(r"([A-Z])\.[ \t]+\S.*", (kop[2] or "").strip())
                 huidig = letter[1] if letter else None
@@ -477,7 +479,7 @@ def hoofdstukken(tekst, letters):
                     gezien.append(huidig)
                 elif verdacht.search(re.sub(r"<[^>]*>", "", kop[2] or "")):
                     raise ValueError("onduidelijke hoofdstukkop in het regelboek")
-            elif verdacht.match(re.sub(r"^[^0-9A-Za-z]+", "", zonder_html)):
+            elif verdacht.match(re.sub(r"^[\W_]+", "", re.sub(r"<[^>]*>", "", vorm))):
                 raise ValueError("onduidelijke hoofdstukkop in het regelboek")
         if huidig in letters:
             uit.append(regel.rstrip())
