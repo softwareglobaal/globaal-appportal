@@ -452,12 +452,12 @@ def hoofdstukken(tekst, letters):
     kop van niveau 1 of 2, met de Markdown-regels: tot drie spaties ervoor, een
     spatie of tab erna. Koppen in een codeblok (``` of ~~~) tellen niet, zodat
     een sjabloon geen grens maakt. Een gevraagd hoofdstuk dat ontbreekt of twee
-    keer voorkomt, of een regel die op een hoofdstukkop lijkt maar er geen is
-    (ingesprongen, in een citaat, een onderstreepte kop), maakt de bron
-    onbruikbaar: dan pauzeert de toetsing liever dan iets te missen.
+    keer voorkomt, of een andere regel die met 'B.' begint (na spaties, '>',
+    '#', '*' of '_'), maakt de bron onbruikbaar: dan pauzeert de toetsing
+    liever dan een regel te missen. Het boek heeft zulke regels alleen als kop.
     """
-    uit, huidig, gezien, hek, vorige = [], None, [], "", ""
-    letterkop = re.compile(r"([A-Z])\.(?:[ \t]|$)")
+    uit, huidig, gezien, hek = [], None, [], ""
+    letterkop = re.compile(r"([A-Z])\.(?:[ \t*_]|$)")
     for regel in tekst.splitlines():
         rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
         if hek:
@@ -466,17 +466,14 @@ def hoofdstukken(tekst, letters):
         elif rand:
             hek = rand[1]
         else:
-            kop = re.match(r" {0,3}(#{1,6})(?:[ \t]+(.*))?$", regel)
-            if kop and len(kop[1]) <= 2:
-                letter = letterkop.match((kop[2] or "").strip())
+            kop = re.match(r" {0,3}(#{1,2})(?:[ \t]+(.*))?$", regel)
+            if kop:
+                letter = letterkop.match(re.sub(r"^[\s*_]+", "", kop[2] or ""))
                 huidig = letter[1] if letter else None
                 if huidig:
                     gezien.append(huidig)
-            elif re.match(r"#{1,6}[ \t]+[A-Z]\.(?:[ \t]|$)", regel.lstrip(" \t>")):
+            elif letterkop.match(re.sub(r"^[\s>#*_]+", "", regel)):
                 raise ValueError("onduidelijke hoofdstukkop in het regelboek")
-            elif re.match(r" {0,3}(=+|-+)[ \t]*$", regel) and letterkop.match(vorige.strip()):
-                raise ValueError("onduidelijke hoofdstukkop in het regelboek")
-        vorige = regel if not hek else ""
         if huidig in letters:
             uit.append(regel.rstrip())
     if any(gezien.count(x) != 1 for x in letters):

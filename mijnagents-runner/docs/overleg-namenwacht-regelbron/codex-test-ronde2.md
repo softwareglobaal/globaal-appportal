@@ -1,0 +1,7 @@
+1. **OK** — Beide gevraagde tests slagen: 20/20 en 27/27. Zie [test_regelbron_en_ha_voorrang.py:313](/Users/mehdichegini/dev/_codex-namenwacht-test/mijnagents-runner/tests/test_regelbron_en_ha_voorrang.py:313) en [test_naamstructuur.py:21](/Users/mehdichegini/dev/_codex-namenwacht-test/mijnagents-runner/tests/test_naamstructuur.py:21).
+
+2. **FOUT** — Een gesimuleerde v1.11 op basis van de echte v1.10, met `####### B. Het verslag` en een nieuwe B6-regel, houdt dezelfde vingerafdruk en krijgt `geldig=True`. De herkenning stopt bij zes `#`; deze kopachtige regel wordt ook niet geweigerd. Zie [naamstructuur.py:469](/Users/mehdichegini/dev/_codex-namenwacht-test/mijnagents-runner/koppelingen/naamstructuur.py:469) en [naamstructuur.py:541](/Users/mehdichegini/dev/_codex-namenwacht-test/mijnagents-runner/koppelingen/naamstructuur.py:541). De geteste varianten met twee of vier spaties, citaat, niveau 3 en onderstreping worden wel geweigerd.
+
+3. **OK** — De echte v1.10 levert exact de [vastgepinde vingerafdruk](/Users/mehdichegini/dev/_codex-namenwacht-test/mijnagents-runner/werkwijze/naamstructuur-regels.json:24) `d956de369b3495fe89c3e54fbc062e3abed2570352d8a7fc2d22581082a6ef8c`; de inhoudscontrole pauzeert die bron dus niet ten onrechte.
+
+**NIET AKKOORD.**

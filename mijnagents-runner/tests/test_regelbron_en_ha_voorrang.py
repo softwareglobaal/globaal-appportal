@@ -320,7 +320,9 @@ class RegelbronEnHATest(unittest.TestCase):
             self.assertNotEqual(N.hoofdstukken(ander, ["A", "B"]), vast, kop)
         achteraan = tekst + "\n  ## B. Het verslag\nB2 nieuwe regel\n"
         for extra in ("\n  ## B. Het verslag\n", "\n    ## B. Het verslag\n", "\n> ## B. Het verslag\n",
-                      "\n### B. Het verslag\n", "\nB. Het verslag\n---\n", "\nB. Het verslag\n===\n"):
+                      "\n### B. Het verslag\n", "\nB. Het verslag\n---\n", "\nB. Het verslag\n===\n",
+                      "\n####### B. Het verslag\n", "\n##B. Het verslag\n", "\n**B. Het verslag**\n",
+                      "\n## **B.** Het verslag\n", "\n\t## B. Het verslag\n"):
             with self.assertRaises(ValueError, msg=repr(extra)):
                 N.hoofdstukken(tekst + extra + "B2 nieuwe regel\n", ["A", "B"])
         with self.assertRaises(ValueError):
