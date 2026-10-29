@@ -50,11 +50,21 @@ try:
     check("'VR Mehdi; Tom, Aqib' wordt intern overleg met beide namen",
           onderzoek("VR Mehdi; Tom, Aqib") == "Mehdi, Tom & Aqib: [TK-IN] overleg", onderzoek("VR Mehdi; Tom, Aqib"))
     check("het onderwerp na de dubbele punt blijft staan",
-          onderzoek("Mehdi & Tom: planning engineering") == "Mehdi & Tom: [TK-IN] Planning engineering")
+          onderzoek("Mehdi & Tom: wekelijks overleg") == "Mehdi & Tom: [TK-IN] Wekelijks overleg")
     check("een online link telt niet als adres",
           onderzoek("Mehdi en Tom", locatie="https://zoom.us/j/1") == "Mehdi & Tom: [TK-IN] overleg")
     check("een onbekende naam erbij: geen titel, de agent vraagt",
           onderzoek("VR Mehdi en Tom en Jan") is None and onderzoek("Mehdi en Jan Peeters") is None)
+    check("onafhankelijke Claude-controle: een klant met de voornaam van een collega blijft een vraag",
+          all(onderzoek(t) is None for t in ("VR Mehdi en Tom Janssens", "Mehdi met Tom van Bouwbedrijf X",
+                                             "Mehdi en Tom (Janssens)", "VR Mehdi met Tom bellen", "Mehdi; Tom Aqib")))
+    check("onafhankelijke Claude-controle: een klant of werf na de dubbele punt blijft een vraag",
+          onderzoek("Mehdi en Tom: klant Peeters offerte") is None and onderzoek("Mehdi & Tom: werfbezoek Janssens") is None)
+    check("onafhankelijke Claude-controle: ZL, ?? en geen scheiding na Mehdi blijven een vraag",
+          all(onderzoek(t) is None for t in ("ZL Mehdi en Tom", "VR ZL Mehdi en Tom", "?? Mehdi en Tom", "mehdi tom",
+                                             "Mehdi en tom@globaal.be")))
+    check("de volledige naam zoals op organisatie.globaal.be telt wel",
+          onderzoek("Mehdi en Aqib Khan") == "Mehdi & Aqib: [TK-IN] overleg")
     check("'Mehdi: planning' heeft geen namen en blijft een vraag", onderzoek("Mehdi: planning") is None)
     check("collega's van verschillende firma's: geen titel", onderzoek("Mehdi, Tom en Leen") is None)
     check("buitenafspraak of fysiek adres: geen titel",
@@ -79,8 +89,8 @@ try:
         return next((t for k, t, _ in uit if k == "x1:firma"), "")
 
     v = vraag("VR Mehdi, Tom en Leen")
-    check("de vraag noemt per collega de firma en vraagt alleen de firma",
-          "Tom werkt voor TKNB" in v and "Leen werkt voor HARC" in v and "welke klant" not in v, v)
+    check("de vraag noemt per collega de firma en vraagt verder",
+          "Tom werkt voor TKNB" in v and "Leen werkt voor HARC" in v and "Zeg voor welke firma" in v, v)
     v = vraag("VR Mehdi en Jan")
     check("zonder gekende collega's blijft de algemene vraag", "zeg voor welke firma en welke klant" in v, v)
 finally:

@@ -1776,28 +1776,39 @@ def collega_titel(titel):
     """'VR Mehdi en Tom' of 'Mehdi; Tom, Aqib: planning' als overleg met collega's lezen. Geeft (collega's, rest) als
     elke naam na 'Mehdi' een gekende collega is (organisatie.globaal.be), anders None. Zonder dubbele punt is alles
     na 'Mehdi' de namenlijst; ';' scheidt ook (FR-212, 29-10-2026: de agent vroeg 'welke firma' bij Tom en Aqib)."""
-    t = re.sub(r"^(?:\s*(?:VR|ZL|!!|\?\?)\s+)+", "", titel or "")
-    m = re.match(r"\s*Mehdi\b\s*[;:,]?\s*(.*)$", t, re.I)
+    # Alleen VR valt weg: ZL (online met iemand van buiten) en ?? (twijfel) zijn geen intern overleg.
+    t = re.sub(r"^\s*VR\s+", "", titel or "")
+    m = re.match(r"\s*Mehdi\s*(?:[;,&+/]|\b(?:en|met|and)\b)\s*(.*)$", t, re.I)
     if not m:
-        return None
+        return None                     # 'Mehdi: planning' en 'mehdi tom' hebben geen namenlijst
     namen_deel, rest = (m.group(1).split(":", 1) + [""])[:2]
-    if ":" not in m.group(1) and re.match(r"\s*Mehdi\s*:", t, re.I):
-        return None                     # 'Mehdi: planning' heeft geen namen
-    delen = [d.strip(" !?.-") for d in re.split(GASTSCHEIDING + r"|;", namen_deel, flags=re.I)]
+    rest = rest.strip(" ,:-")
+    # Na de dubbele punt alleen woorden van intern overleg; een klant, werf of adres blijft een vraag.
+    if rest and not re.fullmatch(r"(?:(?:wekelijks|team|intern|interne|kort|overleg|teamoverleg|planning|"
+                                 r"vergadering|meeting|sync|standup|opvolging|update)\s*)+", rest, re.I):
+        return None
+    delen = [d.strip() for d in re.split(GASTSCHEIDING + r"|;", namen_deel, flags=re.I)]
     delen = [d for d in delen if d]
     if not delen:
         return None
     collegas = []
     for d in delen:
-        try:
-            p = organisatie.herken(d)
-        except Exception:  # noqa: BLE001
-            return None
+        # Een voornaam alleen, of de volledige naam zoals op organisatie.globaal.be: 'Tom Janssens' is een klant.
+        if not re.fullmatch(r"[A-Za-zÀ-ÿ]+", d):
+            try:
+                p = next((x for x in organisatie.collegas() if x["naam"].lower() == d.lower()), None)
+            except Exception:  # noqa: BLE001
+                return None
+        else:
+            try:
+                p = organisatie.herken(d)
+            except Exception:  # noqa: BLE001
+                return None
         if not p:
             return None
         if p not in collegas:
             collegas.append(p)
-    return collegas, rest.strip(" ,:-")
+    return collegas, rest
 
 
 def _collega_kop(collegas):
@@ -7057,7 +7068,7 @@ def _vastgelopen(items, nu=None, uren=48):
             gelezen = collega_titel(a["titel"])
             if gelezen:                 # collega's: noem wat organisatie.globaal.be weet, vraag alleen de firma (FR-212)
                 vraag = "; ".join(f"{p.get('voornaam') or p['naam']} werkt voor {', '.join(p.get('diensten_voor') or []) or 'geen firma'}"
-                                  for p in gelezen[0]) + ". Voor welke firma is dit overleg?"
+                                  for p in gelezen[0]) + ". Zeg voor welke firma, en welke klant als er een is."
             uit.append((f"{a['id']}:firma", f"Mehdi, de afspraak van {wanneer}, {kort}: {vraag}", [a["id"]]))
     uit.extend(_adresvragen(items, nu, uren, projecten))
     # Twee klanten tegelijk: een zin per paar, wat Mehdi moet doen
