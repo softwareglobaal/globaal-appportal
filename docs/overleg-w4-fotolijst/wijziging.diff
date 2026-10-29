@@ -1,0 +1,219 @@
+diff --git a/mijnagents-runner/tests/test_werfketen_eenheid.py b/mijnagents-runner/tests/test_werfketen_eenheid.py
+index 8caf0f6..e5e4b16 100644
+--- a/mijnagents-runner/tests/test_werfketen_eenheid.py
++++ b/mijnagents-runner/tests/test_werfketen_eenheid.py
+@@ -139,3 +139,139 @@ def test_drie_werkwijzen_spreken_dezelfde_taal():
+         assert "auto alleen" not in tekst.lower(), naam
+         assert "auto bij het project = let_op" not in tekst, naam
+     assert "Later: elke afspraak" not in teksten["voorbereider"]
++
++
++OUDE_LIJST = """# Foto's 2145 2026-06-06
++
++3 foto's van de iPhone binnen 300 m van Vertommensberg 9, 3010 Kessel-Lo; geëxporteerd door de iCloud-wacht op 2026-09-14.
++
++| tijd | bestand | lat, lon | afstand |
++|---|---|---|---|
++| 10:42 | 1042 756DF67C.HEIC | 50.86792, 4.7496 | 51 m |
++| 11:03 | 1103 C0C4A1FD.HEIC | 50.8677, 4.74957 | 71 m |
++"""
++
++
++def _fotobezoek(monkeypatch, inhoud, datum="2026-06-06"):
++    m = "/w/2145/_00. Communication/2026-06-06 bezoek"
++    monkeypatch.setattr(V.bronnen, "download", lambda pad, maximum=0: inhoud.encode())
++    return {"map": m, "datum": datum, "foto_manifest": m + "/fotos/00 fotos.md", "foto_manifest_versies": [],
++            "foto_bestanden": [m + "/fotos/1042 756DF67C.jpg", m + "/fotos/1103 C0C4A1FD.jpg"]}
++
++
++VENSTER = {"start": "2026-06-06T10:30:00+02:00", "einde": "2026-06-06T12:30:00+02:00"}
++
++
++def test_oude_fotolijst_van_de_icloud_wacht_is_tijdsbewijs(monkeypatch):
++    # Overleg 29-10-2026: de tabel van vóór 21-10 draagt de Brusselse opnametijd per foto.
++    assert V.fotobewijs(_fotobezoek(monkeypatch, OUDE_LIJST), VENSTER, "2145") == "ok"
++
++
++def test_oude_fotolijst_blijft_streng(monkeypatch):
++    buiten = OUDE_LIJST.replace("| 11:03 |", "| 12:33 |")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, buiten), VENSTER, "2145") == "let_op"            # foto na het venster
++    ver = OUDE_LIJST.replace("| 71 m |", "| 450 m |")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, ver), VENSTER, "2145") == "let_op"               # buiten 300 m: geen tijd
++    andere_dag = OUDE_LIJST.replace("2145 2026-06-06", "2145 2026-06-07")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, andere_dag), VENSTER, "2145") == "let_op"        # lijst van een andere dag
++    assert V.fotobewijs(_fotobezoek(monkeypatch, OUDE_LIJST), None, "2145") == "let_op"           # zonder venster nooit ok
++    zonder_tabel = OUDE_LIJST.split("| tijd |")[0]
++    assert V.fotobewijs(_fotobezoek(monkeypatch, zonder_tabel), VENSTER, "2145") == "let_op"
++
++
++def test_oude_fotolijst_gebruikt_brusselse_tijd():
++    t = V.oude_fototabel(OUDE_LIJST, "2026-06-06", "2145")["1042 756DF67C.HEIC"]
++    assert t.isoformat() == "2026-06-06T10:42:00+02:00"
++
++
++def test_oude_fotolijst_op_de_vensterrand(monkeypatch):
++    # Minuten zonder seconden: de start telt mee, het einde niet (in_venster: start <= t < einde).
++    op_start = OUDE_LIJST.replace("| 10:42 |", "| 10:30 |")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, op_start), VENSTER, "2145") == "ok"
++    op_einde = OUDE_LIJST.replace("| 11:03 |", "| 12:30 |")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, op_einde), VENSTER, "2145") == "let_op"
++    assert V.oude_fototabel(OUDE_LIJST, "2026-06-07", "2145") == {}
++
++
++def test_oude_fotolijst_van_een_andere_werf_of_zonder_dossier(monkeypatch):
++    # Codex 29-10: een tabel met een ander dossier in de titel is geen bewijs voor dit bezoek.
++    andere_werf = OUDE_LIJST.replace("# Foto's 2145", "# Foto's 9999")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, andere_werf), VENSTER, "2145") == "let_op"
++    assert V.fotobewijs(_fotobezoek(monkeypatch, OUDE_LIJST), VENSTER) == "let_op"          # dossier onbekend
++
++
++def test_oude_fotolijst_ongeldig_of_dubbelzinnig_uur():
++    wissel = OUDE_LIJST.replace("2026-06-06", "2026-10-25")
++    assert V.oude_fototabel(wissel.replace("| 10:42 |", "| 02:30 |"), "2026-10-25", "2145") == {}   # dubbelzinnig
++    assert V.oude_fototabel(wissel.replace("| 11:03 |", "| 25:99 |"), "2026-10-25", "2145") == {}   # ongeldig: hele lijst
++    assert len(V.oude_fototabel(wissel, "2026-10-25", "2145")) == 2
++
++
++def test_oude_fotolijst_met_twee_titels_telt_niet(monkeypatch):
++    # Codex 29-10 ronde 2: regels onder een tweede kop (andere werf of dag) mogen niet meetellen.
++    for tweede in ("# Foto's 9999 2026-06-06", "# Foto's 2145 2026-06-07"):
++        dubbel = OUDE_LIJST + "\n" + tweede + "\n\n| tijd | bestand | lat, lon | afstand |\n|---|---|---|---|\n" \
++            "| 11:00 | 1103 C0C4A1FD.HEIC | 50.8677, 4.74957 | 10 m |\n"
++        assert V.fotobewijs(_fotobezoek(monkeypatch, dubbel), VENSTER, "2145") == "let_op"
++        assert V.fotobewijs(_fotobezoek(monkeypatch, tweede + "\n" + OUDE_LIJST), VENSTER, "2145") == "let_op"
++
++
++def test_oude_fotolijst_strikt_formaat(monkeypatch):
++    # Codex 29-10 ronde 3: een ingesprongen tweede titel of een tegenstrijdige dubbele rij maakt de lijst ongeldig.
++    for afwijkend in (OUDE_LIJST + "   # Foto's 9999 2026-06-06\n| 11:00 | 1103 C0C4A1FD.HEIC | 50.8, 4.7 | 10 m |\n",
++                      OUDE_LIJST + "| 11:03 | 1103 C0C4A1FD.HEIC | 50.8677, 4.74957 | 450 m |\n",
++                      OUDE_LIJST + "| 11:03 | 1103 C0C4A1FD.HEIC | 50.8677, 4.74957 | 71 m |\n",
++                      OUDE_LIJST + "  | 11:00 | 1042 756DF67C.HEIC | 50.8, 4.7 | 10 m |\n",
++                      OUDE_LIJST + "| rommel |\n",
++                      "Inleiding\n" + OUDE_LIJST):
++        assert V.oude_fototabel(afwijkend, "2026-06-06", "2145") == {}
++        assert V.fotobewijs(_fotobezoek(monkeypatch, afwijkend), VENSTER, "2145") == "let_op"
++
++
++def test_oude_fotolijst_gemengd_of_met_losse_regel(monkeypatch):
++    # Codex 29-10 ronde 4: nieuwe tijdregels in een oude lijst, of een losse regel ertussen, maken de lijst ongeldig.
++    nieuw_erbij = OUDE_LIJST.replace("# Foto's 2145", "# Foto's 9999") + "- 2026-06-06T08:42:00+00:00 | 1042 756DF67C.HEIC\n"
++    assert V.fotobewijs(_fotobezoek(monkeypatch, nieuw_erbij), VENSTER, "2145") == "let_op"
++    for afwijkend in (OUDE_LIJST + "Nog een regel\n", OUDE_LIJST.replace("|---|---|---|---|\n", "|---|---|---|---|\nTussenregel\n")):
++        assert V.oude_fototabel(afwijkend, "2026-06-06", "2145") == {}
++        assert V.fotobewijs(_fotobezoek(monkeypatch, afwijkend), VENSTER, "2145") == "let_op"
++
++
++def test_oude_titel_met_geldige_nieuwe_regels_telt_niet(monkeypatch):
++    gemengd = OUDE_LIJST.replace("# Foto's 2145", "# Foto's 9999") + (
++        "- 2026-06-06T08:42:00+00:00 | 1042 756DF67C.HEIC\n- 2026-06-06T09:03:00+00:00 | 1103 C0C4A1FD.HEIC\n")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, gemengd), VENSTER, "2145") == "let_op"
++    alleen_nieuw = "# Fotoaanvoer volledig\n\n" + gemengd.split("| tijd |")[0].split("\n", 1)[1] + (
++        "- 2026-06-06T08:42:00+00:00 | 1042 756DF67C.HEIC\n- 2026-06-06T09:03:00+00:00 | 1103 C0C4A1FD.HEIC\n")
++    assert V.fotobewijs(_fotobezoek(monkeypatch, alleen_nieuw), VENSTER, "2145") == "ok"   # nieuw formaat ongewijzigd
++
++
++def test_gemengde_lijst_met_bom_of_andere_titel_telt_niet(monkeypatch):
++    # Codex 29-10 ronde 5: een BOM of afwijkende oude titel mag nieuwe tijdregels niet laten meetellen.
++    nieuw = "- 2026-06-06T08:42:00+00:00 | 1042 756DF67C.HEIC\n- 2026-06-06T09:03:00+00:00 | 1103 C0C4A1FD.HEIC\n"
++    slecht = OUDE_LIJST.replace("# Foto's 2145", "# Foto's 9999").replace("| 71 m |", "| 450 m |")
++    for gemengd in ("﻿" + slecht + nieuw, slecht.replace("# Foto's", "#  FOTO'S") + nieuw,
++                    slecht.split("\n", 1)[1] + nieuw):
++        assert V.fotobewijs(_fotobezoek(monkeypatch, gemengd), VENSTER, "2145") == "let_op"
++    assert V.fotobewijs(_fotobezoek(monkeypatch, "﻿" + OUDE_LIJST), VENSTER, "2145") == "ok"   # BOM alleen: oud geldig
++
++
++def test_oude_fotolijst_dezelfde_foto_met_andere_extensie(monkeypatch):
++    # Codex 29-10 ronde 6: .HEIC en .heic (of .jpg) van dezelfde foto zijn één foto; een tweede rij maakt de lijst ongeldig.
++    for rij in ("| 12:33 | 1103 C0C4A1FD.heic | 50.8677, 4.74957 | 71 m |\n",
++                "| 11:03 | 1103 c0c4a1fd.HEIC | 50.8677, 4.74957 | 450 m |\n",
++                "| 11:03 | 1103 C0C4A1FD.jpg | 50.8677, 4.74957 | 71 m |\n"):
++        assert V.oude_fototabel(OUDE_LIJST + rij, "2026-06-06", "2145") == {}
++        assert V.fotobewijs(_fotobezoek(monkeypatch, OUDE_LIJST + rij), VENSTER, "2145") == "let_op"
++
++
++def test_oude_fotolijst_toetst_ook_heic_zonder_jpg(monkeypatch):
++    # Codex 29-10 ronde 7: een aanwezige HEIC buiten venster of straal maakt W4 niet ok.
++    for rij in ("| 12:45 | 1245 AAAA0001.HEIC | 50.8677, 4.74957 | 71 m |\n",
++                "| 11:10 | 1110 AAAA0002.HEIC | 50.8677, 4.74957 | 450 m |\n"):
++        b = _fotobezoek(monkeypatch, OUDE_LIJST + rij)
++        b["foto_bestanden"].append(b["map"] + "/fotos/" + rij.split(" | ")[1])
++        assert V.fotobewijs(b, VENSTER, "2145") == "let_op"
++    b = _fotobezoek(monkeypatch, OUDE_LIJST)
++    b["foto_bestanden"] += [b["map"] + "/fotos/1042 756DF67C.HEIC", b["map"] + "/fotos/1103 C0C4A1FD.HEIC"]
++    assert V.fotobewijs(b, VENSTER, "2145") == "ok"                                     # HEIC met eigen geldige rij
+diff --git a/mijnagents-runner/werfverslag_voorbereider.py b/mijnagents-runner/werfverslag_voorbereider.py
+index 2bc58d1..a468401 100644
+--- a/mijnagents-runner/werfverslag_voorbereider.py
++++ b/mijnagents-runner/werfverslag_voorbereider.py
+@@ -625,7 +625,41 @@ def aanwezigheidsbewijs(nummer, adres, bezoek, bak, venster):
+     return "ontbreekt", "geen GPS-foto, opname of projectverblijf binnen het venster"
+ 
+ 
+-def fotobewijs(bezoek, venster):
++OUDE_TABELKOP = ("| tijd | bestand | lat, lon | afstand |", "|---|---|---|---|")
++OUDE_TABELRIJ = re.compile(r"\| (\d{2}:\d{2}) \| ([^|]+?) \| -?\d+(?:\.\d+)?, -?\d+(?:\.\d+)? \| (\d+) m \|")
++
++
++def oude_fototabel(inhoud, datum, nummer):
++    """De iCloud-export van vóór 21-10-2026 schreef een tabel met Brusselse uurtijd per foto onder een titel met dossier
++    en bezoekdag. Alleen exact dat formaat telt: één titel met hetzelfde dossier en dezelfde dag als eerste regel, één
++    tabel, elke foto één keer. Wijkt één regel af, dan is de hele lijst geen bewijs. Per foto telt de tijd alleen binnen
++    300 m en bij een geldig, niet dubbelzinnig uur (overleg 29-10-2026, Codex rondes 1 tot 3)."""
++    regels = [r.rstrip() for r in inhoud.splitlines() if r.strip()]
++    kop = re.fullmatch(r"# Foto's (\S+) (\d{4}-\d{2}-\d{2})", regels[0]) if regels else None
++    if not kop or kop.group(1) != str(nummer) or kop.group(2) != datum:
++        return {}
++    # titel, één beschrijvende regel, de tabelkop en daarna alleen fotorijen
++    if len(regels) < 5 or "|" in regels[1] or regels[1].lstrip().startswith(("#", "-")) or tuple(regels[2:4]) != OUDE_TABELKOP:
++        return {}
++    rijen = [OUDE_TABELRIJ.fullmatch(r) for r in regels[4:]]
++    # dezelfde foto (naam zonder extensie, hoofdletters gelijk) mag maar één rij hebben
++    if not all(rijen) or len({os.path.splitext(m.group(2))[0].casefold() for m in rijen}) != len(rijen):
++        return {}
++    brussel, tijden = ZoneInfo("Europe/Brussels"), {}
++    for m in rijen:
++        uur, naam, afstand = m.groups()
++        try:
++            t = datetime.fromisoformat(f"{datum}T{uur}").replace(tzinfo=brussel)
++        except ValueError:
++            return {}
++        if t.utcoffset() != t.replace(fold=1).utcoffset():
++            return {}
++        if int(afstand) <= 300:
++            tijden[naam] = t
++    return tijden
++
++
++def fotobewijs(bezoek, venster, nummer=None):
+     paden = bezoek.get("foto_bestanden") or []
+     in_map = [p for p in paden if p.lower().startswith(bezoek["map"].lower() + "/fotos/")]
+     bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+@@ -634,11 +668,17 @@ def fotobewijs(bezoek, venster):
+     if not bruikbaar or not canoniek or not venster:
+         return "let_op" if paden else "ontbreekt"
+     try:
+-        inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8")
++        inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8-sig")
+     except (OSError, UnicodeError, ValueError, AttributeError, TypeError):
+         return "let_op"
+     # De iCloud-wacht schrijft per geleverd bestand de opnametijd; een vensterregel alleen bewijst dat niet.
+     tijden = {naam: tijdstip(t) for t, naam in re.findall(r"(?m)^- (\S+T\S+) \| ([^\r\n|]+)$", inhoud)}
++    # Een teken van het oude formaat (titel of tabelkop, ook met BOM of andere opmaak): alleen het oude formaat telt,
++    # een gemengde lijst telt niet (Codex 29-10 rondes 4 en 5).
++    if re.search(r"(?im)^\W*#\s*foto'?s\b|\|\s*tijd\s*\|\s*bestand\s*\|", inhoud):
++        tijden = {} if tijden or re.search(r"(?m)^\s*- ", inhoud) or not nummer else oude_fototabel(inhoud, bezoek["datum"], nummer)
++        # de oude export bewaarde ook HEIC zonder JPG: bij dit formaat moet elke foto in fotos/ binnen het venster vallen
++        bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".heic"))]
+     def opname_tijd(p):
+         naam = os.path.basename(p)
+         return tijden.get(naam) or tijden.get(os.path.splitext(naam)[0] + ".HEIC") or tijden.get(os.path.splitext(naam)[0] + ".heic")
+@@ -841,7 +881,7 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
+     post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
+          f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
+     # W4 foto's
+-    foto_stand = fotobewijs(bezoek, venster)
++    foto_stand = fotobewijs(bezoek, venster, nummer)
+     if foto_stand != "ontbreekt":
+         post("W4", "foto's", foto_stand, f"{bezoek['fotos']} foto('s); alleen fotos/ met tijdsbewijs in 00 fotos.md is volledig")
+     else:
