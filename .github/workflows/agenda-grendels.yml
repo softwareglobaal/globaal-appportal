@@ -43,6 +43,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_zorg_plaats.py
       - run: python3 mijnagents-runner/tests/test_agenda_dubbel_huisarts.py
       - run: python3 mijnagents-runner/tests/test_agendagasten.py
+      - run: python3 mijnagents-runner/tests/test_collegatitel.py
       - run: python3 mijnagents-runner/tests/test_nacontrole_v12.py
       - run: python3 mijnagents-runner/tests/test_nacontrole_v13.py
       - run: python3 mijnagents-runner/tests/test_collegas_pdf.py

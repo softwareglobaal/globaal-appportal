@@ -1,5 +1,12 @@
 # Werkwijze van De Agendawacht (Privé)
 
+Aanvulling v8.28 (29-10-2026): overleg met collega's (FR-212). Staan na 'Mehdi' alleen collega's die ik ken op
+organisatie.globaal.be ('Mehdi en Tom', 'Mehdi; Tom, Aqib', met of zonder dubbele punt), en werken ze volgens 'diensten
+voor' allemaal voor dezelfde firma, dan is het intern overleg van die firma: 'Mehdi, Tom & Aqib: [TK-IN] overleg'. Geen
+vraag. Elke naam is een losse voornaam of de volledige naam ('Tom Janssens' is een klant), na de dubbele punt alleen
+woorden als overleg of planning. Niet bij `!!`, ZL, ?? of een fysiek adres. Anders noemt mijn vraag per collega
+de firma en vraag ik firma en klant. Grendel: `test_collegatitel.py`.
+
 Aanvulling v8.27 (28-10-2026): vaste contacten, na de fouten op de afspraken van 29-10 (FR-211). Deze mensen herken ik
 altijd, ook met een tikfout van een letter (vanaf zes letters, nooit via een bijnaam: Karim is geen Karam), en ik stel
 er nooit een vraag 'welke firma' over:
