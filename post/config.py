@@ -16,8 +16,10 @@ per mailbox bij:
 - doorsturen   alleen naar de adressen die eronder staan (doorsturen: [...])
 - verwijderen  naar de prullenbak van de mailbox zelf (verwijderen: ja)
 - verzenden    een zelf opgesteld bericht echt versturen (verzenden: ja)
+- bijlagen     de inhoud van bijlagen lezen en een downloadlink maken
+               (bijlagen: ja); de mailbox verandert daarbij niet
 
-schrijven, verwijderen en verzenden kunnen behalve ja/nee ook een lijst namen
+schrijven, verwijderen, verzenden en bijlagen kunnen behalve ja/nee ook een lijst namen
 zijn (Authentik-gebruikers of -groepen): dan geldt het recht alleen voor wie
 in die lijst staat. Zo kan een mailbox voor de een alleen-lezen zijn en voor
 de ander bewerkbaar. ja = iedereen die de mailbox mag zien; nee of weggelaten
@@ -66,7 +68,7 @@ LOG_PAD = os.path.join(os.path.dirname(TOEGANG_PAD), "wijzigingen.jsonl")
 SLEUTELS = {"adres", "naam", "imap_host", "imap_poort", "gebruiker",
             "wachtwoord", "groepen", "personen", "mappen", "schrijven",
             "smtp_host", "smtp_poort", "doorsturen", "verwijderen", "verzenden",
-            "auth", "oauth_client_id", "beheer"}
+            "auth", "oauth_client_id", "beheer", "bijlagen"}
 
 # Wat een mailbox-beheerder op /toegang mag wijzigen. De rest van de mailbox
 # (wachtwoord, server, mappen, doorsturen, verzenden, beheer zelf) niet.
@@ -280,6 +282,9 @@ def _ontleed(ruw, laag=None):
         # ja/nee, of een lijst namen voor wie het alleen geldt.
         verwijderen = _recht(rij.get("verwijderen"), "verwijderen", fouten, waar)
         verzenden = _recht(rij.get("verzenden"), "verzenden", fouten, waar)
+        # Bijlagen inlezen of downloaden: alleen lezen, maar wel een stap
+        # verder dan de berichttekst, dus ook een bewuste keuze per mailbox.
+        bijlagen = _recht(rij.get("bijlagen"), "bijlagen", fouten, waar)
         # Zonder verzendserver kan verzenden niet werken. Dan valt alleen die
         # bevoegdheid weg; de mailbox blijft verder gewoon bruikbaar.
         if verzenden and not smtp_host:
@@ -321,6 +326,7 @@ def _ontleed(ruw, laag=None):
             "doorsturen": doorsturen,
             "verwijderen": verwijderen,
             "verzenden": verzenden,
+            "bijlagen": bijlagen,
             "auth": auth,
             "oauth_client_id": oauth_client_id,
             "beheer": beheer,
@@ -619,6 +625,11 @@ def vereis_verzenden(mailbox, wie=None):
     _vereis(mailbox, "verzenden", wie, "Versturen kan niet")
 
 
+def vereis_bijlagen(mailbox, wie=None):
+    """Blokkeert het inlezen of downloaden van bijlagen zonder dit recht."""
+    _vereis(mailbox, "bijlagen", wie, "Bijlagen openen kan niet")
+
+
 def rechten(mailbox, wie=None):
     """De bevoegdheden van een mailbox als korte lijst.
 
@@ -639,7 +650,8 @@ def rechten(mailbox, wie=None):
         return f"{etiket} ({', '.join(v)})" if isinstance(v, list) else etiket
 
     uit = ["lezen"]
-    for veld, etiket in (("schrijven", "ordenen"),
+    for veld, etiket in (("bijlagen", "bijlagen"),
+                         ("schrijven", "ordenen"),
                          ("verwijderen", "verwijderen")):
         r = zet(veld, etiket)
         if r:

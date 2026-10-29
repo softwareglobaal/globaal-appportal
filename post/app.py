@@ -10,11 +10,15 @@ een controleknop die per mailbox echt inlogt op IMAP.
 Lezen gebeurt in imapbron.py, de toegangsregels staan in config.py, het
 MCP-endpoint in mcp_server.py.
 """
+import io
 import os
+import re
 from urllib.parse import urlsplit
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import (Flask, redirect, render_template, request, send_file,
+                   url_for)
 
+import bijlagen
 import config
 import imapbron
 import mcp_server
@@ -154,6 +158,62 @@ def toegang_wijzigen():
     tekst = ("niets veranderd" if oud == nieuw
              else "opgeslagen, geldt binnen enkele seconden")
     return redirect(url_for("toegang", ok=f"{adres}: {tekst}"), code=303)
+
+
+def _veilige_naam(naam):
+    """Bestandsnaam zoals de afzender hem gaf, zonder pad of stuurtekens."""
+    naam = re.sub(r"[\x00-\x1f\x7f/\\]", "_", str(naam or "")).strip(" .")
+    return naam or "bijlage"
+
+
+@app.get("/download/<token>")
+@app.get("/download/<token>/<int:nr>")
+def download(token, nr=None):
+    """Een downloadlink uit de tool bijlage_link.
+
+    Staat achter de forward-auth en werkt alleen voor wie de link maakte,
+    en alleen zolang die de mailbox en het recht bijlagen nog heeft. Het
+    bestand gaat altijd als download de deur uit (nooit getoond op dit
+    domein), zodat een html-bijlage hier geen code kan draaien.
+    """
+    wie = _wie()
+    p = mcp_server._lees(token, "dl")
+    if not p:
+        return render_template("download.html", wie=wie, fout=(
+            "Deze link is verlopen of ongeldig. Vraag Claude om een nieuwe."
+        )), 403
+    if wie["gebruiker"].lower() != str(p.get("u", "")).lower():
+        return render_template("download.html", wie=wie, fout=(
+            f"Deze link is gemaakt voor {p.get('u')}, niet voor "
+            f"{wie['gebruiker'] or 'deze login'}.")), 403
+    try:
+        mailbox = config.zoek(p["m"], wie)
+        config.vereis_bijlagen(mailbox, wie)
+        mapnaam = config.map_toegestaan(mailbox, p["f"])
+        koppen, delen = imapbron.bijlagen(mailbox, mapnaam, p["i"])
+    except ValueError as e:
+        return render_template("download.html", wie=wie, fout=str(e)), 403
+    if p.get("b"):
+        nr = p["b"] if nr in (None, p["b"]) else -1
+    if nr is None:
+        return render_template("download.html", wie=wie, token=token,
+                               koppen=koppen, mailbox=mailbox["adres"],
+                               bestanden=bijlagen.overzicht(delen))
+    gekozen = next((d for d in delen if d[0] == nr), None)
+    if gekozen is None:
+        return render_template("download.html", wie=wie,
+                               fout="Die bijlage hoort niet bij deze link."), 404
+    _, naam, _, inhoud = gekozen
+    mcp_server._log(wie, f"download {mailbox['adres']}/{mapnaam} "
+                         f"uid={p['i']} nr={nr} ({len(inhoud)} bytes)")
+    antwoord = send_file(io.BytesIO(inhoud),
+                         mimetype="application/octet-stream",
+                         as_attachment=True,
+                         download_name=_veilige_naam(naam))
+    antwoord.headers["X-Content-Type-Options"] = "nosniff"
+    antwoord.headers["Content-Security-Policy"] = "sandbox"
+    antwoord.headers["Cache-Control"] = "no-store"
+    return antwoord
 
 
 mcp_server.registreer(app, _gebruiker, _groepen)

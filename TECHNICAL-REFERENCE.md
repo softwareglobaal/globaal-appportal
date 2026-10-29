@@ -2518,6 +2518,12 @@ de wijzigfuncties openen een map schrijfbaar.
   `post-toegang` (`toegang.yaml` over `mailboxen.yaml` heen, logboek
   `wijzigingen.jsonl`); `beheer:` weghalen zet ze buiten werking. Eerste:
   mukesh voor info@, oa.epb@ en office@energie-efficient.be.
+- **Bijlagen** (sinds 2026-10-29, v1.4.0): recht `bijlagen` per mailbox
+  (niet via /toegang) zet de tools `bijlage` (inhoud: pdf-tekst, scans en
+  afbeeldingen als image-blok, docx/xlsx/xls/csv, lijst van zip/eml) en
+  `bijlage_link` (downloadlink `/download/<token>`, 15 min, achter
+  forward-auth, alleen voor de maker) open. Code in `post/bijlagen.py`,
+  details in `post/README.md`.
 - **MCP-mantel is die van §14.6** (vermogen): streamable HTTP op `/mcp`,
   minimale OAuth-server met DCR + PKCE voor claude.ai-connectors,
   `POSTBUS_MCP_SECRET`/`POSTBUS_MCP_TOKEN` in de stack-`.env` (beide leeg =

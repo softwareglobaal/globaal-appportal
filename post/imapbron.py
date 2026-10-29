@@ -456,8 +456,71 @@ def bericht(mailbox, mapnaam, uid, deel=1):
                          f"Dit is het laatste deel ({deel} van {aantal_delen}).")
     if bijlagen:
         uit.setdefault("let_op_bijlagen",
-                       "Bijlagen worden alleen benoemd, niet ingelezen.")
+                       "Bijlagen worden hier alleen benoemd. De inhoud lees "
+                       "je met de tool bijlage, als die mailbox het recht "
+                       "bijlagen heeft.")
     return uit
+
+
+def _bijlage_delen(bron):
+    """De bijlagen van een bericht in vaste volgorde, als [(naam, type, bytes)].
+
+    Anders dan bericht() daalt dit niet af in een bijgevoegde mail
+    (message/rfc822): die telt als één bijlage, een .eml, zodat de nummers
+    gaan over wat de afzender echt bijvoegde.
+    """
+    uit = []
+
+    def loop(deel):
+        if deel.get_content_type() == "message/rfc822":
+            binnen = deel.get_payload()
+            binnen = binnen[0] if isinstance(binnen, list) and binnen else None
+            inhoud = binnen.as_bytes() if binnen is not None else b""
+            naam = (_kop(deel.get_filename())
+                    or (_kop(binnen.get("Subject")) if binnen is not None
+                        else "") or "doorgestuurde mail")
+            if not naam.lower().endswith(".eml"):
+                naam += ".eml"
+            uit.append((naam, "message/rfc822", inhoud))
+            return
+        if deel.is_multipart():
+            for sub in deel.get_payload():
+                loop(sub)
+            return
+        if _is_bijlage(deel):
+            uit.append((_kop(deel.get_filename()) or "(zonder naam)",
+                        deel.get_content_type(),
+                        deel.get_payload(decode=True) or b""))
+
+    loop(bron)
+    return uit
+
+
+def bijlagen(mailbox, mapnaam, uid):
+    """Alle bijlagen van een bericht, alleen lezend (readonly + BODY.PEEK).
+
+    Geeft (koppen, [(nr, naam, type, bytes)]) met nr vanaf 1.
+    """
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        raise ValueError(f"uid moet een getal zijn, niet {uid!r}")
+    with _Sessie(mailbox) as M:
+        _selecteer(M, mapnaam)
+        ok, gegevens = M.uid("FETCH", str(uid), "(BODY.PEEK[])")
+        if ok != "OK":
+            raise ValueError("Ophalen mislukt: " + _leesbaar(gegevens))
+        ruw = next((el[1] for el in (gegevens or []) if isinstance(el, tuple)),
+                   None)
+    if not ruw:
+        raise ValueError(f"Geen bericht met uid {uid} in {mapnaam}. "
+                         "UID's zijn per map; zoek eerst met de tool zoek.")
+    bron = email.message_from_bytes(ruw)
+    koppen = {"onderwerp": _kop(bron.get("Subject")),
+              "van": parseaddr(_kop(bron.get("From")))[1].lower()}
+    delen = [(i, n, t, b) for i, (n, t, b)
+             in enumerate(_bijlage_delen(bron), start=1)]
+    return koppen, delen
 
 
 def _lijst_mappen(M):

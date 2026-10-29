@@ -88,6 +88,29 @@ Regels die in de code zitten, niet in een afspraak:
 - Wachtwoorden staan alleen in dit bestand. Ze komen nooit in git, nooit in de
   webpagina en nooit in een tool-antwoord.
 
+## Bijlagen lezen en downloaden (recht `bijlagen`)
+
+`bijlagen: ja` of een namenlijst bij een mailbox zet twee tools open (staat
+niet in /toegang: dat recht zet alleen de VM-beheerder):
+
+- **`bijlage`** (mailbox, uid, map, bijlage, deel): zonder `bijlage` de
+  genummerde lijst; anders de inhoud. PDF: tekst per pagina, een pagina met
+  minder dan 25 tekens als afbeelding (scan). Afbeeldingen, ook heic, als
+  verkleinde jpeg (max 1568 px). docx/xlsx/xls/txt/csv/html als tekst of
+  tabel. Zip en .eml: de lijst van wat erin zit, niets uitgepakt. Lange
+  inhoud in delen (40.000 tekens of 5 scanpagina's per deel).
+- **`bijlage_link`**: een link `/download/<token>` die 15 minuten werkt, achter
+  de forward-auth en alleen voor wie hem maakte. Een bijlage of alle bijlagen
+  van een bericht; bestanden gaan altijd als download
+  (`application/octet-stream`, `nosniff`, CSP sandbox) met de oorspronkelijke
+  naam.
+
+Grenzen: 25 MB per bijlage voor lezen, 200 MB uitgepakt voor docx/xlsx, 50 MP
+per afbeelding, 300 pagina's per pdf. Ophalen via `imapbron.bijlagen`
+(readonly + BODY.PEEK); `bijlagen.py` schrijft niets naar schijf en start
+niets (`test_bijlagen.py` toetst dat op de code). Een bijgevoegde mail telt
+als een bijlage (.eml), niet als losse onderdelen.
+
 ## Toegang laten beheren (`beheer:` en /toegang)
 
 Zet bij een mailbox `beheer: [naam]` (alleen een lijst; `ja` telt als
