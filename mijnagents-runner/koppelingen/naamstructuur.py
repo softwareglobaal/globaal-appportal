@@ -451,13 +451,15 @@ def hoofdstukken(tekst, letters):
     Een hoofdstuk loopt van een kop 'A. ...' van niveau 1 of 2 tot de volgende
     kop van niveau 1 of 2, met de Markdown-regels: tot drie spaties ervoor, een
     spatie of tab erna. Koppen in een codeblok (``` of ~~~) tellen niet, zodat
-    een sjabloon geen grens maakt. Een gevraagd hoofdstuk dat ontbreekt of twee
-    keer voorkomt, of een andere regel die met 'B.' begint (na spaties, '>',
-    '#', '*' of '_'), maakt de bron onbruikbaar: dan pauzeert de toetsing
-    liever dan een regel te missen. Het boek heeft zulke regels alleen als kop.
+    een sjabloon geen grens maakt. Alleen een kop die precies 'B. tekst' is,
+    telt als hoofdstuk. Een gevraagd hoofdstuk dat ontbreekt of twee keer
+    voorkomt, een andere kop met 'B.' erin, of een gewone regel die na het
+    weghalen van HTML en tekens vooraan met 'B.' begint, maakt de bron
+    onbruikbaar: dan pauzeert de toetsing liever dan een regel te missen. Het
+    boek heeft zulke regels alleen als hoofdstukkop.
     """
     uit, huidig, gezien, hek = [], None, [], ""
-    letterkop = re.compile(r"([A-Z])\.(?:[ \t*_]|$)")
+    verdacht = re.compile(r"(?<![0-9A-Za-z])[A-Z]\.(?![0-9A-Za-z])")
     for regel in tekst.splitlines():
         rand = re.match(r" {0,3}(`{3,}|~{3,})", regel)
         if hek:
@@ -466,13 +468,16 @@ def hoofdstukken(tekst, letters):
         elif rand:
             hek = rand[1]
         else:
+            zonder_html = re.sub(r"<[^>]*>", "", regel)
             kop = re.match(r" {0,3}(#{1,2})(?:[ \t]+(.*))?$", regel)
             if kop:
-                letter = letterkop.match(re.sub(r"^[\s*_]+", "", kop[2] or ""))
+                letter = re.fullmatch(r"([A-Z])\.[ \t]+\S.*", (kop[2] or "").strip())
                 huidig = letter[1] if letter else None
                 if huidig:
                     gezien.append(huidig)
-            elif letterkop.match(re.sub(r"^[\s>#*_]+", "", regel)):
+                elif verdacht.search(re.sub(r"<[^>]*>", "", kop[2] or "")):
+                    raise ValueError("onduidelijke hoofdstukkop in het regelboek")
+            elif verdacht.match(re.sub(r"^[^0-9A-Za-z]+", "", zonder_html)):
                 raise ValueError("onduidelijke hoofdstukkop in het regelboek")
         if huidig in letters:
             uit.append(regel.rstrip())

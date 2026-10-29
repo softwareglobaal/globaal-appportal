@@ -322,7 +322,9 @@ class RegelbronEnHATest(unittest.TestCase):
         for extra in ("\n  ## B. Het verslag\n", "\n    ## B. Het verslag\n", "\n> ## B. Het verslag\n",
                       "\n### B. Het verslag\n", "\nB. Het verslag\n---\n", "\nB. Het verslag\n===\n",
                       "\n####### B. Het verslag\n", "\n##B. Het verslag\n", "\n**B. Het verslag**\n",
-                      "\n## **B.** Het verslag\n", "\n\t## B. Het verslag\n"):
+                      "\n## **B.** Het verslag\n", "\n\t## B. Het verslag\n", "\n## > B. Het verslag\n",
+                      "\n## `B.` Het verslag\n", "\n## [B.] Het verslag\n", "\n<h2>B. Het verslag</h2>\n",
+                      "\n- B. Het verslag\n", "\n## Hoofdstuk B. Het verslag\n"):
             with self.assertRaises(ValueError, msg=repr(extra)):
                 N.hoofdstukken(tekst + extra + "B2 nieuwe regel\n", ["A", "B"])
         with self.assertRaises(ValueError):
