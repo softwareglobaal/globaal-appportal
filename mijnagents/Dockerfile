@@ -35,6 +35,8 @@ RUN python3 test_week.py
 # Grendel op /bronnen: alleen beheer, groen/oranje/rood per bron en per dag, een kapot weekoverzicht laat de pagina staan.
 # Zie test_bronnen.py.
 RUN python3 test_bronnen.py
+# Grendel op de tijdlijn (/tijdlijn): verleden en agenda samen, privé zonder namen, dubbels en chats tellen niet. Zie test_tijdlijn.py.
+RUN python3 test_tijdlijn.py
 # Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
 # geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
 RUN python3 test_felix.py

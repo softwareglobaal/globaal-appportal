@@ -1770,6 +1770,75 @@ def dag_pagina(datum):
     )
 
 
+# --- tijdlijn: verleden en agenda op één pagina (Mehdi, 29-10-2026: "mijn toekomst (agenda) en verleden (Dagbundelaar)
+#     samenbrengen, zodat AI mij beter helpt"). Alleen lezen, alleen beheer. Per dag de afspraken uit de Agendawacht en
+#     de gesprekken uit gesprek_log (wie, wanneer, hoe lang, nooit inhoud), plus een tekstblok om aan een AI te geven.
+TIJDLIJN_TERUG, TIJDLIJN_VOORUIT = 14, 14
+
+
+def tijdlijn_gegevens(conn, vandaag):
+    van, tot = (vandaag - timedelta(days=TIJDLIJN_TERUG)).isoformat(), (vandaag + timedelta(days=TIJDLIJN_VOORUIT)).isoformat()
+    dagen = {}
+    for i in range(-TIJDLIJN_TERUG, TIJDLIJN_VOORUIT + 1):
+        d = vandaag + timedelta(days=i)
+        dagen[d.isoformat()] = {"dag": d.isoformat(), "naam": WEEKDAGEN[d.weekday()], "wanneer": "verleden" if i < 0 else "vandaag" if i == 0 else "toekomst",
+                                "afspraken": [], "gesprekken": [], "gesprek_min": 0}
+    # Een afspraak die de Agendawacht opnieuw klaarzette, telt één keer (laatste versie); een vervallen afspraak niet.
+    afspraken = {}
+    for it in conn.execute("SELECT * FROM klaarzet WHERE soort='afspraak' ORDER BY id").fetchall():
+        try:
+            d = json.loads(it["inhoud"] or "{}")
+        except ValueError:
+            continue
+        if not isinstance(d, dict):
+            continue
+        afspraken[it["uniek"] or it["id"]] = (it["status"], d)
+    for status, d in afspraken.values():
+        dag = (d.get("datum") or d.get("start") or "")[:10]
+        if status == "vervallen" or dag not in dagen:
+            continue
+        dagen[dag]["afspraken"].append({"tijd": (d.get("start") or "")[11:16], "eind": (d.get("einde") or "")[11:16],
+                                        "titel": d.get("titel") or "", "plaats": (d.get("locatie") or "")[:60],
+                                        "buiten": bool(d.get("buiten"))})
+    # Telregel Z10 zoals op /dagen: een dubbel telt niet; een privérij toont geen namen.
+    for g in conn.execute("SELECT uniek, bron, datum, start, minuten, personen, prive, COALESCE(afdeling, '') AS afdeling "
+                          "FROM gesprek_log WHERE COALESCE(dubbel_van, '')='' AND datum>=? AND datum<=? ORDER BY start",
+                          (van, tot)).fetchall():
+        if g["datum"] not in dagen or not telt_als_gesprek(g):
+            continue
+        prive = bool(g["prive"]) or g["afdeling"].strip().casefold() in ("prive", "privé")
+        r = dagen[g["datum"]]
+        r["gesprekken"].append({"bron": g["bron"], "tijd": (g["start"] or "")[11:16] if len(g["start"] or "") > 10 else (g["start"] or ""),
+                                "min": int(g["minuten"] or 0), "wie": "privé" if prive else (g["personen"] or "").strip() or "onbekend"})
+        r["gesprek_min"] += int(g["minuten"] or 0)
+    for r in dagen.values():
+        r["afspraken"].sort(key=lambda a: a["tijd"])
+    return [dagen[k] for k in sorted(dagen)]
+
+
+def tijdlijn_tekst(rijen):
+    """Platte tekst voor een AI: per dag wat gepland staat en met wie Mehdi sprak. Geen inhoud van gesprekken."""
+    regels = ["Tijdlijn van Mehdi: verleden (gesprekken, uit De Dagbundelaar) en agenda (afspraken). Alleen wie, wanneer, hoe lang."]
+    for r in rijen:
+        if not r["afspraken"] and not r["gesprekken"]:
+            continue
+        regels.append(f"\n{r['naam']} {r['dag']} ({r['wanneer']})")
+        for a in r["afspraken"]:
+            regels.append(f"- afspraak {a['tijd']}{'-' + a['eind'] if a['eind'] else ''} {a['titel']}{', ' + a['plaats'] if a['plaats'] else ''}")
+        for g in r["gesprekken"]:
+            regels.append(f"- gesprek {g['tijd']} {g['bron']}, {g['min']} min, met {g['wie']}")
+    return "\n".join(regels)
+
+
+@app.route("/tijdlijn")
+def tijdlijn_pagina():
+    if not mag_beslissen():
+        abort(403)
+    rijen = tijdlijn_gegevens(db(), datetime.now(BRUSSEL).date())
+    return render_template("tijdlijn.html", app_naam=APP_NAAM, rijen=rijen, tekst=tijdlijn_tekst(rijen),
+                           terug=TIJDLIJN_TERUG, vooruit=TIJDLIJN_VOORUIT)
+
+
 # --- week: wat Mehdi in een ISO-week effectief deed, naast wat gepland stond (driehoeksoverleg 27-10-2026). Alleen
 #     lezen, alleen beheer. Een runner zet per week een klaarzet-item weekoverzicht:<JJJJ-Www> met json klaar; deze
 #     pagina rekent niets uit, ze toont het. Een getal null is onbekend en wordt een vraagteken.
