@@ -26,6 +26,14 @@ MAX_OUDERDOM_DAGEN = 3
 EU = frozenset("AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK".split())
 BTW = 0.21                     # Belgisch tarief: bij een prijs zonder btw en bij invoer
 MIN_PAGINATEKST = 200          # minder tekens is geen gelezen pagina (een lege of geblokkeerde pagina)
+MIN_CITAAT = 8                 # een citaat als bewijs is minstens zo lang, anders bewijst het niets
+# Alle soorten spaties, ook de vaste en de smalle vaste spatie in "1 299,00" (Codex X11, ronde 2).
+SPATIES = re.compile(r"[\s\xa0   ]+")
+# Woorden die een bedrag tot een bijkomende kost maken: zo'n citaat bewijst nooit de productprijs (Codex X1, ronde 2).
+KOSTWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison|"
+                         r"opgeld|premium|aufgeld|frais|kosten|\bfee\b|toeslag|borg|deposit|statiegeld", re.I)
+VERZENDWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison", re.I)
+GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
 
 # Landen op 60 Hz waar Mehdi toestellen naartoe brengt; de vraag noemt het land, de code maakt er een eis van.
 ZESTIG_HZ = {"suriname": "Suriname", "verenigde staten": "VS", "amerika": "VS", "usa": "VS", "canada": "Canada"}
@@ -76,15 +84,39 @@ def eisen_uit_vraag(vraag):
     return eisen
 
 
+def _schoon(tekst):
+    """Alle soorten spaties als een gewone spatie."""
+    return SPATIES.sub(" ", tekst or "").strip()
+
+
+def citaat_op_pagina(citaat, tekst):
+    """Staat dit citaat letterlijk in de tekst (spaties gelijkgemaakt)? Een te kort citaat bewijst niets."""
+    citaat = _schoon(str(citaat or ""))
+    return len(citaat) >= MIN_CITAAT and citaat in _schoon(tekst)
+
+
+def zonder_kostwoord(citaat, tekst, ervoor=40):
+    """Staat het citaat minstens een keer op de pagina zonder een kostwoord (verzending, opgeld, kosten) vlak ervoor
+    of erin? Zo bewijst "499 euro" uit "Verzendkosten: 499 euro" nooit de productprijs (Codex X1, ronde 2)."""
+    citaat, tekst = _schoon(str(citaat or "")), _schoon(tekst)
+    i = tekst.find(citaat)
+    while i >= 0 and citaat:
+        if not KOSTWOORDEN.search(tekst[max(0, i - ervoor):i + len(citaat)]):
+            return True
+        i = tekst.find(citaat, i + 1)
+    return False
+
+
 def bedrag_op_pagina(bedrag, tekst):
     """Staat dit bedrag in de tekst, in een gangbare schrijfwijze (1.299,00 of 1,299.00 of 1299 of 1 299)?"""
     bedrag = _getal(bedrag)
+    tekst = _schoon(tekst)
     if bedrag is None or not tekst:
         return False
     heel, cent = int(bedrag), round((bedrag - int(bedrag)) * 100)
     groepen = f"{heel:,}"
     vormen = set()
-    for sep in ("", ".", ",", " ", " ", "'"):
+    for sep in ("", ".", ",", " ", "'"):
         h = groepen.replace(",", sep) if heel >= 1000 else str(heel)
         if cent:
             vormen |= {f"{h},{cent:02d}", f"{h}.{cent:02d}"}
@@ -105,7 +137,7 @@ def procent_op_pagina(pct, tekst):
         return False
     heel = int(pct)
     vormen = {f"{pct:g}".replace(".", ","), f"{pct:g}"} | ({str(heel), f"{heel},0", f"{heel}.0"} if pct == heel else set())
-    return any(re.search(rf"(?<![\d.,]){re.escape(v)}\s?%", tekst) for v in vormen)
+    return any(re.search(rf"(?<![\d.,]){re.escape(v)}\s?%", _schoon(tekst)) for v in vormen)
 
 
 def keur(aanbod, vandaag, paginatekst=None):
@@ -138,11 +170,20 @@ def keur(aanbod, vandaag, paginatekst=None):
     if not str(aanbod.get("titel") or "").strip():
         redenen.append("geen productnaam")
     if paginatekst is not None:
-        if len(paginatekst.strip()) < MIN_PAGINATEKST:
+        # De prijs hoort bij dit aanbod: een citaat van de eigen pagina met dat bedrag, dat geen bijkomende kost
+        # noemt. Een bedrag dat ergens anders op de pagina staat (verzending, opgeld) bewijst niets (Codex X1, ronde 2).
+        citaat = str(_bewijs(aanbod).get("prijs") or "")
+        if len(_schoon(paginatekst)) < MIN_PAGINATEKST:
             redenen.append("pagina zonder leesbare tekst")
-        elif prijs and not bedrag_op_pagina(prijs, paginatekst):
-            redenen.append("prijs niet op de gelezen pagina")
+        elif prijs and not (citaat_op_pagina(citaat, paginatekst) and bedrag_op_pagina(prijs, citaat)
+                            and zonder_kostwoord(citaat, paginatekst)):
+            redenen.append("prijs niet bewezen op de gelezen pagina")
     return redenen
+
+
+def _bewijs(aanbod):
+    b = aanbod.get("bewijs") if isinstance(aanbod, dict) else None
+    return b if isinstance(b, dict) else {}
 
 
 def in_euro(bedrag, munt, koersen):
@@ -162,17 +203,29 @@ def in_euro(bedrag, munt, koersen):
 def totaal(aanbod, koersen, alle_tekst=None):
     """(totaal in euro of None, wat ontbreekt, toelichting). Het totaal is alleen een getal als niets ontbreekt.
 
-    prijs + verzending, + btw als de prijs zonder btw is; bij een veiling + opgeld (procent op de hamerprijs) + vaste
-    veilingkosten (0 als er geen zijn); buiten de EU + douane (geschat door het model) + 21 procent btw op het geheel.
-    alle_tekst: de tekst van alle gelezen pagina's; opgeld, verzending en veilingkosten boven nul moeten erin staan.
-    None slaat die toets over (alleen in tests)."""
+    Per kostenpost (Codex X9, ronde 2): de prijs (bij een veiling met opgeld en vaste kosten) krijgt 21 procent btw
+    als btw_inbegrepen onwaar is; de verzending apart volgens verzending_btw_inbegrepen (onbekend telt als de prijs).
+    Buiten de EU: + douane (geschat door het model) en 21 procent btw op het geheel, door de code.
+    alle_tekst: de tekst van alle gelezen pagina's. Elke post heeft dan een citaat nodig dat erin staat (bewijs):
+    verzending met een verzendwoord en het bedrag, of gratis; opgeld met het percentage; veilingkosten boven nul met
+    het bedrag. None slaat die toets over (alleen in tests)."""
     munt = str(aanbod.get("munt") or "").upper()
     ontbreekt, uitleg = [], []
+    bewijs = _bewijs(aanbod)
 
     def bewezen(veld, waarde):
-        if alle_tekst is None or not waarde:
+        if alle_tekst is None:
             return True
-        return procent_op_pagina(waarde, alle_tekst) if veld == "opgeld" else bedrag_op_pagina(waarde, alle_tekst)
+        citaat = str(bewijs.get(veld) or "")
+        if not citaat_op_pagina(citaat, alle_tekst):
+            return veld == "veilingkosten" and not waarde      # geen vaste kosten kan je niet citeren
+        if veld == "opgeld":
+            return procent_op_pagina(waarde, citaat)
+        if veld == "verzending":
+            if waarde:
+                return bool(VERZENDWOORDEN.search(citaat)) and bedrag_op_pagina(waarde, citaat)
+            return bool(GRATIS.search(citaat) or re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
+        return bedrag_op_pagina(waarde, citaat)
 
     def euro_veld(veld, waarde):
         if waarde is None:
@@ -183,56 +236,76 @@ def totaal(aanbod, koersen, alle_tekst=None):
             ontbreekt.append(veld)
             return 0.0
         if not bewezen(veld, _getal(waarde)):
-            ontbreekt.append(f"{veld} niet op een gelezen pagina")
+            ontbreekt.append(f"{veld} niet bewezen")
         return e
 
     prijs = in_euro(aanbod.get("prijs"), munt, koersen)
     if prijs is None:
         ontbreekt.append("koers" if _getal(aanbod.get("prijs")) is not None else "prijs")
         prijs = 0.0
-    verzending = euro_veld("verzending", aanbod.get("verzending"))
-    som = prijs + verzending
+    goed = prijs
     if aanbod.get("soort") == "veiling":
         opgeld = _getal(aanbod.get("opgeld_pct"))
         if opgeld is None:
             ontbreekt.append("opgeld")
         else:
             if not bewezen("opgeld", opgeld):
-                ontbreekt.append("opgeld niet op een gelezen pagina")
-            som += prijs * opgeld / 100
-        som += euro_veld("veilingkosten", aanbod.get("veilingkosten"))
+                ontbreekt.append("opgeld niet bewezen")
+            goed += prijs * opgeld / 100
+        goed += euro_veld("veilingkosten", aanbod.get("veilingkosten"))
+    verzending = euro_veld("verzending", aanbod.get("verzending"))
     land = str(aanbod.get("land") or "").upper()
     if land in EU:
         btw_in = aanbod.get("btw_inbegrepen")
-        if btw_in is False:
-            som *= 1 + BTW
-            uitleg.append("21 procent btw bijgeteld")
-        elif btw_in is not True:
+        btw_verzending = aanbod.get("verzending_btw_inbegrepen", btw_in)
+        if btw_in is None or (verzending and btw_verzending is None):
             ontbreekt.append("btw")
+        if btw_in is False:
+            goed *= 1 + BTW
+            uitleg.append("21 procent btw bijgeteld op de prijs")
+        if verzending and btw_verzending is False:
+            verzending *= 1 + BTW
+            uitleg.append("21 procent btw bijgeteld op de verzending")
+        som = goed + verzending
     elif not land:
         ontbreekt.append("land")
+        som = goed + verzending
     else:
         douane = _getal(aanbod.get("douane"))
-        if douane is None:
+        d = in_euro(douane, munt, koersen) if douane is not None else None
+        if d is None:
             ontbreekt.append("invoer")
-        else:
-            d = in_euro(douane, munt, koersen)
-            if d is None:
-                ontbreekt.append("invoer")
-            else:
-                som = (som + d) * (1 + BTW)
-                uitleg.append("invoer: douane geschat, 21 procent btw berekend")
+            d = 0.0
+        som = (goed + verzending + d) * (1 + BTW)
+        uitleg.append("invoer: douane geschat, 21 procent btw berekend")
     return (round(som, 2) if not ontbreekt else None), ontbreekt, uitleg
 
 
-def compatibel(aanbod, eisen):
+# Eisen die de code uit de vraag haalt, met wat een citaat moet bevatten om "ja" te bewijzen.
+_EIS_BEWIJS = re.compile(r"^(netfrequentie|netspanning) (\d+) (Hz|V)$")
+
+
+def compatibel(aanbod, eisen, alle_tekst=None):
     """"ja", "nee" of "onbekend" tegen de eisen. Zonder eisen is het "ja".
 
-    aanbod["compatibiliteit"] is {eis: "ja"|"nee"|"onbekend"}. Een eis die er niet in staat, is onbekend."""
+    aanbod["compatibiliteit"] is {eis: {"oordeel": "ja"|"nee"|"onbekend", "citaat": "..."}} (of alleen het oordeel).
+    Een eis die er niet in staat, is onbekend. Met alle_tekst geldt "ja" alleen met een citaat dat op een gelezen pagina
+    staat en, bij netfrequentie of netspanning, die waarde noemt; anders wordt het "onbekend" (Codex X2, ronde 2).
+    "nee" wordt altijd geloofd: dat kan nooit tot een verkeerde aanbeveling leiden."""
     if not eisen:
         return "ja"
-    oordeel = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
-    waarden = [str(oordeel.get(eis, "onbekend")).lower() for eis in eisen]
+    oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
+    waarden = []
+    for eis in eisen:
+        o = oordelen.get(eis, "onbekend")
+        oordeel, citaat = (o.get("oordeel"), o.get("citaat")) if isinstance(o, dict) else (o, None)
+        oordeel = str(oordeel or "onbekend").lower()
+        if oordeel == "ja" and alle_tekst is not None:
+            m = _EIS_BEWIJS.match(eis)
+            c = _schoon(str(citaat or "")).lower()
+            if not citaat_op_pagina(citaat, alle_tekst) or (m and not re.search(rf"(?<!\d){m.group(2)}\s?{m.group(3).lower()}", c)):
+                oordeel = "onbekend"
+        waarden.append(oordeel)
     if "nee" in waarden:
         return "nee"
     if all(w == "ja" for w in waarden):
@@ -266,7 +339,7 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         gezien.add(sleutel)
         rij = dict(a)
         rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen, alle_tekst)
-        rij["compatibel"] = compatibel(a, eisen)
+        rij["compatibel"] = compatibel(a, eisen, alle_tekst)
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",
                              r["totaal_eur"] if r["totaal_eur"] is not None else float("inf")))

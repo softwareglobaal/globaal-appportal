@@ -11,6 +11,12 @@ def euro(bedrag):
     return f"{tekst} euro"
 
 
+def _kort(tekst, n=160):
+    """Vrije tekst van het model, begrensd en op een regel (Codex X2, ronde 2); nooit in de aanbeveling zelf."""
+    tekst = " ".join(str(tekst).split())
+    return tekst if len(tekst) <= n else tekst[:n - 3].rstrip() + "..."
+
+
 def _prijs_in_munt(a):
     munt = str(a.get("munt") or "").upper()
     return "" if munt == "EUR" else f" ({a.get('prijs')} {munt})"
@@ -34,7 +40,7 @@ def _regel(a):
         delen.append("compatibiliteit niet bevestigd")
     delen += a.get("uitleg") or []
     if a.get("waarom"):
-        delen.append(str(a["waarom"]))
+        delen.append("toelichting: " + _kort(a["waarom"]))
     return "- " + "; ".join(d for d in delen if d)
 
 
@@ -63,7 +69,7 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
     beste = r.get("beste")
     if beste:
         regels.append(f"**Aanbevolen:** [{beste['titel']}]({beste['url']}) bij {beste.get('winkel') or 'onbekend'}, "
-                      f"{euro(beste['totaal_eur'])} alles inbegrepen" + (f": {beste['waarom']}" if beste.get("waarom") else "."))
+                      f"{euro(beste['totaal_eur'])} alles inbegrepen.")
     else:
         regels.append("**Geen aanbeveling:** geen aanbod dat compatibel is en een volledige totaalprijs heeft.")
     reserve = r.get("reserve")

@@ -32,12 +32,16 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
     {"titel": "exacte productnaam en variant", "url": "de pagina die je met web_fetch las",
      "winkel": "naam", "land": "ISO-landcode van de verkoper, bv. BE, DE, US",
      "soort": "nieuw | refurbished | tweedehands | veiling",
-     "prijs": 0.0, "munt": "EUR", "btw_inbegrepen": true, "verzending": 0.0,
+     "prijs": 0.0, "munt": "EUR", "btw_inbegrepen": true, "verzending": 0.0, "verzending_btw_inbegrepen": true,
      "opgeld_pct": null, "veilingkosten": null, "douane": null,
+     "bewijs": {"prijs": "letterlijk stuk tekst van de aanbodpagina met de prijs van dit product",
+                "verzending": "letterlijk stuk tekst met de verzendkost, of met gratis verzending",
+                "opgeld": "letterlijk stuk uit de veilingvoorwaarden met het percentage", "veilingkosten": "idem met het bedrag"},
      "staat": "nieuw, als nieuw, gebruikt, defect", "garantie": "bv. 2 jaar, geen",
      "beschikbaar": true, "btw_factuur": true, "foto": "de url van de productfoto zoals ze in de gelezen pagina staat, of null",
      "betrouwbaarheid": "officiele dealer, winkel, platform met particulier, met beoordelingen als de pagina ze toont",
-     "compatibiliteit": {"<eis>": "ja | nee | onbekend"}, "waarom": "een zin: waarom dit aanbod, of wat eraan schort"}
+     "compatibiliteit": {"<eis>": {"oordeel": "ja | nee | onbekend", "citaat": "letterlijk stuk tekst van een gelezen pagina"}},
+     "waarom": "een korte zin: waarom dit aanbod, of wat eraan schort"}
   ],
   "niet_gevonden": ["wat je zocht en niet vond, met waar je zocht"],
   "vervolgvraag": "een gebundelde vraag als iets beslissends ontbreekt (bestemming, firma of privé), anders null"
@@ -47,8 +51,14 @@ pagina een prijs zonder btw toont, null als je het niet weet; verzending null al
 veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 als de voorwaarden geen vaste kosten
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
 btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met web_fetch las en de prijs daar zag.
-Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel. Een eis die voor dit product niet
-geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en zeg je in waarom."""
+Elk citaat in bewijs en compatibiliteit kopieer je letterlijk van een pagina die je met web_fetch las; zonder citaat
+telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel. Een
+eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en
+citeer je de tekst waaruit dat blijkt."""
+# Namen gaan nooit naar buiten, ook niet uit de werkwijze (Codex X4, ronde 2).
+NAMEN = re.compile(r"\b(?:Mehdi(?:\s+Chegini)?|Chegini)\b")
+AFRONDEN = ("Stop nu met zoeken en lezen. Geef het JSON-object met wat je tot nu toe op gelezen pagina's zag; wat je "
+            "niet kon nagaan, zet je in niet_gevonden.")
 
 
 def _veld(obj, naam, standaard=None):
@@ -136,7 +146,7 @@ def opdracht(werkwijze, vraag, vandaag, vaste_eisen=()):
         "Je bent De Prijsonderzoeker, een agent die zoekt waar iets het best te koop is en gegevens levert; de code "
         "achter je keurt elk aanbod en rekent de totaalprijs in euro. Nederlands, geen emoji. Beweer niets wat je niet "
         "op een gelezen pagina zag.",
-        "JOUW WERKWIJZE (ze geldt):\n" + (werkwijze or ""),
+        "JOUW WERKWIJZE (ze geldt):\n" + NAMEN.sub("de opdrachtgever", werkwijze or ""),
         VORM,
     ])
     eisen = ("\n\nVASTE EISEN (beoordeel elk aanbod hierop, met precies deze tekst als sleutel): " + "; ".join(vaste_eisen)
@@ -160,20 +170,29 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
         client = Anthropic(max_retries=1)
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
     assistent, teksten, tokens, stop, model = [], [], 0, None, MODEL
-    for _ in range(MAX_HERVATTEN):
+    afronden = False
+    for _ in range(MAX_HERVATTEN + 1):
         rest_zoeken = MAX_ZOEKEN - _gebruikt(assistent, "web_search")
         rest_lezen = MAX_LEZEN - _gebruikt(assistent, "web_fetch")
         rest_tijd = deadline - time.monotonic()
-        if assistent and (tokens >= MAX_TOKENS or rest_tijd < 30 or (rest_zoeken < 1 and rest_lezen < 1)):
-            stop = "plafond"           # niet verder zoeken: wat er al is, gaat door dezelfde controle
-            break
+        if assistent and not afronden and (tokens >= MAX_TOKENS or rest_tijd < 60 or rest_zoeken < 1 or rest_lezen < 1):
+            # Een plafond is bereikt: nog een beurt zonder gereedschap (tool_choice none), zodat er geen zoekopdracht
+            # of pagina meer bij kan (Codex X7, ronde 2) en het model afrondt met wat het las.
+            afronden = True
+            if rest_tijd < 20:
+                stop = "plafond"
+                break
         tools = [{"type": ZOEK_TOOL, "name": "web_search", "max_uses": max(1, rest_zoeken)},
                  {"type": LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen)}]
         # Een gepauzeerde beurt gaat verder met de hele beurt tot nu toe, niet alleen het laatste stuk (Codex X8).
         berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
+        extra = {}
+        if afronden:
+            berichten.append({"role": "user", "content": AFRONDEN})
+            extra["tool_choice"] = {"type": "none"}
         try:
             resp = client.messages.create(model=model, max_tokens=16000, system=systeem, messages=berichten, tools=tools,
-                                          output_config={"effort": "medium"}, timeout=max(30.0, rest_tijd))
+                                          output_config={"effort": "medium"}, timeout=max(15.0, rest_tijd), **extra)
         except Exception as e:  # noqa: BLE001  een onbekende modelnaam: een keer het model van De Ontwikkelaar (K5)
             if type(e).__name__ != "NotFoundError" or model == RESERVE_MODEL:
                 raise
@@ -182,9 +201,12 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
         gebruik = _veld(resp, "usage")
         tokens += (_veld(gebruik, "input_tokens", 0) or 0) + (_veld(gebruik, "output_tokens", 0) or 0)
         blokken = list(_veld(resp, "content", []) or [])
-        assistent += blokken
         teksten = [_veld(b, "text", "") for b in blokken if _veld(b, "type") == "text"] or teksten
         stop = _veld(resp, "stop_reason")
+        if afronden:
+            stop = "plafond"
+            break
+        assistent += blokken
         if stop != "pause_turn":
             break
     tekst = "".join(teksten).strip()

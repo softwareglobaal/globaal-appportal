@@ -108,7 +108,8 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
            f"vraag {va}: {len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
            f"{len(res['afgewezen'])} afgewezen",
            [{"url": x["aanbod"].get("url"), "redenen": x["redenen"]} for x in res["afgewezen"]])
-    ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi", tekst)
+    # Het verslag zelf noemt de vraag; het staat in het klaargezette item, niet in het logboek (Codex X3, ronde 2).
+    ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi (soort {SOORT})")
     return len(res["goed"])
 
 

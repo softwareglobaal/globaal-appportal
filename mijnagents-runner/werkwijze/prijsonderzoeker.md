@@ -27,15 +27,18 @@ wat daarmee compatibel is) volgen later.
    B&H, AliExpress) als dat na invoer goedkoper kan zijn.
 3. Elke aanbodpagina open ik zelf en lees ik de prijs daar. Een prijs uit een zoekresultaat of een vergelijker alleen
    neem ik niet over. De code neemt alleen aanbiedingen op waarvan ik de pagina in deze ronde echt las.
-4. Per aanbod geef ik: productnaam, link, winkel, land, soort, prijs en munt, verzending, opgeld en kosten bij een
-   veiling, invoer buiten de EU, staat, garantie, of er een factuur met btw is, beschikbaarheid, en per eis of het
-   past (ja, nee of onbekend).
-5. De code keurt en rekent: zonder link, prijs of gelezen pagina gaat een aanbod er niet in, het totaal in euro
-   rekent de code met de koersen van de ECB, en wat niet compatibel is komt apart.
-6. Het verslag voor Mehdi begint met een beste keuze en een reserve, elk met een zin waarom, dan de aanbiedingen met
-   een klikbare link (en een foto als die op de gelezen pagina staat), dan wat niet compatibel is, wat ik niet vond,
-   en de volgende stap als voorstel.
-7. Het verslag staat op het bord (soort prijsverslag). De Regisseur geeft het antwoord in de chat; De Bode stuurt
+4. Per aanbod geef ik: productnaam, link, winkel, land, soort, prijs en munt, of de btw erin zit (voor de prijs en
+   voor de verzending apart), verzending, opgeld en kosten bij een veiling, geschatte douane buiten de EU, staat,
+   garantie, of er een factuur met btw is, beschikbaarheid, en per eis of het past (ja, nee of onbekend).
+5. Bij de prijs, de verzending, het opgeld, de veilingkosten en elk "past" kopieer ik letterlijk het stuk tekst van de
+   gelezen pagina als bewijs. Zonder dat citaat telt het bedrag of het "past" niet.
+6. De code keurt en rekent: zonder link, gelezen pagina of bewezen prijs gaat een aanbod er niet in, de btw en de
+   invoer rekent de code, het totaal in euro met de koersen van de ECB, en wat niet compatibel is komt apart. De
+   eisen over netspanning en netfrequentie haalt de code zelf uit de vraag.
+7. Het verslag voor Mehdi begint met een beste keuze en een reserve die de code koos, dan de aanbiedingen met een
+   klikbare link (en een foto als die op de gelezen pagina staat) en een korte toelichting, dan wat niet compatibel
+   is, wat ik niet vond, en de volgende stap als voorstel.
+8. Het verslag staat op het bord (soort prijsverslag). De Regisseur geeft het antwoord in de chat; De Bode stuurt
    het alleen door als Mehdi daar uitdrukkelijk om vraagt.
 
 ## Wat ik weet
