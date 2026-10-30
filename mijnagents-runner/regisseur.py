@@ -121,7 +121,7 @@ WA_MAX = O.WA_MAX               # een antwoord via WhatsApp (R6): De Bode kort h
 WA_MODEL_MAX = 700              # wat ik het model vooraf vraag, zodat er zelden iets moet worden ingekort
 DOSSIER_MAX = 20000
 # De afdeling Bouw (Codex X5, controle 3): van deze agents lees ik alleen het verslag van de vraag die ik doorgaf
-# (sleutel firma:vingerafdruk), en zonder sleutel alleen het laatste, nooit een lijst van beide firma's.
+# (sleutel firma:vingerafdruk); zonder sleutel geen enkel, nooit een lijst van beide firma's.
 BOUW_AGENTS = ("aannemerszoeker", "offertevergelijker")
 BOUW_TWEE = ("Dit antwoord raakte twee firma's. Ik geef ze niet samen: stel de vraag per firma, of lees het verslag "
              "op het bord.")
@@ -626,7 +626,10 @@ def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20, sl
     naam = str(naam or "")
     n = max(1, min(int(n or 20), 100))
     if naam in BOUW_AGENTS and not sleutel:
-        n = 1
+        # Codex X3 (controle 6): zonder sleutel geen verslag van een bouwagent; welk verslag bij welke vraag hoort,
+        # zegt alleen de sleutel
+        return {"items": [], "aantal": 0, "uitleg": "verslagen van de afdeling Bouw alleen met de sleutel uit lees_verslag",
+                "_bron": f"klaargezette items van {naam} (zonder sleutel niet gelezen)"}
     if richting in ("van", "voor"):
         waar, args = f"k.{richting}=?", [naam]
     else:
@@ -1277,8 +1280,10 @@ def dossier(aan):
     k = kennis_lees(aan)
     delen.append("## Kennis (laatst gemeld regelboek)\n" + (f"gemeld {k.get('gemeld')}\n{k['kennis'][:3000]}" if k.get("gemeld")
                                                              else str(k.get("kennis") or k.get("onbekend"))))
-    for titel, uit in (("Open noden", noden_lees(aan)), ("Open voorstellen", voorstellen_lees(aan)),
-                       ("Klaargezet van en voor hem (laatste 20)", klaargezet_lees(aan, "beide", status="alle", n=20))):
+    klaargezet = (("Klaargezet", {"uitleg": "een verslag van de afdeling Bouw lees ik alleen met de sleutel van de vraag "
+                                                "(lees_verslag na agent_ronde), nooit vanuit het dossier"}) if aan in BOUW_AGENTS
+                  else ("Klaargezet van en voor hem (laatste 20)", klaargezet_lees(aan, "beide", status="alle", n=20)))
+    for titel, uit in (("Open noden", noden_lees(aan)), ("Open voorstellen", voorstellen_lees(aan)), klaargezet):
         delen.append(f"## {titel}\n" + _json_kort({x: y for x, y in uit.items() if x != "_bron"}, 4000))
     if aan in ("zoom-wacht", "fathom-wacht"):
         g = gesprekken_lees()

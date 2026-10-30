@@ -32,6 +32,27 @@ RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|indicatief
 VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
 
 
+ONTKENNING = re.compile(r"\b(?:niet|geen|nooit|vervangt|vervangen|eerdere|vorige|ipv|in\s+plaats\s+van)\b", re.I)
+
+
+def _zinnen(tekst):
+    return [z for z in re.split(r"(?<=[.!?])\s+|\n", tekst) if z.strip()]
+
+
+def verlegd(tekst):
+    """Btw verlegd alleen in een zin zonder ontkenning (Codex X4, controle 6: "medecontractant is niet van toepassing")."""
+    return any(VERLEGD.search(z) and not ONTKENNING.search(z) for z in _zinnen(tekst))
+
+
+def is_raming(tekst):
+    """Een raming als het document zichzelf zo noemt: in de kop (de eerste regels) of in een zin zonder ontkenning of
+    verwijzing naar een vorig stuk ("deze offerte vervangt de eerdere raming" is een offerte)."""
+    regels = [r for r in tekst.splitlines() if r.strip()]
+    if any(RAMING.search(r) and not ONTKENNING.search(r) for r in regels[:6]):
+        return True
+    return any(RAMING.search(z) and re.search(r"\b(?:dit|deze)\b", z, re.I) and not ONTKENNING.search(z) for z in _zinnen(tekst))
+
+
 def bedrag(tekst):
     """'1.234,56', '1 234,56', '1234,56', '1,234.56', '1234.56' of '1.234' -> getal; None als het geen bedrag is
     (Codex X8, controle 2: de schrijfwijze volgt uit het laatste scheidingsteken)."""
@@ -130,8 +151,8 @@ def lees(tekst_paginas):
     if not tekst_paginas or leeg:
         return {"soort": "scan", "redenen": [f"OCR nodig: pagina {', '.join(map(str, leeg)) or '1'} zonder tekst"]}
     tekst = "\n".join(tekst_paginas)
-    uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": bool(VERLEGD.search(tekst)),
-           "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": bool(RAMING.search(tekst)),
+    uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": verlegd(tekst),
+           "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": is_raming(tekst),
            "redenen": []}
     excl, incl = [], []
     for regel in tekst.splitlines():
@@ -159,7 +180,11 @@ def lees(tekst_paginas):
 
 def controleer(o):
     """Btw gelijk trekken en de rekensom nakijken. Een ontbrekend bedrag blijft None, nooit nul (X4)."""
-    t = 0 if o.get("verlegd") else o.get("btw_tarief")
+    if o.get("verlegd") and o.get("btw_tarief"):
+        o["redenen"].append("btw verlegd en toch een btw-tarief: kijk na; exclusief btw niet berekend")
+        t = None
+    else:
+        t = 0 if o.get("verlegd") else o.get("btw_tarief")
     if o.get("excl") is None and o.get("incl") is not None and t is not None:
         o["excl"] = round(o["incl"] / (1 + t / 100), 2)
         o["redenen"].append(f"exclusief btw berekend uit het totaal inclusief ({t} procent)")
@@ -176,6 +201,10 @@ def controleer(o):
     return o
 
 
+LOS_ADRES_NA = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|"
+                          r"singel|vest|markt|pad|ring)\s+\d+[a-zA-Z]?", re.I)
+
+
 def redigeer(tekst, extra=()):
     """De tekst die naar het model mag (X5): mailadressen, telefoonnummers, rekeningnummers, rijksregisternummers, de
     regels met een aanspreking of 'klant'/'bouwheer', en de gegeven adressen en namen (bv. het werfadres) weg."""
@@ -187,12 +216,14 @@ def redigeer(tekst, extra=()):
                r"leveradres|uitvoeringsadres|project|referentie|ref\.?)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
     t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
+    t = LOS_ADRES_NA.sub("[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
                "[naam weggelaten]", t)
     from .vraag import HOOFDLETTERNAAM, LOS_ADRES, NAAM_NA
     t = NAAM_NA.sub("[naam weggelaten]", t)       # Codex X6 (controle 4): ook binnen een zin
     t = HOOFDLETTERNAAM.sub("[naam weggelaten]", t)     # Codex X6 (controle 5): ook in hoofdletters
     t = LOS_ADRES.sub("[adres weggelaten]", t)
+    t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ'-]+){1,3}\s*,\s*(?=\[adres weggelaten\])", "[naam weggelaten], ", t)
     # Codex X6 (controle 3): een regel die alleen een naam is (twee tot vier woorden met een hoofdletter)
     t = re.sub(r"(?m)^\s*[A-ZÀ-Ý][a-zà-ÿ'-]+(?:\s+(?:(?:van|de|der|den|le|la|du)\s+)*[A-ZÀ-Ý][a-zà-ÿ'-]+){1,3}\s*$",
                "[naam weggelaten]", t)

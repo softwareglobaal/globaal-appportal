@@ -114,6 +114,16 @@ def naar_buiten_fouten(v):
     return list(dict.fromkeys(fouten))
 
 
+def officiele_gemeente(punt):
+    """'postcode Gemeente' zoals Geopunt het adres kent, of None. Alleen dit gaat als gebied naar buiten."""
+    if not isinstance(punt, dict):
+        return None
+    postcode, gemeente = str(punt.get("postcode") or "").strip(), str(punt.get("gemeente") or "").strip()
+    if not re.fullmatch(r"[1-9]\d{3}", postcode) or not GEMEENTE.match(f"{postcode} {gemeente}"):
+        return None
+    return f"{postcode} {gemeente}"
+
+
 def ontbreekt_vergelijker(v):
     """Wat de vergelijker zeker nodig heeft: de firma, en een map of een project (met lot)."""
     blok = [] if v.get("firma") else ["firma"]

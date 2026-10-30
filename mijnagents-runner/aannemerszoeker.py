@@ -128,6 +128,20 @@ def een_vraag(r, tekst, vandaag, deadline):
                   vandaag, firma)
         return 0
     v["werk"], v["omvang"] = werk, omvang
+    # Codex X1 (controle 6): naar buiten gaat niet de tekst van de vraag maar de officiele postcode en gemeente van
+    # Geopunt; wat Geopunt niet als gemeente kent, gaat niet weg.
+    from adresregister import lokaliseer
+    try:
+        centrum = lokaliseer(gemeente)
+    except Exception:  # noqa: BLE001
+        centrum = None
+        r.nood("Geopunt niet bereikbaar: geen aannemersvraag zonder officiele gemeente", wie="claude-code")
+    officieel = Q.officiele_gemeente(centrum)
+    if not officieel:
+        zet_klaar(tekst, "Aannemersvraag niet gestart: gemeente niet gevonden",
+                  V.onvolledig(NAAM, firma, ["een gemeente die Geopunt kent (postcode en naam)"]), vandaag, firma)
+        return 0
+    gemeente = v["gemeente"] = officieel
     try:
         eigen = E.in_mappen(firma, v["werk"])
         r.bron(f"eigen mappen {S.FIRMANAMEN[firma]}", f"{len(eigen)} treffers onder {E.BASIS[firma]}")
@@ -154,12 +168,6 @@ def een_vraag(r, tekst, vandaag, deadline):
     # De andere firma is nooit een kandidaat: geen mail van de ene firma aan de andere (harde regel van Mehdi).
     firmas = [f for f in firmas if not S.is_andere_firma(f"{f.get('naam')} {f.get('url')} {f.get('email')}", firma)
               and not S.schendingen(str(f.get("naam") or ""), firma)]
-    from adresregister import lokaliseer
-    centrum = None
-    try:
-        centrum = lokaliseer(gemeente)
-    except Exception:  # noqa: BLE001  zonder centrum is elke afstand onbekend: alles komt bij na te kijken
-        r.nood("Geopunt niet bereikbaar: afstanden niet berekend", wie="claude-code")
     res = Z.keur(firmas, uit["gelezen"], centrum, v["straal"], lokaliseer)
     nummers = [f.get("ondernemingsnummer") for f in res["goed"] + res["na_te_kijken"] + res["buiten"]]
     try:

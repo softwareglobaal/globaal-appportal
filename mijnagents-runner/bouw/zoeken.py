@@ -157,6 +157,20 @@ ZETEL = re.compile(r"(?i:adres\s+van\s+de\s+zetel)\s*:?\s*(.{0,120}?)\b([1-9]\d{
                    r"([A-ZÀ-Ý][\wÀ-ÿ'’]*(?:[ -](?:[A-ZÀ-Ý][\wÀ-ÿ'’]*|op|den|de|aan|sur|lez))*)", re.S)
 
 
+def nummer_op_site(nummer, url, gelezen):
+    """Staat het ondernemingsnummer (in elke schrijfwijze) op een gelezen pagina van dezelfde site als de firma?"""
+    if not nummer:
+        return False
+    eigen = host(O.schoon_url(url))
+    kaal = nummer.replace(".", "")
+    for u, t in (gelezen or {}).items():
+        if eigen and host(u) == eigen:
+            for m in re.finditer(r"(?:BE)?\s?[01][\d.\s]{8,14}\d", t or "", re.I):
+                if re.sub(r"\D", "", m.group(0)).zfill(10)[-10:] == kaal:
+                    return True
+    return False
+
+
 def kbo_zetel(nummer, gelezen):
     """'postcode gemeente' van de zetel volgens een gelezen KBO-pagina met dit nummer, of None (Codex X1, controle 5:
     een adres op de website kan een project zijn; de KBO zegt waar de firma gevestigd is)."""
@@ -205,6 +219,9 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
     for f in gelezen_firmas:
         f["ondernemingsnummer"] = btw_geldig(f.get("ondernemingsnummer"))
         f["kbo_actief"] = kbo_actief(f["ondernemingsnummer"], gelezen)
+        # Codex X2 (controle 6): de site hoort bij de onderneming als het nummer op een gelezen pagina van die site
+        # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
+        f["site_bewezen"] = nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
         if f["kbo_actief"] is False:
             uit["afgewezen"].append({"aanbod": f, "redenen": ["stopgezet volgens de KBO"]})
             continue
@@ -227,7 +244,7 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
         f["afstand_km"] = afstand_km(centrum, punt)
         if f["afstand_km"] is not None and f["afstand_km"] > straal_km:
             uit["buiten"].append(f)
-        elif f["afstand_km"] is None or not f["kbo_actief"]:
+        elif f["afstand_km"] is None or not f["kbo_actief"] or not f["site_bewezen"]:
             uit["na_te_kijken"].append(f)
         else:
             uit["goed"].append(f)

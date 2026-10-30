@@ -873,7 +873,7 @@ def test_t45_prijsverslag_tot_in_de_chat():
 
 def test_t45_bouwverslag_alleen_van_die_vraag():
     """Afdeling Bouw (Codex X5, controle 3): De Regisseur leest van de bouwagents alleen het verslag met de sleutel van
-    de vraag die hij doorgaf; zonder sleutel alleen het laatste, nooit een lijst met verslagen van beide firma's."""
+    de vraag die hij doorgaf; zonder sleutel geen enkel, nooit een lijst met verslagen van beide firma's."""
     from datetime import date
 
     from bouw import vraag as BQ
@@ -887,7 +887,7 @@ def test_t45_bouwverslag_alleen_van_die_vraag():
         een = R.klaargezet_lees("aannemerszoeker", "van", sleutel=BQ.sleutel(vraag_ha, vandaag))["items"]
         assert [i["inhoud"] for i in een] == ["verslag A"], een
         zonder = R.klaargezet_lees("aannemerszoeker", "van", n=20)["items"]
-        assert len(zonder) == 1, "zonder sleutel alleen het laatste verslag van een bouwagent"
+        assert zonder == [], "zonder sleutel geen verslag van een bouwagent (Codex X3, controle 6)"
     assert BQ.sleutel(vraag_ha, vandaag).startswith("HA:") and BQ.sleutel(vraag_hb, vandaag).startswith("HB:")
     assert BQ.sleutel(" " + vraag_ha + " ", vandaag) == BQ.sleutel(vraag_ha, vandaag), "De Regisseur stript, de runner ook"
 

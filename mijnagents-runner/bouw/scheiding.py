@@ -15,10 +15,10 @@ FIRMANAMEN = {HA: "H-Architects", HB: "Harmonie Bouw"}
 
 # Wat een stuk aan een firma koppelt. Hoofdletters tellen niet; streepjes en spaties worden gelijkgetrokken.
 KENMERKEN = {
-    HA: [r"(?-i:\bHA\b)", r"\bharc\b", r"\bh[\W_]{0,3}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
+    HA: [r"(?-i:\bHA\b)", r"(?-i:\bH\.\s?A\.)", r"\bharc\b", r"\bh[\W_a]{0,5}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
          r"\+?32\s?\(?0?\)?\s?16\s?79\s?23\s?14", r"\+?32\s?\(?0?\)?\s?491\s?94\s?68\s?79"],
-    HB: [r"(?-i:\bHB\b)", r"\bharm\b", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
-         r"hoveniersstraat\s?19\b"],
+    HB: [r"(?-i:\bHB\b)", r"(?-i:\bH\.\s?B\.)", r"\bharm\b", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstr(?:aat|\.)?\s*,?\s*5\b", r"\b5\s*,?\s*gerzenstr",
+         r"hoveniersstr(?:aat|\.)?\s*,?\s*19\b"],
 }
 # Telefoon- en ondernemingsnummers in elke schrijfwijze (016/79.32.96, 0491 94 68 79, BE0537405239): de code vergelijkt
 # de cijfers, niet de tekens ertussen (Codex X1, controle 3). Aangevuld met kern.firma via laad_kern().
@@ -36,11 +36,11 @@ BANDWOORDEN = (r"(?:dezelfde|zelfde)\s+groep\b|\btot\s+(?:de|onze|dezelfde)\s+gr
                r"bedrijvengroep|groepsmaatschappij|groepsbedrijf|met elkaar verbonden|"
                r"verbonden\s+(?:firma|vennootschap|onderneming|bedrijf)|verwante?\s+(?:firma|bedrijf|vennootschap|onderneming)|"
                r"verwantschap|zuster|holding|aandeelhoud|"
-               r"dezelfde eigenaar|zelfde eigenaar|eigen aannemer|belangenconflict|"
+               r"dezelfde eigenaar|zelfde eigenaar|onze eigen aannemer|ons eigen aannemersbedrijf|belangenconflict|"
                r"onafhankelijke?\s+(?:firma|bedrijf|vennootschap|onderneming|aannemer|architect|bureau)|"
                r"(?:volledig|totaal|geheel)\s+onafhankelijk|onafhankelijk\s+van\s+(?:elkaar|ons|de\s+(?:aannemer|architect))|"
-               r"band tussen|band met|gelieerd|partnerbedrijf|partnerfirma|vaste partner|onze partner|partner van|"
-               r"zaakvoerder van beide|onze aannemer|ons aannemersbedrijf|ons architectenbureau|vaste aannemer|huisaannemer")
+               r"band tussen|band met|gelieerd|partnerbedrijf|partnerfirma|onze vaste partner|onze partner|"
+               r"zaakvoerder van beide|onze aannemer|ons aannemersbedrijf|ons architectenbureau|onze vaste aannemer|huisaannemer")
 BAND = re.compile(BANDWOORDEN, re.I)
 
 
@@ -49,6 +49,17 @@ def normaal(tekst):
     t = unicodedata.normalize("NFKC", str(tekst or ""))
     t = re.sub(r"[‐-―−­]", "-", t)
     return re.sub(r"[   ]", " ", t)
+
+
+def adrespatronen(straat, nr):
+    """Een adres in de gangbare schrijfwijzen: Voorbeeldstraat 5, Voorbeeldstr. 5, 5 Voorbeeldstraat (Codex X5, controle 6)."""
+    straat, nr = straat.strip(), re.escape(nr.strip())
+    stam = re.escape(straat)
+    for lang, kort in (("straat", r"str(?:aat|\.)?"), ("laan", r"l(?:aan|n\.?)"), ("steenweg", r"st(?:eenweg|wg\.?)")):
+        if straat.lower().endswith(lang):
+            stam = re.escape(straat[:-len(lang)]) + kort
+            break
+    return [stam + r"\s*,?\s*" + nr + r"\b", r"\b" + nr + r"\s*,?\s*" + stam]
 
 
 def laad_kern(psql=None):
@@ -73,9 +84,9 @@ def laad_kern(psql=None):
         if len(cijfers) >= 8 and cijfers not in EXTRA[firma]["cijfers"]:
             EXTRA[firma]["cijfers"].append(cijfers)
         if r.get("straat") and r.get("nr"):
-            p = re.escape(r["straat"].strip()) + r"\s*,?\s*" + re.escape(r["nr"].strip()) + r"\b"
-            if p not in EXTRA[firma]["patronen"]:
-                EXTRA[firma]["patronen"].append(p)
+            for p in adrespatronen(r["straat"], r["nr"]):
+                if p not in EXTRA[firma]["patronen"]:
+                    EXTRA[firma]["patronen"].append(p)
     return True
 
 

@@ -112,13 +112,13 @@ print("\nKandidaten keuren (X2, G2)")
 check("geldig ondernemingsnummer", Z.btw_geldig("BE 0537.405.239") == "0537.405.239")
 check("ongeldig ondernemingsnummer vervalt", Z.btw_geldig("0123.456.789") is None and Z.btw_geldig("12") is None)
 VUL = " Dakwerken, platte daken, EPDM, renovatie, zinkwerk, onderhoud en herstellingen in de regio." * 3
-GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV, Dorpstraat 1, 3020 Herent" + VUL,
+GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV, Dorpstraat 1, 3020 Herent, BTW BE 0537.405.239" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239":
                "Ondernemingsnummer 0537.405.239\nStatus: Actief\nAdres van de zetel:\nDorpstraat 1\n3020 Herent\nSinds 2010" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0412345614":
                "Ondernemingsnummer 0412.345.614\nStatus: Actief\nAdres van de zetel:\nZeedijk 3\n8000 Brugge\nSinds 2001" + VUL,
            "https://dak-twee.voorbeeld.com": "Dak Twee, Kerkstraat 2, 3000 Leuven" + VUL,
-           "https://dak-ver.voorbeeld.com": "Dak Ver, Zeedijk 3, 8000 Brugge" + VUL,
+           "https://dak-ver.voorbeeld.com": "Dak Ver, Zeedijk 3, 8000 Brugge, ondernemingsnummer 0412345614" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0403170701":
                "Ondernemingsnummer 0403.170.701 Status: Stopgezet" + VUL,
            "https://dak-weg.voorbeeld.com": "Dak Weg, Molenstraat 4, 3000 Leuven" + VUL}
@@ -446,6 +446,36 @@ check("X8 de offertedatum komt van het label, niet van de eerste datum", x8["dat
       and x8["geldig_tot"] == date(2026, 11, 14), x8)
 check("X8 zonder label: datum onbekend, geen geldigheid berekend", F.lees(pdf("Project 01-01-2026", "Totaal excl. btw 5.000,00",
       "Geldig 30 dagen"))["geldig_tot"] is None)
+
+
+print("\nRegressie na controle 6 van Codex (X1 tot X8)")
+check("X1 alleen de officiele gemeente van Geopunt gaat naar buiten", Q.officiele_gemeente(
+    {"postcode": "3000", "gemeente": "Leuven"}) == "3000 Leuven" and Q.officiele_gemeente(None) is None
+    and Q.officiele_gemeente({"postcode": "", "gemeente": "Jan Peeters"}) is None)
+nieuws = Z.keur([{"naam": "Dak Nieuws", "url": "https://krant.voorbeeld.com/artikel", "postcode": "3020", "gemeente": "Herent",
+                  "ondernemingsnummer": "0537.405.239"}], {"https://krant.voorbeeld.com/artikel": "Nieuws over het weer." + VUL,
+                 K: GELEZEN[K]}, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X2 een pagina zonder het ondernemingsnummer bewijst de site niet: na te kijken", not nieuws["goed"] and nieuws["na_te_kijken"]
+      and nieuws["na_te_kijken"][0]["site_bewezen"] is False)
+with_nr = Z.nummer_op_site("0537.405.239", "https://dak-een.voorbeeld.com", {"https://dak-een.voorbeeld.com/contact": "BTW BE0537 405 239"})
+check("X2 het nummer op een andere pagina van dezelfde site telt", with_nr)
+import inspect  # noqa: E402
+bron = inspect.getsource(RG.dossier)
+check("X3 het dossier van een bouwagent laadt geen verslagen", "aan in BOUW_AGENTS" in bron)
+check("X4 'medecontractant is niet van toepassing' is geen btw verlegd", not F.verlegd("Medecontractant is niet van toepassing."))
+check("X4 'deze offerte vervangt de eerdere raming' is geen raming", not F.is_raming("Offerte 12\nDeze offerte vervangt de eerdere raming."))
+check("X4 een raming in de kop blijft een raming", F.is_raming("Kostenraming dakwerken\nTotaal 8.000,00"))
+x4 = F.lees(pdf("Totaal incl. btw 12.100,00", "btw 21%", "Medecontractant: btw verlegd"))
+check("X4 btw verlegd en toch een tarief: niet berekend, wel gemeld", x4["excl"] is None and any("verlegd en toch" in r for r in x4["redenen"]), x4)
+for schrijf, andere in (("H.B. BV", S.HA), ("H A Architects", S.HB), ("Gerzenstr. 5", S.HA), ("5 Gerzenstraat", S.HA)):
+    check(f"X5 '{schrijf}' wordt herkend", not S.mag_weg(f"Zie {schrijf}.", andere))
+S.laad_kern(kern_nep)
+check("X5 het adres uit kern met afkorting en nummer ervoor", not S.mag_weg("Levering 7 Voorbeeldlaan", S.HB)
+      and not S.mag_weg("Voorbeeldln. 7", S.HB))
+check("X6 een naam voor een adres wordt weggehaald", "Jan Peeters" not in F.redigeer("Jan Peeters, Voorbeeldlaan 7"))
+check("X7 'eigen aannemer', 'vaste aannemer' en 'partner van de fabrikant' zijn gewone taal",
+      S.mag_weg("Geplaatst door de eigen aannemer of een vaste aannemer, partner van de fabrikant.", S.HB))
+check("X7 'onze vaste aannemer' blijft verboden", not S.mag_weg("Dit doet onze vaste aannemer.", S.HA))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
