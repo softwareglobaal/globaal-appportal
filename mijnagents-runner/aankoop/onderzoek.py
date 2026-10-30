@@ -17,9 +17,13 @@ ZOEK_TOOL = os.environ.get("PRIJS_ZOEK_TOOL", "web_search_20250305")
 LEES_TOOL = os.environ.get("PRIJS_LEES_TOOL", "web_fetch_20250910")
 # Plafond per vraag, over alle beurten samen (Codex X7): zoekopdrachten, gelezen pagina's, tokens (vraag K4 aan
 # Mehdi, 30-10-2026) en hervattingen van een gepauzeerde beurt. De tijd komt als deadline van de ronde (Codex X6).
-MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "12"))
-MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "15"))
-MAX_TOKENS = int(os.environ.get("PRIJS_MAX_TOKENS", "150000"))
+# Gemeten 30-10-2026: de eerste echte vraag gebruikte 4,27 miljoen tokens met 12/15 en zonder paginagrens. Winkelpagina's
+# zijn groot en binnen een beurt leest het model bij elke zoekstap alles opnieuw. Daarom een grens per gelezen pagina
+# en minder zoek- en leesbeurten; het tokenplafond geldt tussen de beurten.
+MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
+MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
+MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "6000"))
+MAX_TOKENS = int(os.environ.get("PRIJS_MAX_TOKENS", "300000"))
 MAX_HERVATTEN = 6
 RESERVE_MODEL = "claude-opus-5"     # het model dat De Ontwikkelaar op de VM gebruikt (overleg K5)
 
@@ -167,7 +171,7 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
         from anthropic import Anthropic
         client = Anthropic(max_retries=1)
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
-    assistent, teksten, tokens, stop, model = [], [], 0, None, MODEL
+    assistent, teksten, tokens, stop, model, beurten = [], [], 0, None, MODEL, []
     afronden = False
     for _ in range(MAX_HERVATTEN + 1):
         rest_zoeken = MAX_ZOEKEN - _gebruikt(assistent, "web_search")
@@ -181,7 +185,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
                 stop = "plafond"
                 break
         tools = [{"type": ZOEK_TOOL, "name": "web_search", "max_uses": max(1, rest_zoeken)},
-                 {"type": LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen)}]
+                 {"type": LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen),
+                  "max_content_tokens": MAX_PAGINA_TOKENS}]
         # Een gepauzeerde beurt gaat verder met de hele beurt tot nu toe, niet alleen het laatste stuk (Codex X8).
         berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
         # Afronden hervat de open beurt zoals Anthropic het vraagt, zonder extra bericht, maar zonder gereedschap
@@ -196,7 +201,9 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
             model = RESERVE_MODEL
             continue
         gebruik = _veld(resp, "usage")
-        tokens += (_veld(gebruik, "input_tokens", 0) or 0) + (_veld(gebruik, "output_tokens", 0) or 0)
+        beurt = (_veld(gebruik, "input_tokens", 0) or 0) + (_veld(gebruik, "output_tokens", 0) or 0)
+        tokens += beurt
+        beurten.append(beurt)
         blokken = list(_veld(resp, "content", []) or [])
         teksten = [_veld(b, "text", "") for b in blokken if _veld(b, "type") == "text"] or teksten
         stop = _veld(resp, "stop_reason")
@@ -209,4 +216,4 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
     tekst = "".join(teksten).strip()
     return {"gegevens": json_uit(tekst),
             "gelezen": gelezen_paginas(assistent), "tekst": tekst, "tokens": tokens,
-            "zoekopdrachten": _gebruikt(assistent, "web_search"), "stop": stop, "model": model}
+            "zoekopdrachten": _gebruikt(assistent, "web_search"), "stop": stop, "model": model, "beurten": beurten}

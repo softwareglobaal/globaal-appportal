@@ -86,7 +86,8 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     vaste_eisen = A.eisen_uit_vraag(vraag)
     uit = O.onderzoek(vraag, r.werkwijze, vandaag.isoformat(), vaste_eisen, deadline)
     ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} pagina's "
-                                 f"gelezen, {uit['tokens']} tokens, model {uit['model']}, einde {uit['stop']}")
+                                 f"gelezen, {uit['tokens']} tokens (per beurt {uit.get('beurten')}), model {uit['model']}, "
+                                 f"einde {uit['stop']}")
     if uit["stop"] == "plafond":
         r.nood("Prijsvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
     g = uit["gegevens"]
