@@ -1,0 +1,53 @@
+{% extends "basis.html" %}
+{% block titel %}{{ d['kort'] }} · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>{{ d['naam'] }}</h1>
+  <a href="{{ url_for('overzicht') }}">alle dagen</a>
+  <a href="{{ url_for('dag_pagina', dag=vorige) }}">← vorige dag</a>
+  {% if volgende %}<a href="{{ url_for('dag_pagina', dag=volgende) }}">volgende dag →</a>{% endif %}
+</header>
+<main>
+  {% if not d['er'] %}
+    <div class="kaart"><span class="leeg">Nog niet vastgesteld. De Dagbundelaar legt elke dag 's nachts vast.</span></div>
+  {% else %}
+  {% if d['tegels'] %}<div class="kaart">{% with tegels=d['tegels'] %}{% include "tegels.html" %}{% endwith %}</div>{% endif %}
+
+  <div class="kaart">
+    <h2>Gepland</h2>
+    <table class="lijst gepland">
+    {% for a in d['gepland'] %}
+      <tr><td class="tijd">{{ a['tijd'] }}</td>
+        <td><span class="stip {{ a['kleur'] }}"></span></td>
+        <td><b>{{ a['titel'] }}</b>{% if a['label'] %} <span class="zacht">{{ a['label'] }}</span>{% endif %}
+          {% if a['grond'] %}<div class="zacht klein">{{ a['grond'] }}</div>{% endif %}</td></tr>
+    {% else %}<tr><td class="leeg">Geen afspraken.</td></tr>{% endfor %}
+    </table>
+  </div>
+
+  <div class="kaart">
+    <h2>Niet gepland</h2>
+    <table class="lijst">
+    {% for g in d['niet_gepland'] %}
+      <tr><td class="tijd">{{ g['tijd'] }}</td>
+        <td><b>{{ g['wat'] }}</b> {% if g['kanaal'] %}<span class="zacht">{{ g['kanaal'] }}{% if g['min'] is not none %}, {{ g['min'] }} min{% endif %}</span>{% endif %}</td></tr>
+    {% else %}<tr><td class="leeg">Niets gevonden.</td></tr>{% endfor %}
+    </table>
+  </div>
+
+  <div class="kaart">
+    <h2>Communicatie</h2>
+    {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
+  </div>
+
+  {% if d['versie'] %}<p class="zacht klein">Dagbestand {{ d['versie'] }}.</p>{% endif %}
+  {% endif %}
+</main>
+<style>
+  table.lijst{border-collapse:collapse;width:100%}
+  table.lijst td{padding:7px 6px;border-top:1px solid var(--rand);vertical-align:top}
+  table.lijst tr:first-child td{border-top:0}
+  td.tijd{width:58px;color:var(--zacht);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.gepland td:nth-child(2){width:18px;padding-top:12px}
+</style>
+{% endblock %}

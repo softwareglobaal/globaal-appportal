@@ -1,0 +1,46 @@
+{
+ "afspraken": {
+  "aanwijzing": 2,
+  "bevestigd": 0,
+  "geen spoor": 1,
+  "privé": 1,
+  "totaal": 4
+ },
+ "dag": "2026-10-22",
+ "dagversie": 2,
+ "gesprekken": {
+  "aantal": 2,
+  "alleen_zoom": 2,
+  "met_opname": 0,
+  "minuten": 41
+ },
+ "mail": {
+  "binnen": 0,
+  "onvolledig": false,
+  "verzonden": 0
+ },
+ "niet_gepland": {
+  "bezoeken": 1,
+  "gesprekken": 4,
+  "minuten": 48
+ },
+ "standen": {
+  "agenda": "volledig",
+  "locatie": "onbekend",
+  "zoom": "volledig"
+ },
+ "telefoon": {
+  "minuten": 7,
+  "oproepen": 2,
+  "stand": "aangesloten"
+ },
+ "vastgesteld": true,
+ "whatsapp": {
+  "berichten": 0,
+  "gesprekken": 0,
+  "minuten": 0,
+  "oproepen": 0,
+  "stand": "aangesloten"
+ },
+ "zoom_chats": 0
+}

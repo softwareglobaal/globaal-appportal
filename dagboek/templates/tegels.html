@@ -1,0 +1,10 @@
+<div class="tegels">
+  {% for t in tegels %}
+  <div class="tegel{% if t.get('uit') %} uit{% endif %}">
+    <div class="naam">{{ t['naam'] }}</div>
+    <div class="groot">{{ t['groot'] }}</div>
+    {% if t.get('stippen') %}<div class="stippen">{% for kleur, n in t['stippen'] %}{% for _ in range(n) %}<span class="stip {{ kleur }}"></span>{% endfor %}{% endfor %}</div>{% endif %}
+    <div class="klein">{{ t['klein'] }}</div>
+  </div>
+  {% endfor %}
+</div>
