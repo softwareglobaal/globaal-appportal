@@ -53,12 +53,15 @@ laad_env("~/agents/.env")
 
 
 def laad_kern(r):
-    """Het ondernemingsnummer en adres van beide firma's uit kern, voor de scheiding (Codex X1, controle 3)."""
+    """Het ondernemingsnummer en adres van beide firma's uit kern, voor de scheiding (Codex X1, controle 3). Zonder kern
+    werk ik niet: dan kan de toets het adres en het nummer van de andere firma niet herkennen (Codex X1, controle 4)."""
     try:
-        if not S.laad_kern():
-            r.nood("Firmagegevens niet in kern: de scheiding werkt alleen met de vaste lijst", wie="claude-code")
-    except Exception:  # noqa: BLE001  zonder kern blijft de vaste lijst gelden
-        r.nood("Kern niet gelezen: de scheiding werkt alleen met de vaste lijst", wie="claude-code")
+        if S.laad_kern():
+            return True
+        r.nood("Firmagegevens niet in kern: geen bouwwerk tot ze er staan", wie="claude-code")
+    except Exception:  # noqa: BLE001
+        r.nood("Kern niet gelezen: geen bouwwerk tot kern leesbaar is", wie="claude-code")
+    return False
 
 
 def open_vragen():
@@ -166,7 +169,9 @@ def werk(r, hand_vraag=None, droog=False):
         return
     vandaag = date.today()
     deadline = time.monotonic() + RONDE_SECONDEN
-    laad_kern(r)
+    if not laad_kern(r):
+        r.detail = "niet gewerkt: de firmagegevens uit kern ontbreken; de vragen blijven klaarstaan"
+        return
     gedaan = offertes = 0
     for v in vragen[:MAX_VRAGEN]:
         if time.monotonic() > deadline:

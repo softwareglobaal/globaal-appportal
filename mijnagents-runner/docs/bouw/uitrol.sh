@@ -12,7 +12,13 @@ cd ~/appportal
 if [ -n "$(git status --porcelain -- mijnagents-runner)" ]; then
   echo "STOP: mijnagents-runner heeft wijzigingen die niet in git staan"; git status --short -- mijnagents-runner; exit 1
 fi
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "STOP: ~/appportal staat niet op main maar op $(git rev-parse --abbrev-ref HEAD)"; exit 1
+fi
 git pull --ff-only origin main
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+  echo "STOP: ~/appportal is na de pull niet gelijk aan origin/main"; exit 1
+fi
 git log --oneline -1
 cd mijnagents-runner
 PY=~/agents/.venv/bin/python

@@ -65,13 +65,12 @@ def modelwerkwijze(werkwijze):
 def kennis_voor_model(collegas_tekst, lessen):
     """De gedeelde lessen (N13) en de collega's (N14) zoals ze naar het model gaan (Codex X13, controle 2): zonder elke
     regel die een van de twee firma's noemt."""
-    from aankoop import privacy as P
-    from .vraag import NAAM_NA
+    from .vraag import persoonsgegevens
     regels = ["GEDEELDE LESSEN:"] + [f"- {l.get('les', '')}" for l in lessen or [] if isinstance(l, dict) and l.get("les")]
     regels += ["", str(collegas_tekst or "")]
     # Codex X4 (controle 3): ook geen regel met iets dat op een persoon, adres of nummer lijkt
     return "\n".join(r for r in "\n".join(regels).splitlines()
-                     if not S.noemt_een_firma(r) and not P.gevonden(r) and not NAAM_NA.search(r)).strip()
+                     if not S.noemt_een_firma(r) and not persoonsgegevens(r)).strip()
 
 
 def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", kennis=""):
@@ -156,12 +155,18 @@ def vestiging_bewezen(f, gelezen):
     """Staat de postcode (of anders de gemeente) van de firma op een gelezen pagina van haar eigen website? Anders is
     de afstand niet bewezen en komt ze bij na te kijken."""
     eigen = host(O.schoon_url(f.get("url")))
-    teksten = " ".join(t or "" for u, t in (gelezen or {}).items() if host(u) == eigen and eigen)
+    teksten = " ".join(" ".join((t or "").split()) for u, t in (gelezen or {}).items() if host(u) == eigen and eigen).lower()
     postcode = re.sub(r"\D", "", str(f.get("postcode") or ""))
-    if len(postcode) == 4:
-        return re.search(rf"(?<!\d){postcode}(?!\d)", teksten) is not None
-    gemeente = str(f.get("gemeente") or "").strip()
-    return bool(gemeente) and gemeente.lower() in teksten.lower()
+    adres = " ".join(str(f.get("adres") or "").split()).lower()
+    # Codex X3 (controle 4): een postcode in een lijst van het werkgebied bewijst geen vestiging; het adres van de firma
+    # moet er staan, met de postcode kort erna.
+    if len(postcode) != 4 or len(adres) < 5:
+        return False
+    for m in re.finditer(re.escape(adres), teksten):
+        volgende = re.search(r"(?<!\d)\d{4}(?!\d)", teksten[m.end():m.end() + 25])
+        if volgende and volgende.group(0) == postcode:     # de eerste postcode na het adres, niet een verderop
+            return True
+    return False
 
 
 def sleutel(f):

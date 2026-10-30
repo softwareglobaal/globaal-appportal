@@ -24,9 +24,11 @@ MIN_TEKST_PER_BLZ = 20
 MAX_BLZ = 40
 # Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
 BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
-EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|na\s+korting|netto\s+tota|tota\w*\s+netto|te\s+betalen")
-SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|(?<!na )korting|voorschot", re.I)
-RAMING = re.compile(r"\b(?:raming|kostenraming|schatting|indicatief|indicatieve prijs|budgetprijs|richtprijs)\b", re.I)
+EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|\bna\b.{0,20}korting|netto\s+tota|tota\w*\s+netto|"
+                        r"te\s+betalen")
+SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|korting|voorschot", re.I)
+RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|indicatief|indicatieve|prijsindicatie|indicatie|"
+                    r"budgetprijs|richtprijs|globale\s+prijs|onder\s+voorbehoud\s+van\s+opmeting)\b", re.I)
 VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
 
 
@@ -96,7 +98,8 @@ def lees(tekst_paginas):
     excl, incl = [], []
     for regel in tekst.splitlines():
         laag = regel.lower()
-        if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not SUBTOTAAL.search(laag):
+        sub = SUBTOTAAL.search(laag) and not re.search(r"\bna\b.{0,20}korting", laag)
+        if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not sub:
             b = _laatste_bedrag(regel)
             if b is None or b <= 0:
                 continue
@@ -152,6 +155,9 @@ def redigeer(tekst, extra=()):
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
                "[naam weggelaten]", t)
+    from .vraag import LOS_ADRES, NAAM_NA
+    t = NAAM_NA.sub("[naam weggelaten]", t)       # Codex X6 (controle 4): ook binnen een zin
+    t = LOS_ADRES.sub("[adres weggelaten]", t)
     # Codex X6 (controle 3): een regel die alleen een naam is (twee tot vier woorden met een hoofdletter)
     t = re.sub(r"(?m)^\s*[A-ZÀ-Ý][a-zà-ÿ'-]+(?:\s+(?:(?:van|de|der|den|le|la|du)\s+)*[A-ZÀ-Ý][a-zà-ÿ'-]+){1,3}\s*$",
                "[naam weggelaten]", t)

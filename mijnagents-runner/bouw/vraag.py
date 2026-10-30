@@ -75,15 +75,36 @@ GEMEENTE = re.compile(r"^\s*[1-9]\d{3}\s+[A-Za-zÀ-ÿ'’.\- ]{2,40}\s*$")
 NAAM_NA = re.compile(r"\b(?i:bij|voor|van|familie|fam\.?|woning|huis|klant|bouwheer)\s+(?:(?i:de|van|der|den)\s+)*"
                      r"[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+")
 MAX_VELD = 160
+# Een straat als los woord met een huisnummer (Grote Markt 12, Rue Neuve 3), naast de patronen van De Prijsonderzoeker
+LOS_ADRES = re.compile(r"\b(?:grote\s+|kleine\s+|oude\s+)?(?:markt|plein|steenweg|lei|dreef|kaai|vest|square|avenue|rue|"
+                       r"chaussée|place|boulevard|weg|laan|straat)\s+\d{1,4}[a-z]?\b", re.I)
+HOOFDLETTERNAAM = re.compile(r"\b[A-ZÀ-Ý]{3,}(?:\s+(?:VAN|DE|DER|DEN)\b)*\s+[A-ZÀ-Ý]{3,}\b")
+
+
+def persoonsgegevens(tekst):
+    """De soorten persoonsgegevens in een tekst, ook in hoofdletters (Codex X4, controle 4): de patronen van De
+    Prijsonderzoeker op de tekst en op de tekst met hoofdletters per woord, een naam na bij of voor, een straat als los
+    woord met een nummer, en twee woorden helemaal in hoofdletters (een naam als JAN PEETERS)."""
+    t = str(tekst or "")
+    titel = " ".join(w[:1].upper() + w[1:].lower() if w.isupper() and len(w) > 1 else w for w in t.split())
+    uit = list(P.gevonden(t)) + [s for s in P.gevonden(titel) if s not in P.gevonden(t)]
+    if NAAM_NA.search(t) or NAAM_NA.search(titel):
+        uit.append("naam")
+    if LOS_ADRES.search(t):
+        uit.append("adres")
+    if HOOFDLETTERNAAM.search(t):
+        uit.append("naam in hoofdletters")
+    return list(dict.fromkeys(uit))
 
 
 def naar_buiten_fouten(v):
     """Waarom de velden die naar buiten gaan (werk, omvang, gemeente) niet mogen vertrekken (Codex X5, controle 2):
     persoonsgegevens volgens het patroon van De Prijsonderzoeker, een naam na 'bij', 'voor', 'familie' en dergelijke,
     een gemeente die meer is dan postcode en naam (een straat of huisnummer), of een veld dat te lang is."""
-    fouten = list(P.gevonden(" ; ".join(str(v.get(k) or "") for k in ("werk", "omvang", "gemeente"))))
-    if any(NAAM_NA.search(str(v.get(k) or "")) for k in ("werk", "omvang")):
-        fouten.append("naam")
+    fouten = []
+    for k in ("werk", "omvang"):
+        fouten += persoonsgegevens(v.get(k))
+    fouten += [s for s in P.gevonden(str(v.get("gemeente") or "")) if s != "naam"]
     if v.get("gemeente") and not GEMEENTE.match(v["gemeente"]):
         fouten.append("gemeente zonder postcode, of met een adres (alleen postcode en gemeente)")
     if any(len(str(v.get(k) or "")) > MAX_VELD for k in ("werk", "omvang", "gemeente")):

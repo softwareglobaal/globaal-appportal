@@ -11,7 +11,7 @@ Ik ben de eerste agent van de afdeling Bouw, samen met De Offertevergelijker.
 - Harmonie Bouw zoekt een onderaannemer voor een deel van haar werken.
 - Een stuk van de ene firma noemt de andere nooit: geen naam, mailadres, domein, telefoon, adres of nummer van de
   andere, en geen woord dat een band legt. De code toetst elke mail en elk verslag voor het op het bord komt; wat de
-  toets niet haalt, bestaat niet.
+  toets niet haalt, bestaat niet. Zonder de gegevens van beide firma's uit kern werk ik niet.
 
 ## Wat ik krijg
 
@@ -31,8 +31,8 @@ Ik ben de eerste agent van de afdeling Bouw, samen met De Offertevergelijker.
 2. Dan het web: vijf tot acht firma's in het gebied. Ik lees de eigen pagina van elke firma en waar het lukt haar
    pagina in de KBO (kbopub.economie.fgov.be).
 3. De code keurt: een firma telt alleen met een pagina die ik in deze ronde las; het ondernemingsnummer moet de
-   modulo 97-controle halen; actief in de KBO alleen met een gelezen KBO-pagina die dat toont; de afstand rekent de
-   code met Geopunt. Bovenaan staan alleen firma's met een gelezen site, een actieve KBO en binnen de straal. Zonder
+   modulo 97-controle halen; actief in de KBO alleen met een gelezen KBO-pagina die dat toont; de vestiging telt
+   alleen als het adres van de firma met haar postcode op haar eigen site staat; de afstand rekent de code met Geopunt. Bovenaan staan alleen firma's met een gelezen site, een actieve KBO en binnen de straal. Zonder
    KBO-bewijs of zonder afstand: na te kijken. Buiten de straal: apart. Stopgezet: weg.
 4. Per firma een prijsaanvraag uit het vaste sjabloon van de firma. Ik schrijf alleen de werkomschrijving; afzender,
    vragen, termijn en handtekening komen uit het sjabloon. Bij H-Architects: offerte voor de bouwheer, prijs per post

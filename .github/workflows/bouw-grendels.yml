@@ -6,11 +6,13 @@ on:
   push:
     paths: ["mijnagents-runner/bouw/**", "mijnagents-runner/aannemerszoeker.py", "mijnagents-runner/offertevergelijker.py",
             "mijnagents-runner/werkwijze/aannemerszoeker.md", "mijnagents-runner/werkwijze/offertevergelijker.md",
-            "mijnagents-runner/aankoop/**", "mijnagents-runner/tests/test_bouw.py", ".github/workflows/bouw-grendels.yml"]
+            "mijnagents-runner/aankoop/**", "mijnagents-runner/regisseur.py", "mijnagents-runner/tests/test_bouw.py",
+            ".github/workflows/bouw-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/bouw/**", "mijnagents-runner/aannemerszoeker.py", "mijnagents-runner/offertevergelijker.py",
             "mijnagents-runner/werkwijze/aannemerszoeker.md", "mijnagents-runner/werkwijze/offertevergelijker.md",
-            "mijnagents-runner/aankoop/**", "mijnagents-runner/tests/test_bouw.py", ".github/workflows/bouw-grendels.yml"]
+            "mijnagents-runner/aankoop/**", "mijnagents-runner/regisseur.py", "mijnagents-runner/tests/test_bouw.py",
+            ".github/workflows/bouw-grendels.yml"]
 
 jobs:
   grendels:
@@ -20,5 +22,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pypdf
+      - run: pip install -r mijnagents/requirements.txt pypdf
       - run: python3 mijnagents-runner/tests/test_bouw.py

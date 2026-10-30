@@ -114,19 +114,24 @@ VUL = " Dakwerken, platte daken, EPDM, renovatie, zinkwerk, onderhoud en herstel
 GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV, Dorpstraat 1, 3020 Herent" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239":
                "Ondernemingsnummer 0537.405.239 Status: Actief" + VUL,
-           "https://dak-twee.voorbeeld.com": "Dak Twee, 3000 Leuven" + VUL, "https://dak-ver.voorbeeld.com": "Dak Ver, 8000 Brugge" + VUL,
+           "https://dak-twee.voorbeeld.com": "Dak Twee, Kerkstraat 2, 3000 Leuven" + VUL,
+           "https://dak-ver.voorbeeld.com": "Dak Ver, Zeedijk 3, 8000 Brugge" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0403170701":
                "Ondernemingsnummer 0403.170.701 Status: Stopgezet" + VUL,
-           "https://dak-weg.voorbeeld.com": "Dak Weg, 3000 Leuven" + VUL}
+           "https://dak-weg.voorbeeld.com": "Dak Weg, Molenstraat 4, 3000 Leuven" + VUL}
 PUNTEN = {"3000 Leuven": {"lat": 50.879, "lon": 4.700}, "3020 Herent": {"lat": 50.905, "lon": 4.672},
           "8000 Brugge": {"lat": 51.209, "lon": 3.224}}
 firmas = [
-    {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "postcode": "3020", "gemeente": "Herent", "ondernemingsnummer": "0537.405.239"},
-    {"naam": "Dak Twee", "url": "https://dak-twee.voorbeeld.com/", "postcode": "3000", "gemeente": "Leuven", "ondernemingsnummer": None},
-    {"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "postcode": "8000", "gemeente": "Brugge"},
+    {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "adres": "Dorpstraat 1", "postcode": "3020", "gemeente": "Herent",
+     "ondernemingsnummer": "0537.405.239"},
+    {"naam": "Dak Twee", "url": "https://dak-twee.voorbeeld.com/", "adres": "Kerkstraat 2", "postcode": "3000", "gemeente": "Leuven",
+     "ondernemingsnummer": None},
+    {"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "adres": "Zeedijk 3", "postcode": "8000", "gemeente": "Brugge"},
     {"naam": "Dak Spook", "url": "https://dak-spook.voorbeeld.com", "postcode": "3000", "gemeente": "Leuven"},
-    {"naam": "Dak Weg", "url": "https://dak-weg.voorbeeld.com", "postcode": "3000", "gemeente": "Leuven", "ondernemingsnummer": "0403.170.701"},
-    {"naam": "Dak Een dubbel", "url": "https://www.dak-een.voorbeeld.com/contact", "postcode": "3020", "gemeente": "Herent", "ondernemingsnummer": "0537405239"},
+    {"naam": "Dak Weg", "url": "https://dak-weg.voorbeeld.com", "adres": "Molenstraat 4", "postcode": "3000", "gemeente": "Leuven",
+     "ondernemingsnummer": "0403.170.701"},
+    {"naam": "Dak Een dubbel", "url": "https://www.dak-een.voorbeeld.com/contact", "adres": "Dorpstraat 1", "postcode": "3020",
+     "gemeente": "Herent", "ondernemingsnummer": "0537405239"},
 ]
 res = Z.keur(firmas, GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
 check("bovenaan alleen met gelezen site, actieve KBO en binnen de straal", [f["naam"] for f in res["goed"]] == ["Dak Een"])
@@ -370,6 +375,39 @@ onv = E.Onvolledig(); onv.volledig = False
 check("X8 het verslag zegt dat de eigen mappen niet volledig gelezen zijn", "niet alle treffers" in V.zoekverslag(
     v, {}, res, onv, mails, {}, True, [], "2026-10-30"))
 check("X9 'onze groep D' is bouwtaal", S.mag_weg("Onze groep D zorgt voor de ventilatie.", S.HB))
+
+
+print("\nRegressie na controle 4 van Codex (X1 tot X10)")
+check("X1 zonder beide firma's in kern: geen werk", S.laad_kern(lambda sql: [{"code": "HARC", "kbo": "", "straat": "", "nr": ""}]) is False)
+check("X1 een onleesbare kern: geen werk", S.laad_kern(lambda sql: []) is False)
+check("X2 'Harm BV' wordt als de andere firma herkend", S.is_andere_firma("Harm BV", S.HA) and S.is_andere_firma("harc nv", S.HB))
+lijst = Z.keur([{"naam": "Dak Lijst", "url": "https://lijst.voorbeeld.com", "adres": "Zeedijk 3", "postcode": "3000", "gemeente": "Leuven",
+                 "ondernemingsnummer": "0537.405.239"}],
+               {"https://lijst.voorbeeld.com": "Dak Lijst, Zeedijk 3, 8000 Brugge. Werkgebied: Leuven 3000, Herent 3020." + VUL, K:
+                "0537.405.239 Status: Actief" + VUL}, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X3 een postcode in de lijst van het werkgebied is geen vestiging", not lijst["goed"] and lijst["na_te_kijken"])
+for tekst in ("dakwerken bij JAN PEETERS", "plat dak, werf GROTE MARKT 12", "ramen voor Jan Peeters"):
+    check(f"X4 '{tekst}' gaat niet naar buiten", Q.naar_buiten_fouten({"werk": tekst, "gemeente": "3000 Leuven"}) != [])
+check("X4 gewone vakwoorden in hoofdletters blijven toegelaten", Q.naar_buiten_fouten(
+    {"werk": "plat dak EPDM met PIR-isolatie", "gemeente": "3000 Leuven"}) == [])
+check("X4 een les met een naam in hoofdletters gaat niet naar het model", "PEETERS" not in Z.kennis_voor_model(
+    "", [{"les": "Bel JAN PEETERS terug."}, {"les": "Meet eerst."}]))
+import regisseur as RG  # noqa: E402
+check("X5 een antwoord over HB met de naam van H-A wordt tegengehouden", RG.bouw_grendel(
+    "Drie dakwerkers gevonden, zie ook H-Architects.", {S.HB}) == RG.BOUW_GEWEIGERD)
+check("X5 een antwoord over twee firma's gaat niet samen", RG.bouw_grendel("x", {S.HA, S.HB}) == RG.BOUW_TWEE)
+check("X5 een gewoon antwoord over HB blijft", RG.bouw_grendel("Drie dakwerkers gevonden.", {S.HB}) == "Drie dakwerkers gevonden.")
+check("X5 de firma uit de vraag en uit de sleutel", RG.bouw_firmas("agent_ronde", {"naam": "aannemerszoeker", "vraag": "firma: HB; werk: x"}, {})
+      == {S.HB} and RG.bouw_firmas("klaargezet", {"naam": "offertevergelijker"}, {"items": [{"sleutel": "HA:abc"}]}) == {S.HA})
+r6 = F.redigeer("Offerte voor Jan Voorbeeld, werf Grote Markt 12, plaatsen van ramen.")
+check("X6 inline naam en adres weg", "Jan Voorbeeld" not in r6 and "Markt 12" not in r6 and "plaatsen van ramen" in r6, r6)
+x7c = F.lees(pdf("Totaal excl. btw 12.000,00", "Totaal excl. btw na 10% korting 11.000,00", "btw 6%"))
+check("X7 'na 10% korting' is het eindtotaal", x7c["excl"] == 11000.0, x7c)
+check("X7 een prijsindicatie is een raming", F.lees(pdf("Prijsindicatie dakwerken", "Totaal excl. btw 8.000,00"))["raming"])
+check("X8 'onze groep warmtepompen' is bouwtaal", S.mag_weg("Onze groep warmtepompen wordt vervangen.", S.HB))
+uitrol = open(Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read()
+check("X9 de uitrol stopt buiten main of als de VM niet gelijk is aan origin/main",
+      "rev-parse --abbrev-ref HEAD" in uitrol and "rev-parse origin/main" in uitrol)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -15,9 +15,9 @@ FIRMANAMEN = {HA: "H-Architects", HB: "Harmonie Bouw"}
 
 # Wat een stuk aan een firma koppelt. Hoofdletters tellen niet; streepjes en spaties worden gelijkgetrokken.
 KENMERKEN = {
-    HA: [r"(?-i:\bHA\b)", r"(?-i:\bHARC\b)", r"\bh[\W_]{0,3}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
+    HA: [r"(?-i:\bHA\b)", r"\bharc\b", r"\bh[\W_]{0,3}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
          r"\+?32\s?\(?0?\)?\s?16\s?79\s?23\s?14", r"\+?32\s?\(?0?\)?\s?491\s?94\s?68\s?79"],
-    HB: [r"(?-i:\bHB\b)", r"(?-i:\bHARM\b)", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
+    HB: [r"(?-i:\bHB\b)", r"\bharm\b", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
          r"hoveniersstraat\s?19\b"],
 }
 # Telefoon- en ondernemingsnummers in elke schrijfwijze (016/79.32.96, 0491 94 68 79, BE0537405239): de code vergelijkt
@@ -31,7 +31,8 @@ NUMMERREEKS = re.compile(r"[+\d][\d\s./()\-]{5,}\d")
 PERSOON = [r"chegini"]
 # Woorden die een band leggen (2405: VERBODEN_BAND), aangevuld voor mails. "groep" en "verbonden" alleen in de zin
 # van een band: een ventilatiegroep of een leiding die verbonden wordt met het riool is gewone bouwtaal.
-BANDWOORDEN = (r"(?:dezelfde|zelfde|onze|uw|een|één)\s+groep\b(?!\s+[A-Z0-9]\b)|\btot\s+de\s+groep\b|\bgroep\s+(?:van|waartoe)\b|"
+BANDWOORDEN = (r"(?:dezelfde|zelfde)\s+groep\b|\btot\s+(?:de|onze|dezelfde)\s+groep\b|\bgroep\s+van\s+(?:bedrijven|firma)|"
+               r"\bgroep\s+waartoe\b|"
                r"bedrijvengroep|groepsmaatschappij|groepsbedrijf|met elkaar verbonden|"
                r"verbonden\s+(?:firma|vennootschap|onderneming|bedrijf)|verwant|zuster|holding|aandeelhoud|"
                r"dezelfde eigenaar|zelfde eigenaar|eigen aannemer|belangenconflict|"
@@ -59,6 +60,8 @@ def laad_kern(psql=None):
         import organisatie
         psql = organisatie._psql
     rijen = psql(sql) or []
+    if {r.get("code") for r in rijen} != set(KERN_CODES):
+        return False
     for r in rijen:
         firma = KERN_CODES.get(r.get("code"))
         if not firma:
@@ -70,7 +73,7 @@ def laad_kern(psql=None):
             p = re.escape(r["straat"].strip()) + r"\s*,?\s*" + re.escape(r["nr"].strip()) + r"\b"
             if p not in EXTRA[firma]["patronen"]:
                 EXTRA[firma]["patronen"].append(p)
-    return bool(rijen)
+    return True
 
 
 def _cijfertreffers(t, firma):
