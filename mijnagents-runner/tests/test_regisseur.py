@@ -832,7 +832,8 @@ def test_t45_droge_stand_gemeten_in_de_code():
         assert set(s["agents"]) == {n for n, r in R.RONDE_TOEGELATEN.items() if r["slot"] == slot}, (slot, s)
     vroeger = {"contracten-agent", "agenda-wacht", "fathom-wacht", "plaud-wacht", "dagbundelaar", "locatie-wacht", "ontwikkelaar",
                "levenscoach", "bode", "benamingen-wacht", "mappen-wacht"}
-    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur"}, "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog)"
+    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur", "prijsonderzoeker"}, \
+        "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog) en De Prijsonderzoeker (overleg 30-10-2026)"
 
 
 def test_t45_dag_en_deal_gemeten_in_de_code():
@@ -845,6 +846,27 @@ def test_t45_dag_en_deal_gemeten_in_de_code():
             assert kent == recht[vlag], f"{naam}: {vlag} {recht[vlag]} in de lijst, maar de code {'kent' if kent else 'kent geen'} --{vlag}"
     assert {n for n, r in R.RONDE_TOEGELATEN.items() if r["deal"]} == {"contracten-agent"}
     assert not R.RONDE_TOEGELATEN["zoom-wacht"]["dag"] and not R.RONDE_TOEGELATEN["fathom-wacht"]["dag"]
+    # --vraag (De Prijsonderzoeker, 30-10-2026): alleen naar een runner die het leest; een andere weigert de ronde
+    for naam, recht in R.RONDE_TOEGELATEN.items():
+        kent = bool(re.search(r"""["']--vraag["']""", open(C._runnerpad(naam), encoding="utf-8").read()))
+        if recht.get("vraag"):
+            assert kent, f"{naam}: vraag in de lijst, maar de code kent geen --vraag"
+    assert {n for n, r in R.RONDE_TOEGELATEN.items() if r.get("vraag")} == {"prijsonderzoeker"}
+    assert "kent geen --vraag" in R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["ontwikkelaar"], naam="ontwikkelaar"), {"vraag": "x"})
+    assert R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["prijsonderzoeker"], naam="prijsonderzoeker"), {"vraag": "x"}) is None
+
+
+def test_t45_prijsverslag_tot_in_de_chat():
+    """Overleg 30-10-2026 X2, Codex X5: De Prijsonderzoeker zet zijn verslag als soort prijsverslag klaar; De Bode stuurt
+    het niet door, De Regisseur leest de inhoud en geeft de aanbeveling met de link in de chat."""
+    with Wereld("t45-prijs", datetime(2026, 10, 30, 9, 0, tzinfo=UTC)) as w:
+        w.item("prijsonderzoeker", "mehdi", "prijsverslag", "Prijsonderzoek: vloerwasser voor Suriname (beste 499,00 euro)",
+               "**Aanbevolen:** [X1](https://winkel.voorbeeld.com/x1) bij W, 499,00 euro alles inbegrepen.")
+        items = R.klaargezet_lees("prijsonderzoeker", "van")["items"]
+        assert items and items[0]["inhoud"].startswith("**Aanbevolen:** [X1](https://winkel.voorbeeld.com/x1)"), items
+    bode = open(os.path.join(os.path.dirname(C._runnerpad("bode")), "bode.py"), encoding="utf-8").read()
+    soorten = re.search(r"^SOORTEN = \((.*)\)$", bode, re.M).group(1)
+    assert '"verslag"' in soorten and "prijsverslag" not in soorten, "De Bode stuurt een prijsverslag niet vanzelf door (X2)"
 
 
 # ------------------------------------------------------------------------------------------------- T46 ---
