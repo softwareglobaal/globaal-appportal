@@ -1,0 +1,35 @@
+# Grendel op geheimen in de nginx-configuratie (22-10-2026): de repo is publiek,
+# en het SSO-geheim van de schuldentracker stond van 03-07 tot 22-10-2026
+# letterlijk in 41-schuldentracker.conf.template. Geheimen horen in de .env op
+# de VM en komen via ${NAAM} in de template.
+name: geheimen-grendels
+
+on:
+  push:
+    paths: ["nginx/**", "scripts/geen-geheimen-in-nginx.sh", ".github/workflows/geheimen-grendels.yml"]
+  pull_request:
+    paths: ["nginx/**", "scripts/geen-geheimen-in-nginx.sh", ".github/workflows/geheimen-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Geen letterlijke hex-geheimen onder nginx/
+        run: sh scripts/geen-geheimen-in-nginx.sh nginx
+      # De grendel zelf moet ook bijten: een kopie met een nep-waarde moet falen,
+      # en de nep-waarde mag niet in de uitvoer staan.
+      - name: Zelftest van de grendel
+        run: |
+          proef="$(mktemp -d)"
+          cp -r nginx "$proef/nginx"
+          nep="$(printf 'a%.0s' $(seq 1 64))"
+          printf 'map $host $proef { default ""; "x" "%s"; }\n' "$nep" > "$proef/nginx/templates/99-proef.conf.template"
+          if sh scripts/geen-geheimen-in-nginx.sh "$proef/nginx" > "$proef/uit.txt" 2>&1; then
+            echo "FOUT: de grendel liet een letterlijke hex-reeks door"; exit 1
+          fi
+          if grep -qF "$nep" "$proef/uit.txt"; then
+            echo "FOUT: de grendel toont de waarde in zijn uitvoer"; exit 1
+          fi
+          grep -q '99-proef.conf.template:1' "$proef/uit.txt" || { echo "FOUT: bestand en regel ontbreken in de melding"; exit 1; }
+          echo "OK: de grendel bijt en maskeert"
