@@ -44,6 +44,17 @@ def _regel(a):
     return "- " + "; ".join(d for d in delen if d)
 
 
+def _bewijsregel(a):
+    """Waarop de aanbeveling steunt, letterlijk van de gelezen pagina (Codex ronde 3): Mehdi ziet het bij het klikken
+    meteen terug, ook als de pagina meer varianten of een oude prijs toont."""
+    bewijs = a.get("bewijs") if isinstance(a.get("bewijs"), dict) else {}
+    delen = [f'prijs "{_kort(bewijs["prijs"], 80)}"'] if bewijs.get("prijs") else []
+    for eis, o in (a.get("compatibiliteit") or {}).items():
+        if isinstance(o, dict) and str(o.get("oordeel")).lower() == "ja" and o.get("citaat"):
+            delen.append(f'{eis} "{_kort(o["citaat"], 80)}"')
+    return "Bewijs op de pagina: " + "; ".join(delen) + "." if delen else "Bewijs op de pagina: geen citaat bewaard."
+
+
 def titel(gegevens, resultaat):
     """Korte titel voor het bord. Het verslag gaat als soort 'prijsverslag': De Bode stuurt het niet vanzelf door
     (overleg X2: het antwoord komt via De Regisseur in de chat, De Bode alleen op uitdrukkelijk verzoek)."""
@@ -72,10 +83,13 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
                       f"{euro(beste['totaal_eur'])} alles inbegrepen.")
     else:
         regels.append("**Geen aanbeveling:** geen aanbod dat compatibel is en een volledige totaalprijs heeft.")
+    if beste:
+        regels.append(_bewijsregel(beste))
     reserve = r.get("reserve")
     if reserve:
         regels.append(f"**Reserve:** [{reserve['titel']}]({reserve['url']}) bij {reserve.get('winkel') or 'onbekend'}, "
                       f"{euro(reserve['totaal_eur'])}.")
+        regels.append(_bewijsregel(reserve))
     if g.get("vervolgvraag"):
         regels.append(f"**Vraag aan jou:** {g['vervolgvraag']}")
     # Geen vrije adviestekst van het model: die kon een afgewezen aanbod alsnog aanraden (Codex X2). De aanbeveling

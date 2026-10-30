@@ -4,7 +4,7 @@ Staat er iets in de vraag dat op persoons- of firmagegevens lijkt, dan gaat de v
 soort hij zag en vraagt de vraag opnieuw te stellen zonder. Liever een vraag te veel tegenhouden dan een adres of
 rekeningnummer naar buiten sturen.
 
-"Mr." en "Mrs." staan er niet bij: dat zijn ook productnamen (Mr. Proper, Codex X10).
+"Mr." en "Mrs." met een uitzondering voor productnamen als Mr. Proper en Mr. Muscle (Codex X10, ronde 3).
 
 Een gewone naam zonder aanspreking ("Jan Peeters") herkent een patroon niet zonder ook merknamen te blokkeren
 ("Apple Watch", "Harmonie Bouw"). Daarom ook aan de bron: De Regisseur geeft alleen product, land en firma of privé
@@ -19,6 +19,7 @@ PATRONEN = (
     ("ondernemingsnummer", re.compile(r"\b[01]\d{3}[.\s]\d{3}[.\s]\d{3}\b")),
     ("telefoonnummer", re.compile(r"(?:\+\d{2,3}[\s./-]?|\b0)\d{2,3}(?:[\s./-]?\d{2,3}){2,4}\b")),
     ("naam", re.compile(r"\b(?i:dhr|mevr|meneer|mevrouw|heer|madame|monsieur|herr|frau)\.?\s+[A-Z][a-z]+"
+                        r"|\b(?i:mr|mrs)\.?\s+(?!(?:Proper|Muscle|Clean|Bean|Coffee|Freeze|Frosty|Handyman)\b)[A-Z][a-z]+"
                         r"|\b(?i:klant|bewoner|eigenaar|naam)\s*:?\s+[A-Z][a-z]+\s+[A-Z][a-z]+")),
     ("adres", re.compile(r"\b[A-Z][a-zà-ÿ]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof)\s+\d+[a-z]?\b", re.I)),
 )

@@ -57,8 +57,6 @@ eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder 
 citeer je de tekst waaruit dat blijkt."""
 # Namen gaan nooit naar buiten, ook niet uit de werkwijze (Codex X4, ronde 2).
 NAMEN = re.compile(r"\b(?:Mehdi(?:\s+Chegini)?|Chegini)\b")
-AFRONDEN = ("Stop nu met zoeken en lezen. Geef het JSON-object met wat je tot nu toe op gelezen pagina's zag; wat je "
-            "niet kon nagaan, zet je in niet_gevonden.")
 
 
 def _veld(obj, naam, standaard=None):
@@ -186,10 +184,9 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
                  {"type": LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen)}]
         # Een gepauzeerde beurt gaat verder met de hele beurt tot nu toe, niet alleen het laatste stuk (Codex X8).
         berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
-        extra = {}
-        if afronden:
-            berichten.append({"role": "user", "content": AFRONDEN})
-            extra["tool_choice"] = {"type": "none"}
+        # Afronden hervat de open beurt zoals Anthropic het vraagt, zonder extra bericht, maar zonder gereedschap
+        # (Codex X13, ronde 3); de systeemtekst vraagt het JSON-object als het zoekwerk voorbij is.
+        extra = {"tool_choice": {"type": "none"}} if afronden else {}
         try:
             resp = client.messages.create(model=model, max_tokens=16000, system=systeem, messages=berichten, tools=tools,
                                           output_config={"effort": "medium"}, timeout=max(15.0, rest_tijd), **extra)
@@ -203,10 +200,10 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, clien
         blokken = list(_veld(resp, "content", []) or [])
         teksten = [_veld(b, "text", "") for b in blokken if _veld(b, "type") == "text"] or teksten
         stop = _veld(resp, "stop_reason")
+        assistent += blokken          # ook de afrondbeurt: wat erin gelezen werd, blijft gelezen (Codex X13)
         if afronden:
             stop = "plafond"
             break
-        assistent += blokken
         if stop != "pause_turn":
             break
     tekst = "".join(teksten).strip()

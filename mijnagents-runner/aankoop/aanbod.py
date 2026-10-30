@@ -34,6 +34,14 @@ KOSTWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|deliver
                          r"opgeld|premium|aufgeld|frais|kosten|\bfee\b|toeslag|borg|deposit|statiegeld", re.I)
 VERZENDWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison", re.I)
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
+# "Gratis verzending" voor de prijs is geen kost en mag een juiste prijs niet weigeren (Codex X1, ronde 3).
+GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:verzending|levering|shipping|delivery|versand|"
+                               r"lieferung|livraison)|(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)"
+                               r"\s*(?::|is|ist|est)?\s*(?:gratis|free|kostenlos|gratuite?)", re.I)
+SCHEIDING = re.compile(r"~~|[.;|!?]\s|\b(?:nu|now|jetzt|maintenant|ahora)\b", re.I)
+# Een oude of doorgestreepte prijs is niet de prijs van vandaag (Codex X1, ronde 3).
+OUDE_PRIJS = re.compile(r"~~|adviesprijs|oude prijs|\bvan\s*:|\bwas\s*:|\bwas\b\s*[\u20ac$\u00a3]|uvp|\bstatt\b|vorher|"
+                        r"au lieu de|prix barr|\brrp\b|list price|vergelijkingsprijs|normale prijs|doorgestreept", re.I)
 
 # Landen op 60 Hz waar Mehdi toestellen naartoe brengt; de vraag noemt het land, de code maakt er een eis van.
 ZESTIG_HZ = {"suriname": "Suriname", "verenigde staten": "VS", "amerika": "VS", "usa": "VS", "canada": "Canada"}
@@ -96,13 +104,20 @@ def citaat_op_pagina(citaat, tekst):
 
 
 def zonder_kostwoord(citaat, tekst, ervoor=40):
-    """Staat het citaat minstens een keer op de pagina zonder een kostwoord (verzending, opgeld, kosten) vlak ervoor
-    of erin? Zo bewijst "499 euro" uit "Verzendkosten: 499 euro" nooit de productprijs (Codex X1, ronde 2)."""
+    """Staat het citaat minstens een keer op de pagina zonder een kostwoord (verzending, opgeld, kosten) of een teken
+    van een oude prijs (doorgestreept, adviesprijs, "van") vlak ervoor of erin? Zo bewijst "499 euro" uit
+    "Verzendkosten: 499 euro" nooit de productprijs (Codex X1, ronde 2), en "1.399" uit "~~1.399~~" ook niet (ronde 3).
+    "Gratis verzending" telt niet als kost (ronde 3)."""
     citaat, tekst = _schoon(str(citaat or "")), _schoon(tekst)
     i = tekst.find(citaat)
     while i >= 0 and citaat:
-        if not KOSTWOORDEN.search(tekst[max(0, i - ervoor):i + len(citaat)]):
-            return True
+        # Binnen een doorgestreept stuk (~~ ... ~~) is het nooit de prijs van vandaag. Wat ervoor staat, telt alleen
+        # tot het laatste scheidingsteken ("Adviesprijs 1.399. Nu 1.099": "Nu 1.099" is de prijs).
+        if tekst[:i].count("~~") % 2 == 0:
+            ervoor_tekst = SCHEIDING.split(tekst[max(0, i - ervoor):i])[-1]
+            stuk = GRATIS_VERZENDING.sub(" ", ervoor_tekst + citaat)
+            if not KOSTWOORDEN.search(stuk) and not OUDE_PRIJS.search(stuk):
+                return True
         i = tekst.find(citaat, i + 1)
     return False
 
@@ -224,7 +239,9 @@ def totaal(aanbod, koersen, alle_tekst=None):
         if veld == "verzending":
             if waarde:
                 return bool(VERZENDWOORDEN.search(citaat)) and bedrag_op_pagina(waarde, citaat)
-            return bool(GRATIS.search(citaat) or re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
+            # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3)
+            return bool(GRATIS_VERZENDING.search(citaat) or (VERZENDWOORDEN.search(citaat)
+                                                            and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat))))
         return bedrag_op_pagina(waarde, citaat)
 
     def euro_veld(veld, waarde):
@@ -257,7 +274,9 @@ def totaal(aanbod, koersen, alle_tekst=None):
     land = str(aanbod.get("land") or "").upper()
     if land in EU:
         btw_in = aanbod.get("btw_inbegrepen")
-        btw_verzending = aanbod.get("verzending_btw_inbegrepen", btw_in)
+        # Is de prijs met btw, dan is een consumentenverzending dat ook. Is de prijs zonder btw, dan moet de status van
+        # de verzending apart gekend zijn; ze erft niet (Codex X9, ronde 3).
+        btw_verzending = aanbod.get("verzending_btw_inbegrepen", True if btw_in is True else None)
         if btw_in is None or (verzending and btw_verzending is None):
             ontbreekt.append("btw")
         if btw_in is False:
@@ -283,15 +302,36 @@ def totaal(aanbod, koersen, alle_tekst=None):
 
 # Eisen die de code uit de vraag haalt, met wat een citaat moet bevatten om "ja" te bewijzen.
 _EIS_BEWIJS = re.compile(r"^(netfrequentie|netspanning) (\d+) (Hz|V)$")
+_ANDERE_HZ = {"60": "50", "50": "60"}
 
 
-def compatibel(aanbod, eisen, alle_tekst=None):
+def _netwaarde_bewezen(eenheid, waarde, citaat, eigen_tekst):
+    """Een citaat van de eigen aanbodpagina dat de gevraagde waarde noemt. Bij netfrequentie: noemt het citaat of de
+    eigen pagina ook de andere frequentie (50 tegen 60 Hz), behalve als een toestel voor allebei (50/60 Hz), dan is het
+    niet duidelijk welke variant dit aanbod is en blijft het onbekend (Codex X2, ronde 3: een 60 Hz-citaat van een
+    Amerikaanse variant bewijst niets voor het Europese model op dezelfde pagina)."""
+    c = _schoon(citaat).lower()
+    if not citaat_op_pagina(citaat, eigen_tekst) or not re.search(rf"(?<!\d){waarde}\s?{eenheid}", c):
+        return False
+    if eenheid == "hz":
+        beide = re.compile(r"50\s?(?:/|-|en|tot|to|bis|à)\s?60\s?hz|60\s?(?:/|-|en|tot|to|bis|à)\s?50\s?hz")
+        pagina = _schoon(eigen_tekst).lower()
+        if beide.search(c) or beide.search(pagina):
+            return True
+        ander = _ANDERE_HZ.get(waarde)
+        if ander and re.search(rf"(?<!\d){ander}\s?hz", pagina):
+            return False
+    return True
+
+
+def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
     """"ja", "nee" of "onbekend" tegen de eisen. Zonder eisen is het "ja".
 
     aanbod["compatibiliteit"] is {eis: {"oordeel": "ja"|"nee"|"onbekend", "citaat": "..."}} (of alleen het oordeel).
-    Een eis die er niet in staat, is onbekend. Met alle_tekst geldt "ja" alleen met een citaat dat op een gelezen pagina
-    staat en, bij netfrequentie of netspanning, die waarde noemt; anders wordt het "onbekend" (Codex X2, ronde 2).
-    "nee" wordt altijd geloofd: dat kan nooit tot een verkeerde aanbeveling leiden."""
+    Een eis die er niet in staat, is onbekend. Met de gelezen tekst geldt "ja" alleen met een citaat (Codex X2):
+    netspanning en netfrequentie van de eigen aanbodpagina, met die waarde en zonder twijfel over de variant
+    (_netwaarde_bewezen); een andere eis van een gelezen pagina. Anders wordt het "onbekend". "nee" wordt altijd
+    geloofd: dat kan nooit tot een verkeerde aanbeveling leiden."""
     if not eisen:
         return "ja"
     oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
@@ -302,8 +342,11 @@ def compatibel(aanbod, eisen, alle_tekst=None):
         oordeel = str(oordeel or "onbekend").lower()
         if oordeel == "ja" and alle_tekst is not None:
             m = _EIS_BEWIJS.match(eis)
-            c = _schoon(str(citaat or "")).lower()
-            if not citaat_op_pagina(citaat, alle_tekst) or (m and not re.search(rf"(?<!\d){m.group(2)}\s?{m.group(3).lower()}", c)):
+            if m:
+                bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), eigen_tekst or "")
+            else:
+                bewezen = citaat_op_pagina(citaat, alle_tekst)
+            if not bewezen:
                 oordeel = "onbekend"
         waarden.append(oordeel)
     if "nee" in waarden:
@@ -339,7 +382,7 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         gezien.add(sleutel)
         rij = dict(a)
         rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen, alle_tekst)
-        rij["compatibel"] = compatibel(a, eisen, alle_tekst)
+        rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst)
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",
                              r["totaal_eur"] if r["totaal_eur"] is not None else float("inf")))

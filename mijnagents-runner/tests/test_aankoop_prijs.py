@@ -84,6 +84,11 @@ check("een verzendkost als productprijs wordt geweigerd (Codex X1, ronde 2)", "p
 check("ook als het citaat alleen het bedrag noemt", "prijs niet bewezen op de gelezen pagina" in
       A.keur(met_bewijs("499,00 euro", prijs=499), VANDAAG, TEGENPROEF))
 check("de echte productprijs wel", A.keur(met_bewijs("Prijs: 999,00 euro", prijs=999), VANDAAG, TEGENPROEF) == [])
+OUD = pagina("MOVA V70 Ultra Adviesprijs ~~1.399,00 €~~ Nu 1.099,00 €. Gratis verzending 1.099,00 € in je mandje.")
+check("een doorgestreepte of adviesprijs is niet de prijs van vandaag (Codex X1, ronde 3)", "prijs niet bewezen op de gelezen pagina"
+      in A.keur(met_bewijs("1.399,00 €", prijs=1399), VANDAAG, OUD))
+check("de huidige prijs wel, ook met gratis verzending ervoor", A.keur(met_bewijs("Nu 1.099,00 €", prijs=1099), VANDAAG, OUD) == []
+      and A.keur(met_bewijs("Gratis verzending 1.099,00 €", prijs=1099), VANDAAG, OUD) == [])
 check("499 is niet 1499", not A.bedrag_op_pagina(499, "1499 euro"))
 check("499 is niet 499,99", not A.bedrag_op_pagina(499, "499,99 euro"))
 check("procent op de pagina", A.procent_op_pagina(18, "opgeld 18 % excl. btw") and not A.procent_op_pagina(8, "opgeld 18%"))
@@ -105,7 +110,9 @@ check("een prijs zonder btw krijgt 21 procent erbij", t[0] == 1210.0 and "21 pro
 t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False, verzending_btw_inbegrepen=True), KOERSEN)
 check("btw per kostenpost: 100 zonder btw plus 10 verzending met btw is 131 (Codex X9, ronde 2)", t[:2] == (131.0, []), str(t))
 t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False), KOERSEN)
-check("zonder aparte opgave volgt de verzending de prijs", t[:2] == (133.1, []), str(t))
+check("prijs zonder btw en verzending zonder opgave: onvolledig, niet erven (Codex X9, ronde 3)", t[:2] == (None, ["btw"]), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=10), KOERSEN)
+check("prijs met btw: een consumentenverzending ook", t[:2] == (110.0, []), str(t))
 t = A.totaal(aanbod(soort="veiling", prijs=1000, verzending=50, veilingkosten=0), KOERSEN)
 check("een veilingprijs zonder opgeld is geen totaalprijs", t[:2] == (None, ["opgeld"]), str(t))
 t = A.totaal(aanbod(soort="veiling", prijs=1000, verzending=50, opgeld_pct=18), KOERSEN)
@@ -126,6 +133,9 @@ t = A.totaal(aanbod(prijs=500, verzending=0, bewijs={"verzending": "Gratis verze
 check("gratis verzending met citaat", t[:2] == (500.0, []), str(t))
 t = A.totaal(aanbod(prijs=500, verzending=0), KOERSEN, pagina("500 euro"))
 check("verzending 0 zonder citaat is niet bewezen", t[:2] == (None, ["verzending niet bewezen"]), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=0, bewijs={"verzending": "Gratis retourneren binnen 30 dagen"}), KOERSEN,
+             pagina("100 euro. Gratis retourneren binnen 30 dagen. Verzending 25 euro."))
+check("gratis retourneren bewijst geen gratis verzending (Codex X12, ronde 3)", t[:2] == (None, ["verzending niet bewezen"]), str(t))
 t = A.totaal(aanbod(land="US", munt="USD", prijs=550, verzending=55), KOERSEN)
 check("buiten de EU zonder douane is onvolledig", t[:2] == (None, ["invoer"]), str(t))
 t = A.totaal(aanbod(land="US", munt="USD", prijs=550, verzending=55, douane=22), KOERSEN)
@@ -148,8 +158,19 @@ check("ja zonder citaat is onbekend (Codex X2, ronde 2)",
       A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": "ja"}), ["netfrequentie 60 Hz"], SPEC) == "onbekend")
 check("ja met een citaat dat 50 Hz zegt, is onbekend", A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {
       "oordeel": "ja", "citaat": "Specificaties: 220-240 V, 50 Hz"}}), ["netfrequentie 60 Hz"], SPEC) == "onbekend")
-check("ja met een citaat van de pagina dat 60 Hz zegt", A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {
-      "oordeel": "ja", "citaat": "Versie VS: 120 V, 60 Hz"}}), ["netfrequentie 60 Hz"], SPEC) == "ja")
+check("een 60 Hz-citaat van een andere variant op dezelfde pagina is onbekend (Codex X2, ronde 3)",
+      A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Versie VS: 120 V, 60 Hz"}}),
+                   ["netfrequentie 60 Hz"], SPEC, SPEC) == "onbekend")
+ALLEEN60 = pagina("Specificaties: 127 V, 60 Hz, stekker type A.")
+check("ja met een citaat van de eigen pagina dat alleen 60 Hz noemt", A.compatibel(aanbod(compatibiliteit={
+      "netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Specificaties: 127 V, 60 Hz"}}), ["netfrequentie 60 Hz"],
+      ALLEEN60, ALLEEN60) == "ja")
+check("het citaat moet van de eigen aanbodpagina komen", A.compatibel(aanbod(compatibiliteit={
+      "netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Specificaties: 127 V, 60 Hz"}}), ["netfrequentie 60 Hz"],
+      ALLEEN60, SPEC) == "onbekend")
+BEIDE = pagina("Ingang 100-240 V, 50/60 Hz, wereldwijd bruikbaar.")
+check("een toestel voor 50/60 Hz is ja", A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {
+      "oordeel": "ja", "citaat": "Ingang 100-240 V, 50/60 Hz"}}), ["netfrequentie 60 Hz"], BEIDE, BEIDE) == "ja")
 check("ja met een verzonnen citaat is onbekend", A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {
       "oordeel": "ja", "citaat": "Werkt op 60 Hz overal"}}), ["netfrequentie 60 Hz"], SPEC) == "onbekend")
 
@@ -270,6 +291,8 @@ check("het verzonnen aanbod staat nergens in het verslag, ook niet via vrij advi
 check("de uitleg van het model staat bij het aanbod, niet in de aanbeveling", "toelichting: 60 Hz-versie, officiele dealer." in tekst
       and "officiele dealer" not in tekst.splitlines()[0])
 check("vrije modeltekst is begrensd", len(V._kort("x" * 500)) == 160)
+check("het verslag toont letterlijk waarop de aanbeveling steunt", 'Bewijs op de pagina: prijs "X1 499,00 euro"; '
+      'netfrequentie 60 Hz "Netspanning 127 V, 60 Hz".' in tekst)
 check("het verslag zegt dat er niets gekocht is", "Ik kocht, bood en contacteerde niets." in tekst)
 check("bedrag in Belgische schrijfwijze", V.euro(1299.5) == "1.299,50 euro")
 check("titel met het beste totaal", V.titel(uit["gegevens"], r) == "Prijsonderzoek: vloerwasser X1 voor Suriname (beste 499,00 euro)")
@@ -284,8 +307,13 @@ print("Plafonds en reservemodel")
 nep = NepClient([NepAntwoord(STUK1, "pause_turn", (200000, 100)), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
 uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
 check("boven het tokenplafond nog een afrondbeurt zonder gereedschap (Codex X7, ronde 2)", len(nep.vragen) == 2
-      and nep.vragen[1]["tool_choice"] == {"type": "none"} and nep.vragen[1]["messages"][-1]["role"] == "user"
-      and uit["stop"] == "plafond" and uit["gegevens"] is not None)
+      and nep.vragen[1]["tool_choice"] == {"type": "none"} and uit["stop"] == "plafond" and uit["gegevens"] is not None)
+nep = NepClient([NepAntwoord(STUK1, "pause_turn", (200000, 100)),
+                 NepAntwoord(STUK2 + [{"type": "text", "text": JSON}], "end_turn")])
+uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
+check("een pagina gelezen in de afrondbeurt blijft gelezen (Codex X13, ronde 3)", "https://winkel.voorbeeld.com/x1" in uit["gelezen"])
+check("de afrondbeurt hervat de open beurt zonder extra bericht (Codex X13, ronde 3)",
+      [m["role"] for m in nep.vragen[1]["messages"]] == ["user", "assistant"])
 O.MAX_ZOEKEN, oud_zoeken = 1, O.MAX_ZOEKEN
 nep = NepClient([NepAntwoord(STUK1, "pause_turn"), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
 uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
@@ -326,6 +354,8 @@ check("een rekeningnummer", P.gevonden("betaal met BE68 5390 0754 7034") == ["re
 check("een ondernemingsnummer", P.gevonden("factuur op 0123.456.789") == ["ondernemingsnummer"])
 check("een adres", P.gevonden("leveren in de Voorbeeldstraat 12") == ["adres"])
 check("een naam met aanspreking", P.gevonden("droger voor mevrouw Proefnaam") == ["naam"])
+check("Mr. met een naam blijft tegengehouden, Mr. Proper niet (Codex X10, ronde 3)", P.gevonden("cadeau voor Mr. John") == ["naam"]
+      and P.gevonden("Mr Proper allesreiniger 5 liter") == [])
 check("een klant met voor- en achternaam", P.gevonden("klant Jan Proefnaam wil een droger") == ["naam"])
 check("het korte verslag zegt wat het zag, niet de gegevens zelf",
       "e-mailadres" in V.tegengehouden(["e-mailadres"]) and "@" not in V.tegengehouden(["e-mailadres"]))
