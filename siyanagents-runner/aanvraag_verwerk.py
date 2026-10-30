@@ -114,6 +114,10 @@ AGENTS_TOKEN = os.environ.get("AGENTS_TOKEN", "")
 DIENST_PIPELINE = {
     "energie": (3, 79),
     "stabiliteit": (2, 67),
+    # Structurele diagnose (scheuren, verzakking) is sinds 28 okt 2026 een eigen
+    # dienst op unabo.be. Zelfde team als stabiliteit; zonder deze regel krijgt
+    # de deal het label "Te routeren".
+    "structurele diagnose": (2, 67),
     "veiligheidscoordinatie": (5, 22),
     "vergunning": (14, 138),
     # Regularisatie is sinds 4 sep 2026 een eigen dienst op unabo.be en loopt door
