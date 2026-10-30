@@ -262,5 +262,75 @@ check("eerder leverancier vermeld", "al leverancier in onze boekhouding" in vs)
 check("de mails staan als concept, met afzender van HB", "Van: kantoor@harmoniebouw.be" in vs and "concept, niet verstuurd" in vs)
 check("het verslag van HB noemt H-A niet", S.kruis(vs, S.HB) == [])
 
+
+print("\nRegressie na controle 2 van Codex (X1 tot X15)")
+for f in (S.HA, S.HB, None):
+    o = V.onvolledig("aannemerszoeker", f, ["werk"])
+    check(f"X1 onvolledig verslag zonder de andere firma ({f})", f is None or S.kruis(o, f) == [])
+check("X1 zonder firma: een neutraal voorbeeld", "<firmacode>" in V.onvolledig("aannemerszoeker", None, ["firma"]))
+check("X2 de code HA in een stuk van HB wordt geweigerd", not S.mag_weg("Referentie HA 2999", S.HB))
+check("X2 de code HB in een stuk van HA wordt geweigerd", not S.mag_weg("zie dossier HB", S.HA))
+check("X2 hectare in kleine letters is geen firmacode", S.mag_weg("Een terrein van 2 ha met afsluiting.", S.HB))
+check("X2 de verslagtoets kent ook bandwoorden", S.kruis("Dak Een behoort tot dezelfde groep.", S.HB) != [])
+check("X3 'ventilatie groep D' en 'onafhankelijke ophanging' zijn gewone bouwtaal",
+      S.mag_weg("Ventilatie groep D met onafhankelijke ophanging van de kanalen.", S.HB))
+check("X3 'tot de groep' en 'onafhankelijke firma' blijven verboden",
+      not S.mag_weg("Wij horen tot de groep.", S.HA) and not S.mag_weg("Een onafhankelijke firma.", S.HB))
+check("X3 een firmanaam met Partners is geen band", S.mag_weg("Beste Renovatie Partners,", S.HB))
+ww = open(Path(__file__).resolve().parents[1] / "werkwijze" / "aannemerszoeker.md", encoding="utf-8").read()
+mw = Z.modelwerkwijze(ww)
+check("X4 de werkwijze naar het model noemt geen van beide firma's", not S.noemt_een_firma(mw) and "Wat ik nooit doe" in mw)
+sy, ge = Z.opdracht(ww, "dakwerken", "3000 Leuven", 25, "uitvoering", "2026-10-30", "", Z.kennis_voor_model(
+    "- De Contractmaker (contracten-agent, h-architects): dossiers\n- De Postwacht (post, mail): post", [{"les": "Meet eerst."}]))
+check("X4 en X13 de opdracht aan het model noemt geen firma, wel lessen en collega's",
+      not S.noemt_een_firma(sy + ge) and "Meet eerst." in sy and "De Postwacht" in sy and "Contractmaker" not in sy)
+check("X5 een straat in de gemeente gaat niet naar buiten",
+      Q.naar_buiten_fouten({"werk": "dak", "gemeente": "Voorbeeldstraat 1, 3000 Leuven"}) != [])
+check("X5 een naam na 'bij' in het werk gaat niet naar buiten",
+      "naam" in Q.naar_buiten_fouten({"werk": "dakwerken bij Jan Voorbeeld", "gemeente": "3000 Leuven"}))
+check("X5 een firmanaam in het werk gaat niet naar buiten",
+      "een firmanaam" in Q.naar_buiten_fouten({"werk": "dak zoals Harmonie Bouw", "gemeente": "3000 Leuven"}))
+check("X5 een gewone vraag mag weg", Q.naar_buiten_fouten({"werk": "plat dak EPDM", "omvang": "40 m2",
+                                                          "gemeente": "3010 Kessel-Lo"}) == [])
+K = "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239"
+check("X6 'Niet actief' is niet actief", Z.kbo_actief("0537.405.239", {K: "0537.405.239 Status: Niet actief"}) is False)
+check("X6 een nagemaakte KBO-host telt niet", Z.kbo_actief("0537.405.239", {
+    "https://kbopub.economie.fgov.be.voorbeeld.com/?ondernemingsnummer=0537405239": "0537.405.239 Status: Actief"}) is None)
+check("X6 een KBO-pagina van een ander nummer telt niet", Z.kbo_actief("0537.405.239", {
+    K.replace("0537405239", "0403170701"): "0537.405.239 Status: Actief"}) is None)
+check("X6 het woord actief zonder statusregel telt niet", Z.kbo_actief("0537.405.239", {K: "0537.405.239 actief sinds 2014"}) is None)
+leeg = Z.keur([{"naam": "Leeg", "url": "https://leeg.voorbeeld.com"}], {"https://leeg.voorbeeld.com": ""}, None, 25, lambda p: None)
+check("X6 een gelezen pagina zonder tekst bewijst niets", leeg["afgewezen"] and not leeg["na_te_kijken"])
+x8 = F.lees(pdf("Subtotaal excl. btw 2.000,00", "Totaal excl. btw 12.000,00", "Sub-totaal excl. btw 3.000,00", "btw 21%",
+                "Totaal incl. btw 14.520,00"))
+check("X8 een subtotaal na het totaal overschrijft het totaal niet", x8["excl"] == 12000.0 and not any("rekenfout" in r for r in x8["redenen"]), x8)
+check("X8 de Engelse schrijfwijze", F.bedrag("1,234.56") == 1234.56 and F._laatste_bedrag("Total excl. VAT 1,234.56") == 1234.56)
+x8b = F.lees(pdf("Totaal excl. btw 5.000,00", "Totaal excl. btw 7.000,00", "btw 6%"))
+check("X8 twee eindtotalen: het grootste, met een melding", x8b["excl"] == 7000.0 and any("meer dan een" in r for r in x8b["redenen"]))
+p9, r9 = F.keur_posten({"offertes": {"A": {"posten": [{"nr": "1", "totaal": "4.000,00"}, {"nr": "2", "totaal": "6.000,00"},
+                                                      {"nr": "3", "totaal": "1.500,00", "optie": True}]}}},
+                       {"A": "4.000,00 6.000,00 1.500,00"}, {"A": 10000.0})
+check("X9 een optie staat apart, niet in de vergelijking", p9["A"] == {"1": 4000.0, "2": 6000.0} and any("optie" in x for x in r9["A"]))
+p9b, r9b = F.keur_posten({"offertes": {"A": {"posten": [{"nr": "1", "totaal": "4.000,00"}]}}}, {"A": "4.000,00"}, {"A": None})
+check("X9 zonder bevestigd totaal geen vergelijking per post", p9b["A"] == {} and r9b["A"])
+r10 = F.redigeer("Werf: Voorbeeldstraat 1\nProject: Renovatie bij de klant\nLevering te Kerkplein 12 bus 3.\nPlaatsen van ramen.")
+check("X10 werfregel en adressen weg, het werk blijft", "Voorbeeldstraat" not in r10 and "Kerkplein 12" not in r10
+      and "Plaatsen van ramen." in r10, r10)
+check("X10 de offerte gaat nog niet naar de AI", F.OFFERTE_NAAR_AI is False)
+klok = iter([0, 10, 999, 999]).__next__
+gl, tk = F.lees_bestanden([("A", {"pad": "/a"}, "a"), ("B", {"pad": "/b"}, "b"), ("C", {"pad": "/c"}, "c")],
+                          lambda p: (_ for _ in ()).throw(OSError("weg")), deadline=100, klok=klok)
+check("X11 na de deadline geen download meer; elke offerte staat erbij", [g["lees"]["soort"] for g in gl] == ["onleesbaar"] * 3
+      and "tijd van de ronde" in gl[2]["lees"]["redenen"][0])
+oproepen = []
+def rpc_nep(pad, body):
+    oproepen.append(pad)
+    return {"matches": [{"metadata": {"metadata": {".tag": "folder", "name": f"m{len(oproepen)}", "path_display": f"/x/m{len(oproepen)}"}}}],
+            "has_more": True, "cursor": "c"}
+tr = E._dropbox_zoek("dak", "/x", rpc=rpc_nep)
+check("X12 vervolgpagina's gelezen, met een grens", len(tr) == E.MAX_PAGINAS and oproepen[1] == "files/search/continue_v2")
+check("eigen mappen: een map die de andere firma noemt, telt niet", E.in_mappen(S.HA, "ruwbouw", zoek=lambda q, p: [
+    {"soort": "folder", "naam": "01 Harmoniebouw - ruwbouw", "pad": "/Work All/01. H-A WORK/x/2999 S 1/Offerte/01 Harmoniebouw - ruwbouw"}]) == [])
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

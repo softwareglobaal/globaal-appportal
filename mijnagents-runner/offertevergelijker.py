@@ -18,6 +18,7 @@ import hashlib
 import os
 import re
 import sys
+import time
 from datetime import date
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +35,7 @@ NAAM = "offertevergelijker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
 MAX_OFFERTES = 8
+RONDE_SECONDEN = 420            # een download kan 120 s duren; zo blijft de ronde binnen de 600 s van De Regisseur (X11)
 SOORT = "offertevergelijking"
 
 
@@ -80,14 +82,25 @@ def lotnaam(pad, firma):
     return naam
 
 
-def een_vraag(r, tekst, vandaag):
+def werfstraat(v):
+    """De straat en het huisnummer van de werf bij H-Architects (uit de projectmap), om weg te halen voor het model."""
+    if v.get("firma") != S.HA or not v.get("project"):
+        return ""
+    try:
+        import projectadressen
+        return (projectadressen.adres(v["project"]) or "").split(",")[0].strip()
+    except Exception:  # noqa: BLE001  zonder index: de algemene adresregel in redigeer() blijft gelden
+        return ""
+
+
+def een_vraag(r, tekst, vandaag, deadline=None):
     import bronnen
     va = vingerafdruk(tekst, vandaag)
     v = Q.ontleed(tekst)
     blok = Q.ontbreekt_vergelijker(v)
     if blok:
         zet_klaar(tekst, "Offertevergelijking niet gestart: vraag onvolledig", V.onvolledig(NAAM, v.get("firma"), blok),
-                  vandaag)
+                  vandaag, v.get("firma"))
         return 0
     firma = v["firma"]
     try:
@@ -106,20 +119,11 @@ def een_vraag(r, tekst, vandaag):
                   vandaag, firma)
         return 0
     letters = F.letters(bestanden, firma)
-    gelezen, teksten = [], {}
-    for letter, b, _ in letters:
-        try:
-            blz = F.paginas(bronnen.download(b["pad"]))
-        except Exception as e:  # noqa: BLE001  een offerte die niet binnenkomt, telt niet mee en staat erbij
-            blz = None
-            ag.log("offertes", "fout", f"vraag {va}: inschrijver {letter} niet gedownload: {type(e).__name__}")
-        gelezen.append({"letter": letter, "lees": F.lees(blz)})
-        if blz:
-            teksten[letter] = "\n".join(blz)
+    gelezen, teksten = F.lees_bestanden(letters, bronnen.download, deadline)
     uit = F.vergelijk(gelezen, vandaag)
     per_post, post_redenen = None, {}
     if F.OFFERTE_NAAR_AI and len(teksten) >= 2:
-        extra = [x for x in (v.get("project"),) if x]
+        extra = [x for x in (v.get("project"), werfstraat(v)) if x]
         geredigeerd = {l: F.redigeer(t, extra) for l, t in teksten.items()
                        if next(g for g in gelezen if g["letter"] == l)["lees"].get("soort") == "offerte"}
         try:
@@ -157,11 +161,14 @@ def werk(r, hand_vraag=None, droog=False):
         r.detail = f"droog: {len(vragen)} vragen klaar, geen offerte gelezen"
         return
     vandaag = date.today()
+    deadline = time.monotonic() + RONDE_SECONDEN
     gedaan = offertes = 0
     for v in vragen[:MAX_VRAGEN]:
+        if time.monotonic() > deadline:
+            break                                   # blijft klaarstaan voor de volgende ronde
         tekst = str(v.get("inhoud") or v.get("titel")).strip()
         try:
-            offertes += een_vraag(r, tekst, vandaag)
+            offertes += een_vraag(r, tekst, vandaag, deadline)
         except Exception as e:  # noqa: BLE001
             ag.log("offertes", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Offertevergelijking mislukt", wie="claude-code")

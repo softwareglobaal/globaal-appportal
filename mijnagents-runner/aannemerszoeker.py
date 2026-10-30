@@ -25,7 +25,6 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, HIER)
 import bord  # noqa: E402
-from aankoop import privacy as P  # noqa: E402
 from bouw import eigen as E  # noqa: E402
 from bouw import mail as M  # noqa: E402
 from bouw import scheiding as S  # noqa: E402
@@ -96,18 +95,21 @@ def een_vraag(r, tekst, vandaag, deadline):
     blok, aan_te_vullen = Q.ontbreekt_zoeker(v)
     if blok:
         ag.log("aannemersvraag", "beslissing", f"vraag {va} niet gestart: ontbreekt {', '.join(blok)}")
-        zet_klaar(tekst, "Aannemersvraag niet gestart: vraag onvolledig", V.onvolledig(NAAM, v.get("firma"), blok), vandaag)
-        return 0
-    soorten = P.gevonden(" ".join(str(v.get(k) or "") for k in ("werk", "omvang")))
-    if soorten:
-        ag.log("aannemersvraag", "beslissing", f"vraag {va} niet verstuurd: persoonsgegevens", ", ".join(soorten))
-        zet_klaar(tekst, "Aannemersvraag niet gestart: persoonsgegevens", V.tegengehouden(soorten), vandaag)
+        zet_klaar(tekst, "Aannemersvraag niet gestart: vraag onvolledig", V.onvolledig(NAAM, v.get("firma"), blok), vandaag,
+                  v.get("firma"))
         return 0
     firma = v["firma"]
     gemeente, project = gemeente_en_project(v)
     v["gemeente"] = gemeente
     if not gemeente:
-        zet_klaar(tekst, "Aannemersvraag niet gestart: geen gemeente", V.onvolledig(NAAM, firma, ["gemeente"]), vandaag)
+        zet_klaar(tekst, "Aannemersvraag niet gestart: geen gemeente", V.onvolledig(NAAM, firma, ["gemeente"]), vandaag,
+                  firma)
+        return 0
+    # Alles wat naar buiten gaat, wordt getoetst: werk, omvang en gemeente (Codex X5, controle 2)
+    soorten = Q.naar_buiten_fouten(v)
+    if soorten:
+        ag.log("aannemersvraag", "beslissing", f"vraag {va} niet verstuurd: persoonsgegevens", ", ".join(soorten))
+        zet_klaar(tekst, "Aannemersvraag niet gestart: persoonsgegevens", V.tegengehouden(soorten), vandaag, firma)
         return 0
     try:
         eigen = E.in_mappen(firma, v["werk"])
@@ -117,8 +119,9 @@ def een_vraag(r, tekst, vandaag, deadline):
         ag.log("aannemersvraag", "fout", f"vraag {va}: eigen mappen niet gelezen: {type(e).__name__}")
         r.nood("Eigen mappen van de firma niet doorzocht", wie="claude-code")
     soort = "uitvoering" if firma == S.HA else "onderaanneming"
+    kennis = Z.kennis_voor_model(bord.collega_tekst(r.collegas) if r.collegas else "", getattr(r, "lessen", []))
     uit = Z.zoek(r.werkwijze, v["werk"], gemeente, v["straal"], soort, vandaag.isoformat(), deadline,
-                 omvang=v.get("omvang") or "")
+                 omvang=v.get("omvang") or "", kennis=kennis)
     ag.log("aannemersvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} "
                                      f"pagina's gelezen, {uit['tokens']} tokens, model {uit['model']}, einde {uit['stop']}")
     if uit["stop"] == "plafond":
@@ -128,11 +131,12 @@ def een_vraag(r, tekst, vandaag, deadline):
         ag.log("aannemersvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
         r.nood("Aannemersvraag zonder leesbaar antwoord van het model", wie="claude-code")
         zet_klaar(tekst, "Aannemersvraag zonder antwoord", "**Geen antwoord:** het zoeken gaf geen bruikbare gegevens. "
-                  "Ik contacteerde niemand en verstuurde niets.", vandaag)
+                  "Ik contacteerde niemand en verstuurde niets.", vandaag, firma)
         return 0
     firmas = [f for f in (g.get("firmas") or []) if isinstance(f, dict)]
     # De andere firma is nooit een kandidaat: geen mail van de ene firma aan de andere (harde regel van Mehdi).
-    firmas = [f for f in firmas if not S.is_andere_firma(f"{f.get('naam')} {f.get('url')} {f.get('email')}", firma)]
+    firmas = [f for f in firmas if not S.is_andere_firma(f"{f.get('naam')} {f.get('url')} {f.get('email')}", firma)
+              and not S.schendingen(str(f.get("naam") or ""), firma)]
     from adresregister import lokaliseer
     centrum = None
     try:

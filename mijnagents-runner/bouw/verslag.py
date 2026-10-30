@@ -15,10 +15,12 @@ def euro(bedrag):
 
 def onvolledig(agent, firma, ontbreekt):
     """Het korte verslag als de vraag niet volstaat om te werken (overleg X1, X2)."""
-    wie = S.FIRMANAMEN.get(firma, "geen firma")
-    return (f"**Niet gestart:** de vraag mist {', '.join(ontbreekt)} ({wie}). Ik heb niets gezocht of gelezen.\n\n"
-            f"Stel de vraag opnieuw als velden, bijvoorbeeld: `firma: HB; werk: plafonneerwerk; omvang: 120 m2; "
-            f"gemeente: 3020 Herent; straal: 25; tegen: 15-11-2026`.")
+    wie = f" ({S.FIRMANAMEN[firma]})" if firma in S.FIRMANAMEN else ""
+    code = firma if firma in S.FIRMANAMEN else "<firmacode>"
+    voorbeeld = (f"firma: {code}; werk: plafonneerwerk; omvang: 120 m2; gemeente: 3020 Herent; straal: 25; tegen: 15-11-2026"
+                 if agent == "aannemerszoeker" else f"firma: {code}; project: <projectnummer>; lot: <nummer van het lot>")
+    return (f"**Niet gestart:** de vraag mist {', '.join(ontbreekt)}{wie}. Ik heb niets gezocht of gelezen.\n\n"
+            f"Stel de vraag opnieuw als velden, bijvoorbeeld: `{voorbeeld}`.")
 
 
 def tegengehouden(soorten):
@@ -39,7 +41,7 @@ def _firma_regel(i, f, firma, eerder, boekhouding_bekend):
     if f.get("email"):
         delen.append(str(f["email"]))
     if f.get("specialiteit"):
-        delen.append(str(f["specialiteit"]))
+        delen.append(S.schoon_veld(str(f["specialiteit"]), firma))
     if nr and nr.replace(".", "") in eerder:
         delen.append("al leverancier in onze boekhouding")
     elif nr and not boekhouding_bekend:
@@ -47,8 +49,8 @@ def _firma_regel(i, f, firma, eerder, boekhouding_bekend):
     if firma == S.HB:
         delen.append("inhoudingsplicht niet gecontroleerd")
     if f.get("waarom"):
-        delen.append(str(f["waarom"]))
-    return "; ".join(delen)
+        delen.append(S.schoon_veld(str(f["waarom"]), firma))
+    return "; ".join(d for d in delen if d)
 
 
 def zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vullen, vandaag):
@@ -66,7 +68,7 @@ def zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vull
     if firma == S.HB:
         stap += " Kijk de inhoudingsplicht na op checkinhoudingsplicht.be voor je een opdracht geeft."
     regels = [kop, "", stap]
-    if g.get("vervolgvraag"):
+    if S.schoon_veld(str(g.get("vervolgvraag") or ""), firma):
         regels += ["", f"**Vraag:** {g['vervolgvraag']}"]
     for titel, lijst in (("Klaar om aan te schrijven", goed), ("Na te kijken (KBO of afstand niet bevestigd)", na),
                          (f"Buiten {v['straal']} km", buiten)):
@@ -76,10 +78,12 @@ def zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vull
     regels += ["", f"## Eerder in de mappen van {naam}"]
     regels += ([f"- {e['naam']}" + (f" (project {e['project']})" if e.get("project") else "") + f": `{e['pad']}`"
                 for e in eigen] or ["- niets gevonden met deze woorden"])
-    if g.get("aannames"):
-        regels += ["", "## Aannames"] + [f"- {a}" for a in g["aannames"]]
-    if g.get("niet_gevonden"):
-        regels += ["", "## Niet gevonden"] + [f"- {n}" for n in g["niet_gevonden"]]
+    aannames = [a for a in g.get("aannames") or [] if S.schoon_veld(str(a), firma)]
+    niet = [n for n in g.get("niet_gevonden") or [] if S.schoon_veld(str(n), firma)]
+    if aannames:
+        regels += ["", "## Aannames"] + [f"- {a}" for a in aannames]
+    if niet:
+        regels += ["", "## Niet gevonden"] + [f"- {n}" for n in niet]
     if res["afgewezen"]:
         regels += ["", f"Weggelaten: {len(res['afgewezen'])} (pagina niet gelezen of stopgezet)."]
     geweigerd = [u for u, m in mails.items() if m is None]

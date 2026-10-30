@@ -9,6 +9,8 @@ krijgt alleen de firma uit de tekst; de rest moet dan opnieuw gevraagd worden.
 """
 import re
 
+from aankoop import privacy as P
+
 from . import scheiding as S
 
 VELDEN = ("firma", "werk", "omvang", "gemeente", "straal", "tegen", "project", "lot", "map", "bestanden")
@@ -54,6 +56,28 @@ def ontbreekt_zoeker(v):
     if not v.get("gemeente") and not (v.get("firma") == S.HA and v.get("project")):
         blok.append("gemeente")
     return blok, [n for n in ("omvang", "tegen") if not v.get(n)]
+
+
+GEMEENTE = re.compile(r"^\s*(?:\d{4}\s*)?[A-Za-zÀ-ÿ'’.\- ]{2,40}\s*$")
+NAAM_NA = re.compile(r"\b(?i:bij|voor|van|familie|fam\.?|woning|huis|klant|bouwheer)\s+(?:(?i:de|van|der|den)\s+)*"
+                     r"[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+")
+MAX_VELD = 160
+
+
+def naar_buiten_fouten(v):
+    """Waarom de velden die naar buiten gaan (werk, omvang, gemeente) niet mogen vertrekken (Codex X5, controle 2):
+    persoonsgegevens volgens het patroon van De Prijsonderzoeker, een naam na 'bij', 'voor', 'familie' en dergelijke,
+    een gemeente die meer is dan postcode en naam (een straat of huisnummer), of een veld dat te lang is."""
+    fouten = list(P.gevonden(" ; ".join(str(v.get(k) or "") for k in ("werk", "omvang", "gemeente"))))
+    if any(NAAM_NA.search(str(v.get(k) or "")) for k in ("werk", "omvang")):
+        fouten.append("naam")
+    if v.get("gemeente") and not GEMEENTE.match(v["gemeente"]):
+        fouten.append("adres in de gemeente (alleen postcode en gemeente)")
+    if any(len(str(v.get(k) or "")) > MAX_VELD for k in ("werk", "omvang", "gemeente")):
+        fouten.append("een te lang veld")
+    if any(S.noemt_een_firma(str(v.get(k) or "")) for k in ("werk", "omvang", "gemeente")):
+        fouten.append("een firmanaam")
+    return list(dict.fromkeys(fouten))
 
 
 def ontbreekt_vergelijker(v):

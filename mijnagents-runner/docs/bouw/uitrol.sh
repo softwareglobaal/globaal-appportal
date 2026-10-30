@@ -7,6 +7,10 @@
 # 4. de eerste ronde met controle, zonder vraag (kost niets, toetst de normen). Geen cron: ze werken op verzoek.
 set -euo pipefail
 cd ~/appportal
+# Codex X14: alleen met een schone werkboom, zodat het opzij zetten en terughalen van de runners geen ander werk raakt
+if [ -n "$(git status --porcelain -- mijnagents-runner)" ]; then
+  echo "STOP: mijnagents-runner heeft wijzigingen die niet in git staan"; git status --short -- mijnagents-runner; exit 1
+fi
 git pull --ff-only origin main
 git log --oneline -1
 cd mijnagents-runner

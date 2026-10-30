@@ -22,26 +22,31 @@ from . import scheiding as S
 OFFERTE_NAAR_AI = False      # X5: pas True na een uitdrukkelijk ja van Mehdi, met zijn antwoord in de commit
 MIN_TEKST_PER_BLZ = 20
 MAX_BLZ = 40
-BEDRAG = (r"(?:€|eur|euro)?\s*(-?\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})|-?\d+(?:,\d{2})|-?\d{1,3}(?:,\d{3})*\.\d{2})"
-          r"\s*(?:€|eur|euro)?")
+# Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
+BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
+SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|korting|voorschot", re.I)
 RAMING = re.compile(r"\b(?:raming|kostenraming|schatting|indicatief|indicatieve prijs|budgetprijs|richtprijs)\b", re.I)
 VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
 
 
 def bedrag(tekst):
-    """'1.234,56' of '1 234,56' of '1,234.56' -> 1234.56; None als het geen bedrag is."""
-    t = str(tekst or "").replace(" ", " ").strip()
-    if re.fullmatch(r"-?\d{1,3}(?:,\d{3})*\.\d{2}", t):
-        return float(t.replace(",", ""))
-    t = re.sub(r"[.\s]", "", t).replace(",", ".")
-    try:
-        return round(float(t), 2)
-    except ValueError:
-        return None
+    """'1.234,56', '1 234,56', '1234,56', '1,234.56', '1234.56' of '1.234' -> getal; None als het geen bedrag is
+    (Codex X8, controle 2: de schrijfwijze volgt uit het laatste scheidingsteken)."""
+    t = re.sub(r"[€\s ]|eur(?:o)?", "", str(tekst or ""), flags=re.I)
+    vormen = ((r"-?\d{1,3}(?:,\d{3})+\.\d{2}", lambda x: x.replace(",", "")),
+              (r"-?\d{1,3}(?:\.\d{3})+,\d{2}", lambda x: x.replace(".", "").replace(",", ".")),
+              (r"-?\d+,\d{2}", lambda x: x.replace(",", ".")),
+              (r"-?\d+\.\d{2}", lambda x: x),
+              (r"-?\d{1,3}(?:[.,]\d{3})+", lambda x: re.sub(r"[.,]", "", x)),
+              (r"-?\d+", lambda x: x))
+    for patroon, zet in vormen:
+        if re.fullmatch(patroon, t):
+            return round(float(zet(t)), 2)
+    return None
 
 
 def _laatste_bedrag(regel):
-    gevonden = [bedrag(m.group(1)) for m in re.finditer(BEDRAG, regel, re.I)]
+    gevonden = [bedrag(m.group(0)) for m in BEDRAG.finditer(regel)]
     gevonden = [b for b in gevonden if b is not None]
     return gevonden[-1] if gevonden else None
 
@@ -78,16 +83,17 @@ def lees(tekst_paginas):
     uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": bool(VERLEGD.search(tekst)),
            "datum": _datum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": bool(RAMING.search(tekst)),
            "redenen": []}
+    excl, incl = [], []
     for regel in tekst.splitlines():
         laag = regel.lower()
-        if "totaal" in laag or "total" in laag or "te betalen" in laag:
+        if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not SUBTOTAAL.search(laag):
             b = _laatste_bedrag(regel)
-            if b is None:
+            if b is None or b <= 0:
                 continue
             if re.search(r"excl|exclusief|zonder btw|htva|netto|hors tva", laag):
-                uit["excl"] = b
+                excl.append(b)
             elif re.search(r"incl|inclusief|tvac|te betalen|met btw", laag):
-                uit["incl"] = b
+                incl.append(b)
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -97,6 +103,10 @@ def lees(tekst_paginas):
         m = re.search(r"geldig\w*[^.\n]{0,30}?(\d{1,3})\s*(?:kalender)?dagen", regel, re.I)
         if m and not uit["geldig_dagen"]:
             uit["geldig_dagen"] = int(m.group(1))
+    uit["excl"] = max(excl) if excl else None
+    uit["incl"] = max(incl) if incl else None
+    if len(set(excl)) > 1:
+        uit["redenen"].append("meer dan een eindtotaal exclusief btw; het grootste genomen, kijk het na")
     return controleer(uit)
 
 
@@ -126,7 +136,10 @@ def redigeer(tekst, extra=()):
     for soort, patroon in P.PATRONEN:
         if soort in ("e-mailadres", "rekeningnummer", "rijksregisternummer", "telefoonnummer"):
             t = patroon.sub(f"[{soort}]", t)
-    t = re.sub(r"(?im)^\s*(?:aan|klant|bouwheer|opdrachtgever|t\.?a\.?v\.?)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
+    t = re.sub(r"(?im)^\s*(?:aan|klant|bouwheer|opdrachtgever|t\.?a\.?v\.?|werf|werfadres|bouwplaats|ligging|adres|"
+               r"leveradres|uitvoeringsadres|project|referentie|ref\.?)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
+    t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
+               r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
                "[naam weggelaten]", t)
     for stuk in extra:
@@ -148,6 +161,27 @@ def letters(bestanden, firma):
             sleutel = naam
         uit.append((letter, b, sleutel))
     return uit
+
+
+def lees_bestanden(letters, download, deadline=None, klok=None):
+    """([{letter, lees}], {letter: tekst}) voor de bestanden van een lot. Na de deadline wordt niets meer gedownload: die
+    offertes staan erbij als niet gelezen (Codex X11). download(pad) -> bytes; een fout maakt de offerte onleesbaar."""
+    import time
+    klok = klok or time.monotonic
+    gelezen, teksten = [], {}
+    for letter, b, _ in letters:
+        if deadline and klok() > deadline:
+            gelezen.append({"letter": letter, "lees": {"soort": "onleesbaar",
+                                                       "redenen": ["niet gelezen: de tijd van de ronde was op"]}})
+            continue
+        try:
+            blz = paginas(download(b["pad"]))
+        except Exception:  # noqa: BLE001  een offerte die niet binnenkomt, telt niet mee en staat erbij
+            blz = None
+        gelezen.append({"letter": letter, "lees": lees(blz)})
+        if blz:
+            teksten[letter] = "\n".join(blz)
+    return gelezen, teksten
 
 
 def vergelijk(offertes, vandaag):
@@ -240,6 +274,9 @@ def keur_posten(gegevens, teksten, totalen):
     aanvaard, redenen = {}, {}
     for letter, d in ((gegevens or {}).get("offertes") or {}).items():
         posten, weg = {}, []
+        if totalen.get(letter) is None:
+            aanvaard[letter], redenen[letter] = {}, ["geen bevestigd totaal: geen vergelijking per post"]
+            continue
         for p in d.get("posten") or []:
             if not isinstance(p, dict):
                 continue
@@ -253,7 +290,8 @@ def keur_posten(gegevens, teksten, totalen):
         if totaal is not None and abs(som - totaal) > max(1.0, totaal * 0.005):
             weg.append(f"de posten tellen op tot {som}, de offerte zegt {totaal}: geen vergelijking per post")
             posten = {}
-        aanvaard[letter] = {nr: b for nr, (b, _) in posten.items()}
+        aanvaard[letter] = {nr: b for nr, (b, optie) in posten.items() if not optie}
+        weg += [f"post {nr} is een optie of stelpost ({b}), niet in de vergelijking" for nr, (b, optie) in posten.items() if optie]
         redenen[letter] = weg
     return aanvaard, redenen
 

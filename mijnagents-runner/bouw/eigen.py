@@ -26,15 +26,24 @@ def zoekwoorden(werk, maximum=2):
     return sorted(dict.fromkeys(woorden), key=len, reverse=True)[:maximum]
 
 
-def _dropbox_zoek(query, pad):
-    import bronnen
-    uit = bronnen._rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100,
-                                                                      "filename_only": True}})
+MAX_PAGINAS = 5
+
+
+def _dropbox_zoek(query, pad, rpc=None):
+    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12)."""
+    if rpc is None:
+        import bronnen
+        rpc = bronnen._rpc
+    uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
     treffers = []
-    for m in (uit or {}).get("matches") or []:
-        meta = ((m.get("metadata") or {}).get("metadata")) or {}
-        if meta.get("path_display"):
-            treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
+    for _ in range(MAX_PAGINAS):
+        for m in (uit or {}).get("matches") or []:
+            meta = ((m.get("metadata") or {}).get("metadata")) or {}
+            if meta.get("path_display"):
+                treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
+        if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
+            break
+        uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
     return treffers
 
 
@@ -50,7 +59,7 @@ def in_mappen(firma, werk, zoek=None, maximum=12):
             laag = pad.lower()
             if not laag.startswith(basis.lower() + "/") or any(n in laag for n in NIET_ZOEKEN):
                 continue
-            if laag.startswith(BASIS[S.andere(firma)].lower()):
+            if laag.startswith(BASIS[S.andere(firma)].lower()) or S.schendingen(pad, firma):
                 continue
             ouder = pad.rsplit("/", 1)[0] if t.get("soort") == "file" else pad
             if ouder.lower() in gezien:

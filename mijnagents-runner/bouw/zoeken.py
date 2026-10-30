@@ -13,14 +13,18 @@ Grendels in de code:
 import math
 import re
 import time
+from urllib.parse import parse_qs, urlsplit
 
 from aankoop import onderzoek as O
+
+from . import scheiding as S
 
 MODEL = O.MODEL
 MAX_ZOEKEN = 10
 MAX_LEZEN = 18
 MAX_TOKENS = 150000
 KBO = "kbopub.economie.fgov.be"
+MIN_TEKST = 100
 
 VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, met deze velden:
 {
@@ -46,16 +50,36 @@ het niet zag. Zoek het ondernemingsnummer op in de KBO (kbopub.economie.fgov.be)
 Geen bemiddelingsplatformen of offertesites als firma (zoals sites die je aanvraag doorverkopen)."""
 
 
-def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang=""):
+def modelwerkwijze(werkwijze):
+    """De werkwijze zoals ze naar het model gaat (Codex X4, controle 2): zonder het deel over voor wie ik werk en zonder
+    elke regel die een van de twee firma's noemt. Het model zoekt firmaneutraal; de firma doet de code."""
+    uit, overslaan = [], False
+    for regel in (werkwijze or "").splitlines():
+        if regel.startswith("## "):
+            overslaan = regel.strip().lower() == "## voor wie ik werk"
+        if not overslaan and not S.noemt_een_firma(regel):
+            uit.append(regel)
+    return "\n".join(uit)
+
+
+def kennis_voor_model(collegas_tekst, lessen):
+    """De gedeelde lessen (N13) en de collega's (N14) zoals ze naar het model gaan (Codex X13, controle 2): zonder elke
+    regel die een van de twee firma's noemt."""
+    regels = ["GEDEELDE LESSEN:"] + [f"- {l.get('les', '')}" for l in lessen or [] if isinstance(l, dict) and l.get("les")]
+    regels += ["", str(collegas_tekst or "")]
+    return "\n".join(r for r in "\n".join(regels).splitlines() if not S.noemt_een_firma(r)).strip()
+
+
+def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", kennis=""):
     """De systeemtekst en de vraag. soort: 'uitvoering' (een uitvoerder voor een bouwheer) of 'onderaanneming'."""
     wie = ("een aannemer of vakman die dit werk rechtstreeks voor een particuliere bouwheer uitvoert"
            if soort == "uitvoering" else "een vakman of firma die dit werk in onderaanneming voor een aannemer uitvoert")
-    systeem = "\n\n".join([
-        "Je bent De Aannemerszoeker, een agent die firma's zoekt die een bouwwerk kunnen uitvoeren, en gegevens levert; "
-        "de code achter je keurt elke firma. Nederlands, geen emoji. Beweer niets wat je niet op een gelezen pagina zag.",
-        "JOUW WERKWIJZE (ze geldt):\n" + (werkwijze or ""),
-        VORM,
-    ])
+    delen = ["Je bent De Aannemerszoeker, een agent die firma's zoekt die een bouwwerk kunnen uitvoeren, en gegevens "
+             "levert; de code achter je keurt elke firma. Nederlands, geen emoji. Beweer niets wat je niet op een gelezen "
+             "pagina zag.", "JOUW WERKWIJZE (ze geldt):\n" + modelwerkwijze(werkwijze)]
+    if kennis:
+        delen.append(kennis)
+    systeem = "\n\n".join(delen + [VORM])
     gebruiker = (f"Vandaag is {vandaag}. Gezocht: {wie}.\nWERK: {werk}\n" + (f"OMVANG: {omvang}\n" if omvang else "")
                  + f"GEBIED: {gemeente}, binnen ongeveer {straal_km} km.\n"
                  "Zoek op het web en lees de pagina van elke firma met web_fetch voor je ze opneemt. Mik op vijf tot "
@@ -75,21 +99,35 @@ def btw_geldig(nummer):
     return f"{cijfers[:4]}.{cijfers[4:7]}.{cijfers[7:]}"
 
 
+STATUS = re.compile(r"status\s*:?\s*(niet\s+actief|actief|stopgezet|doorgehaald|ontbonden|vereffening)", re.I)
+
+
 def kbo_actief(nummer, gelezen):
-    """True als een gelezen KBO-pagina dit nummer toont met de status actief, False als ze het als stopgezet toont,
-    None als er geen KBO-pagina met dit nummer gelezen is."""
+    """True als een gelezen pagina van kbopub.economie.fgov.be met precies dit nummer in de url en in de tekst als
+    status Actief toont; False bij elke andere status; None als zo'n pagina er niet is (Codex X6, controle 2: de host
+    exact, het nummer exact, de status uit de statusregel, nooit uit een los woord)."""
     if not nummer:
         return None
     kaal = nummer.replace(".", "")
+    uitslag = None
     for url, tekst in (gelezen or {}).items():
-        if KBO not in url or (kaal not in url.replace(".", "") and nummer not in (tekst or "") and kaal not in (tekst or "")):
+        try:
+            d = urlsplit(url)
+        except ValueError:
             continue
-        t = (tekst or "").lower()
-        if "stopgezet" in t or "doorgehaald" in t:
+        nrs = {re.sub(r"\D", "", w) for w in parse_qs(d.query).get("ondernemingsnummer", [])}
+        if d.netloc.lower() != KBO or kaal not in nrs:
+            continue
+        t = tekst or ""
+        if nummer not in t and kaal not in re.sub(r"\D", "", t):
+            continue
+        m = STATUS.search(t)
+        if not m:
+            continue
+        if " ".join(m.group(1).lower().split()) != "actief":
             return False
-        if "actief" in t:
-            return True
-    return None
+        uitslag = True
+    return uitslag
 
 
 def afstand_km(a, b):
@@ -116,6 +154,13 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
     heeft, een gelezen KBO-pagina die actief toont en binnen de straal ligt. Zonder KBO-bewijs of zonder bekende afstand:
     na te kijken, nooit groen. lokaliseer: 'postcode gemeente' -> {lat, lon} of None (Geopunt)."""
     gelezen_firmas, afgewezen = O.alleen_gelezen([f for f in firmas or [] if isinstance(f, dict)], gelezen)
+    met_tekst = []
+    for f in gelezen_firmas:     # Codex X6: een gelezen pagina zonder tekst bewijst niets
+        if len((gelezen.get(O.schoon_url(f.get("url")), "") if isinstance(gelezen, dict) else "").strip()) < MIN_TEKST:
+            afgewezen.append({"aanbod": f, "redenen": ["pagina zonder leesbare tekst"]})
+        else:
+            met_tekst.append(f)
+    gelezen_firmas = met_tekst
     uit = {"goed": [], "na_te_kijken": [], "buiten": [], "afgewezen": afgewezen}
     gezien = set()
     for f in gelezen_firmas:
@@ -147,7 +192,7 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
     return uit
 
 
-def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None, client=None, omvang=""):
+def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None, client=None, omvang="", kennis=""):
     """Een zoekvraag uitvoeren. Geeft {gegevens, gelezen, tekst, tokens, zoekopdrachten, stop, model}, zoals
     aankoop.onderzoek.onderzoek (dezelfde lus, met de plafonds van deze agent); gegevens is None als het model geen
     leesbaar JSON-object gaf."""
@@ -155,7 +200,7 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
     if client is None:
         from anthropic import Anthropic
         client = Anthropic(max_retries=1)
-    systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang)
+    systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
     assistent, teksten, tokens, stop, model = [], [], 0, None, MODEL
     for _ in range(O.MAX_HERVATTEN):
         rest_zoeken = MAX_ZOEKEN - O._gebruikt(assistent, "web_search")
