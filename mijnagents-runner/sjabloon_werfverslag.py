@@ -18,10 +18,13 @@ Opbouw (identiek in Word en in markdown):
 `naar_markdown(v)` en `van_markdown(md)` zijn elkaars spiegel, zodat een nieuwe lay-out zonder Claude
 (dus zonder tokens) uit de bewaarde markdown kan worden gemaakt (`--herlayout`).
 """
+import copy
 import io
 import os
 import re
 from datetime import date
+
+import schrijfregels
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 MASTER = os.path.join(HIER, "sjabloon_HA_master.docx")
@@ -155,6 +158,69 @@ FASE_PUNTEN = {
                    "Restpunten opvolgen tot afgewerkt; uitgevoerde werken bevestigen", "Definitieve oplevering: apart proces-verbaal"],
 }
 
+# Vaste kantoorteksten: tekst van Mehdi zelf, die de grendel nooit schrapt (zoals de VGP-zin "De architect is niet
+# aansprakelijk ...", die anders als S5 zou tellen).
+VASTE_TEKSTEN = frozenset([t for p in VASTE_PUNTEN for t in (p["nl"], p["en"])] + [t for ts in FASE_PUNTEN.values() for t in ts]
+                          + [VAST_VEILIGHEID, VAST_TIENJARIG, VAST_VOORWAARDEN])
+
+
+def herkomst(bron):
+    """De herkomst zoals het verslag ze toont (schrijfregel S4): nooit het tijdstip of een verwijzing naar de opname, dat
+    blijft in het veld bron van de gegevens. Een code V, B of S als de schrijver die zelf geeft; anders de bron zonder
+    tijdstip. De code wordt niet uit de bestandsnaam geraden: een foto van de bouwheer of een verklaring in het eigen
+    transcript is geen "eigen vaststelling", en een onjuiste V is erger dan een bestandsnaam (17e en 18e review).
+    Altijd één regel, zoals de bronnoot: anders breekt de regel Herkomst en komt de noot in de tekst van het punt."""
+    b = re.sub(r"\s*\n\s*", " / ", (bron or "").strip())
+    if not b or b == "vast punt kantoor":
+        return b
+    if re.fullmatch(r"[VBS](?:\s*[+,/]\s*[VBS])*", b):
+        return b   # alleen een veld dat helemaal een code is: 'V - Vergunningsbesluit.pdf' is een bestandsnaam (25e review)
+    if re.search(r"\bbouwhe(?:er|ren)\b|\bmondeling\b", b, re.I) and not re.search(r"\.\w{2,4}\b", b):
+        return "B"   # de schrijver zegt zelf dat het een verklaring is (geen bestand met 'bouwheer' in de naam)
+    zonder = schrijfregels.bron_zichtbaar(b)   # dezelfde regel als de bron in het verslag van bevindingen
+    return zonder or "(na te kijken)"
+
+
+# verslag_md is bij een werfverslag de enige plek waar de bron per punt (bestand en opnametijdstip) bewaard blijft. Het
+# verslag toont alleen V, B of S; de volledige bron staat erachter als HTML-commentaar, onzichtbaar op de bezoekpagina,
+# in Word en in de PDF, en van_markdown leest ze terug (Herlayout verliest zo niets).
+def _bron_noot(bron):
+    b = (bron or "").strip()
+    if not b or b == herkomst(b):
+        return ""
+    # één regel en geen "--" erin: anders breekt het commentaar en komt de bron in de tekst terecht
+    return " <!-- bron: " + re.sub(r"-{2,}", "-", re.sub(r"\s*\n\s*", " / ", b)) + " -->"
+
+
+def _bron_uit(regel):
+    m = re.match(r"(.*?)\s*<!-- bron: (.*?) -->\s*$", regel)
+    return (m.group(2) if m else regel).strip()
+
+
+def herkomst_omzetten(md):
+    """Zet in een bewaarde markdown elke regel 'Herkomst: <ruwe bron>' om naar V/B/S met de bron erachter verborgen, en
+    laat de rest letterlijk staan (van_markdown en naar_markdown zijn niet volledig verliesvrij: meerregelige velden)."""
+    def regel(r):
+        if not r.startswith("Herkomst: "):
+            return r
+        zicht = r[len("Herkomst: "):].strip()
+        if "<!--" in zicht or zicht == herkomst(zicht):
+            return r
+        return "Herkomst: " + herkomst(zicht) + _bron_noot(zicht)
+    return "\n".join(regel(r) for r in (md or "").split("\n"))
+
+
+def toont_ruwe_bron(md):
+    """Een oude proef toont nog 'Herkomst: transcript.txt 00:12:00' (van vóór de V/B/S-weergave): Herlayout herschrijft
+    dan de bewaarde markdown, zodat de bezoekpagina hetzelfde toont als Word en de PDF."""
+    for regel in (md or "").splitlines():
+        if regel.startswith("Herkomst: "):
+            zicht = re.sub(r"\s*<!--.*?-->\s*$", "", regel[len("Herkomst: "):]).strip()
+            if zicht and zicht != herkomst(zicht):
+                return True
+    return False
+
+
 VLAG = {"ok": "OK", "belangrijk": "Belangrijk", "dringend": "Dringend", "": ""}
 VLAG_TERUG = {v.lower(): k for k, v in VLAG.items() if v}
 
@@ -182,6 +248,8 @@ def titel_van(v):
 
 # ------------------------------------------------------------------ markdown ---
 def naar_markdown(v):
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v, vast=VASTE_TEKSTEN)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = []
     nr, n = v["dossier"], v["bezoek"]
     r.append(f"# {titel_van(v)} voor project {nr} {v['adres']}")
@@ -221,7 +289,7 @@ def naar_markdown(v):
             r.append(p.get("tekst_nl", ""))
             if p.get("bron"):
                 r.append("")
-                r.append(f"Herkomst: {p['bron']}")
+                r.append(f"Herkomst: {herkomst(p['bron'])}" + _bron_noot(p["bron"]))
             if p.get("tekst_en"):
                 r.append("")
                 r.append(f"*{p['tekst_en']}*")
@@ -327,7 +395,7 @@ def van_markdown(md):
         if rg.startswith("Verantwoordelijke: "):
             punt["verantwoordelijke"] = rg[len("Verantwoordelijke: "):].strip()
         elif rg.startswith("Herkomst: "):
-            punt["bron"] = rg[len("Herkomst: "):].strip()
+            punt["bron"] = _bron_uit(rg[len("Herkomst: "):])
             punt["doorlopend"] = punt["bron"] == "vast punt kantoor"
         elif rg.startswith("Naslag: "):
             punt["naslag"] = rg[len("Naslag: "):].strip()
@@ -336,7 +404,9 @@ def van_markdown(md):
         elif rg.startswith("*") and rg.endswith("*") and punt["tekst_nl"]:
             punt["tekst_en"] = rg.strip("*")
         else:
-            punt["tekst_nl"] = (punt["tekst_nl"] + " " + rg.strip()).strip()
+            # met de regelovergang: naar_markdown schrijft tekst_nl zoals hij is, en de grendel (S1-S7 per regel) mag bij
+            # Herlayout of naar werfapp geen lijstregels samen zien die in de proef apart stonden
+            punt["tekst_nl"] = (punt["tekst_nl"] + "\n" + rg.strip()).strip()
     for rg in secties.get("Foto's niet geplaatst", []):
         m = re.match(r"- (.*?): (.*)", rg)
         if m:
@@ -402,7 +472,10 @@ def _voettekst(doc, tekst):
 
 
 def naar_docx(v, fotos=None, master=MASTER):
-    """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png)."""
+    """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png). Een foto die niet in Word
+    past, komt in fotos_niet_geplaatst van het verslag van de aanroeper (melding, md en logboek)."""
+    aanroeper, v = v, copy.deepcopy(v)
+    schrijfregels.wacht(v, vast=VASTE_TEKSTEN)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt, RGBColor
@@ -509,7 +582,7 @@ def naar_docx(v, fotos=None, master=MASTER):
             if pt.get("bron"):
                 q = alinea(na=2)
                 r = q.add_run("Herkomst: "); r.bold = True; r.font.size = Pt(9)
-                q.add_run(pt["bron"])
+                q.add_run(herkomst(pt["bron"]))
             if pt.get("tekst_en"):
                 alinea(pt["tekst_en"], cursief=True, na=2)
             if pt.get("verantwoordelijke"):
@@ -554,7 +627,7 @@ def naar_docx(v, fotos=None, master=MASTER):
                 p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
             except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {b} niet leesbaar)")
-                v.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})
+                aanroeper.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})
             q = alinea(na=10)
             r = q.add_run(f"Foto {i}"); r.bold = True; r.font.size = Pt(9)
             tijd = f"{b[:2]}:{b[2:4]}" if b[:4].isdigit() else b

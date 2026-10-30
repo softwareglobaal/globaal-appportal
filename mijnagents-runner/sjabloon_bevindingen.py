@@ -21,6 +21,7 @@ Opbouw (identiek in Word en in markdown):
 
 Herkomst per bevinding: V = eigen vaststelling ter plaatse, B = verklaring van de bouwheer, S = blijkt uit stukken.
 """
+import copy
 import io
 import json
 import os
@@ -31,6 +32,7 @@ from datetime import date
 HIER = os.path.dirname(os.path.abspath(__file__))
 if HIER not in sys.path:
     sys.path.insert(0, HIER)
+import schrijfregels  # noqa: E402
 import sjabloon_werfverslag as sj  # noqa: E402
 
 SOORT = "verslag_bevindingen"
@@ -46,6 +48,7 @@ VOORBEHOUD = (
     "gebreken. Dat is de taak van de raadsman van de bouwheer en, desgevallend, van een gerechtsdeskundige.\n"
     "De raming is een indicatieve orde van grootte, exclusief btw, en vervangt geen offerte van een herstelaannemer.\n"
     "Toestanden of herstellingen van na het plaatsbezoek zijn niet in dit verslag verwerkt.")
+VAST = sj.VASTE_TEKSTEN | {VOORBEHOUD}   # vaste kantoorteksten: de grendel schrapt ze nooit
 
 
 def leeg(nr="<nr>", adres="<adres van het goed>"):
@@ -128,7 +131,9 @@ def uit_werfproef(verslag):
             if p.get("doorlopend"):
                 continue   # vaste werfpunten horen niet in een verslag van bevindingen
             i += 1
-            bevindingen.append({"nr": f"B{i}", "titel": p.get("titel", ""), "herkomst": p.get("bron") or "(na te kijken)",
+            # herkomst V, B of S in het verslag (S4); de bron met het opnametijdstip blijft in de gegevens
+            bevindingen.append({"nr": f"B{i}", "titel": p.get("titel", ""), "herkomst": sj.herkomst(p.get("bron")) or "(na te kijken)",
+                                "bron": p.get("bron", ""),
                                 "vaststelling": p.get("tekst_nl", ""), "beoordeling": open_, "herstel": open_,
                                 "fotos": list(p.get("fotos", []))})
         if bevindingen:
@@ -162,7 +167,11 @@ def _fotoverwijzing(b, nummer):
 
 
 # ------------------------------------------------------------------ markdown ---
-def naar_markdown(v):
+def naar_markdown(v, fotos=None):
+    """fotos (dict naam -> bytes): alleen die foto's krijgen een nummer, zoals in Word en in de fotobijlage van de PDF.
+    Zonder fotos krijgt elke genoemde foto een nummer."""
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v, vast=VAST)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     r = [f"# {TITEL}: {v['dossier']} {v['adres']}", "",
          f"**CONCEPT** - opgemaakt op {v['opgemaakt']}. Na te kijken en aan te vullen door Mehdi Chegini vóór verzending.", "",
          "| | |", "|---|---|",
@@ -170,7 +179,7 @@ def naar_markdown(v):
          f"| Adres van het goed | {v['adres']} |", f"| Datum plaatsbezoek | {sj.datum_nl(v['datum'])} |",
          f"| Verslagtype | {TITEL.lower()} (geen werfverslag) |",
          f"| Opgemaakt door | {sj.FIRMA['naam']}, {sj.FIRMA['adres']}, {sj.FIRMA['btw']} |", ""]
-    nummer, _ = _fotonummers(v)
+    nummer, _ = _fotonummers(v, fotos)
     k = 0
 
     def kop(t):
@@ -194,7 +203,7 @@ def naar_markdown(v):
         r.extend([alinea, ""])
     kop("Offerte, facturen en uitvoering")
     r.extend(["| Post | Bron | Bedrag excl. btw | Opmerking |", "|---|---|---|---|"])
-    r.extend(f"| {p.get('post', '')} | {p.get('bron', '')} | {euro(p.get('bedrag', ''))} | {p.get('opmerking', '')} |" for p in v.get("posten", []))
+    r.extend(f"| {p.get('post', '')} | {schrijfregels.bron_zichtbaar(p.get('bron'))} | {euro(p.get('bedrag', ''))} | {p.get('opmerking', '')} |" for p in v.get("posten", []))
     r.append("")
     for alinea in v.get("posten_toelichting", []):
         r.extend([alinea, ""])
@@ -210,7 +219,8 @@ def naar_markdown(v):
             if b.get("dias"):
                 r.extend([f"*Fotodossier van de bouwheer:* {b['dias']}", ""])
     kop("Door de bouwheer gemelde punten, niet ter plaatse vastgesteld")
-    r.extend(f"- {g['punt']}" + (f" ({g['bron']})" if g.get("bron") else "") for g in v.get("gemeld", []))
+    r.extend(f"- {g['punt']}" + (f" ({schrijfregels.bron_zichtbaar(g['bron'])})" if schrijfregels.bron_zichtbaar(g.get("bron")) else "")
+             for g in v.get("gemeld", []))
     r.append("")
     kop("Herstelling en raming")
     r.extend(["| Nr | Herstelling | Bij | Raming excl. btw |", "|---|---|---|---|"])
@@ -233,6 +243,8 @@ def naar_markdown(v):
 # ---------------------------------------------------------------------- docx ---
 def naar_docx(v, fotos=None, master=sj.MASTER):
     """Word in de huisstijl van de contractmasters (zoals het werfverslag). fotos: dict bestandsnaam -> bytes."""
+    v = copy.deepcopy(v)
+    schrijfregels.wacht(v, vast=VAST)   # schrijfregels S1-S5 van het kantoor: nooit in een concept
     from docx import Document
     from docx.enum.text import WD_BREAK
     from docx.shared import Cm, Pt, RGBColor
@@ -327,7 +339,8 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
         alinea(t, na=4)
     hoofdstuk("Offerte, facturen en uitvoering")
     tabel(["Post", "Bron", "Bedrag excl. btw", "Opmerking"],
-          [[x.get("post", ""), x.get("bron", ""), euro(x.get("bedrag", "")), x.get("opmerking", "")] for x in v.get("posten", [])], [4.6, 2.4, 2.4, 7])
+          [[x.get("post", ""), schrijfregels.bron_zichtbaar(x.get("bron")), euro(x.get("bedrag", "")), x.get("opmerking", "")]
+           for x in v.get("posten", [])], [4.6, 2.4, 2.4, 7])
     for t in v.get("posten_toelichting", []):
         alinea(t, na=4)
     hoofdstuk("Bevindingen")
@@ -350,7 +363,7 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
     alinea("Deze punten staan in de stukken van de bouwheer of werden mondeling gemeld. Ze werden tijdens het plaatsbezoek niet "
            "vastgesteld en worden hier zonder oordeel vermeld.", cursief=True, grootte=9.5, na=4)
     for g in v.get("gemeld", []):
-        alinea("- " + g["punt"] + (f" ({g['bron']})" if g.get("bron") else ""), na=2)
+        alinea("- " + g["punt"] + (f" ({schrijfregels.bron_zichtbaar(g['bron'])})" if schrijfregels.bron_zichtbaar(g.get("bron")) else ""), na=2)
     hoofdstuk("Herstelling en raming")
     rijen = [[x.get("nr", ""), _ramingpost(x), x.get("bij", ""), _ramingbedrag(x)] for x in v.get("raming", [])]
     van, tot = raming_totaal(v)
