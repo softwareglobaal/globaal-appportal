@@ -37,4 +37,9 @@ verwerking staat in `docs/bouw/verwerkt-4-controle.md`. Daarna dezelfde punten a
    (N10: geen aantal in een noodtekst; N12: de ronde in het runnerbestand)? Klopt het uitrolscript?
 7. Ontbrekende tests voor wat hierboven kan breken.
 
+Weeg de ernst naar de echte blootstelling: geen enkele agent verstuurt iets; een mail vertrekt pas als Mehdi ze zelf
+kopieert en verstuurt, en de verslagen staan op het bord achter Authentik. Hoog is wat zonder menselijke handeling een
+fout naar buiten brengt of een verkeerde keuze uitlokt; een theoretisch randgeval dat de grendel mist maar dat een
+mens ziet voor het vertrekt, is middel of laag. Zeg bij elk punt welke handeling van Mehdi het nog zou tegenhouden.
+
 Geef bovenaan een beslissing: klaar, klaar met kanttekeningen, of niet klaar. Alleen punten met bewijs.
