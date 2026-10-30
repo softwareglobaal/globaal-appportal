@@ -30,7 +30,7 @@ case "$wat" in
         ;;
     schijf)
         aantal 1
-        df -h -x tmpfs -x devtmpfs -x overlay -x squashfs
+        df -h -x tmpfs -x devtmpfs -x overlay -x squashfs -x fuse.rclone
         ;;
     geheugen)
         aantal 1
