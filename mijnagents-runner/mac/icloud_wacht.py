@@ -726,6 +726,13 @@ def taken():
             continue
         if not tkn:
             jpeg_kopieen(doel)
+            # Afvinken pas als elke geleverde HEIC een JPG heeft: de voorbereider maakt een hersteltaak maar één keer aan
+            # (overleg W4 P3, 30-10-2026, Codex X4), dus een mislukte omzetting moet de taak open houden.
+            if any(not os.path.isfile(jpg) or os.path.getsize(jpg) == 0 for jpg in (
+                    os.path.join(doel, os.path.splitext(f["export"])[0] + ".jpg") for f in binnen
+                    if str(f.get("export") or "").lower().endswith(".heic"))):
+                blokkeer(it, "omzetting_mislukt")
+                continue
         taak_opgepakt(it["id"])
         gedaan += 1
     if regels:
