@@ -832,8 +832,9 @@ def test_t45_droge_stand_gemeten_in_de_code():
         assert set(s["agents"]) == {n for n, r in R.RONDE_TOEGELATEN.items() if r["slot"] == slot}, (slot, s)
     vroeger = {"contracten-agent", "agenda-wacht", "fathom-wacht", "plaud-wacht", "dagbundelaar", "locatie-wacht", "ontwikkelaar",
                "levenscoach", "bode", "benamingen-wacht", "mappen-wacht"}
-    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur", "prijsonderzoeker"}, \
-        "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog) en De Prijsonderzoeker (overleg 30-10-2026)"
+    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur", "prijsonderzoeker", "aannemerszoeker",
+                                                 "offertevergelijker"}, \
+        "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog), De Prijsonderzoeker en de afdeling Bouw"
 
 
 def test_t45_dag_en_deal_gemeten_in_de_code():
@@ -851,7 +852,8 @@ def test_t45_dag_en_deal_gemeten_in_de_code():
         kent = bool(re.search(r"""["']--vraag["']""", open(C._runnerpad(naam), encoding="utf-8").read()))
         if recht.get("vraag"):
             assert kent, f"{naam}: vraag in de lijst, maar de code kent geen --vraag"
-    assert {n for n, r in R.RONDE_TOEGELATEN.items() if r.get("vraag")} == {"prijsonderzoeker"}
+    assert {n for n, r in R.RONDE_TOEGELATEN.items() if r.get("vraag")} == {"prijsonderzoeker", "aannemerszoeker",
+                                                                            "offertevergelijker"}
     assert "kent geen --vraag" in R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["ontwikkelaar"], naam="ontwikkelaar"), {"vraag": "x"})
     assert R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["prijsonderzoeker"], naam="prijsonderzoeker"), {"vraag": "x"}) is None
 

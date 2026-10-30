@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""De Offertevergelijker (afdeling bouw): legt op verzoek de offertes van een lot naast elkaar, voor precies een
+firma (H-Architects of Harmonie Bouw), en zet de vergelijking op het bord. Geen gunning: Mehdi beslist.
+
+Een vraag komt binnen als klaargezet item (voor: offertevergelijker, soort: vraag) of met de hand:
+    offertevergelijker.py --vraag "firma: HA; project: 2145; lot: 06"
+
+Per vraag: de vraag ontleden (zonder firma geen werk), de lotmap van die firma zoeken (bouw/mappen.py), de PDF's lokaal
+lezen met pypdf (bouw/offertes.py: een scan is "OCR nodig"), de totalen en voorwaarden vergelijken, en alleen met het
+ja van Mehdi (OFFERTE_NAAR_AI, overleg X5) ook per post via het model, op geredigeerde tekst. De inschrijvers heten
+A, B, C; de naam van de andere firma komt nooit in de vergelijking. Leest Dropbox, schrijft er niets in.
+
+Overleg 30-10-2026 (docs/bouw/rapport-1-ontwerp.md, verwerking in verwerkt-1-ontwerp.md).
+--droog: zegt welke vragen klaarstaan en leest geen offertes.
+"""
+import argparse
+import hashlib
+import os
+import re
+import sys
+from datetime import date
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+sys.path.insert(0, HIER)
+import bord  # noqa: E402
+from bouw import mappen as MP  # noqa: E402
+from bouw import offertes as F  # noqa: E402
+from bouw import scheiding as S  # noqa: E402
+from bouw import vraag as Q  # noqa: E402
+from bouw import verslag as V  # noqa: E402
+
+NAAM = "offertevergelijker"
+ag = bord.Agent(NAAM)
+MAX_VRAGEN = 2
+MAX_OFFERTES = 8
+SOORT = "offertevergelijking"
+
+
+def laad_env(pad):
+    try:
+        for regel in open(os.path.expanduser(pad)):
+            regel = regel.strip()
+            if regel and not regel.startswith("#") and "=" in regel:
+                k, v = regel.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    except OSError:
+        pass
+
+
+laad_env("~/agents/.env")
+
+
+def open_vragen():
+    items = bord.klaargezet_voor(NAAM, status="klaar")
+    vragen = [it for it in items if it.get("soort") == "vraag" and (it.get("inhoud") or it.get("titel"))]
+    return sorted(vragen, key=lambda it: it.get("id") or 0)
+
+
+def vingerafdruk(tekst, vandaag):
+    return hashlib.sha256(f"{vandaag}:{tekst}".encode()).hexdigest()[:12]
+
+
+def zet_klaar(tekst_vraag, titel, inhoud, vandaag, firma=None):
+    """Klaarzetten voor Mehdi; met een firma eerst de scheiding (geen kenmerk van de andere firma)."""
+    if firma:
+        weg = S.kruis(titel + "\n" + inhoud, firma)
+        if weg:
+            raise ValueError("; ".join(weg))
+    ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": vandaag.isoformat(), "titel": titel,
+                  "uniek": f"offertes:{vingerafdruk(tekst_vraag, vandaag)}", "inhoud": inhoud}])
+
+
+def lotnaam(pad, firma):
+    """De naam van de lotmap voor het verslag; noemt die de andere firma, dan alleen het nummer van het lot."""
+    naam = (pad or "").rsplit("/", 1)[-1]
+    if S.is_andere_firma(naam, firma):
+        m = re.match(r"\s*(\d{1,3})", naam)
+        return f"lot {m.group(1)}" if m else "dit lot"
+    return naam
+
+
+def een_vraag(r, tekst, vandaag):
+    import bronnen
+    va = vingerafdruk(tekst, vandaag)
+    v = Q.ontleed(tekst)
+    blok = Q.ontbreekt_vergelijker(v)
+    if blok:
+        zet_klaar(tekst, "Offertevergelijking niet gestart: vraag onvolledig", V.onvolledig(NAAM, v.get("firma"), blok),
+                  vandaag)
+        return 0
+    firma = v["firma"]
+    try:
+        pad, lots = MP.offertemap(v, bronnen.lijst, MP.projectmap)
+    except MP.MapFout as e:
+        zet_klaar(tekst, "Offertevergelijking niet gestart", f"**Niet gestart:** {e}. Ik las geen offerte.", vandaag, firma)
+        return 0
+    if not pad:
+        zet_klaar(tekst, "Offertevergelijking: kies een lot", V.lotkeuze(v, lots), vandaag, firma)
+        return 0
+    naam = lotnaam(pad, firma)
+    bestanden = MP.offertebestanden(pad, bronnen.lijst)[:MAX_OFFERTES]
+    r.bron(f"lotmap {S.FIRMANAMEN[firma]}", f"{len(bestanden)} PDF's")
+    if not bestanden:
+        zet_klaar(tekst, f"Offertes {naam}: geen PDF", f"**Niet vergeleken:** in {naam} staat geen offerte als PDF.",
+                  vandaag, firma)
+        return 0
+    letters = F.letters(bestanden, firma)
+    gelezen, teksten = [], {}
+    for letter, b, _ in letters:
+        try:
+            blz = F.paginas(bronnen.download(b["pad"]))
+        except Exception as e:  # noqa: BLE001  een offerte die niet binnenkomt, telt niet mee en staat erbij
+            blz = None
+            ag.log("offertes", "fout", f"vraag {va}: inschrijver {letter} niet gedownload: {type(e).__name__}")
+        gelezen.append({"letter": letter, "lees": F.lees(blz)})
+        if blz:
+            teksten[letter] = "\n".join(blz)
+    uit = F.vergelijk(gelezen, vandaag)
+    per_post, post_redenen = None, {}
+    if F.OFFERTE_NAAR_AI and len(teksten) >= 2:
+        extra = [x for x in (v.get("project"),) if x]
+        geredigeerd = {l: F.redigeer(t, extra) for l, t in teksten.items()
+                       if next(g for g in gelezen if g["letter"] == l)["lees"].get("soort") == "offerte"}
+        try:
+            gegevens = F.posten_uit_model(geredigeerd)
+            totalen = {g["letter"]: g["lees"].get("excl") for g in gelezen}
+            posten, post_redenen = F.keur_posten(gegevens, teksten, totalen)
+            if any(posten.values()):
+                per_post = F.per_post((gegevens or {}).get("rijen"), {l: p for l, p in posten.items() if p})
+        except Exception as e:  # noqa: BLE001  zonder model blijft de vergelijking van de totalen staan
+            ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {type(e).__name__}: {str(e)[:200]}")
+            r.nood("Offerteposten niet uitgelezen door het model", wie="claude-code")
+    inhoud = V.vergelijkingsverslag(v, naam, letters, uit, per_post, post_redenen, vandaag.isoformat(),
+                                    F.OFFERTE_NAAR_AI)
+    try:
+        zet_klaar(tekst, V.vergelijkingstitel(v, naam), inhoud, vandaag, firma)
+    except ValueError as e:
+        ag.log("offertes", "fout", f"vraag {va}: verslag geweigerd door de scheiding", str(e))
+        r.nood("Vergelijking geweigerd door de scheidingsgrendel", wie="claude-code")
+        return 0
+    ag.log("offertes", "melding", f"vergelijking {va} klaargezet voor Mehdi: {len(bestanden)} offertes", inhoud)
+    return len(bestanden)
+
+
+def werk(r, hand_vraag=None, droog=False):
+    nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
+    if not nooit or not mehdi_beslist:
+        r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
+        r.detail = "geen werk gedaan, grenzen ontbreken in de werkwijze"
+        return
+    vragen = [{"id": None, "inhoud": hand_vraag}] if hand_vraag else open_vragen()
+    if not vragen:
+        r.detail = "geen open vraag om offertes te vergelijken"
+        return
+    if droog:
+        r.detail = f"droog: {len(vragen)} vragen klaar, geen offerte gelezen"
+        return
+    vandaag = date.today()
+    gedaan = offertes = 0
+    for v in vragen[:MAX_VRAGEN]:
+        tekst = str(v.get("inhoud") or v.get("titel")).strip()
+        try:
+            offertes += een_vraag(r, tekst, vandaag)
+        except Exception as e:  # noqa: BLE001
+            ag.log("offertes", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
+            r.nood("Offertevergelijking mislukt", wie="claude-code")
+        gedaan += 1
+        if v.get("id"):
+            bord.opgepakt(v["id"], NAAM)
+    rest = len(vragen) - gedaan
+    r.detail = f"{gedaan} vergelijkingen afgewerkt, {offertes} offertes bekeken" + (f", {rest} wachten" if rest else "")
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description="De Offertevergelijker")
+    p.add_argument("--vraag", help="een vraag met de hand: firma: HA; project: 2145; lot: 06")
+    p.add_argument("--droog", action="store_true", help="geen offertes lezen; zeggen wat klaarstaat")
+    a = p.parse_args()
+    with ag.ronde("offertevraag" if a.vraag else "offertevragen afwerken") as r:
+        werk(r, a.vraag, a.droog)

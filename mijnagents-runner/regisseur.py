@@ -93,6 +93,10 @@ RONDE_TOEGELATEN = {
     # De Prijsonderzoeker (afdeling aankoop, overleg 30-10-2026 X2/X6): een ronde met de prijsvraag van Mehdi (--vraag);
     # het verslag lees ik daarna met de tool klaargezet (van prijsonderzoeker) en geef ik in de chat.
     "prijsonderzoeker": {"droog": True, "stuurt": False, "slot": None, "dag": False, "deal": False, "vraag": True},
+    # De afdeling Bouw (overleg 30-10-2026, X7): dezelfde weg, met de vraag als velden (firma verplicht); het verslag
+    # lees ik met klaargezet (van aannemerszoeker of offertevergelijker) en geef ik in de chat.
+    "aannemerszoeker": {"droog": True, "stuurt": False, "slot": None, "dag": False, "deal": False, "vraag": True},
+    "offertevergelijker": {"droog": True, "stuurt": False, "slot": None, "dag": False, "deal": False, "vraag": True},
 }
 # icloud-wacht, tekenaar en gezondheid-wacht draaien op de Mac (launchd), niet hier.
 NOOIT_RONDE = {"regisseur", "mijnagents-uitvoerder"}
@@ -118,7 +122,8 @@ WA_MODEL_MAX = 700              # wat ik het model vooraf vraag, zodat er zelden
 DOSSIER_MAX = 20000
 # Inhoud van een klaargezet item geef ik alleen voor deze soorten (R4), en nooit voor de soorten daaronder.
 INHOUD_SOORTEN = ("verslag", "dagbundel", "dagplan", "signaal", "verzoek", "ochtendbericht", "zoom-tekst", "zoom",
-                  "prijsverslag")    # het antwoord van De Prijsonderzoeker, dat ik in de chat geef (overleg X2, Codex X5)
+                  "prijsverslag",    # het antwoord van De Prijsonderzoeker, dat ik in de chat geef (overleg X2, Codex X5)
+                  "aannemersverslag", "offertevergelijking")    # de antwoorden van de afdeling Bouw (overleg 30-10-2026)
 NOOIT_INHOUD = ("transcript", "locatie", "gezondheid", "coaching")
 # privé of prive, met of zonder accent, in elke hoofdletter: De Fathomwacht schrijft de afdeling 'prive' zonder accent
 PRIVE = re.compile(r"priv[eé]", re.I)
@@ -246,7 +251,13 @@ TOOLS = [
                                            "uitkomst terug, geen ruwe uitvoer. fathom-wacht en zoom-wacht lopen via het slot van de gesprekkenketen. "
                                            "prijsonderzoeker: geef de prijsvraag van Mehdi mee als vraag (alleen het product, het land "
                                            "en firma of privé, nooit een naam, adres of nummer); lees daarna zijn prijsverslag met klaargezet "
-                                           "(van prijsonderzoeker) en geef de aanbeveling met de links. Een prijsvraag duurt enkele minuten.",
+                                           "(van prijsonderzoeker) en geef de aanbeveling met de links. Een prijsvraag duurt enkele minuten. "
+                                           "aannemerszoeker en offertevergelijker (afdeling Bouw): geef de vraag als velden, firma altijd "
+                                           "(HA voor H-Architects, HB voor Harmonie Bouw; vraag het als Mehdi het niet zegt, kies nooit zelf), "
+                                           "bv. 'firma: HB; werk: plafonneerwerk; omvang: 120 m2; gemeente: 3020 Herent; straal: 25; "
+                                           "tegen: 15-11-2026' of 'firma: HA; project: 2145; lot: 06'; nooit de naam of het adres van een "
+                                           "bouwheer. Lees daarna het verslag met klaargezet (van die agent). Noem in een antwoord over de "
+                                           "ene firma de andere nooit.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}, "vraag": {"type": "string"}}, "required": ["naam"]}},
     {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal. Geeft het voorstel-ID terug zoals het bord het bewaarde; zonder ID staat er niets.",
      "input_schema": {"type": "object", "properties": {"actie": {"type": "string"}, "reden": {"type": "string"}, "runbook": {"type": "string"}, "parameters": {"type": "object"}}, "required": ["actie", "reden"]}},
