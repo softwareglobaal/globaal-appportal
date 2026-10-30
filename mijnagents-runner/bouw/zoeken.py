@@ -36,7 +36,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
      "telefoon": "zoals op de site, of null", "email": "zoals op de site, of null",
      "ondernemingsnummer": "0123.456.789 zoals op de site of in de KBO, of null",
      "kbo_url": "de KBO-pagina die je met web_fetch las, of null",
-     "specialiteit": "wat ze doen, kort", "bewijs": "een korte zin van de gelezen pagina die toont dat ze dit werk doen",
+     "specialiteit": "wat ze doen, kort", "bewijs": "een zin letterlijk overgenomen van een gelezen eigen pagina die toont dat ze dit werk doen",
      "werkgebied": "wat de site zegt over hun werkgebied, of null", "waarom": "een zin: waarom deze firma past"}
   ],
   "werkomschrijving": "een korte alinea voor de prijsaanvraag: wat er moet gebeuren, met de omvang als die
@@ -171,6 +171,22 @@ def nummer_op_site(nummer, url, gelezen):
     return False
 
 
+def _plat(tekst):
+    return " ".join(re.sub(r"[^\w]+", " ", S.normaal(tekst).lower()).split())
+
+
+def naam_en_werk_op_site(f, gelezen):
+    """Codex X1 (controle 7): een pagina met alleen het nummer in de voettekst bewijst niets. Op een gelezen pagina van
+    dezelfde site moeten ook de naam van de firma (haar langste woord buiten de rechtsvorm) en de zin over het werk
+    (het bewijs dat het model citeerde, minstens twintig tekens) letterlijk staan."""
+    eigen = host(O.schoon_url(f.get("url")))
+    tekst = " ".join(_plat(t) for u, t in (gelezen or {}).items() if eigen and host(u) == eigen)
+    woorden = [w for w in _plat(f.get("naam")).split() if w not in {"bv", "nv", "bvba", "comm", "commv", "vof", "srl", "sa"}]
+    naam = max(woorden, key=len) if woorden else ""
+    bewijs = _plat(f.get("bewijs"))
+    return len(naam) >= 3 and naam in tekst.split() and len(bewijs) >= 20 and bewijs in tekst
+
+
 def kbo_zetel(nummer, gelezen):
     """'postcode gemeente' van de zetel volgens een gelezen KBO-pagina met dit nummer, of None (Codex X1, controle 5:
     een adres op de website kan een project zijn; de KBO zegt waar de firma gevestigd is)."""
@@ -221,7 +237,8 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
         f["kbo_actief"] = kbo_actief(f["ondernemingsnummer"], gelezen)
         # Codex X2 (controle 6): de site hoort bij de onderneming als het nummer op een gelezen pagina van die site
         # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
-        f["site_bewezen"] = nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
+        f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
+                             and naam_en_werk_op_site(f, gelezen))
         if f["kbo_actief"] is False:
             uit["afgewezen"].append({"aanbod": f, "redenen": ["stopgezet volgens de KBO"]})
             continue

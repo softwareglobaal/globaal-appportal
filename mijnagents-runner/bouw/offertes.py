@@ -94,8 +94,8 @@ def bedragen_met_label(regel):
     bedrag (Codex X2, controle 5: "excl. 10.000 btw 2.100 incl. 12.100" op een regel). Een bedrag met alleen btw ervoor
     is het btw-bedrag en telt niet. Zonder label erbij: het label van de regel, als die er maar een heeft."""
     uit, vorige = [], 0
-    regel_excl, regel_incl = bool(EXCL.search(regel)), bool(INCL.search(regel))
-    for m in BEDRAG.finditer(regel):
+    geld = [m for m in BEDRAG.finditer(regel) if is_geld(regel, m)]
+    for m in geld:
         b = bedrag(m.group(0))
         # "excl. btw" en "incl. btw" zijn een label, geen btw-bedrag
         stuk = re.sub(r"(excl\w*|incl\w*|zonder|met)\.?\s*(?:btw|tva|vat)\b", r"\1", regel[vorige:m.start()], flags=re.I)
@@ -106,9 +106,22 @@ def bedragen_met_label(regel):
                              for x in p.finditer(stuk)), default=(None, None))[1]
         if laatste_label in ("excl", "incl"):
             uit.append((laatste_label, b))
-        elif laatste_label is None and regel_excl != regel_incl:
-            uit.append(("excl" if regel_excl else "incl", b))
+        elif laatste_label is None and len(geld) == 1 and m is geld[0] and not uit:
+            # Codex X2 (controle 7): alleen als dit het enige geldbedrag van de regel is, krijgt het het label van de regel
+            regel_excl, regel_incl = bool(EXCL.search(regel)), bool(INCL.search(regel))
+            if regel_excl != regel_incl:
+                uit.append(("excl" if regel_excl else "incl", b))
     return uit
+
+
+def is_geld(regel, m):
+    """Een geldbedrag: met decimalen, met duizendtallen, of met een euroteken of EUR ernaast. Niet '30 dagen' of
+    '6 weken' (Codex X2, controle 7)."""
+    t = m.group(0)
+    if re.search(r"[.,]\d{2}$", t) or re.search(r"\d[.,\u00a0 ]\d{3}", t):
+        return True
+    rond = regel[max(0, m.start() - 4):m.end() + 5].lower()
+    return "€" in rond or "eur" in rond
 
 
 DATUM_LABEL = re.compile(r"(?:offerte\s*datum|datum\s+(?:van\s+de\s+)?offerte|datum|opgemaakt\s+op|gedateerd)\s*:?\s*"
@@ -212,8 +225,11 @@ def redigeer(tekst, extra=()):
     for soort, patroon in P.PATRONEN:
         if soort in ("e-mailadres", "rekeningnummer", "rijksregisternummer", "telefoonnummer"):
             t = patroon.sub(f"[{soort}]", t)
-    t = re.sub(r"(?im)^\s*(?:aan|klant|bouwheer|opdrachtgever|t\.?a\.?v\.?|werf|werfadres|bouwplaats|ligging|adres|"
-               r"leveradres|uitvoeringsadres|project|referentie|ref\.?)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
+    t = re.sub(r"(?im)^\s*(?:aan|klant|klantnaam|naam\s+klant|naam|contact|contactpersoon|bouwheer|opdrachtgever|"
+               r"t\.?a\.?v\.?|werf|werfadres|bouwplaats|ligging|adres|leveradres|uitvoeringsadres|project|referentie|ref\.?|"
+               r"client|nom|adresse)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
+    t = re.sub(r"(?i)\b(?:rue|avenue|chaussée|place|boulevard|square|drève|quai)\s+[A-Za-zÀ-ÿ'’ -]{2,40}?\s+\d{1,4}[a-z]?\b",
+               "[adres weggelaten]", t)
     t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = LOS_ADRES_NA.sub("[adres weggelaten]", t)

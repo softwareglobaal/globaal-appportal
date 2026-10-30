@@ -32,7 +32,8 @@ Ik ben de eerste agent van de afdeling Bouw, samen met De Offertevergelijker.
 2. Dan het web: vijf tot acht firma's in het gebied. Ik lees de eigen pagina van elke firma en waar het lukt haar
    pagina in de KBO (kbopub.economie.fgov.be).
 3. De code keurt: een firma telt alleen met een pagina die ik in deze ronde las; het ondernemingsnummer moet de
-   modulo 97-controle halen en op een gelezen pagina van de eigen site staan (een Belgische firmasite moet het tonen);
+   modulo 97-controle halen en op een gelezen pagina van de eigen site staan (een Belgische firmasite moet het tonen),
+   samen met de naam van de firma en een letterlijke zin over het werk;
    actief in de KBO alleen met een gelezen KBO-pagina die dat toont; de vestiging telt
    uit de zetel op de gelezen KBO-pagina, niet uit een adres op de website (dat kan een project zijn); de afstand rekent
    de code met Geopunt. Bovenaan staan alleen firma's met een gelezen site, een actieve KBO en binnen de straal. Zonder

@@ -126,11 +126,11 @@ PUNTEN = {"3000 Leuven": {"lat": 50.879, "lon": 4.700}, "3020 Herent": {"lat": 5
           "8000 Brugge": {"lat": 51.209, "lon": 3.224}}
 firmas = [
     {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "adres": "Dorpstraat 1", "postcode": "3020", "gemeente": "Herent",
-     "ondernemingsnummer": "0537.405.239"},
+     "ondernemingsnummer": "0537.405.239", "bewijs": "Dakwerken, platte daken, EPDM, renovatie"},
     {"naam": "Dak Twee", "url": "https://dak-twee.voorbeeld.com/", "adres": "Kerkstraat 2", "postcode": "3000", "gemeente": "Leuven",
      "ondernemingsnummer": None},
     {"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "adres": "Zeedijk 3", "postcode": "3000", "gemeente": "Leuven",
-     "ondernemingsnummer": "0412.345.614"},
+     "ondernemingsnummer": "0412.345.614", "bewijs": "Dakwerken, platte daken, EPDM, renovatie"},
     {"naam": "Dak Spook", "url": "https://dak-spook.voorbeeld.com", "postcode": "3000", "gemeente": "Leuven"},
     {"naam": "Dak Weg", "url": "https://dak-weg.voorbeeld.com", "adres": "Molenstraat 4", "postcode": "3000", "gemeente": "Leuven",
      "ondernemingsnummer": "0403.170.701"},
@@ -476,6 +476,23 @@ check("X6 een naam voor een adres wordt weggehaald", "Jan Peeters" not in F.redi
 check("X7 'eigen aannemer', 'vaste aannemer' en 'partner van de fabrikant' zijn gewone taal",
       S.mag_weg("Geplaatst door de eigen aannemer of een vaste aannemer, partner van de fabrikant.", S.HB))
 check("X7 'onze vaste aannemer' blijft verboden", not S.mag_weg("Dit doet onze vaste aannemer.", S.HA))
+
+
+print("\nRegressie na controle 7 van Codex (X1 tot X6)")
+voet = Z.keur([{"naam": "Dak Voet", "url": "https://voet.voorbeeld.com/blog", "postcode": "3020", "gemeente": "Herent",
+                "ondernemingsnummer": "0537.405.239", "bewijs": "Wij leggen platte daken in EPDM"}],
+              {"https://voet.voorbeeld.com/blog": "Recept van de week: soep." + VUL + " BTW BE 0537.405.239", K: GELEZEN[K]},
+              PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X1 alleen het nummer in de voettekst bewijst de site niet", not voet["goed"] and voet["na_te_kijken"])
+x2 = F.lees(pdf("Totaal excl. BTW 10.000,00, geldig 30 dagen", "levering in 6 weken, totaal incl. btw 10.600,00", "btw 6%"))
+check("X2 '30 dagen' en '6 weken' zijn geen bedrag", x2["excl"] == 10000.0 and x2["incl"] == 10600.0, x2)
+check("X2 een bedrag zonder decimalen met euroteken telt wel", F.bedragen_met_label("Totaal excl. btw € 9500") == [("excl", 9500.0)])
+for schrijf, andere in (("H B BV", S.HA), ("H A BV", S.HB), ("Gerzenstraat 5A", S.HA), ("5A Gerzenstraat", S.HA)):
+    check(f"X3 '{schrijf}' wordt herkend", not S.mag_weg(f"Zie {schrijf}.", andere))
+r4 = F.redigeer("Klantnaam: Jan Peeters\nLivraison Rue Neuve 3, Bruxelles\nRamen plaatsen")
+check("X4 klantnaam en een Frans adres worden weggehaald", "Peeters" not in r4 and "Neuve 3" not in r4 and "Ramen plaatsen" in r4, r4)
+check("X5 'zusterbalk' is bouwtaal, 'zusterbedrijf' niet", S.mag_weg("Een zusterbalk naast de balk.", S.HB)
+      and not S.mag_weg("Ons zusterbedrijf.", S.HB))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
