@@ -30,6 +30,22 @@ restrict,port-forwarding,permitlisten="127.0.0.1:8121",command="/bin/false" ssh-
 Met die sleutel kan je geen shell openen en alleen op 127.0.0.1:8121 een
 tunnel laten luisteren. Weg ermee = de regel verwijderen.
 
+## De leessleutel
+
+De tool `read_server` kijkt op de VM mee met een tweede sleutel,
+`claude_manager_lees`, die alleen `manager-lees.sh` in deze map kan draaien.
+Dat script kent een vaste lijst opdrachten (uptime, schijf, geheugen,
+containers, stats, logs, mislukt, dienst, journaal); de rest wordt geweigerd.
+Elke aanroep staat in syslog onder `claude-manager-lees`. Docker exec en
+inspect zitten er bewust niet in. In `~/.ssh/authorized_keys`:
+
+```
+restrict,command="/home/ubuntu/appportal/claude-manager-brug/manager-lees.sh" ssh-ed25519 AAAA... claude-manager-lees
+```
+
+Let op: een push naar dit script bepaalt wat de sleutel mag. Weg ermee = de
+regel verwijderen.
+
 ## Installeren
 
 ```

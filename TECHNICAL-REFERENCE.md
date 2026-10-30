@@ -1105,7 +1105,10 @@ vanaf de laptop, eigen sleutel met `restrict,permitlisten`) -> laptop. Laptop
 uit = 502, zo bedoeld. OAuth-opzet gelijk aan portal-mcp (OIDC-client van
 Authentik met `prompt=login`, `scripts/add-claude-manager.py`, groep
 `claude-manager`), plus een namenlijst op de laptop. Uitrollen:
-`claude-manager-brug/README.md`.
+`claude-manager-brug/README.md`. De dienst is op 29-10-2026 verhuisd naar de
+tweede pc (DESKTOP-7OHCIIV); waar hierboven laptop staat, lees die pc. Sinds
+30-10-2026 kijkt de tool `read_server` alleen-lezen mee op de VM met een eigen
+sleutel die alleen `claude-manager-brug/manager-lees.sh` kan draaien.
 
 ### 13.3 CI/CD - automatische check, merge & deploy
 Doel: de handmatige stap "PR op GitHub goedkeuren + op de VM `git pull` doen"
