@@ -15,9 +15,9 @@ FIRMANAMEN = {HA: "H-Architects", HB: "Harmonie Bouw"}
 
 # Wat een stuk aan een firma koppelt. Hoofdletters tellen niet; streepjes en spaties worden gelijkgetrokken.
 KENMERKEN = {
-    HA: [r"(?-i:\bHA\b)", r"(?-i:\bHARC\b)", r"h\s?-?\s?architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
+    HA: [r"(?-i:\bHA\b)", r"(?-i:\bHARC\b)", r"\bh[\W_]{0,3}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
          r"\+?32\s?\(?0?\)?\s?16\s?79\s?23\s?14", r"\+?32\s?\(?0?\)?\s?491\s?94\s?68\s?79"],
-    HB: [r"(?-i:\bHB\b)", r"(?-i:\bHARM\b)", r"harmonie\s?-?\s?bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
+    HB: [r"(?-i:\bHB\b)", r"(?-i:\bHARM\b)", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
          r"hoveniersstraat\s?19\b"],
 }
 # De persoon achter de firma's: een mail tekent met de firma, nooit met zijn naam (zoals de mails van standaard@).

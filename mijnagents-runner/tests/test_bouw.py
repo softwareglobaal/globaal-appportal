@@ -290,6 +290,11 @@ check("X5 een naam na 'bij' in het werk gaat niet naar buiten",
       "naam" in Q.naar_buiten_fouten({"werk": "dakwerken bij Jan Voorbeeld", "gemeente": "3000 Leuven"}))
 check("X5 een firmanaam in het werk gaat niet naar buiten",
       "een firmanaam" in Q.naar_buiten_fouten({"werk": "dak zoals Harmonie Bouw", "gemeente": "3000 Leuven"}))
+check("controle 3: een naam zonder postcode als gemeente gaat niet naar buiten",
+      Q.naar_buiten_fouten({"werk": "dakwerken", "gemeente": "Jan Voorbeeld"}) != [])
+for schrijf in ("H. Architects", "H.Architects", "H_Architects", "H - Architects", "Harmonie.Bouw", "Harmonie_Bouw"):
+    andere = S.HA if schrijf.lower().startswith("harmonie") else S.HB
+    check(f"controle 3: '{schrijf}' wordt herkend", not S.mag_weg(f"Beste {schrijf} BV,", andere))
 check("X5 een gewone vraag mag weg", Q.naar_buiten_fouten({"werk": "plat dak EPDM", "omvang": "40 m2",
                                                           "gemeente": "3010 Kessel-Lo"}) == [])
 K = "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239"

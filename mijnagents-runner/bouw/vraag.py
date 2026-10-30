@@ -58,7 +58,8 @@ def ontbreekt_zoeker(v):
     return blok, [n for n in ("omvang", "tegen") if not v.get(n)]
 
 
-GEMEENTE = re.compile(r"^\s*(?:\d{4}\s*)?[A-Za-zÀ-ÿ'’.\- ]{2,40}\s*$")
+# Een gemeente is altijd postcode en naam (Codex, controle 3: een naam zonder postcode kan een persoon zijn).
+GEMEENTE = re.compile(r"^\s*[1-9]\d{3}\s+[A-Za-zÀ-ÿ'’.\- ]{2,40}\s*$")
 NAAM_NA = re.compile(r"\b(?i:bij|voor|van|familie|fam\.?|woning|huis|klant|bouwheer)\s+(?:(?i:de|van|der|den)\s+)*"
                      r"[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+")
 MAX_VELD = 160
@@ -72,7 +73,7 @@ def naar_buiten_fouten(v):
     if any(NAAM_NA.search(str(v.get(k) or "")) for k in ("werk", "omvang")):
         fouten.append("naam")
     if v.get("gemeente") and not GEMEENTE.match(v["gemeente"]):
-        fouten.append("adres in de gemeente (alleen postcode en gemeente)")
+        fouten.append("gemeente zonder postcode, of met een adres (alleen postcode en gemeente)")
     if any(len(str(v.get(k) or "")) > MAX_VELD for k in ("werk", "omvang", "gemeente")):
         fouten.append("een te lang veld")
     if any(S.noemt_een_firma(str(v.get(k) or "")) for k in ("werk", "omvang", "gemeente")):
