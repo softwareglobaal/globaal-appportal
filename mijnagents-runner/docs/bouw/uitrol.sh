@@ -22,6 +22,7 @@ fi
 git log --oneline -1
 cd mijnagents-runner
 PY=~/agents/.venv/bin/python
+$PY -c "import pypdf" || { echo "STOP: pypdf ontbreekt in ~/agents/.venv (nodig voor De Offertevergelijker)"; exit 1; }
 KOPIE=$(mktemp -d /tmp/bouw-uitrol.XXXXXX)
 trap 'rm -rf "$KOPIE"' EXIT
 cp -a . "$KOPIE/mijnagents-runner"

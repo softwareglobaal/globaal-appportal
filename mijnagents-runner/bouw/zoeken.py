@@ -193,6 +193,19 @@ def naam_en_werk_op_site(f, gelezen):
     return naam_ok and len(bewijs) >= 20 and bewijs in tekst
 
 
+def contact_van_site(f, gelezen):
+    """Codex X5 (controle 9): een mailadres of telefoonnummer blijft alleen staan als het op een gelezen pagina van de
+    eigen site staat (het telefoonnummer op cijfers vergeleken); anders wordt het leeg, nooit verzonnen."""
+    eigen = host(O.schoon_url(f.get("url")))
+    tekst = " ".join(t or "" for u, t in (gelezen or {}).items() if eigen and host(u) == eigen)
+    mail = str(f.get("email") or "").strip()
+    if mail and mail.lower() not in tekst.lower():
+        f["email"] = None
+    tel = re.sub(r"\D", "", str(f.get("telefoon") or ""))
+    if tel and (len(tel) < 8 or tel[-8:] not in re.sub(r"\D", "", tekst)):
+        f["telefoon"] = None
+
+
 def kbo_zetel(nummer, gelezen):
     """'postcode gemeente' van de zetel volgens een gelezen KBO-pagina met dit nummer, of None (Codex X1, controle 5:
     een adres op de website kan een project zijn; de KBO zegt waar de firma gevestigd is)."""
@@ -245,6 +258,7 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
         # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
         f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
                              and naam_en_werk_op_site(f, gelezen))
+        contact_van_site(f, gelezen)
         if f["kbo_actief"] is False:
             uit["afgewezen"].append({"aanbod": f, "redenen": ["stopgezet volgens de KBO"]})
             continue

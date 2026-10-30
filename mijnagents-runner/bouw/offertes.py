@@ -218,7 +218,7 @@ def controleer(o):
 
 
 LOS_ADRES_NA = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|"
-                          r"singel|vest|markt|pad|ring)\s+\d+[a-zA-Z]?", re.I)
+                          r"singel|vest|markt|pad)\s+\d+[a-zA-Z]?", re.I)   # geen 'ring': Levering 3 is geen adres
 
 
 def redigeer(tekst, extra=()):
@@ -235,8 +235,10 @@ def redigeer(tekst, extra=()):
                "[adres weggelaten]", t)
     t = re.sub(r"(?i)\b\d{1,4}[a-z]?,?\s+(?:rue|avenue|chaussée|place|boulevard|square|drève|quai)\s+[A-Za-zÀ-ÿ'’ -]{2,40}",
                "[adres weggelaten]", t)
+    t = re.sub(r"(?i)\b\d{1,4}[a-z]?,?\s+[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|"
+               r"dijk|singel|vest|markt|pad)\b", "[adres weggelaten]", t)
     t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
-               r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
+               r"vest|markt|pad)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = LOS_ADRES_NA.sub("[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
                "[naam weggelaten]", t)
@@ -305,7 +307,9 @@ def vergelijk(offertes, vandaag):
     tarieven.discard(None)
     if len(tarieven) > 1:
         letop.append("Het btw-tarief verschilt tussen de offertes: vergelijk exclusief btw.")
-    mee = [r for r in rijen if r.get("soort") == "offerte" and r.get("excl") is not None and not r.get("raming")]
+    # Codex X3 (controle 9): een verlopen offerte doet niet mee aan laagste en hoogste, net als een raming
+    mee = [r for r in rijen if r.get("soort") == "offerte" and r.get("excl") is not None and not r.get("raming")
+           and not (r.get("geldig_tot") and r["geldig_tot"] < vandaag)]
     mee.sort(key=lambda r: r["excl"])
     uit = {"rijen": rijen, "letop": letop, "laagste": mee[0] if mee else None, "hoogste": mee[-1] if mee else None}
     if len(mee) >= 2:

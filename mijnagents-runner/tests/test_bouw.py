@@ -515,5 +515,23 @@ check("X6 zonder vergelijking per post zegt de eerste regel dat alleen de totale
       "alleen de totalen" in vt.splitlines()[0])
 check("X7 een Frans adres met het nummer vooraan wordt weggehaald", "Neuve" not in F.redigeer("Livraison 3 Rue Neuve, 1000 Bruxelles"))
 
+
+print("\nRegressie na controle 9 van Codex (X2 tot X7)")
+for schrijf, andere in (("h.a. bv", S.HB), ("h.b. bv", S.HA), ("H. A. BV", S.HB), ("h.b.bv", S.HA)):
+    check(f"X2 '{schrijf}' wordt herkend", not S.mag_weg(f"Zie {schrijf}.", andere))
+verlopen = F.lees(pdf("Totaal excl. btw 7.000,00", "btw 21%", "geldig tot 01-09-2026"))
+u9 = F.vergelijk([{"letter": "A", "lees": verlopen}, {"letter": "B", "lees": a}], date(2026, 10, 30))
+check("X3 een verlopen offerte staat nooit bovenaan als laagste", u9["laagste"]["letter"] == "B")
+check("X4 een indicatieve offerte is niet bindend: als raming gemeld", F.is_raming("Indicatieve offerte dakwerken"))
+c5 = {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "email": "verzonnen@voorbeeld.com", "telefoon": "0470 99 99 99"}
+Z.contact_van_site(c5, {"https://dak-een.voorbeeld.com": "Contact: info@dak-een.voorbeeld.com, tel 016 12 34 56"})
+check("X5 een mailadres of telefoon dat niet op de site staat, valt weg", c5["email"] is None and c5["telefoon"] is None)
+c5b = {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "email": "info@dak-een.voorbeeld.com", "telefoon": "+32 16 12 34 56"}
+Z.contact_van_site(c5b, {"https://dak-een.voorbeeld.com/contact": "Contact: info@dak-een.voorbeeld.com, tel 016/12.34.56"})
+check("X5 wat wel op de site staat, blijft", c5b["email"] and c5b["telefoon"])
+check("X6 een huisnummer voor de straat wordt weggehaald", "Voorbeeldlaan" not in F.redigeer("Levering 3 Voorbeeldlaan, Leuven"))
+check("X7 de uitrol stopt zonder pypdf", "import pypdf" in uitrol or "import pypdf" in open(
+    Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read())
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
