@@ -17,6 +17,7 @@ from bouw import mail as M  # noqa: E402
 from bouw import mappen as MP  # noqa: E402
 from bouw import offertes as F  # noqa: E402
 from bouw import scheiding as S  # noqa: E402
+from bouw import vakwoorden as W  # noqa: E402
 from bouw import verslag as V  # noqa: E402
 from bouw import vraag as Q  # noqa: E402
 from bouw import zoeken as Z  # noqa: E402
@@ -113,7 +114,9 @@ check("ongeldig ondernemingsnummer vervalt", Z.btw_geldig("0123.456.789") is Non
 VUL = " Dakwerken, platte daken, EPDM, renovatie, zinkwerk, onderhoud en herstellingen in de regio." * 3
 GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV, Dorpstraat 1, 3020 Herent" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239":
-               "Ondernemingsnummer 0537.405.239 Status: Actief" + VUL,
+               "Ondernemingsnummer 0537.405.239\nStatus: Actief\nAdres van de zetel:\nDorpstraat 1\n3020 Herent\nSinds 2010" + VUL,
+           "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0412345614":
+               "Ondernemingsnummer 0412.345.614\nStatus: Actief\nAdres van de zetel:\nZeedijk 3\n8000 Brugge\nSinds 2001" + VUL,
            "https://dak-twee.voorbeeld.com": "Dak Twee, Kerkstraat 2, 3000 Leuven" + VUL,
            "https://dak-ver.voorbeeld.com": "Dak Ver, Zeedijk 3, 8000 Brugge" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0403170701":
@@ -126,7 +129,8 @@ firmas = [
      "ondernemingsnummer": "0537.405.239"},
     {"naam": "Dak Twee", "url": "https://dak-twee.voorbeeld.com/", "adres": "Kerkstraat 2", "postcode": "3000", "gemeente": "Leuven",
      "ondernemingsnummer": None},
-    {"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "adres": "Zeedijk 3", "postcode": "8000", "gemeente": "Brugge"},
+    {"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "adres": "Zeedijk 3", "postcode": "3000", "gemeente": "Leuven",
+     "ondernemingsnummer": "0412.345.614"},
     {"naam": "Dak Spook", "url": "https://dak-spook.voorbeeld.com", "postcode": "3000", "gemeente": "Leuven"},
     {"naam": "Dak Weg", "url": "https://dak-weg.voorbeeld.com", "adres": "Molenstraat 4", "postcode": "3000", "gemeente": "Leuven",
      "ondernemingsnummer": "0403.170.701"},
@@ -173,7 +177,7 @@ a = F.lees(pdf("Offerte 12-09-2026", "Ventilatie systeem D", "Totaal excl. btw 1
                "Totaal incl. btw 10.600,00 EUR", "Deze offerte is geldig tot 31-12-2026"))
 check("totalen, btw en geldigheid gelezen", a["excl"] == 10000.0 and a["incl"] == 10600.0 and a["btw_tarief"] == 6
       and a["geldig_tot"] == date(2026, 12, 31) and not a["redenen"], a)
-b = F.lees(pdf("Prijs 01-10-2026", "Totaal te betalen 11.130,00", "btw 6 %", "Geldigheid 30 dagen"))
+b = F.lees(pdf("Datum: 01-10-2026", "Totaal te betalen 11.130,00", "btw 6 %", "Geldigheid 30 dagen"))
 check("alleen inclusief: exclusief berekend en gemeld", b["excl"] == 10500.0 and any("berekend" in r for r in b["redenen"]))
 check("geldigheid in dagen wordt een datum", b["geldig_tot"] == date(2026, 10, 31))
 c = F.lees(pdf("Totaal excl. btw 9.000,00", "BTW 21%", "Totaal incl. btw 10.000,00"))
@@ -348,7 +352,7 @@ for nr in ("016/79.32.96", "016 79 32 96", "+32 (0)16 79.32.96", "0491/94.68.79"
     check(f"X1 het nummer van H-A in de vorm {nr} wordt herkend", not S.mag_weg(f"Bel {nr}", S.HB))
 check("X1 het ondernemingsnummer van HB zonder punten wordt herkend", not S.mag_weg("BE0537405239", S.HA))
 kern_nep = lambda sql: [{"code": "HARC", "kbo": "0999.999.996", "straat": "Voorbeeldlaan", "nr": "7", "weergave": ""},
-                        {"code": "HARM", "kbo": "", "straat": "", "nr": "", "weergave": ""}]
+                        {"code": "HARM", "kbo": "0537.405.239", "straat": "Voorbeeldplein", "nr": "5", "weergave": ""}]
 check("X1 gegevens uit kern gelezen", S.laad_kern(kern_nep))
 check("X1 het adres van H-A uit kern wordt herkend", not S.mag_weg("Levering aan Voorbeeldlaan 7, Leuven", S.HB))
 check("X1 het ondernemingsnummer van H-A uit kern wordt herkend", not S.mag_weg("btw BE 0999 999 996", S.HB))
@@ -408,6 +412,40 @@ check("X8 'onze groep warmtepompen' is bouwtaal", S.mag_weg("Onze groep warmtepo
 uitrol = open(Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read()
 check("X9 de uitrol stopt buiten main of als de VM niet gelijk is aan origin/main",
       "rev-parse --abbrev-ref HEAD" in uitrol and "rev-parse origin/main" in uitrol)
+
+
+print("\nRegressie na controle 5 van Codex en het herbekeken ontwerp (X1 tot X9)")
+proj = Z.keur([{"naam": "Dak Proj", "url": "https://proj.voorbeeld.com", "adres": "Kerkstraat 2", "postcode": "3000",
+                "gemeente": "Leuven", "ondernemingsnummer": "0412.345.614"}],
+              {"https://proj.voorbeeld.com": "Realisatie: Kerkstraat 2, 3000 Leuven. Contact Zeedijk 3, 8000 Brugge." + VUL,
+               K.replace("0537405239", "0412345614"): "0412.345.614\nStatus: Actief\nAdres van de zetel:\nZeedijk 3\n8000 Brugge"},
+              PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X1 de afstand komt van de zetel in de KBO, niet van een projectadres op de site",
+      not proj["goed"] and proj["buiten"] and proj["buiten"][0]["zetel"] == "8000 Brugge")
+check("X1 zonder zetel in de KBO: na te kijken", Z.kbo_zetel("0537.405.239", {K: "0537.405.239 Status: Actief"}) is None)
+check("X1 een gemeente met streepjes", Z.kbo_zetel("0537.405.239", {K: "Adres van de zetel:\nX 1\n3010 Kessel-Lo\nSinds"}) == "3010 Kessel-Lo")
+x2 = F.lees(pdf("Totaal excl. btw 10.000,00 btw 21% 2.100,00 incl. btw 12.100,00"))
+check("X2 exclusief, btw en inclusief op een regel", x2["excl"] == 10000.0 and x2["incl"] == 12100.0, x2)
+check("X2 de labels per bedrag", F.bedragen_met_label("Totaal: excl. 1.000,00 / incl. 1.210,00") == [("excl", 1000.0), ("incl", 1210.0)])
+for tekst, weg in (("dakwerken voor jan peeters", ["jan", "peeters"]), ("gevelrenovatie bij familie De Smet", ["familie", "Smet"])):
+    gefilterd, weggelaten = W.filter_tekst(tekst)
+    check(f"X3 '{tekst}': de naam valt weg voor het naar buiten gaat", all(w in weggelaten for w in weg)
+          and not any(w.lower() in gefilterd.lower().split() for w in weg), (gefilterd, weggelaten))
+for tekst in ("plat dak EPDM met PIR-isolatie 40 m2", "vloerverwarming en chape gelijkvloers 85 m2", "dakgoten in zink vervangen",
+              "ventilatie systeem D met warmtepomp", "plafonneerwerken muren en plafonds 120 m2"):
+    check(f"X3 vakwoorden blijven: '{tekst}'", W.filter_tekst(tekst)[1] == [], W.filter_tekst(tekst))
+check("X4 kern zonder ondernemingsnummer of adres: geen werk", S.laad_kern(lambda sql: [
+    {"code": "HARC", "kbo": "", "straat": "", "nr": ""}, {"code": "HARM", "kbo": "0537.405.239", "straat": "X", "nr": "1"}]) is False)
+check("X5 het werkverslag of dossier van een bouwagent: nooit beide firma's in een antwoord",
+      RG.bouw_grendel("Ik werk voor H-Architects en voor Harmonie Bouw.", RG.bouw_firmas("agent_verslag", {"naam": "aannemerszoeker"}, {}))
+      == RG.BOUW_TWEE and RG.bouw_grendel("Drie vragen afgewerkt.", {"?"}) == "Drie vragen afgewerkt.")
+check("X6 een naam in hoofdletters binnen een zin wordt weggehaald", "PEETERS" not in F.redigeer("Offerte voor de woning van JAN PEETERS."))
+check("X7 'aanverwante werken' is bouwtaal", S.mag_weg("Ook aanverwante werken.", S.HB) and not S.mag_weg("Een verwante firma.", S.HB))
+x8 = F.lees(pdf("Project gestart 01-01-2026", "Datum: 15-10-2026", "Totaal excl. btw 5.000,00", "btw 6%", "Geldig 30 dagen"))
+check("X8 de offertedatum komt van het label, niet van de eerste datum", x8["datum"] == date(2026, 10, 15)
+      and x8["geldig_tot"] == date(2026, 11, 14), x8)
+check("X8 zonder label: datum onbekend, geen geldigheid berekend", F.lees(pdf("Project 01-01-2026", "Totaal excl. btw 5.000,00",
+      "Geldig 30 dagen"))["geldig_tot"] is None)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

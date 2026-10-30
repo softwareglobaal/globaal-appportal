@@ -34,7 +34,8 @@ PERSOON = [r"chegini"]
 BANDWOORDEN = (r"(?:dezelfde|zelfde)\s+groep\b|\btot\s+(?:de|onze|dezelfde)\s+groep\b|\bgroep\s+van\s+(?:bedrijven|firma)|"
                r"\bgroep\s+waartoe\b|"
                r"bedrijvengroep|groepsmaatschappij|groepsbedrijf|met elkaar verbonden|"
-               r"verbonden\s+(?:firma|vennootschap|onderneming|bedrijf)|verwant|zuster|holding|aandeelhoud|"
+               r"verbonden\s+(?:firma|vennootschap|onderneming|bedrijf)|verwante?\s+(?:firma|bedrijf|vennootschap|onderneming)|"
+               r"verwantschap|zuster|holding|aandeelhoud|"
                r"dezelfde eigenaar|zelfde eigenaar|eigen aannemer|belangenconflict|"
                r"onafhankelijke?\s+(?:firma|bedrijf|vennootschap|onderneming|aannemer|architect|bureau)|"
                r"(?:volledig|totaal|geheel)\s+onafhankelijk|onafhankelijk\s+van\s+(?:elkaar|ons|de\s+(?:aannemer|architect))|"
@@ -60,7 +61,9 @@ def laad_kern(psql=None):
         import organisatie
         psql = organisatie._psql
     rijen = psql(sql) or []
-    if {r.get("code") for r in rijen} != set(KERN_CODES):
+    # Codex X4 (controle 5): beide firma's, elk met een ondernemingsnummer en een adres; anders werkt Bouw niet
+    if {r.get("code") for r in rijen} != set(KERN_CODES) or not all(
+            len(re.sub(r"\D", "", r.get("kbo") or "")) >= 9 and r.get("straat") and r.get("nr") for r in rijen):
         return False
     for r in rijen:
         firma = KERN_CODES.get(r.get("code"))
@@ -121,6 +124,13 @@ def noemt_een_firma(tekst):
     t = normaal(tekst)
     return any(re.search(p, t, re.I) for f in (HA, HB) for p in KENMERKEN[f] + EXTRA[f]["patronen"]) or any(
         True for f in (HA, HB) for _ in _cijfertreffers(t, f))
+
+
+def noemt(tekst, firma):
+    """Noemt de tekst deze firma (naam, code, domein, nummer, adres)?"""
+    t = normaal(tekst)
+    return any(re.search(p, t, re.I) for p in KENMERKEN[firma] + EXTRA[firma]["patronen"]) or any(
+        True for _ in _cijfertreffers(t, firma))
 
 
 def is_andere_firma(naam, firma):

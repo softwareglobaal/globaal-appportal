@@ -27,6 +27,7 @@ import bord  # noqa: E402
 from bouw import eigen as E  # noqa: E402
 from bouw import mail as M  # noqa: E402
 from bouw import scheiding as S  # noqa: E402
+from bouw import vakwoorden as W  # noqa: E402
 from bouw import vraag as Q  # noqa: E402
 from bouw import verslag as V  # noqa: E402
 from bouw import zoeken as Z  # noqa: E402
@@ -59,7 +60,7 @@ def laad_kern(r):
     try:
         if S.laad_kern():
             return True
-        r.nood("Firmagegevens niet in kern: geen bouwwerk tot ze er staan", wie="claude-code")
+        r.nood("Ondernemingsnummer of adres van een firma ontbreekt in kern: geen bouwwerk tot ze er staan", wie="mehdi")
     except Exception:  # noqa: BLE001
         r.nood("Kern niet gelezen: geen bouwwerk tot kern leesbaar is", wie="claude-code")
     return False
@@ -117,6 +118,16 @@ def een_vraag(r, tekst, vandaag, deadline):
         ag.log("aannemersvraag", "beslissing", f"vraag {va} niet verstuurd: persoonsgegevens", ", ".join(soorten))
         zet_klaar(tekst, "Aannemersvraag niet gestart: persoonsgegevens", V.tegengehouden(soorten), vandaag, firma)
         return 0
+    # Naar buiten gaan alleen vakwoorden, getallen en eenheden (bouw/vakwoorden.py, controle 5): de rest valt weg en het
+    # verslag zegt welke woorden. Ook de mail gebruikt alleen het gefilterde werk.
+    werk, weg_werk = W.filter_tekst(v["werk"])
+    omvang, weg_omvang = W.filter_tekst(v.get("omvang") or "")
+    v["weggelaten"] = weg_werk + weg_omvang
+    if not werk:
+        zet_klaar(tekst, "Aannemersvraag niet gestart: geen vakwoord", V.onvolledig(NAAM, firma, ["een vakwoord in het werk"]),
+                  vandaag, firma)
+        return 0
+    v["werk"], v["omvang"] = werk, omvang
     try:
         eigen = E.in_mappen(firma, v["werk"])
         r.bron(f"eigen mappen {S.FIRMANAMEN[firma]}", f"{len(eigen)} treffers onder {E.BASIS[firma]}")
@@ -163,21 +174,21 @@ def een_vraag(r, tekst, vandaag, deadline):
         except M.MailGeweigerd as e:
             mails[f["url"]] = None
             geweigerd += 1
-            ag.log("aannemersvraag", "beslissing", f"vraag {va}: mail geweigerd door de scheiding", e.redenen)
+            ag.log("aannemersvraag", "beslissing", f"vraag {va}: mail geweigerd door de scheiding ({len(e.redenen)} kenmerken)")
     if geweigerd:
         r.nood("Prijsaanvraag geweigerd door de scheidingsgrendel", wie="claude-code")
     inhoud = V.zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vullen, vandaag.isoformat())
     try:
         zet_klaar(tekst, V.zoektitel(v, res), inhoud, vandaag, firma)
     except M.MailGeweigerd as e:
-        ag.log("aannemersvraag", "fout", f"vraag {va}: verslag geweigerd door de scheiding", e.redenen)
+        ag.log("aannemersvraag", "fout", f"vraag {va}: verslag geweigerd door de scheiding ({len(e.redenen)} kenmerken)")
         r.nood("Verslag geweigerd door de scheidingsgrendel", wie="claude-code")
         return 0
     ag.log("aannemersvraag", "beslissing",
            f"vraag {va}: {len(res['goed'])} klaar, {len(res['na_te_kijken'])} na te kijken, {len(res['buiten'])} buiten, "
            f"{len(res['afgewezen'])} weggelaten, {len(eigen)} eigen treffers",
            [{"url": x["aanbod"].get("url"), "redenen": x["redenen"]} for x in res["afgewezen"]])
-    ag.log("aannemersvraag", "melding", f"aannemersverslag {va} klaargezet voor Mehdi", inhoud)
+    ag.log("aannemersvraag", "melding", f"aannemersverslag {va} klaargezet voor Mehdi (de inhoud staat op het bord)")
     return len(res["goed"])
 
 

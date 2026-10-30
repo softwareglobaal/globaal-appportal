@@ -151,22 +151,30 @@ def host(url):
         return ""
 
 
-def vestiging_bewezen(f, gelezen):
-    """Staat de postcode (of anders de gemeente) van de firma op een gelezen pagina van haar eigen website? Anders is
-    de afstand niet bewezen en komt ze bij na te kijken."""
-    eigen = host(O.schoon_url(f.get("url")))
-    teksten = " ".join(" ".join((t or "").split()) for u, t in (gelezen or {}).items() if host(u) == eigen and eigen).lower()
-    postcode = re.sub(r"\D", "", str(f.get("postcode") or ""))
-    adres = " ".join(str(f.get("adres") or "").split()).lower()
-    # Codex X3 (controle 4): een postcode in een lijst van het werkgebied bewijst geen vestiging; het adres van de firma
-    # moet er staan, met de postcode kort erna.
-    if len(postcode) != 4 or len(adres) < 5:
-        return False
-    for m in re.finditer(re.escape(adres), teksten):
-        volgende = re.search(r"(?<!\d)\d{4}(?!\d)", teksten[m.end():m.end() + 25])
-        if volgende and volgende.group(0) == postcode:     # de eerste postcode na het adres, niet een verderop
-            return True
-    return False
+# "Adres van de zetel: <straat> <nr> <postcode> <Gemeente>": de gemeente is een of meer woorden met een hoofdletter op
+# dezelfde regel (Sint-Truiden, Kessel-Lo, Heist-op-den-Berg).
+ZETEL = re.compile(r"(?i:adres\s+van\s+de\s+zetel)\s*:?\s*(.{0,120}?)\b([1-9]\d{3})[ \t]+"
+                   r"([A-ZÀ-Ý][\wÀ-ÿ'’]*(?:[ -](?:[A-ZÀ-Ý][\wÀ-ÿ'’]*|op|den|de|aan|sur|lez))*)", re.S)
+
+
+def kbo_zetel(nummer, gelezen):
+    """'postcode gemeente' van de zetel volgens een gelezen KBO-pagina met dit nummer, of None (Codex X1, controle 5:
+    een adres op de website kan een project zijn; de KBO zegt waar de firma gevestigd is)."""
+    if not nummer:
+        return None
+    kaal = nummer.replace(".", "")
+    for url, tekst in (gelezen or {}).items():
+        try:
+            d = urlsplit(url)
+        except ValueError:
+            continue
+        nrs = {re.sub(r"\D", "", w) for w in parse_qs(d.query).get("ondernemingsnummer", [])}
+        if d.netloc.lower() != KBO or kaal not in nrs:
+            continue
+        m = ZETEL.search(tekst or "")
+        if m:
+            return f"{m.group(2)} {m.group(3).strip()}"
+    return None
 
 
 def sleutel(f):
@@ -204,10 +212,12 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
         if k in gezien:
             continue
         gezien.add(k)
-        plaats = " ".join(str(x) for x in (f.get("postcode"), f.get("gemeente")) if x)
-        if plaats and not vestiging_bewezen(f, gelezen):
-            f["vestiging_onbewezen"] = True      # Codex X3 (controle 3): het model kan de gevraagde gemeente invullen
-            plaats = ""
+        # De afstand alleen vanaf de zetel in de KBO (Codex X3 controle 3, X3 controle 4, X1 controle 5): wat het model of
+        # de website als adres geeft, kan een werkgebied of een project zijn.
+        plaats = kbo_zetel(f["ondernemingsnummer"], gelezen) if f["kbo_actief"] else None
+        f["zetel"] = plaats
+        if not plaats:
+            f["vestiging_onbewezen"] = True
         punt = None
         if plaats:
             try:

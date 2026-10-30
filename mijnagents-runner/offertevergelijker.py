@@ -58,7 +58,7 @@ def laad_kern(r):
     try:
         if S.laad_kern():
             return True
-        r.nood("Firmagegevens niet in kern: geen bouwwerk tot ze er staan", wie="claude-code")
+        r.nood("Ondernemingsnummer of adres van een firma ontbreekt in kern: geen bouwwerk tot ze er staan", wie="mehdi")
     except Exception:  # noqa: BLE001
         r.nood("Kern niet gelezen: geen bouwwerk tot kern leesbaar is", wie="claude-code")
     return False
@@ -147,10 +147,10 @@ def een_vraag(r, tekst, vandaag, deadline=None):
     try:
         zet_klaar(tekst, V.vergelijkingstitel(v, naam), inhoud, vandaag, firma)
     except ValueError as e:
-        ag.log("offertes", "fout", f"vraag {va}: verslag geweigerd door de scheiding", str(e))
+        ag.log("offertes", "fout", f"vraag {va}: verslag geweigerd door de scheiding")
         r.nood("Vergelijking geweigerd door de scheidingsgrendel", wie="claude-code")
         return 0
-    ag.log("offertes", "melding", f"vergelijking {va} klaargezet voor Mehdi: {len(bestanden)} offertes", inhoud)
+    ag.log("offertes", "melding", f"vergelijking {va} klaargezet voor Mehdi: {len(bestanden)} offertes (de inhoud staat op het bord)")
     return len(bestanden)
 
 

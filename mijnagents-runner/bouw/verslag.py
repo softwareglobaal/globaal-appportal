@@ -68,6 +68,8 @@ def zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vull
     if firma == S.HB:
         stap += " Kijk de inhoudingsplicht na op checkinhoudingsplicht.be voor je een opdracht geeft."
     regels = [kop, "", stap]
+    if v.get("weggelaten"):
+        regels += ["", "Weggelaten uit de zoekvraag (geen vakwoord): " + ", ".join(v["weggelaten"]) + "."]
     if S.schoon_veld(str(g.get("vervolgvraag") or ""), firma):
         regels += ["", f"**Vraag:** {g['vervolgvraag']}"]
     for titel, lijst in (("Klaar om aan te schrijven", goed), ("Na te kijken (KBO of afstand niet bevestigd)", na),

@@ -63,6 +63,44 @@ def _eindtotaal(kandidaten):
     return [b for v, b in kandidaten if v == hoogste][-1]
 
 
+EXCL = re.compile(r"excl|exclusief|zonder\s+btw|htva|hors\s+tva|netto|excluding", re.I)
+INCL = re.compile(r"incl|inclusief|tvac|te\s+betalen|met\s+btw|including", re.I)
+BTW = re.compile(r"\b(?:btw|tva|vat)\b", re.I)
+
+
+def bedragen_met_label(regel):
+    """[(excl|incl, bedrag)] van een totaalregel: elk bedrag krijgt het label in de tekst vlak ervoor, sinds het vorige
+    bedrag (Codex X2, controle 5: "excl. 10.000 btw 2.100 incl. 12.100" op een regel). Een bedrag met alleen btw ervoor
+    is het btw-bedrag en telt niet. Zonder label erbij: het label van de regel, als die er maar een heeft."""
+    uit, vorige = [], 0
+    regel_excl, regel_incl = bool(EXCL.search(regel)), bool(INCL.search(regel))
+    for m in BEDRAG.finditer(regel):
+        b = bedrag(m.group(0))
+        # "excl. btw" en "incl. btw" zijn een label, geen btw-bedrag
+        stuk = re.sub(r"(excl\w*|incl\w*|zonder|met)\.?\s*(?:btw|tva|vat)\b", r"\1", regel[vorige:m.start()], flags=re.I)
+        vorige = m.end()
+        if b is None or re.fullmatch(r"\s*\d{1,2}\s*", m.group(0)) and "%" in regel[m.end():m.end() + 2]:
+            continue
+        laatste_label = max(((x.end(), soort) for soort, p in (("excl", EXCL), ("incl", INCL), ("btw", BTW))
+                             for x in p.finditer(stuk)), default=(None, None))[1]
+        if laatste_label in ("excl", "incl"):
+            uit.append((laatste_label, b))
+        elif laatste_label is None and regel_excl != regel_incl:
+            uit.append(("excl" if regel_excl else "incl", b))
+    return uit
+
+
+DATUM_LABEL = re.compile(r"(?:offerte\s*datum|datum\s+(?:van\s+de\s+)?offerte|datum|opgemaakt\s+op|gedateerd)\s*:?\s*"
+                         r"(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2})", re.I)
+
+
+def _offertedatum(tekst):
+    """De datum met een label (Datum:, Offertedatum, opgemaakt op); zonder label onbekend, nooit de eerste datum in het
+    document, want dat kan een projectdatum zijn (Codex X8, controle 5)."""
+    m = DATUM_LABEL.search(tekst)
+    return _datum(m.group(1)) if m else None
+
+
 def _datum(tekst):
     m = re.search(r"\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b", tekst)
     if not m:
@@ -93,21 +131,17 @@ def lees(tekst_paginas):
         return {"soort": "scan", "redenen": [f"OCR nodig: pagina {', '.join(map(str, leeg)) or '1'} zonder tekst"]}
     tekst = "\n".join(tekst_paginas)
     uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": bool(VERLEGD.search(tekst)),
-           "datum": _datum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": bool(RAMING.search(tekst)),
+           "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": bool(RAMING.search(tekst)),
            "redenen": []}
     excl, incl = [], []
     for regel in tekst.splitlines():
         laag = regel.lower()
         sub = SUBTOTAAL.search(laag) and not re.search(r"\bna\b.{0,20}korting", laag)
         if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not sub:
-            b = _laatste_bedrag(regel)
-            if b is None or b <= 0:
-                continue
             voorrang = 1 if EINDTOTAAL.search(laag) else 0
-            if re.search(r"excl|exclusief|zonder btw|htva|netto|hors tva", laag):
-                excl.append((voorrang, b))
-            elif re.search(r"incl|inclusief|tvac|te betalen|met btw", laag):
-                incl.append((voorrang, b))
+            for soort, b in bedragen_met_label(regel):
+                if b > 0:
+                    (excl if soort == "excl" else incl).append((voorrang, b))
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -155,8 +189,9 @@ def redigeer(tekst, extra=()):
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
                "[naam weggelaten]", t)
-    from .vraag import LOS_ADRES, NAAM_NA
+    from .vraag import HOOFDLETTERNAAM, LOS_ADRES, NAAM_NA
     t = NAAM_NA.sub("[naam weggelaten]", t)       # Codex X6 (controle 4): ook binnen een zin
+    t = HOOFDLETTERNAAM.sub("[naam weggelaten]", t)     # Codex X6 (controle 5): ook in hoofdletters
     t = LOS_ADRES.sub("[adres weggelaten]", t)
     # Codex X6 (controle 3): een regel die alleen een naam is (twee tot vier woorden met een hoofdletter)
     t = re.sub(r"(?m)^\s*[A-ZÀ-Ý][a-zà-ÿ'-]+(?:\s+(?:(?:van|de|der|den|le|la|du)\s+)*[A-ZÀ-Ý][a-zà-ÿ'-]+){1,3}\s*$",

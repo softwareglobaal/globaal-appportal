@@ -123,8 +123,8 @@ DOSSIER_MAX = 20000
 # De afdeling Bouw (Codex X5, controle 3): van deze agents lees ik alleen het verslag van de vraag die ik doorgaf
 # (sleutel firma:vingerafdruk), en zonder sleutel alleen het laatste, nooit een lijst van beide firma's.
 BOUW_AGENTS = ("aannemerszoeker", "offertevergelijker")
-BOUW_TWEE = ("Deze vraag raakte verslagen van twee firma's. Ik geef ze niet samen: stel de vraag per firma, of lees "
-             "het verslag op het bord.")
+BOUW_TWEE = ("Dit antwoord raakte twee firma's. Ik geef ze niet samen: stel de vraag per firma, of lees het verslag "
+             "op het bord.")
 BOUW_GEWEIGERD = ("Mijn antwoord noemde iets dat niet bij de firma van deze vraag hoort en is tegengehouden. Het verslag "
                   "staat op het bord bij de agent.")
 
@@ -134,6 +134,8 @@ def bouw_firmas(tool, inp, uit):
     voorvoegsel van de sleutel van de gelezen verslagen (Codex X5, controle 4)."""
     if inp.get("naam") not in BOUW_AGENTS:
         return set()
+    if tool in ("agent_verslag", "dossier"):
+        return {"?"}       # Codex X5 (controle 5): het werkverslag of dossier van een bouwagent kan beide firma's raken
     if tool == "agent_ronde" and inp.get("vraag"):
         from bouw import vraag as BQ
         return {BQ.ontleed(inp["vraag"]).get("firma") or "geen"}
@@ -148,6 +150,9 @@ def bouw_grendel(tekst, firmas):
     from bouw import scheiding as BS
     echte = {f for f in firmas if f in (BS.HA, BS.HB)}
     if not echte:
+        # Zonder bekende firma (werkverslag of dossier van een bouwagent): nooit beide firma's in een antwoord
+        if "?" in firmas and BS.noemt(tekst, BS.HA) and BS.noemt(tekst, BS.HB):
+            return BOUW_TWEE
         return tekst
     if len(echte) > 1:
         return BOUW_TWEE
@@ -1351,6 +1356,7 @@ def antwoord(gesprek, eerder, werkwijze_regisseur, grenzen=None):
             gedaan.append({"tool": "ochtendbericht", "meta": f"antwoordvorm, punten {', '.join(map(str, nummers))}", "bron": bron})
             return afronden(tekst), gedaan
     dossier_tekst = ""
+    firmas = {"?"} if aan in BOUW_AGENTS else set()
     if aan != NAAM:
         dossier_tekst, bron = dossier(aan)
         gedaan.append({"tool": "dossier", "meta": f"dossier {aan}, {len(dossier_tekst)} tekens", "bron": bron})
@@ -1406,7 +1412,6 @@ def antwoord(gesprek, eerder, werkwijze_regisseur, grenzen=None):
     berichten.append({"role": "user", "content": gesprek["tekst"]})
     gereedschap = [t for t in TOOLS if not (alleen_lezen and t["name"] in NIET_LEZEN)]
     client = _client()
-    firmas = set()
     for _ in range(MAX_RONDES):
         resp = client.messages.create(model=MODEL, max_tokens=4000, system=system, messages=berichten, tools=gereedschap)
         berichten.append({"role": "assistant", "content": resp.content})
