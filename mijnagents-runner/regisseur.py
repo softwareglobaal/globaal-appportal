@@ -90,6 +90,9 @@ RONDE_TOEGELATEN = {
     "mappen-wacht": {"droog": False, "stuurt": False, "slot": None, "dag": False, "deal": False},
     "bode": {"droog": True, "stuurt": True, "slot": None, "dag": False, "deal": False},
     "mail-regisseur": {"droog": True, "stuurt": True, "slot": None, "dag": False, "deal": False},
+    # De Prijsonderzoeker (afdeling aankoop, overleg 30-10-2026 X2/X6): een ronde met de prijsvraag van Mehdi (--vraag);
+    # het verslag lees ik daarna met de tool klaargezet (van prijsonderzoeker) en geef ik in de chat.
+    "prijsonderzoeker": {"droog": True, "stuurt": False, "slot": None, "dag": False, "deal": False, "vraag": True},
 }
 # icloud-wacht, tekenaar en gezondheid-wacht draaien op de Mac (launchd), niet hier.
 NOOIT_RONDE = {"regisseur", "mijnagents-uitvoerder"}
@@ -239,8 +242,11 @@ TOOLS = [
                                            "deal_id) of dag (agenda-wacht, dagbundelaar, locatie-wacht, levenscoach; een andere agent "
                                            "met dag of deal wordt geweigerd). Belt nooit. Een agent die Mehdi zelf bereikt (bode, mail-regisseur) draait alleen droog; "
                                            "droog vragen bij een agent zonder droge stand wordt geweigerd. Geeft de exitcode, de hartslag en de "
-                                           "uitkomst terug, geen ruwe uitvoer. fathom-wacht en zoom-wacht lopen via het slot van de gesprekkenketen.",
-     "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}}, "required": ["naam"]}},
+                                           "uitkomst terug, geen ruwe uitvoer. fathom-wacht en zoom-wacht lopen via het slot van de gesprekkenketen. "
+                                           "prijsonderzoeker: geef de prijsvraag van Mehdi mee als vraag (alleen het product, het land "
+                                           "en firma of privé, nooit een naam, adres of nummer); lees daarna zijn prijsverslag met klaargezet "
+                                           "(van prijsonderzoeker) en geef de aanbeveling met de links. Een prijsvraag duurt enkele minuten.",
+     "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}, "vraag": {"type": "string"}}, "required": ["naam"]}},
     {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal. Geeft het voorstel-ID terug zoals het bord het bewaarde; zonder ID staat er niets.",
      "input_schema": {"type": "object", "properties": {"actie": {"type": "string"}, "reden": {"type": "string"}, "runbook": {"type": "string"}, "parameters": {"type": "object"}}, "required": ["actie", "reden"]}},
     {"name": "taak_plannen", "description": "Leg een toezegging voor later vast als taak: een agent een ronde laten draaien op een moment in de toekomst "
@@ -393,7 +399,7 @@ def onbekende_vlag(r, inp):
     """Waarom deze ronde niet mag met de gevraagde dag of deal, of None (K2, R2). Een runner krijgt alleen --dag of --deal
     als hij ze leest (RONDE_TOEGELATEN): anders weigert hij het argument, of draait hij een gewone ronde die niet doet
     wat gevraagd is en de kwartierregel omzeilt (J15)."""
-    for sleutel, vlag in (("dag", "dag"), ("deal_id", "deal")):
+    for sleutel, vlag in (("dag", "dag"), ("deal_id", "deal"), ("vraag", "vraag")):
         if inp.get(sleutel) not in (None, "") and not r.get(vlag):
             return f"{r['naam']} kent geen --{vlag}: zo'n ronde zou niet doen wat gevraagd is"
     return None
@@ -468,7 +474,7 @@ def ronde_starten(inp):
     ts = O.tijdstip((hs or {}).get("ts"))
     if (hs or {}).get("status") == "actief" and ts and nu - ts < timedelta(minutes=ACTIEF_VERS_MIN):
         return {"ok": False, "geweigerd": f"{naam} loopt al (actief sinds {O.kort(ts)} Brussel)", "wacht": True}
-    vrij = bool(UIT_TAAK["actief"] or inp.get("dag") or inp.get("deal_id"))
+    vrij = bool(UIT_TAAK["actief"] or inp.get("dag") or inp.get("deal_id") or inp.get("vraag"))
     if not droog and not vrij and ts and nu - ts < timedelta(minutes=RONDE_RUST_MIN):
         return {"ok": False, "wacht": True,
                 "geweigerd": f"{naam} gaf om {_uur(ts)} Brussel nog een hartslag; een echte ronde kan vanaf "
@@ -478,6 +484,8 @@ def ronde_starten(inp):
         cmd += ["--deal", str(int(inp["deal_id"]))]
     if inp.get("dag"):
         cmd += ["--dag", str(inp["dag"])[:10]]
+    if inp.get("vraag"):
+        cmd += ["--vraag", str(inp["vraag"]).strip()[:2000]]
     if droog:
         cmd.append("--droog")
     if r["slot"]:
