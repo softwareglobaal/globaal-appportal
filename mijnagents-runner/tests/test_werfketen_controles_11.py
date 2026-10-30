@@ -274,3 +274,12 @@ def test_w12_project_van_voor_het_contractsysteem_is_onbekend_niet_ontbreekt(mon
     monkeypatch.setattr(v.werfapp, "call", lambda *a, **kw: (_ for _ in ()).throw(OSError("project onbekend")))
     stand, toel = v.contractbewijs("2173")
     assert stand == "onbekend" and "vóór het systeem" in toel
+
+
+# De P3-grendels staan in test_werfketen_eenheid.py; dit bestand draait in CI (werfverslag-grendels), dus ze lopen hier mee.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_werfketen_eenheid import (  # noqa: E402,F401
+    test_p3_fotobewijs_geeft_de_reden, test_p3_herstelbaar_aanvoerprobleem_geeft_een_taak,
+    test_p3_geen_taak_bij_foto_buiten_het_venster, test_p3_geen_taak_zonder_agendavenster,
+    test_p3_geen_taak_bij_fotonamen_die_de_wacht_niet_kent, test_p3_hersteltaak_eigen_sleutel_en_geen_botsing_met_e4_reden,
+    test_p3_dedup_op_dossier_en_dag)

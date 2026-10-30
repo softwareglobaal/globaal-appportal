@@ -659,18 +659,41 @@ def oude_fototabel(inhoud, datum, nummer):
     return tijden
 
 
+# Waarom W4 niet ok is (overleg 29-10-2026, P3). Alleen de redenen in FOTOHERSTEL kan de iCloud-wacht met een fototaak
+# oplossen: zij exporteert naar fotos/, schrijft 00 fotos.md en zet naast elke HEIC een JPG (mac/icloud_wacht.py).
+FOTOREDEN = {"geen_fotos": "geen foto's", "geen_venster": "geen bezoekvenster", "niet_in_fotomap": "geen foto in fotos/",
+             "lijst_ontbreekt": "00 fotos.md ontbreekt", "jpg_ontbreekt": "alleen HEIC, geen JPG",
+             "lijst_onleesbaar": "00 fotos.md onleesbaar", "tijd_ontbreekt": "opnametijd ontbreekt of valt buiten het venster"}
+FOTOHERSTEL = ("niet_in_fotomap", "lijst_ontbreekt", "jpg_ontbreekt")
+# Zo noemt de iCloud-wacht een export: uur en minuut, dan het begin van de Photos-uuid ("1015 1FA4D3F8.heic").
+ICLOUD_EXPORTNAAM = re.compile(r"\d{4} [0-9A-Fa-f]{8}\.[A-Za-z0-9]+")
+
+
 def fotobewijs(bezoek, venster, nummer=None):
+    return fotobewijs_reden(bezoek, venster, nummer)[0]
+
+
+def fotobewijs_reden(bezoek, venster, nummer=None):
+    """(stand, reden): de stand van W4 en de sleutel in FOTOREDEN waarom die niet ok is ("" bij ok)."""
     paden = bezoek.get("foto_bestanden") or []
     in_map = [p for p in paden if p.lower().startswith(bezoek["map"].lower() + "/fotos/")]
     bruikbaar = [p for p in in_map if p.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
     canoniek = bezoek.get("foto_manifest")
     manifest = max(bezoek.get("foto_manifest_versies") or [canoniek or ""])
-    if not bruikbaar or not canoniek or not venster:
-        return "let_op" if paden else "ontbreekt"
+    if not paden:
+        return "ontbreekt", "geen_fotos"
+    if not venster:
+        return "let_op", "geen_venster"
+    if not in_map:
+        return "let_op", "niet_in_fotomap"
+    if not canoniek:
+        return "let_op", "lijst_ontbreekt"
+    if not bruikbaar:
+        return "let_op", "jpg_ontbreekt"
     try:
         inhoud = bronnen.download(manifest, maximum=100_000).decode("utf-8-sig")
     except (OSError, UnicodeError, ValueError, AttributeError, TypeError):
-        return "let_op"
+        return "let_op", "lijst_onleesbaar"
     # De iCloud-wacht schrijft per geleverd bestand de opnametijd; een vensterregel alleen bewijst dat niet.
     tijden = {naam: tijdstip(t) for t, naam in re.findall(r"(?m)^- (\S+T\S+) \| ([^\r\n|]+)$", inhoud)}
     # Een teken van het oude formaat (titel of tabelkop, ook met BOM of andere opmaak): alleen het oude formaat telt,
@@ -683,8 +706,20 @@ def fotobewijs(bezoek, venster, nummer=None):
         naam = os.path.basename(p)
         return tijden.get(naam) or tijden.get(os.path.splitext(naam)[0] + ".HEIC") or tijden.get(os.path.splitext(naam)[0] + ".heic")
     if not tijden or any(not in_venster(opname_tijd(p), venster) for p in bruikbaar):
-        return "let_op"
-    return "ok"
+        return "let_op", "tijd_ontbreekt"
+    return "ok", ""
+
+
+def fotoherstel(bezoek, reden, bevestigd):
+    """De reden waarvoor een fototaak helpt, of "". Alleen bij een door de agenda bevestigd venster, en alleen als elke
+    foto in fotos/ een exportnaam van de iCloud-wacht draagt: een andere naam (IMG_7256.HEIC) zet zij niet in haar
+    lijst, dus een taak zou alleen een tweede kopie leveren en W4 blijft let_op (meting 30-10-2026: 2145 en 2173)."""
+    if not bevestigd or reden not in FOTOHERSTEL:
+        return ""
+    in_map = [p for p in bezoek.get("foto_bestanden") or [] if p.lower().startswith(bezoek["map"].lower() + "/fotos/")]
+    if any(not ICLOUD_EXPORTNAAM.fullmatch(os.path.basename(p)) for p in in_map):
+        return ""
+    return reden
 
 
 # Het contractsysteem bestaat sinds 30-08-2026 (eerste commit van contract-systeem). Een project met een jaar ervoor
@@ -818,7 +853,7 @@ def bevestigd_fotovenster(nummer, bezoek, bezoeken, bak, bezoek_id):
     return geldig[0]
 
 
-def fototaak(nummer, adres, projectmap, bezoek, bezoeken, bak, registratie):
+def fototaak(nummer, adres, projectmap, bezoek, bezoeken, bak, registratie, herstel=""):
     bid = registratie.get("bezoek_id")
     try:
         if not isinstance(bid, str) or str(uuid.UUID(bid)) != bid:
@@ -842,8 +877,17 @@ def fototaak(nummer, adres, projectmap, bezoek, bezoeken, bak, registratie):
                        "datum": bezoek["datum"], "adres": adres, "projectmap": projectmap, "bezoekmap": doel,
                        "volgnr": bezoek["volgnr"], "nr_label": bezoek["nr_label"], "soort_bezoek": bezoek["soort_bezoek"],
                        "lat": coord[0], "lon": coord[1], "straal": 300, "straal_m": 300, **venster,
-                       "bezoeksleutel": f"{nummer}:{bezoek['datum']}:{doel}"}, "verwijzing": doel,
-            "uniek": f"werf:{project_ref}:{registratie['bezoek_id']}:icloud-wacht"}
+                       "bezoeksleutel": f"{nummer}:{bezoek['datum']}:{doel}", **({"herstel": herstel} if herstel else {})},
+            "verwijzing": doel,
+            # een hersteltaak krijgt per reden een eigen sleutel: het bord maakt elke sleutel maar één keer aan, ook na
+            # afvinken, dus de iCloud-wacht krijgt nooit dezelfde hersteltaak opnieuw
+            "uniek": f"werf:{project_ref}:{registratie['bezoek_id']}:icloud-wacht" + (f":{herstel}" if herstel else "")}
+
+
+def fototaak_open_op_dag(open_items, nummer, datum, gesloten=()):
+    """Dedup van hersteltaken op dossier en dag: staat er al een fototaak open, dan geen tweede."""
+    return any(str(_inhoud(it).get("dossier")) == str(nummer) and _inhoud(it).get("datum") == datum
+               and it.get("id") not in gesloten for it in open_items)
 
 
 # ------------------------------------------------------- controleposten ---
@@ -865,7 +909,9 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
         venster = bevestigd_fotovenster(nummer, bezoek, bezoeken or [bezoek], bak,
                                          (br.get("registratie") or {}).get("bezoek_id", ""))
         post("W1", "afspraak in de agenda", "ok", "H-A-afspraak, dossier en buitenvenster bevestigd")
+        bevestigd = True
     except ValueError:
+        bevestigd = False
         venster = e4_venster(bezoek, bak, nummer, adres)
         if venster:
             post("W1", "afspraak in de agenda", "let_op", "bevestigd door foto's/opname, niet door de agenda")
@@ -881,9 +927,14 @@ def controleer(nummer, adres, soort_project, projectmap, bezoek, bak, bord_rij=N
     post("W3", "projectmap en bezoekmap", "ok" if projectmap and bezoek.get("map") and bezoek.get("bron_map") != "los verslag" else "ontbreekt",
          f"{soort_project}: {projectmap}; {bezoek.get('map', '')}")
     # W4 foto's
-    foto_stand = fotobewijs(bezoek, venster, nummer)
+    foto_stand, foto_reden = fotobewijs_reden(bezoek, venster, nummer)
     if foto_stand != "ontbreekt":
-        post("W4", "foto's", foto_stand, f"{bezoek['fotos']} foto('s); alleen fotos/ met tijdsbewijs in 00 fotos.md is volledig")
+        herstel = fotoherstel(bezoek, foto_reden, bevestigd)
+        post("W4", "foto's", foto_stand, f"{bezoek['fotos']} foto('s); alleen fotos/ met tijdsbewijs in 00 fotos.md is volledig"
+             + (f"; {FOTOREDEN[foto_reden]}" if foto_reden else "") + ("; taak voor de iCloud-wacht" if herstel else ""))
+        if herstel:
+            c[-1]["herstel"] = herstel
+            taken.append(("icloud-wacht", f"Foto's van {d} binnen 300 m van {adres} (dossier {nummer}) opnieuw leveren: {FOTOREDEN[herstel]}"))
     else:
         fotos = [f for f in bak.get("foto", []) if dag_van(f) == d]
         if fotos:
@@ -1216,7 +1267,8 @@ def verwerk(nummer, droog=False):
                       "stand": stand_van(controles)})
         if oude:
             rijen[-1]["vorige_bezoekmappen"] = [r["bezoekmap"] for r in oude]
-        fotowerk.append((b, rijen[-1], any(voor == "icloud-wacht" for voor, _ in taken)))
+        fotowerk.append((b, rijen[-1], any(voor == "icloud-wacht" for voor, _ in taken),
+                         next((x.get("herstel", "") for x in controles if x["code"] == "W4"), "")))
         # het bezoeknummer (PB1.., 1..) is wat in het verslag komt; de rij telt alle bezoeken door en is alleen het adres op het bord
         ag.log(str(nummer), "bevinding", f"{b['soort_bezoek']} {b['nr_label']} (rij {b['volgnr']}, {b['datum']}): {rijen[-1]['stand']}; "
                + ", ".join(f"{x['code']} {x['stand']}" for x in controles))
@@ -1235,7 +1287,8 @@ def verwerk(nummer, droog=False):
         ag.log(str(nummer), "fout", "stand niet op het bord bevestigd; geen bronopdracht gepubliceerd")
         noden.append({"tekst": f"Dossier {nummer}: bordregistratie niet bevestigd; fotoaanvoer blijft open", "wie": "claude-code"})
         return rijen, noden, dubbels
-    for b, rij, nodig in fotowerk:
+    hersteld_op = set()  # (dossier, dag) met een hersteltaak uit deze ronde
+    for b, rij, nodig, herstel in fotowerk:
         passend = [r for r in opgeslagen if r.get("datum") == b["datum"] and (r.get("bezoekmap") or "").casefold() == b["map"].casefold()
                    and not str(r.get("stand", "")).startswith("dubbel na verhuis")]
         try:
@@ -1257,8 +1310,12 @@ def verwerk(nummer, droog=False):
                 rij["taken"].append({"voor": "icloud-wacht", "titel": it.get("titel", "Fotoaanvoer nog open"), "uniek": it.get("uniek")})
                 if not (_inhoud(it).get("start") and _inhoud(it).get("einde")):
                     noden.append({"tekst": f"Dossier {nummer}, bezoek {b['nr_label']}: bestaande fototaak mist bezoekvenster en blijft open", "wie": "collega"})
-            if nodig and not open_foto:
-                taak = fototaak(nummer, adres, projectmap, b, bezoeken, bak, registratie)
+            zelfde_dag = herstel and (((str(nummer), b["datum"]) in hersteld_op)
+                                      or fototaak_open_op_dag(open_taken.get("icloud-wacht", []), nummer, b["datum"], gesloten_ids))
+            if nodig and not open_foto and not zelfde_dag:
+                taak = fototaak(nummer, adres, projectmap, b, bezoeken, bak, registratie, herstel)
+                if herstel:
+                    hersteld_op.add((str(nummer), b["datum"]))
                 if not any(t.get("uniek") == taak["uniek"] for t in open_taken.get("icloud-wacht", [])):
                     alle_taken.append(taak)
                 if not any(t.get("uniek") == taak["uniek"] for t in rij["taken"]):

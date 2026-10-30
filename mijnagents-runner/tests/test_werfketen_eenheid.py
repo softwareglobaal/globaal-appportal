@@ -275,3 +275,105 @@ def test_oude_fotolijst_toetst_ook_heic_zonder_jpg(monkeypatch):
     b = _fotobezoek(monkeypatch, OUDE_LIJST)
     b["foto_bestanden"] += [b["map"] + "/fotos/1042 756DF67C.HEIC", b["map"] + "/fotos/1103 C0C4A1FD.HEIC"]
     assert V.fotobewijs(b, VENSTER, "2145") == "ok"                                     # HEIC met eigen geldige rij
+
+
+# P3 (overleg 29-10-2026): een fototaak bij let_op, alleen als de iCloud-wacht het kan herstellen.
+import json  # noqa: E402
+
+P3_MAP = "/project/2026-10-14 bezoek"
+
+
+def _p3_bezoek(*namen, lijst=True):
+    return {"datum": "2026-10-14", "map": P3_MAP, "fotos": len(namen), "foto_bestanden": [P3_MAP + "/" + n for n in namen],
+            "foto_manifest": P3_MAP + "/fotos/00 fotos.md" if lijst else "", "foto_manifest_versies": [], "opnames": [],
+            "opname_starts": [], "transcripten": [], "transcript_bestanden": [], "verslagen": [], "notities": [],
+            "volgnr": 1, "nr_label": "1", "werfnr": 1, "soort_bezoek": "werfbezoek"}
+
+
+def _p3_bak(agenda=True):
+    afspraak = {"van": "agenda-wacht", "voor": "h-architects", "soort": "afspraak", "status": "klaar",
+                "inhoud": json.dumps({"firma": "HARC", "nummer": "9999", "datum": "2026-10-14", "agenda": "H-A Buiten",
+                                      "type": "WB", "onzeker": False, "buiten": True,
+                                      "start": "2026-10-14T11:00:00+02:00", "einde": "2026-10-14T12:00:00+02:00"})}
+    return {"afspraak": [afspraak] if agenda else [], "foto": [], "transcript": [], "locatie": []}
+
+
+def _p3(monkeypatch, b, bak=None, lijst=b"- 2026-10-14T11:30:00+02:00 | 1130 AAAA0001.jpg\n"):
+    monkeypatch.setattr(V, "contractbewijs", lambda nr: ("onbekend", "fictief"))
+    monkeypatch.setattr(V, "werfapp_bezoeken", lambda nr: [])
+    monkeypatch.setattr(V, "projectcoordinaten", lambda nr, adres, bak: (51.0, 4.0))
+    monkeypatch.setattr(V.bronnen, "download", lambda *a, **kw: lijst)
+    c, taken, _ = V.controleer("9999", "Werfstraat 1", "standaard", "/project", b, bak or _p3_bak(), bezoeken=[b])
+    w4 = next(p for p in c if p["code"] == "W4")
+    return w4, [t for voor, t in taken if voor == "icloud-wacht"]
+
+
+def test_p3_fotobewijs_geeft_de_reden(monkeypatch):
+    monkeypatch.setattr(V.bronnen, "download", lambda *a, **kw: b"- 2026-10-14T11:30:00+02:00 | 1130 AAAA0001.jpg\n")
+    venster = {"start": "2026-10-14T11:00:00+02:00", "einde": "2026-10-14T12:00:00+02:00"}
+    assert V.fotobewijs_reden(_p3_bezoek(), venster) == ("ontbreekt", "geen_fotos")
+    assert V.fotobewijs_reden(_p3_bezoek("fotos/1130 AAAA0001.jpg"), None) == ("let_op", "geen_venster")
+    assert V.fotobewijs_reden(_p3_bezoek("1130 AAAA0001.jpg"), venster) == ("let_op", "niet_in_fotomap")
+    assert V.fotobewijs_reden(_p3_bezoek("fotos/1130 AAAA0001.jpg", lijst=False), venster) == ("let_op", "lijst_ontbreekt")
+    assert V.fotobewijs_reden(_p3_bezoek("fotos/1130 AAAA0001.heic"), venster) == ("let_op", "jpg_ontbreekt")
+    assert V.fotobewijs_reden(_p3_bezoek("fotos/1130 AAAA0001.jpg"), venster) == ("ok", "")
+    assert V.fotobewijs_reden(_p3_bezoek("fotos/1130 AAAA0001.jpg", "fotos/1300 AAAA0002.jpg"), venster) == \
+        ("let_op", "tijd_ontbreekt")
+    # de oude vorm blijft dezelfde stand geven
+    assert V.fotobewijs(_p3_bezoek("fotos/1130 AAAA0001.heic"), venster) == "let_op"
+
+
+def test_p3_herstelbaar_aanvoerprobleem_geeft_een_taak(monkeypatch):
+    for b, reden in ((_p3_bezoek("fotos/1130 AAAA0001.jpg", lijst=False), "lijst_ontbreekt"),   # JPG zonder lijst
+                     (_p3_bezoek("fotos/1130 AAAA0001.heic"), "jpg_ontbreekt"),                 # lijst, alleen HEIC
+                     (_p3_bezoek("1130 AAAA0001.jpg"), "niet_in_fotomap")):                     # foto naast fotos/
+        w4, taken = _p3(monkeypatch, b)
+        assert w4["stand"] == "let_op" and w4["herstel"] == reden, reden
+        assert len(taken) == 1 and V.FOTOREDEN[reden] in taken[0], reden
+
+
+def test_p3_geen_taak_bij_foto_buiten_het_venster(monkeypatch):
+    # X2: foto's buiten het bevestigde venster blijven let_op, zonder taak; de iCloud-wacht kan dat niet oplossen.
+    w4, taken = _p3(monkeypatch, _p3_bezoek("fotos/1300 AAAA0002.jpg"),
+                    lijst=b"- 2026-10-14T13:00:00+02:00 | 1300 AAAA0002.jpg\n")
+    assert w4["stand"] == "let_op" and "herstel" not in w4 and taken == []
+
+
+def test_p3_geen_taak_zonder_agendavenster(monkeypatch):
+    # Geen door de agenda bevestigd venster (ook geen E4-terugval): geen taak, de wacht weet niet welke foto's.
+    w4, taken = _p3(monkeypatch, _p3_bezoek("fotos/1130 AAAA0001.jpg", lijst=False), bak=_p3_bak(agenda=False))
+    assert w4["stand"] == "let_op" and "herstel" not in w4 and taken == []
+    monkeypatch.setattr(V, "e4_venster", lambda *a, **kw: {"start": "2026-10-14T11:00:00+02:00",
+                                                            "einde": "2026-10-14T12:00:00+02:00", "reden": "E4, geen afspraak"})
+    w4, taken = _p3(monkeypatch, _p3_bezoek("fotos/1130 AAAA0001.jpg", lijst=False), bak=_p3_bak(agenda=False))
+    assert "herstel" not in w4 and taken == []
+
+
+def test_p3_geen_taak_bij_fotonamen_die_de_wacht_niet_kent(monkeypatch):
+    # Meting 30-10-2026 (2145 15-09, 2173 20-08 en 27-08): IMG_xxxx uit Photos staat nooit in haar lijst. Een taak
+    # zou alleen een tweede kopie onder haar eigen naam leveren, en W4 bleef let_op.
+    for namen in (("fotos/IMG_7256.HEIC",), ("fotos/IMG_6141.HEIC", "fotos/IMG_6141.jpg"),
+                  ("fotos/1130 AAAA0001.heic", "fotos/IMG_6141.jpg")):
+        w4, taken = _p3(monkeypatch, _p3_bezoek(*namen, lijst=False))
+        assert w4["stand"] == "let_op" and "herstel" not in w4 and taken == [], namen
+
+
+def test_p3_hersteltaak_eigen_sleutel_en_geen_botsing_met_e4_reden(monkeypatch):
+    monkeypatch.setattr(V, "projectcoordinaten", lambda nr, adres, bak: (51.0, 4.0))
+    b = _p3_bezoek("fotos/1130 AAAA0001.heic")
+    bid = "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f"
+    reg = {"bezoek_id": bid, "project_ref": "h-architects:9999"}
+    gewoon = V.fototaak("9999", "Werfstraat 1", "/project", b, [b], _p3_bak(), reg)
+    herstel = V.fototaak("9999", "Werfstraat 1", "/project", b, [b], _p3_bak(), reg, "jpg_ontbreekt")
+    assert gewoon["uniek"] == f"werf:h-architects:9999:{bid}:icloud-wacht" and "herstel" not in gewoon["inhoud"]
+    assert herstel["uniek"] == gewoon["uniek"] + ":jpg_ontbreekt"
+    # de iCloud-wacht leest 'reden' als E4-teken (mac/icloud_wacht.py taakvenster): de hersteltaak mag die niet zetten
+    assert herstel["inhoud"]["herstel"] == "jpg_ontbreekt" and "reden" not in herstel["inhoud"]
+
+
+def test_p3_dedup_op_dossier_en_dag():
+    open_items = [{"id": 7, "inhoud": json.dumps({"dossier": "9999", "datum": "2026-10-14", "bezoekmap": "/ander"})}]
+    assert V.fototaak_open_op_dag(open_items, 9999, "2026-10-14")
+    assert not V.fototaak_open_op_dag(open_items, "9999", "2026-10-15")
+    assert not V.fototaak_open_op_dag(open_items, "9998", "2026-10-14")
+    assert not V.fototaak_open_op_dag(open_items, "9999", "2026-10-14", gesloten={7})   # net afgevinkt telt niet
