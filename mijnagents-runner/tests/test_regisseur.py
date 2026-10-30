@@ -856,6 +856,19 @@ def test_t45_dag_en_deal_gemeten_in_de_code():
     assert R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["prijsonderzoeker"], naam="prijsonderzoeker"), {"vraag": "x"}) is None
 
 
+def test_t45_prijsverslag_tot_in_de_chat():
+    """Overleg 30-10-2026 X2, Codex X5: De Prijsonderzoeker zet zijn verslag als soort prijsverslag klaar; De Bode stuurt
+    het niet door, De Regisseur leest de inhoud en geeft de aanbeveling met de link in de chat."""
+    with Wereld("t45-prijs", datetime(2026, 10, 30, 9, 0, tzinfo=UTC)) as w:
+        w.item("prijsonderzoeker", "mehdi", "prijsverslag", "Prijsonderzoek: vloerwasser voor Suriname (beste 499,00 euro)",
+               "**Aanbevolen:** [X1](https://winkel.voorbeeld.com/x1) bij W, 499,00 euro alles inbegrepen.")
+        items = R.klaargezet_lees("prijsonderzoeker", "van")["items"]
+        assert items and items[0]["inhoud"].startswith("**Aanbevolen:** [X1](https://winkel.voorbeeld.com/x1)"), items
+    bode = open(os.path.join(os.path.dirname(C._runnerpad("bode")), "bode.py"), encoding="utf-8").read()
+    soorten = re.search(r"^SOORTEN = \((.*)\)$", bode, re.M).group(1)
+    assert '"verslag"' in soorten and "prijsverslag" not in soorten, "De Bode stuurt een prijsverslag niet vanzelf door (X2)"
+
+
 # ------------------------------------------------------------------------------------------------- T46 ---
 def test_t46_agent_ronde_slot_droog_en_kwartier():
     nu = datetime(2026, 10, 22, 7, 30, tzinfo=UTC)

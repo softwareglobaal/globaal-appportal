@@ -16,9 +16,9 @@ Leest het web, verandert niets: geen aankoop, geen bod, geen contact met een ver
 """
 import argparse
 import hashlib
-import json
 import os
 import sys
+import time
 from datetime import date
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +34,8 @@ from aankoop import verslag as V  # noqa: E402
 NAAM = "prijsonderzoeker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
+RONDE_SECONDEN = 480            # binnen de 600 s die De Regisseur op een ronde wacht
+MIN_SECONDEN_PER_VRAAG = 150    # minder tijd over: de vraag wacht op de volgende ronde
 # Niet 'verslag' of 'signaal': die stuurt De Bode vanzelf door. Het antwoord komt via De Regisseur (overleg X2).
 SOORT = "prijsverslag"
 
@@ -59,50 +61,58 @@ def open_vragen():
     return sorted(vragen, key=lambda it: it.get("id") or 0)
 
 
+def vingerafdruk(vraag, vandaag):
+    """Wat het logboek van een vraag bewaart: nooit de vraag zelf (Codex X3), alleen een vingerafdruk."""
+    return hashlib.sha256(f"{vandaag}:{vraag}".encode()).hexdigest()[:12]
+
+
 def zet_klaar(vraag, titel, tekst, vandaag):
-    vingerafdruk = hashlib.sha256(f"{vandaag}:{vraag}".encode()).hexdigest()[:12]
     ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": vandaag.isoformat(), "titel": titel,
-                  "uniek": f"prijsonderzoek:{vingerafdruk}", "inhoud": tekst}])
+                  "uniek": f"prijsonderzoek:{vingerafdruk(vraag, vandaag)}", "inhoud": tekst}])
 
 
-def een_vraag(r, vraag, koersdatum, koersen, vandaag):
+def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     """Een prijsvraag uitvoeren en het verslag klaarzetten. Geeft het aantal aanbiedingen in het verslag."""
+    va = vingerafdruk(vraag, vandaag)
     soorten = P.gevonden(vraag)
     if soorten:
-        # Niets naar het model: alleen de productvraag mag weg (X4, K6). De vraag zelf komt niet in het logboek.
-        ag.log("prijsvraag", "beslissing", "vraag niet verstuurd: persoonsgegevens", ", ".join(soorten))
+        # Niets naar het model: alleen de productvraag mag weg (X4, K6).
+        ag.log("prijsvraag", "beslissing", f"vraag {va} niet verstuurd: persoonsgegevens", ", ".join(soorten))
         zet_klaar(vraag, "Prijsvraag niet verstuurd: persoonsgegevens", V.tegengehouden(soorten), vandaag)
         return 0
-    lessen = json.dumps(r.lessen, ensure_ascii=False)[:20000] if r.lessen else ""
-    uit = O.onderzoek(vraag, r.werkwijze, bord.collega_tekst(r.collegas), lessen, vandaag.isoformat())
+    vaste_eisen = A.eisen_uit_vraag(vraag)
+    uit = O.onderzoek(vraag, r.werkwijze, vandaag.isoformat(), vaste_eisen, deadline)
+    ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} pagina's "
+                                 f"gelezen, {uit['tokens']} tokens, model {uit['model']}, einde {uit['stop']}")
+    if uit["stop"] == "plafond":
+        r.nood("Prijsvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
     g = uit["gegevens"]
     if g is None:
-        ag.log("prijsvraag", "fout", "het model gaf geen leesbare gegevens", uit["tekst"][:3000])
+        ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
         r.nood("Prijsvraag zonder leesbaar antwoord van het model", wie="claude-code")
+        zet_klaar(vraag, "Prijsvraag zonder antwoord", "**Geen antwoord:** het zoeken gaf geen bruikbare gegevens. "
+                  "Ik kocht, bood en contacteerde niets.", vandaag)
         return 0
     aanbiedingen = g.get("aanbiedingen") if isinstance(g.get("aanbiedingen"), list) else []
     for a in aanbiedingen:
         if isinstance(a, dict):
             a["gezien_op"] = vandaag.isoformat()     # gelezen in deze ronde; de datum zet de code, niet het model
     gelezen, niet_gelezen = O.alleen_gelezen(aanbiedingen, uit["gelezen"])
-    eisen = [str(e) for e in g.get("eisen") or [] if str(e).strip()]
-    res = A.verwerk(gelezen, vandaag, koersen, eisen)
+    eisen = list(dict.fromkeys(vaste_eisen + [str(e) for e in g.get("eisen") or [] if str(e).strip()]))
+    g["eisen"] = eisen
+    res = A.verwerk(gelezen, vandaag, koersen, eisen, paginas=uit["gelezen"])
     res["afgewezen"] = niet_gelezen + res["afgewezen"]
     tekst = V.maak(vraag, g, res, koersdatum, vandaag.isoformat())
     zet_klaar(vraag, V.titel(g, res), tekst, vandaag)
-    ag.log("prijsvraag", "bron", f"{uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} pagina's gelezen, "
-                                 f"{uit['tokens']} tokens, model {uit['model']}, einde {uit['stop']}", vraag)
-    if uit["stop"] == "plafond":
-        r.nood("Prijsvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
     ag.log("prijsvraag", "beslissing",
-           f"{len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
+           f"vraag {va}: {len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
            f"{len(res['afgewezen'])} afgewezen",
            [{"url": x["aanbod"].get("url"), "redenen": x["redenen"]} for x in res["afgewezen"]])
-    ag.log("prijsvraag", "melding", "prijsverslag klaargezet voor Mehdi", tekst)
+    ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi", tekst)
     return len(res["goed"])
 
 
-def werk(r, hand_vraag=None, droog=False):
+def werk(r, hand_vraag=None, droog=False, begin=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         r.nood("Werkwijze zegt niet in de vaste vorm wat ik nooit doe of wat Mehdi beslist", wie="mehdi")
@@ -115,6 +125,8 @@ def werk(r, hand_vraag=None, droog=False):
     if droog:
         r.detail = f"droog: {len(vragen)} prijsvragen klaar, model niet aangeroepen"
         return
+    # Een deadline voor de hele ronde: De Regisseur wacht hoogstens 600 seconden op mij (Codex X6).
+    deadline = (begin or time.monotonic()) + RONDE_SECONDEN
     koersdatum, koersen = K.haal()
     r.bron("ECB-koersen", f"{koersdatum}: " + ", ".join(f"{m} {k}" for m, k in sorted(koersen.items())))
     if not koersen:
@@ -122,16 +134,18 @@ def werk(r, hand_vraag=None, droog=False):
     vandaag = date.today()
     gedaan = aanbod = 0
     for v in vragen[:MAX_VRAGEN]:
+        if deadline - time.monotonic() < MIN_SECONDEN_PER_VRAAG:
+            break                                   # blijft klaarstaan voor de volgende ronde
         tekst = str(v.get("inhoud") or v.get("titel")).strip()
         try:
-            aanbod += een_vraag(r, tekst, koersdatum, koersen, vandaag)
-        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet elke tien minuten terug (kosten)
-            ag.log("prijsvraag", "fout", f"{type(e).__name__}: {str(e)[:300]}", tekst)
+            aanbod += een_vraag(r, tekst, koersdatum, koersen, vandaag, deadline)
+        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug (kosten)
+            ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Prijsvraag mislukt bij het zoeken", wie="claude-code")
         gedaan += 1
         if v.get("id"):
             bord.opgepakt(v["id"], NAAM)
-    rest = max(0, len(vragen) - MAX_VRAGEN)
+    rest = len(vragen) - gedaan
     r.detail = f"{gedaan} prijsvragen afgewerkt, {aanbod} aanbiedingen in de verslagen" + (f", {rest} wachten" if rest else "")
 
 
@@ -140,5 +154,6 @@ if __name__ == "__main__":
     p.add_argument("--vraag", help="een prijsvraag met de hand, zonder het bord")
     p.add_argument("--droog", action="store_true", help="niet zoeken; zeggen wat klaarstaat")
     a = p.parse_args()
+    begin = time.monotonic()
     with ag.ronde("prijsvraag" if a.vraag else "prijsvragen afwerken") as r:
-        werk(r, a.vraag, a.droog)
+        werk(r, a.vraag, a.droog, begin)

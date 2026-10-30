@@ -32,8 +32,9 @@ def _regel(a):
         delen.append(f"[foto]({a['foto']})")
     if a.get("compatibel") == "onbekend":
         delen.append("compatibiliteit niet bevestigd")
-    if a.get("opmerking"):
-        delen.append(str(a["opmerking"]))
+    delen += a.get("uitleg") or []
+    if a.get("waarom"):
+        delen.append(str(a["waarom"]))
     return "- " + "; ".join(d for d in delen if d)
 
 
@@ -62,7 +63,7 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
     beste = r.get("beste")
     if beste:
         regels.append(f"**Aanbevolen:** [{beste['titel']}]({beste['url']}) bij {beste.get('winkel') or 'onbekend'}, "
-                      f"{euro(beste['totaal_eur'])} alles inbegrepen.")
+                      f"{euro(beste['totaal_eur'])} alles inbegrepen" + (f": {beste['waarom']}" if beste.get("waarom") else "."))
     else:
         regels.append("**Geen aanbeveling:** geen aanbod dat compatibel is en een volledige totaalprijs heeft.")
     reserve = r.get("reserve")
@@ -71,10 +72,13 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
                       f"{euro(reserve['totaal_eur'])}.")
     if g.get("vervolgvraag"):
         regels.append(f"**Vraag aan jou:** {g['vervolgvraag']}")
-    if g.get("advies"):
-        regels.append(str(g["advies"]))
-    if g.get("volgende_stap"):
-        regels.append(f"**Voorstel:** {g['volgende_stap']}")
+    # Geen vrije adviestekst van het model: die kon een afgewezen aanbod alsnog aanraden (Codex X2). De aanbeveling
+    # en de volgende stap komen uit de code; de uitleg van het model staat alleen bij een aanbod dat de controle doorstond.
+    if beste:
+        regels.append("**Voorstel:** open de link van het aanbevolen aanbod en beslis zelf; ik koop, bied en contacteer niets.")
+    elif r.get("goed"):
+        regels.append("**Voorstel:** kijk bij de aanbiedingen wat ontbreekt (meestal verzending, btw of invoer) en vraag "
+                      "mij gericht verder, of beslis op de link.")
     regels.append("")
     regels.append(f"Vraag: {vraag}")
     if g.get("aannames"):

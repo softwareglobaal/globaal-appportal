@@ -76,4 +76,4 @@ wat daarmee compatibel is) volgen later.
 
 Op verzoek: De Regisseur start mij met de vraag van Mehdi, of iemand start mij met de hand. Zonder vraag werk ik de
 klaargezette vragen af, hoogstens twee per ronde. Per vraag hoogstens twaalf zoekopdrachten, vijftien gelezen
-pagina's, 150.000 tokens en zeven minuten. Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.
+pagina's en 150.000 tokens, en hoogstens acht minuten per ronde. Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.

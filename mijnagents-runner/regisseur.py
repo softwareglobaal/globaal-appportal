@@ -117,7 +117,8 @@ WA_MAX = O.WA_MAX               # een antwoord via WhatsApp (R6): De Bode kort h
 WA_MODEL_MAX = 700              # wat ik het model vooraf vraag, zodat er zelden iets moet worden ingekort
 DOSSIER_MAX = 20000
 # Inhoud van een klaargezet item geef ik alleen voor deze soorten (R4), en nooit voor de soorten daaronder.
-INHOUD_SOORTEN = ("verslag", "dagbundel", "dagplan", "signaal", "verzoek", "ochtendbericht", "zoom-tekst", "zoom")
+INHOUD_SOORTEN = ("verslag", "dagbundel", "dagplan", "signaal", "verzoek", "ochtendbericht", "zoom-tekst", "zoom",
+                  "prijsverslag")    # het antwoord van De Prijsonderzoeker, dat ik in de chat geef (overleg X2, Codex X5)
 NOOIT_INHOUD = ("transcript", "locatie", "gezondheid", "coaching")
 # privé of prive, met of zonder accent, in elke hoofdletter: De Fathomwacht schrijft de afdeling 'prive' zonder accent
 PRIVE = re.compile(r"priv[eé]", re.I)
