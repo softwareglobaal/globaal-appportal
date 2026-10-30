@@ -85,6 +85,10 @@ Niet verplicht: de wachten halen na een slaap tot zestig dagen in. Wil Mehdi het
   moeten groen staan met een hartslag van de laptop.
 - Pas dan op de oude Mac dezelfde taken uitzetten (`launchctl bootout`, niet wissen),
   na ja van Mehdi.
+- Gedaan op 30-10-2026 (Claude 2): de VM-cronregels die `wacht_skelet.py` voor
+  belwacht en whatsapp-wacht om 07:12 en 07:14 draaiden, staan in commentaar. Ze
+  zetten elke ochtend de echte wachten van de laptop op rust met oude noden. Kopie
+  van de vorige crontab: `~/crontab.voor-skelet-uit-20261030` op de VM.
 
 ## Stap 9. Driehoeksoverleg
 
