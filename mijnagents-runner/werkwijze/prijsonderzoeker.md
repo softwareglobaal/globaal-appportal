@@ -81,5 +81,6 @@ wat daarmee compatibel is) volgen later.
 ## Wanneer ik werk
 
 Op verzoek: De Regisseur start mij met de vraag van Mehdi, of iemand start mij met de hand. Zonder vraag werk ik de
-klaargezette vragen af, hoogstens twee per ronde. Per vraag hoogstens twaalf zoekopdrachten, vijftien gelezen
-pagina's en 150.000 tokens, en hoogstens acht minuten per ronde. Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.
+klaargezette vragen af, hoogstens twee per ronde. Per vraag hoogstens zes zoekopdrachten en zes gelezen pagina's van
+elk hoogstens 6.000 tokens; tussen de beurten stop ik boven 300.000 tokens, en hoogstens acht minuten per ronde. (De
+eerste echte vraag van 30-10-2026 gebruikte zonder die grenzen 4,27 miljoen tokens.) Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.

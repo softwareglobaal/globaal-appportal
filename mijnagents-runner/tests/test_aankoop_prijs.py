@@ -359,6 +359,9 @@ check("het verslag toont het bewijs met de tekst eromheen (Codex ronde 5)", "- p
 check("het verslag zegt dat er niets gekocht is", "Ik kocht, bood en contacteerde niets." in tekst)
 check("bedrag in Belgische schrijfwijze", V.euro(1299.5) == "1.299,50 euro")
 check("titel met het beste totaal", V.titel(uit["gegevens"], r) == "Prijsonderzoek: vloerwasser X1 voor Suriname (beste 499,00 euro)")
+r_onv = A.verwerk([aanbod(prijs=1099, verzending=None)], VANDAAG, KOERSEN)
+check("ook bij een onvolledig totaal staat de prijs in het verslag (proef 30-10-2026)",
+      "prijs 1099 EUR, totaal onvolledig: verzending" in V.maak("v", {}, r_onv, None, "2026-10-30"))
 check("zonder goed aanbod geen aanbeveling", V.maak("v", {}, A.verwerk([], VANDAAG, KOERSEN), None, "2026-10-30")
       .startswith("**Geen aanbeveling:**"))
 r = A.verwerk([aanbod(prijs=500), aanbod(url="https://b.voorbeeld.com/2", prijs=520)], VANDAAG, KOERSEN)
@@ -367,8 +370,12 @@ check("de reserve en de vervolgvraag staan bovenaan", "**Reserve:**" in tekst.sp
       and "**Vraag aan jou:** Is het voor privé of voor een firma?" in tekst)
 
 print("Plafonds en reservemodel")
-nep = NepClient([NepAntwoord(STUK1, "pause_turn", (200000, 100)), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
+nep = NepClient([NepAntwoord(STUK1, "pause_turn", (O.MAX_TOKENS + 1, 100)), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
 uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
+check("elke gelezen pagina heeft een grens in tokens (proef 30-10-2026: 4,27 miljoen tokens)",
+      [t.get("max_content_tokens") for t in nep.vragen[0]["tools"] if t["name"] == "web_fetch"] == [O.MAX_PAGINA_TOKENS]
+      and O.MAX_ZOEKEN <= 6 and O.MAX_LEZEN <= 6)
+check("het verbruik per beurt komt terug, voor het werkverslag", uit["beurten"] == [O.MAX_TOKENS + 101, 1200], str(uit["beurten"]))
 check("boven het tokenplafond nog een afrondbeurt zonder gereedschap (Codex X7, ronde 2)", len(nep.vragen) == 2
       and nep.vragen[1]["tool_choice"] == {"type": "none"} and uit["stop"] == "plafond" and uit["gegevens"] is not None)
 nep = NepClient([NepAntwoord(STUK1, "pause_turn", (200000, 100)),

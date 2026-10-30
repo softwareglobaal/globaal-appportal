@@ -23,7 +23,9 @@ def _prijs_in_munt(a):
 
 
 def _regel(a):
-    totaal = euro(a["totaal_eur"]) if a["totaal_eur"] is not None else "totaal onvolledig: " + ", ".join(a["ontbreekt"])
+    # Ook bij een onvolledig totaal staat de prijs erbij: zonder prijs is de lijst voor Mehdi waardeloos (proef 30-10-2026).
+    totaal = (euro(a["totaal_eur"]) if a["totaal_eur"] is not None
+              else f"prijs {a.get('prijs')} {str(a.get('munt') or '').upper()}, totaal onvolledig: " + ", ".join(a["ontbreekt"]))
     delen = [f"[{a['titel']}]({a['url']})", f"{a.get('winkel') or 'winkel onbekend'} ({a.get('land') or '?'})",
              a.get("soort") or "", totaal + _prijs_in_munt(a)]
     if a.get("staat") and a.get("soort") != "nieuw":
