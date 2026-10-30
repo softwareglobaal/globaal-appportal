@@ -236,11 +236,27 @@ ACC = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 500,00 euro. Gratis verz
                                                   "Accessoire laadstation: Stekker type A/B.")}
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending."}, compatibiliteit={
     "stekker type A/B": {"oordeel": "ja", "citaat": "Stekker type A/B."}})], VANDAAG, KOERSEN, ["stekker type A/B"], paginas=ACC)
-check("een accessoirecitaat staat met zijn context in het verslag (Codex X2, ronde 5)",
-      "Accessoire laadstation" in V.maak("v", {}, r, None, "2026-10-30"))
+check("een past vlak na het woord accessoire telt niet (Codex X2, ronde 6)", r["beste"] is None
+      and r["goed"][0]["compatibel"] == "onbekend")
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro"}, verzending=7.95)],
               VANDAAG, KOERSEN, paginas=paginas)
-check("de verzendpagina van dezelfde winkel telt wel", r["beste"] is not None and r["beste"]["totaal_eur"] == 507.95, str(r["goed"]))
+check("een verzendkost van een andere pagina, ook van dezelfde winkel, telt niet (Codex X12 en X16, ronde 6)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
+EIGEN = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 100,00 euro. Verzendkosten: 5,00 euro."),
+         "https://winkel.voorbeeld.com/z": pagina("Z nu 130,00 euro. Gratis verzending.")}
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 100,00 euro", "verzending": "Verzendkosten: 5,00 euro"}, prijs=100, verzending=5),
+               aanbod(url="https://winkel.voorbeeld.com/z", bewijs={"prijs": "Z nu 130,00 euro", "verzending": "Gratis verzending."},
+                      prijs=130, verzending=0)], VANDAAG, KOERSEN, paginas=EIGEN)
+check("met de verzending op de eigen pagina wint het goedkoopste totaal", r["beste"]["totaal_eur"] == 105.0
+      and r["reserve"]["totaal_eur"] == 130.0, str([(g["totaal_eur"], g["ontbreekt"]) for g in r["goed"]]))
+VEIL = {"https://veiling.voorbeeld.com/kavel/1": pagina("Kavel 1 hamerprijs 1.000 euro. Verzending: 50 euro."),
+        "https://veiling.voorbeeld.com/voorwaarden": pagina("Op elke kavel geldt een opgeld van 18% en dossierkosten 10 euro.")}
+r = A.verwerk([aanbod(url="https://veiling.voorbeeld.com/kavel/1", soort="veiling", prijs=1000, verzending=50, opgeld_pct=18,
+                      veilingkosten=10, bewijs={"prijs": "Kavel 1 hamerprijs 1.000 euro", "verzending": "Verzending: 50 euro",
+                                                "opgeld": "opgeld van 18%", "veilingkosten": "dossierkosten 10 euro"})],
+              VANDAAG, KOERSEN, paginas=VEIL)
+check("opgeld en kosten uit de voorwaarden van hetzelfde veilinghuis tellen", r["beste"] is not None
+      and r["beste"]["totaal_eur"] == 1240.0, str([(g["totaal_eur"], g["ontbreekt"]) for g in r["goed"]]))
 fout_type = A.verwerk([aanbod(compatibiliteit="past wel")], VANDAAG, KOERSEN)
 check("een compatibiliteit als tekst laat het verslag niet crashen (Codex X15, ronde 4)",
       V.maak("v", {}, fout_type, None, "2026-10-30").startswith("**Aanbevolen:**"))

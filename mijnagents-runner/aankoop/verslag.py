@@ -54,7 +54,7 @@ def _bewijsregel(a):
     regels = ["Bewijs op de pagina:"]
     for veld, (tekst, bron) in ctx.items():
         waar = "" if bron == a.get("url") else f" ([bron]({bron}))"
-        regels.append(f'- {veld}: "{_kort(tekst, 200)}"{waar}')
+        regels.append(f'- {veld}: "{_kort(tekst, 600)}"{waar}')
     return "\n".join(regels)
 
 

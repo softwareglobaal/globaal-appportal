@@ -39,8 +39,8 @@ wat daarmee compatibel is) volgen later.
    zoals ze op de pagina staat, met wat eromheen staat, en de bronpagina als die niet de aanbodpagina is. Dan de
    aanbiedingen met een klikbare link (en een foto als die op de gelezen pagina staat) en een korte toelichting, wat
    niet compatibel is, wat ik niet vond, en de volgende stap als voorstel.
-   Een verzendkost of veilingvoorwaarde telt alleen van de aanbodpagina of van de algemene pagina's van dezelfde
-   winkel (verzending, voorwaarden), nooit van de pagina van een ander product.
+   Een verzendkost telt alleen als ze op de aanbodpagina zelf staat; opgeld en veilingkosten van de voorwaarden van
+   hetzelfde veilinghuis. Een "past" vlak na een woord als accessoire, optioneel of los verkrijgbaar telt niet.
 8. Het verslag staat op het bord (soort prijsverslag). De Regisseur geeft het antwoord in de chat; De Bode stuurt
    het alleen door als Mehdi daar uitdrukkelijk om vraagt.
 

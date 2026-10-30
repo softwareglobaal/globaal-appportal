@@ -34,9 +34,11 @@ KOSTWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|deliver
                          r"opgeld|premium|aufgeld|frais|kosten|\bfee\b|toeslag|borg|deposit|statiegeld", re.I)
 VERZENDWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison", re.I)
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
-# Algemene pagina's van een winkel waar verzending en voorwaarden voor elk aanbod staan.
-ALGEMEEN = re.compile(r"verzend|levering|shipping|delivery|versand|lieferung|livraison|voorwaarden|conditions|terms|agb|"
-                      r"cgv|faq|hulp|help|service|klantenservice|veiling|auction|kosten|fees|tarie", re.I)
+# Een "past" vlak na zo'n woord kan over iets anders gaan dan het toestel zelf (Codex X2, ronde 6).
+ACCESSOIRE = re.compile(r"accessoire|accessory|accessories|zubeh|optione|optional|los verkrijgbaar|apart verkrijgbaar|"
+                        r"sold separately|separat erh|vendu s[ée]par|laadstation|docking|onderdeel|spare part|ersatzteil|"
+                        r"bundel|bundle|\bkit\b|\bset\b", re.I)
+VOOR_EIS = 250                 # zoveel tekens voor een citaat bij een eis worden nagekeken en in het verslag getoond
 # "Gratis verzending" voor de prijs is geen kost en mag een juiste prijs niet weigeren (Codex X1, ronde 3).
 GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:verzending|levering|shipping|delivery|versand|"
                                r"lieferung|livraison)|(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)"
@@ -255,13 +257,14 @@ def in_euro(bedrag, munt, koersen):
     return bedrag / koers
 
 
-def totaal(aanbod, koersen, alle_tekst=None):
+def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None):
     """(totaal in euro of None, wat ontbreekt, toelichting). Het totaal is alleen een getal als niets ontbreekt.
 
     Per kostenpost (Codex X9, ronde 2): de prijs (bij een veiling met opgeld en vaste kosten) krijgt 21 procent btw
     als btw_inbegrepen onwaar is; de verzending apart volgens verzending_btw_inbegrepen (onbekend telt als de prijs).
     Buiten de EU: + douane (geschat door het model) en 21 procent btw op het geheel, door de code.
-    alle_tekst: de tekst van alle gelezen pagina's. Elke post heeft dan een citaat nodig dat erin staat (bewijs):
+    alle_tekst: de gelezen pagina's van dezelfde host, eigen_tekst: de aanbodpagina. Elke post heeft dan een citaat
+    nodig (bewijs): de verzending van de aanbodpagina, opgeld en veilingkosten van een pagina van dezelfde host:
     verzending met een verzendwoord en het bedrag, of gratis; opgeld met het percentage; veilingkosten boven nul met
     het bedrag. None slaat die toets over (alleen in tests)."""
     munt = str(aanbod.get("munt") or "").upper()
@@ -272,7 +275,10 @@ def totaal(aanbod, koersen, alle_tekst=None):
         if alle_tekst is None:
             return True
         citaat = str(bewijs.get(veld) or "")
-        if not citaat_op_pagina(citaat, alle_tekst):
+        # De verzending alleen van de eigen aanbodpagina: geen woorden in een link die raden welke pagina algemeen is
+        # (Codex X12 en X16, ronde 6). Opgeld en veilingkosten van het veilinghuis zelf (zelfde host).
+        bron = (eigen_tekst if eigen_tekst is not None else alle_tekst) if veld == "verzending" else alle_tekst
+        if not citaat_op_pagina(citaat, bron):
             return veld == "veilingkosten" and not waarde      # geen vaste kosten kan je niet citeren
         if veld == "opgeld":
             return procent_op_pagina(waarde, citaat)
@@ -365,6 +371,14 @@ def _netwaarde_bewezen(eenheid, waarde, citaat, eigen_tekst):
     return True
 
 
+def _accessoire_ervoor(citaat, tekst):
+    """Staat er in de VOOR_EIS tekens voor het citaat een woord als accessoire, optioneel of los verkrijgbaar? Dan kan
+    het "past" over iets anders gaan dan het toestel, en telt het niet (Codex X2, ronde 6)."""
+    citaat, tekst = _schoon(citaat), _schoon(tekst)
+    i = tekst.find(citaat)
+    return i >= 0 and bool(ACCESSOIRE.search(tekst[max(0, i - VOOR_EIS):i + len(citaat)]))
+
+
 def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
     """"ja", "nee" of "onbekend" tegen de eisen. Zonder eisen is het "ja".
 
@@ -387,6 +401,8 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
                 bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), eigen_tekst or "")
             else:
                 bewezen = citaat_op_pagina(citaat, eigen_tekst or "")     # van de eigen pagina (Codex X2, ronde 4)
+            if bewezen and _accessoire_ervoor(str(citaat or ""), eigen_tekst or ""):
+                bewezen = False
             if not bewezen:
                 oordeel = "onbekend"
         waarden.append(oordeel)
@@ -408,16 +424,9 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
     alle_tekst = "\n".join(paginas.values()) if paginas is not None else None
 
     def winkeltekst(url):
-        """De gelezen pagina's van dezelfde winkel: daar horen verzending, opgeld en voorwaarden van dit aanbod
-        (Codex X12, ronde 4: een kostencitaat van een andere winkel bewijst niets)."""
-        return "\n".join(t for _, t in winkelpaginas(url))
-
-    def winkelpaginas(url):
-        """De eigen aanbodpagina en de algemene pagina's van dezelfde winkel (verzending, voorwaarden, hulp), niet de
-        pagina van een ander product (Codex X12, ronde 5)."""
-        eigen, host = schoon_url(url), urlparse(schoon_url(url)).netloc
-        return [(u, t) for u, t in paginas.items()
-                if u == eigen or (urlparse(u).netloc == host and ALGEMEEN.search(urlparse(u).path))]
+        """De gelezen pagina's van dezelfde host, voor opgeld en veilingkosten van het veilinghuis."""
+        host = urlparse(schoon_url(url)).netloc
+        return "\n".join(t for u, t in paginas.items() if urlparse(u).netloc == host)
 
     def contexten(a, tekst):
         """Per bewijs het citaat met de tekst eromheen en de pagina waar het staat, voor het verslag."""
@@ -425,15 +434,18 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         b = _bewijs(a)
         if b.get("prijs"):
             uit["prijs"] = (context(b["prijs"], tekst, vindplaats(b["prijs"], tekst)), a["url"])
-        for veld in ("verzending", "opgeld", "veilingkosten"):
-            for u, t in winkelpaginas(a["url"]):
-                if b.get(veld) and citaat_op_pagina(b[veld], t):
+        if b.get("verzending") and citaat_op_pagina(b["verzending"], tekst):
+            uit["verzending"] = (context(b["verzending"], tekst), a["url"])
+        host = urlparse(schoon_url(a["url"])).netloc
+        for veld in ("opgeld", "veilingkosten"):
+            for u, t in paginas.items():
+                if b.get(veld) and urlparse(u).netloc == host and citaat_op_pagina(b[veld], t):
                     uit[veld] = (context(b[veld], t), u)
                     break
         compat = a.get("compatibiliteit") if isinstance(a.get("compatibiliteit"), dict) else {}
         for eis, o in compat.items():
             if isinstance(o, dict) and o.get("citaat") and citaat_op_pagina(o["citaat"], tekst):
-                uit[eis] = (context(o["citaat"], tekst), a["url"])
+                uit[eis] = (context(o["citaat"], tekst, rond=VOOR_EIS), a["url"])
         return uit
     goed, niet_compatibel, afgewezen = [], [], []
     gezien = set()
@@ -451,8 +463,8 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
             continue
         gezien.add(sleutel)
         rij = dict(a)
-        rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen,
-                                                                  winkeltekst(a["url"]) if paginas is not None else None)
+        rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = (
+            totaal(a, koersen, winkeltekst(a["url"]), tekst) if paginas is not None else totaal(a, koersen))
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst)
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
