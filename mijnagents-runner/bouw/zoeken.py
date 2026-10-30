@@ -20,9 +20,13 @@ from aankoop import onderzoek as O
 from . import scheiding as S
 
 MODEL = O.MODEL
-MAX_ZOEKEN = 10
-MAX_LEZEN = 18
-MAX_TOKENS = 150000
+# Kostengrenzen per vraag, naar de meting van De Prijsonderzoeker op 30-10-2026 (4,27 miljoen tokens zonder paginagrens):
+# een grens per gelezen pagina, weinig zoek- en leesbeurten, en een tokenplafond tussen de beurten. Per kandidaat zijn
+# twee pagina's nodig (eigen site en KBO); een KBO-pagina is klein.
+MAX_ZOEKEN = 5
+MAX_LEZEN = 10
+MAX_PAGINA_TOKENS = 4000
+MAX_TOKENS = 300000
 KBO = "kbopub.economie.fgov.be"
 MIN_TEKST = 100
 
@@ -299,7 +303,7 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
         from anthropic import Anthropic
         client = Anthropic(max_retries=1)
     systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
-    assistent, teksten, tokens, stop, model = [], [], 0, None, MODEL
+    assistent, teksten, tokens, stop, model, beurten = [], [], 0, None, MODEL, []
     for _ in range(O.MAX_HERVATTEN):
         rest_zoeken = MAX_ZOEKEN - O._gebruikt(assistent, "web_search")
         rest_lezen = MAX_LEZEN - O._gebruikt(assistent, "web_fetch")
@@ -308,7 +312,8 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
             stop = "plafond"
             break
         tools = [{"type": O.ZOEK_TOOL, "name": "web_search", "max_uses": max(1, rest_zoeken)},
-                 {"type": O.LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen)}]
+                 {"type": O.LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen),
+                  "max_content_tokens": MAX_PAGINA_TOKENS}]
         berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
         try:
             resp = client.messages.create(model=model, max_tokens=16000, system=systeem, messages=berichten, tools=tools,
@@ -319,7 +324,9 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
             model = O.RESERVE_MODEL
             continue
         gebruik = O._veld(resp, "usage")
-        tokens += (O._veld(gebruik, "input_tokens", 0) or 0) + (O._veld(gebruik, "output_tokens", 0) or 0)
+        beurt = (O._veld(gebruik, "input_tokens", 0) or 0) + (O._veld(gebruik, "output_tokens", 0) or 0)
+        tokens += beurt
+        beurten.append(beurt)
         blokken = list(O._veld(resp, "content", []) or [])
         assistent += blokken
         teksten = [O._veld(b, "text", "") for b in blokken if O._veld(b, "type") == "text"] or teksten
@@ -328,4 +335,4 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
             break
     tekst = "".join(teksten).strip()
     return {"gegevens": O.json_uit(tekst), "gelezen": O.gelezen_paginas(assistent), "tekst": tekst, "tokens": tokens,
-            "zoekopdrachten": O._gebruikt(assistent, "web_search"), "stop": stop, "model": model}
+            "zoekopdrachten": O._gebruikt(assistent, "web_search"), "stop": stop, "model": model, "beurten": beurten}

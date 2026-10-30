@@ -51,6 +51,9 @@ def laad_env(pad):
         pass
 
 
+# Eerst ~/appportal/.env, zoals De Prijsonderzoeker en De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026
+# een 401. setdefault: het eerste bestand met een waarde wint.
+laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
 
 
@@ -154,7 +157,8 @@ def een_vraag(r, tekst, vandaag, deadline):
     uit = Z.zoek(r.werkwijze, v["werk"], gemeente, v["straal"], soort, vandaag.isoformat(), deadline,
                  omvang=v.get("omvang") or "", kennis=kennis)
     ag.log("aannemersvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} "
-                                     f"pagina's gelezen, {uit['tokens']} tokens, model {uit['model']}, einde {uit['stop']}")
+                                     f"pagina's gelezen, {uit['tokens']} tokens (per beurt {uit.get('beurten')}), model "
+                                     f"{uit['model']}, einde {uit['stop']}")
     if uit["stop"] == "plafond":
         r.nood("Aannemersvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
     g = uit["gegevens"]

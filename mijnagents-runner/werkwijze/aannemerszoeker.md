@@ -75,5 +75,5 @@ Ik ben de eerste agent van de afdeling Bouw, samen met De Offertevergelijker.
 ## Wanneer ik werk
 
 Op verzoek: De Regisseur start mij met de vraag van Mehdi, of iemand zet een vraag voor mij klaar. Hoogstens twee
-vragen per ronde, per vraag hoogstens tien zoekopdrachten, achttien gelezen pagina's en 150.000 tokens, en hoogstens
-acht minuten per ronde. Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.
+vragen per ronde, per vraag hoogstens vijf zoekopdrachten, tien gelezen pagina's van elk hoogstens 4.000 tokens en een
+plafond van 300.000 tokens, en hoogstens acht minuten per ronde. Een vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.

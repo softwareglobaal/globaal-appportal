@@ -49,6 +49,9 @@ def laad_env(pad):
         pass
 
 
+# Eerst ~/appportal/.env, zoals De Prijsonderzoeker en De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026
+# een 401. setdefault: het eerste bestand met een waarde wint.
+laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
 
 
