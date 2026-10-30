@@ -181,10 +181,16 @@ def naam_en_werk_op_site(f, gelezen):
     (het bewijs dat het model citeerde, minstens twintig tekens) letterlijk staan."""
     eigen = host(O.schoon_url(f.get("url")))
     tekst = " ".join(_plat(t) for u, t in (gelezen or {}).items() if eigen and host(u) == eigen)
+    from .vakwoorden import toegelaten
     woorden = [w for w in _plat(f.get("naam")).split() if w not in {"bv", "nv", "bvba", "comm", "commv", "vof", "srl", "sa"}]
-    naam = max(woorden, key=len) if woorden else ""
+    eigen_woorden = [w for w in woorden if not toegelaten(w)]     # Codex X3 (controle 8): niet 'dakwerken' maar 'Fantasio'
+    tokens = set(tekst.split())
+    if eigen_woorden:
+        naam_ok = all(w in tokens for w in eigen_woorden)
+    else:
+        naam_ok = bool(woorden) and " ".join(woorden) in tekst
     bewijs = _plat(f.get("bewijs"))
-    return len(naam) >= 3 and naam in tekst.split() and len(bewijs) >= 20 and bewijs in tekst
+    return naam_ok and len(bewijs) >= 20 and bewijs in tekst
 
 
 def kbo_zetel(nummer, gelezen):

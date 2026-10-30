@@ -27,8 +27,9 @@ BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d
 EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|\bna\b.{0,20}korting|netto\s+tota|tota\w*\s+netto|"
                         r"te\s+betalen")
 SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|korting|voorschot", re.I)
-RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|indicatief|indicatieve|prijsindicatie|indicatie|"
-                    r"budgetprijs|richtprijs|globale\s+prijs|onder\s+voorbehoud\s+van\s+opmeting)\b", re.I)
+RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|prijsindicatie|kostenindicatie|budgetprijs|richtprijs|"
+                    r"indicatie(?:f|ve)\s+(?:prijs|prijzen|kost|kosten|bedrag|bedragen|raming|offerte|budget)|"
+                    r"globale\s+prijs|onder\s+voorbehoud\s+van\s+opmeting)\b", re.I)
 VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
 
 
@@ -94,6 +95,8 @@ def bedragen_met_label(regel):
     bedrag (Codex X2, controle 5: "excl. 10.000 btw 2.100 incl. 12.100" op een regel). Een bedrag met alleen btw ervoor
     is het btw-bedrag en telt niet. Zonder label erbij: het label van de regel, als die er maar een heeft."""
     uit, vorige = [], 0
+    # Codex X2 (controle 8): een datum (30.10.2026) is nooit een bedrag; ze wordt eerst blanco gemaakt
+    regel = re.sub(r"\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b", lambda m: " " * len(m.group(0)), regel)
     geld = [m for m in BEDRAG.finditer(regel) if is_geld(regel, m)]
     for m in geld:
         b = bedrag(m.group(0))
@@ -229,6 +232,8 @@ def redigeer(tekst, extra=()):
                r"t\.?a\.?v\.?|werf|werfadres|bouwplaats|ligging|adres|leveradres|uitvoeringsadres|project|referentie|ref\.?|"
                r"client|nom|adresse)\s*:.*$", "[regel met de bouwheer weggelaten]", t)
     t = re.sub(r"(?i)\b(?:rue|avenue|chaussée|place|boulevard|square|drève|quai)\s+[A-Za-zÀ-ÿ'’ -]{2,40}?\s+\d{1,4}[a-z]?\b",
+               "[adres weggelaten]", t)
+    t = re.sub(r"(?i)\b\d{1,4}[a-z]?,?\s+(?:rue|avenue|chaussée|place|boulevard|square|drève|quai)\s+[A-Za-zÀ-ÿ'’ -]{2,40}",
                "[adres weggelaten]", t)
     t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)

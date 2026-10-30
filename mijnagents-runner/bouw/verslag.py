@@ -127,8 +127,11 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     kop = f"**Vergelijking {lotnaam} ({S.FIRMANAMEN[firma]}):** {len(gelezen)} offertes gelezen"
     kop += f", {len(niet)} niet (scan of onleesbaar)." if niet else "."
     if uit.get("laagste") and uit.get("verschil") is not None:
-        kop += (f" Laagste exclusief btw: Inschrijver {uit['laagste']['letter']}, {euro(uit['laagste']['excl'])}; "
+        kop += (f" Laagste totaal exclusief btw: Inschrijver {uit['laagste']['letter']}, {euro(uit['laagste']['excl'])}; "
                 f"verschil met de hoogste {euro(uit['verschil'])} ({uit['verschil_pct']} procent).")
+        if not per_post:
+            # Codex X6 (controle 8): zonder vergelijking per post zegt het totaal niet of ze hetzelfde werk dekken
+            kop += " Let op: alleen de totalen; wat inbegrepen is en op welke basis, is niet vergeleken."
     kop += " Geen gunning: jij beslist."
     stap = "**Volgende stap:** lees de punten om op te letten; "
     stap += ("de vergelijking per post staat hieronder." if per_post else

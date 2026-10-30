@@ -494,5 +494,26 @@ check("X4 klantnaam en een Frans adres worden weggehaald", "Peeters" not in r4 a
 check("X5 'zusterbalk' is bouwtaal, 'zusterbedrijf' niet", S.mag_weg("Een zusterbalk naast de balk.", S.HB)
       and not S.mag_weg("Ons zusterbedrijf.", S.HB))
 
+
+print("\nRegressie na controle 8 van Codex (X1 tot X8)")
+tooltekst = next(t["description"] for t in RG.TOOLS if t["name"] == "agent_ronde")
+check("X1 de tooltekst van De Regisseur noemt geen firma", not S.noemt(tooltekst, S.HA) and not S.noemt(tooltekst, S.HB))
+x2 = F.lees(pdf("Totaal excl. btw: nog te bepalen, geldig tot 30.10.2026", "btw 21%"))
+check("X2 een datum is nooit een bedrag", x2["excl"] is None, x2)
+fant = Z.keur([{"naam": "Dakwerken Fantasio", "url": "https://dak-een.voorbeeld.com", "postcode": "3020", "gemeente": "Herent",
+                "ondernemingsnummer": "0537.405.239", "bewijs": "Dakwerken, platte daken, EPDM, renovatie"}],
+              GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X3 een naam die niet op de site staat ('Fantasio'): niet bovenaan", not fant["goed"] and fant["na_te_kijken"])
+check("X4 'indicatieve uitvoeringstermijn' maakt een offerte geen raming",
+      not F.is_raming("Offerte dakwerken\nIndicatieve uitvoeringstermijn: 6 weken") and F.is_raming("Indicatieve prijs dakwerken"))
+for schrijf, andere in (("h a bv", S.HB), ("Gerzenstraat nr. 5A", S.HA), ("19 Hoveniersstraat", S.HA)):
+    check(f"X5 '{schrijf}' wordt herkend", not S.mag_weg(f"Zie {schrijf}.", andere))
+check("X5 het adres uit kern met nr. ertussen", not S.mag_weg("Voorbeeldlaan nr. 7", S.HB))
+vt = V.vergelijkingsverslag({"firma": S.HA, "project": "2999"}, "06 ventilatie", lt, F.vergelijk(
+    [{"letter": "A", "lees": a}, {"letter": "B", "lees": b}], date(2026, 10, 30)), None, {}, "2026-10-30", False)
+check("X6 zonder vergelijking per post zegt de eerste regel dat alleen de totalen vergeleken zijn",
+      "alleen de totalen" in vt.splitlines()[0])
+check("X7 een Frans adres met het nummer vooraan wordt weggehaald", "Neuve" not in F.redigeer("Livraison 3 Rue Neuve, 1000 Bruxelles"))
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

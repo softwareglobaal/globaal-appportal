@@ -15,10 +15,32 @@ FIRMANAMEN = {HA: "H-Architects", HB: "Harmonie Bouw"}
 
 # Wat een stuk aan een firma koppelt. Hoofdletters tellen niet; streepjes en spaties worden gelijkgetrokken.
 KENMERKEN = {
-    HA: [r"(?-i:\bHA\b)", r"(?-i:\bH[\s.]{1,3}A\b)", r"\bharc\b", r"\bh[\W_a]{0,5}architects?", r"harchitects", r"\bh-a\b", r"h-architects\.be", r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
-         r"\+?32\s?\(?0?\)?\s?16\s?79\s?23\s?14", r"\+?32\s?\(?0?\)?\s?491\s?94\s?68\s?79"],
-    HB: [r"(?-i:\bHB\b)", r"(?-i:\bH[\s.]{1,3}B\b)", r"\bharm\b", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstr(?:aat|\.)?\s*,?\s*5[a-z]?\b", r"\b5[a-z]?\s*,?\s*gerzenstr",
-         r"hoveniersstr(?:aat|\.)?\s*,?\s*19[a-z]?\b"],
+    HA: [
+        r"(?-i:\bHA\b)",
+        r"(?-i:\bH[\s.]{1,3}A\b)",
+        r"\bh[\s.]{0,3}a[\s.]+(?:bv|nv|bvba)\b",
+        r"\bharc\b",
+        r"\bh[\W_a]{0,5}architects?",
+        r"harchitects",
+        r"\bh-a\b",
+        r"h-architects\.be",
+        r"\+?32\s?\(?0?\)?\s?16\s?79\s?32\s?96",
+        r"\+?32\s?\(?0?\)?\s?16\s?79\s?23\s?14",
+        r"\+?32\s?\(?0?\)?\s?491\s?94\s?68\s?79",
+    ],
+    HB: [
+        r"(?-i:\bHB\b)",
+        r"(?-i:\bH[\s.]{1,3}B\b)",
+        r"\bh[\s.]{0,3}b[\s.]+(?:bv|nv|bvba)\b",
+        r"\bharm\b",
+        r"harmonie[\W_]{0,3}bouw",
+        r"harmoniebouw\.be",
+        r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b",
+        r"gerzenstr(?:aat|\.)?\s*,?\s*(?:nr\.?\s*|n°\s*|nummer\s+)?5[a-z]?\b",
+        r"\b5[a-z]?\s*,?\s*gerzenstr",
+        r"hoveniersstr(?:aat|\.)?\s*,?\s*(?:nr\.?\s*|n°\s*|nummer\s+)?19[a-z]?\b",
+        r"\b19[a-z]?\s*,?\s*hoveniersstr",
+    ],
 }
 # Telefoon- en ondernemingsnummers in elke schrijfwijze (016/79.32.96, 0491 94 68 79, BE0537405239): de code vergelijkt
 # de cijfers, niet de tekens ertussen (Codex X1, controle 3). Aangevuld met kern.firma via laad_kern().
@@ -59,7 +81,7 @@ def adrespatronen(straat, nr):
         if straat.lower().endswith(lang):
             stam = re.escape(straat[:-len(lang)]) + kort
             break
-    return [stam + r"\s*,?\s*" + nr + r"[a-z]?\b", r"\b" + nr + r"[a-z]?\s*,?\s*" + stam]
+    return [stam + r"\s*,?\s*(?:nr\.?\s*|n°\s*|nummer\s+)?" + nr + r"[a-z]?\b", r"\b" + nr + r"[a-z]?\s*,?\s*" + stam]
 
 
 def laad_kern(psql=None):
