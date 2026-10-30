@@ -1,0 +1,57 @@
+#!/bin/sh
+# Beheer-helper voor de user 'ashvand' (SPIL test, spil-test.globaal.be).
+# Wordt uitsluitend via sudo aangeroepen vanuit /usr/local/bin/spil-shell; zie
+# /etc/sudoers.d/spil-test. Alles is hard vastgezet op de SPIL-app: er is bewust
+# geen weg naar andere containers, bestanden of een shell.
+set -eu
+
+CONTAINER=spil-test-app-1
+DEPLOY=/home/ubuntu/appportal/spil-test/deploy.sh
+DEPLOYLOG=/home/ubuntu/deploy-spil-test.log
+LOGFILE=/var/log/spil-test-ashvand.log
+
+audit() { echo "$(date -Is) $*" >> "$LOGFILE" 2>/dev/null || true; }
+
+aantal() {
+  case "$1" in
+    ''|*[!0-9]*) echo "aantal regels moet een getal zijn (1-2000)"; exit 1 ;;
+  esac
+  [ "$1" -ge 1 ] && [ "$1" -le 2000 ] || { echo "aantal regels moet 1-2000 zijn"; exit 1; }
+}
+
+cmd="${1:-help}"
+
+case "$cmd" in
+  status)
+    audit status
+    docker ps --all --filter "name=$CONTAINER" \
+      --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+    ;;
+  logs)
+    n="${2:-100}"
+    aantal "$n"
+    audit "logs $n"
+    docker logs --tail "$n" "$CONTAINER" 2>&1
+    ;;
+  deploylog)
+    n="${2:-100}"
+    aantal "$n"
+    audit "deploylog $n"
+    tail -n "$n" "$DEPLOYLOG" 2>/dev/null || echo "nog geen deploy-log"
+    ;;
+  restart)
+    audit restart
+    docker restart "$CONTAINER"
+    echo "Container herstart. Controleer met: status"
+    ;;
+  deploy)
+    audit deploy
+    # Als ubuntu (de checkout is van ubuntu); ook naar het cron-log, zodat de
+    # historie compleet blijft.
+    runuser -u ubuntu -- "$DEPLOY" nu 2>&1 | tee -a "$DEPLOYLOG"
+    ;;
+  *)
+    echo "Gebruik: status | logs [regels] | deploylog [regels] | restart | deploy"
+    exit 1
+    ;;
+esac

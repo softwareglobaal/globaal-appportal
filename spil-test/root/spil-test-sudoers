@@ -1,0 +1,4 @@
+# Ashvand (ForceCommand-account) mag uitsluitend de SPIL-helper als root draaien.
+# De helper valideert zelf alle argumenten en is hard vastgezet op de SPIL-app;
+# zie /usr/local/sbin/spil-ctl.
+ashvand ALL=(root) NOPASSWD: /usr/local/sbin/spil-ctl

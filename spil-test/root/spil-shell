@@ -1,0 +1,45 @@
+#!/bin/sh
+# ForceCommand-shell voor de user 'ashvand', gezet via de command=-optie in zijn
+# authorized_keys (samen met 'restrict'). Wat er ook via SSH wordt aangeroepen,
+# dit script is het enige dat draait: een whitelist naar /usr/local/sbin/spil-ctl.
+set -euf
+
+help() {
+  cat <<'EOF'
+SPIL (test) op spil-test.globaal.be - beschikbare commando's:
+
+  ssh ashvand@54.80.98.233 status          draait de app?
+  ssh ashvand@54.80.98.233 logs [n]        laatste n logregels van de app (max 2000)
+  ssh ashvand@54.80.98.233 deploylog [n]   uitkomst van de laatste deploys en builds
+  ssh ashvand@54.80.98.233 restart         herstart de app
+  ssh ashvand@54.80.98.233 deploy          nu bouwen en uitrollen
+
+Code gaat via git push naar main (repo softwareglobaal/spil); de server rolt
+zelf uit binnen 2 minuten. Zie README.md in die repo.
+EOF
+}
+
+line="${SSH_ORIGINAL_COMMAND:-}"
+[ -n "$line" ] || { help; exit 0; }
+
+# Woordsplitsing van het aangevraagde commando (set -f staat al aan, dus geen
+# glob-expansie). Alleen exact gewhiteliste vormen gaan door naar sudo.
+set -- $line
+case "${1:-}" in
+  status|restart|deploy)
+    [ $# -eq 1 ] || { help; exit 1; }
+    exec sudo /usr/local/sbin/spil-ctl "$1"
+    ;;
+  logs|deploylog)
+    [ $# -le 2 ] || { help; exit 1; }
+    exec sudo /usr/local/sbin/spil-ctl "$1" "${2:-100}"
+    ;;
+  help|-h|--help)
+    help; exit 0
+    ;;
+  *)
+    echo "Onbekend commando: ${1:-}" >&2
+    help
+    exit 1
+    ;;
+esac
