@@ -460,6 +460,10 @@ r = NepRonde()
 PO.werk(r, None, False, begin=time.monotonic() - PO.RONDE_SECONDEN)
 check("zonder tijd over blijft een klaargezette vraag staan (Codex X6)", opgepakt == [] and "2 wachten" in r.detail, r.detail)
 
+bron = open(Path(PO.__file__), encoding="utf-8").read()
+check("de sleutel komt eerst uit ~/appportal/.env, de werkende bron (30-10-2026)",
+      bron.index('laad_env("~/appportal/.env")') < bron.index('laad_env("~/agents/.env")'))
+
 print("Koersen van de ECB")
 XML = """<gesmes:Envelope><Cube><Cube time='2026-10-30'>
 <Cube currency='USD' rate='1.0812'/><Cube currency='GBP' rate='0.8461'/></Cube></Cube></gesmes:Envelope>"""

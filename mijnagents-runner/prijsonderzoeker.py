@@ -51,6 +51,9 @@ def laad_env(pad):
         pass
 
 
+# Eerst ~/appportal/.env, zoals De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026 een 401 (ongeldig),
+# die in ~/appportal/.env werkt. setdefault: het eerste bestand dat een waarde heeft, wint.
+laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
 
 
