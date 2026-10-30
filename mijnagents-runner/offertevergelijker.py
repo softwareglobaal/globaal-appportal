@@ -14,7 +14,6 @@ Overleg 30-10-2026 (docs/bouw/rapport-1-ontwerp.md, verwerking in verwerkt-1-ont
 --droog: zegt welke vragen klaarstaan en leest geen offertes.
 """
 import argparse
-import hashlib
 import os
 import re
 import sys
@@ -53,14 +52,19 @@ def laad_env(pad):
 laad_env("~/agents/.env")
 
 
+def laad_kern(r):
+    """Het ondernemingsnummer en adres van beide firma's uit kern, voor de scheiding (Codex X1, controle 3)."""
+    try:
+        if not S.laad_kern():
+            r.nood("Firmagegevens niet in kern: de scheiding werkt alleen met de vaste lijst", wie="claude-code")
+    except Exception:  # noqa: BLE001  zonder kern blijft de vaste lijst gelden
+        r.nood("Kern niet gelezen: de scheiding werkt alleen met de vaste lijst", wie="claude-code")
+
+
 def open_vragen():
     items = bord.klaargezet_voor(NAAM, status="klaar")
     vragen = [it for it in items if it.get("soort") == "vraag" and (it.get("inhoud") or it.get("titel"))]
     return sorted(vragen, key=lambda it: it.get("id") or 0)
-
-
-def vingerafdruk(tekst, vandaag):
-    return hashlib.sha256(f"{vandaag}:{tekst}".encode()).hexdigest()[:12]
 
 
 def zet_klaar(tekst_vraag, titel, inhoud, vandaag, firma=None):
@@ -69,8 +73,8 @@ def zet_klaar(tekst_vraag, titel, inhoud, vandaag, firma=None):
         weg = S.kruis(titel + "\n" + inhoud, firma)
         if weg:
             raise ValueError("; ".join(weg))
-    ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": vandaag.isoformat(), "titel": titel,
-                  "uniek": f"offertes:{vingerafdruk(tekst_vraag, vandaag)}", "inhoud": inhoud}])
+    ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": Q.sleutel(tekst_vraag, vandaag), "titel": titel,
+                  "uniek": f"offertes:{Q.vingerafdruk(tekst_vraag, vandaag)}", "inhoud": inhoud}])
 
 
 def lotnaam(pad, firma):
@@ -95,7 +99,7 @@ def werfstraat(v):
 
 def een_vraag(r, tekst, vandaag, deadline=None):
     import bronnen
-    va = vingerafdruk(tekst, vandaag)
+    va = Q.vingerafdruk(tekst, vandaag)
     v = Q.ontleed(tekst)
     blok = Q.ontbreekt_vergelijker(v)
     if blok:
@@ -162,6 +166,7 @@ def werk(r, hand_vraag=None, droog=False):
         return
     vandaag = date.today()
     deadline = time.monotonic() + RONDE_SECONDEN
+    laad_kern(r)
     gedaan = offertes = 0
     for v in vragen[:MAX_VRAGEN]:
         if time.monotonic() > deadline:
@@ -170,7 +175,7 @@ def werk(r, hand_vraag=None, droog=False):
         try:
             offertes += een_vraag(r, tekst, vandaag, deadline)
         except Exception as e:  # noqa: BLE001
-            ag.log("offertes", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
+            ag.log("offertes", "fout", f"vraag {Q.vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Offertevergelijking mislukt", wie="claude-code")
         gedaan += 1
         if v.get("id"):

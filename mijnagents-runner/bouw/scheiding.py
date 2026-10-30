@@ -20,11 +20,18 @@ KENMERKEN = {
     HB: [r"(?-i:\bHB\b)", r"(?-i:\bHARM\b)", r"harmonie[\W_]{0,3}bouw", r"harmoniebouw\.be", r"\b(?:be\s?)?0?537[.\s]?405[.\s]?239\b", r"gerzenstraat\s?5\b",
          r"hoveniersstraat\s?19\b"],
 }
+# Telefoon- en ondernemingsnummers in elke schrijfwijze (016/79.32.96, 0491 94 68 79, BE0537405239): de code vergelijkt
+# de cijfers, niet de tekens ertussen (Codex X1, controle 3). Aangevuld met kern.firma via laad_kern().
+CIJFERS = {HA: ["16793296", "16792314", "491946879"], HB: ["537405239"]}
+EXTRA = {HA: {"patronen": [], "cijfers": []}, HB: {"patronen": [], "cijfers": []}}
+KERN_CODES = {"HARC": HA, "HARM": HB}
+NUMMERREEKS = re.compile(r"[+\d][\d\s./()\-]{5,}\d")
+
 # De persoon achter de firma's: een mail tekent met de firma, nooit met zijn naam (zoals de mails van standaard@).
 PERSOON = [r"chegini"]
 # Woorden die een band leggen (2405: VERBODEN_BAND), aangevuld voor mails. "groep" en "verbonden" alleen in de zin
 # van een band: een ventilatiegroep of een leiding die verbonden wordt met het riool is gewone bouwtaal.
-BANDWOORDEN = (r"(?:dezelfde|zelfde|onze|uw|een|één)\s+groep\b|\btot\s+de\s+groep\b|\bgroep\s+(?:van|waartoe)\b|"
+BANDWOORDEN = (r"(?:dezelfde|zelfde|onze|uw|een|één)\s+groep\b(?!\s+[A-Z0-9]\b)|\btot\s+de\s+groep\b|\bgroep\s+(?:van|waartoe)\b|"
                r"bedrijvengroep|groepsmaatschappij|groepsbedrijf|met elkaar verbonden|"
                r"verbonden\s+(?:firma|vennootschap|onderneming|bedrijf)|verwant|zuster|holding|aandeelhoud|"
                r"dezelfde eigenaar|zelfde eigenaar|eigen aannemer|belangenconflict|"
@@ -42,6 +49,38 @@ def normaal(tekst):
     return re.sub(r"[   ]", " ", t)
 
 
+def laad_kern(psql=None):
+    """Het ondernemingsnummer en het adres van beide firma's uit kern.firma en kern.adres, naast de vaste lijst. Geeft
+    True als kern gelezen is. Zonder kern blijft de vaste lijst gelden; de runner meldt dat als nood."""
+    sql = ("select json_agg(json_build_object('code', f.code, 'kbo', coalesce(f.kbo_nummer, ''), 'straat', "
+           "coalesce(a.straat, ''), 'nr', coalesce(a.huisnummer, ''), 'weergave', coalesce(a.weergave, ''))) "
+           "from kern.firma f left join kern.adres a on a.id = f.adres_id where f.code in ('HARC', 'HARM')")
+    if psql is None:
+        import organisatie
+        psql = organisatie._psql
+    rijen = psql(sql) or []
+    for r in rijen:
+        firma = KERN_CODES.get(r.get("code"))
+        if not firma:
+            continue
+        cijfers = re.sub(r"\D", "", r.get("kbo") or "").lstrip("0")
+        if len(cijfers) >= 8 and cijfers not in EXTRA[firma]["cijfers"]:
+            EXTRA[firma]["cijfers"].append(cijfers)
+        if r.get("straat") and r.get("nr"):
+            p = re.escape(r["straat"].strip()) + r"\s*,?\s*" + re.escape(r["nr"].strip()) + r"\b"
+            if p not in EXTRA[firma]["patronen"]:
+                EXTRA[firma]["patronen"].append(p)
+    return bool(rijen)
+
+
+def _cijfertreffers(t, firma):
+    bekend = CIJFERS[firma] + EXTRA[firma]["cijfers"]
+    for m in NUMMERREEKS.finditer(t):
+        cijfers = re.sub(r"\D", "", m.group(0))
+        if any(b in cijfers for b in bekend):
+            yield m.group(0).strip()
+
+
 def andere(firma):
     if firma not in (HA, HB):
         raise ValueError(f"onbekende firma {firma!r}: alleen {HA} of {HB}")
@@ -54,8 +93,9 @@ def schendingen(tekst, firma, extra_kenmerken=None):
     tegen = andere(firma)
     t = normaal(tekst)
     weg = [f"bandwoord '{m.group(0)}'" for m in BAND.finditer(t)]
-    for p in KENMERKEN[tegen] + list((extra_kenmerken or {}).get(tegen) or []):
+    for p in KENMERKEN[tegen] + EXTRA[tegen]["patronen"] + list((extra_kenmerken or {}).get(tegen) or []):
         weg += [f"kenmerk van {FIRMANAMEN[tegen]} '{m.group(0)}'" for m in re.finditer(p, t, re.I)]
+    weg += [f"nummer van {FIRMANAMEN[tegen]} '{n}'" for n in _cijfertreffers(t, tegen)]
     for p in PERSOON:
         weg += [f"persoonsnaam '{m.group(0)}' (een stuk tekent met de firma)" for m in re.finditer(p, t, re.I)]
     return list(dict.fromkeys(weg))
@@ -76,13 +116,15 @@ def noemt_een_firma(tekst):
     """Noemt deze tekst een van de twee firma's (naam, code, domein, nummer, adres)? Voor wat naar het model gaat:
     daar hoort geen van beide in (Codex X4)."""
     t = normaal(tekst)
-    return any(re.search(p, t, re.I) for f in (HA, HB) for p in KENMERKEN[f])
+    return any(re.search(p, t, re.I) for f in (HA, HB) for p in KENMERKEN[f] + EXTRA[f]["patronen"]) or any(
+        True for f in (HA, HB) for _ in _cijfertreffers(t, f))
 
 
 def is_andere_firma(naam, firma):
     """Is deze inschrijver (naam zoals op de offerte of in de bestandsnaam) de andere firma?"""
-    t = normaal(naam)
-    return any(re.search(p, t, re.I) for p in KENMERKEN[andere(firma)])
+    t, tegen = normaal(naam), andere(firma)
+    return any(re.search(p, t, re.I) for p in KENMERKEN[tegen] + EXTRA[tegen]["patronen"]) or any(
+        True for _ in _cijfertreffers(t, tegen))
 
 
 def mag_weg(tekst, firma, extra_kenmerken=None):

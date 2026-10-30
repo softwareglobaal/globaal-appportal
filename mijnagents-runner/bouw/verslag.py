@@ -76,6 +76,8 @@ def zoekverslag(v, g, res, eigen, mails, eerder, boekhouding_bekend, aan_te_vull
             regels += ["", f"## {titel}"] + [_firma_regel(i, f, firma, eerder, boekhouding_bekend)
                                             for i, f in enumerate(lijst, 1)]
     regels += ["", f"## Eerder in de mappen van {naam}"]
+    if getattr(eigen, "volledig", True) is False:
+        regels.append("- Let op: niet alle treffers gelezen (meer dan twintig pagina's in Dropbox).")
     regels += ([f"- {e['naam']}" + (f" (project {e['project']})" if e.get("project") else "") + f": `{e['pad']}`"
                 for e in eigen] or ["- niets gevonden met deze woorden"])
     aannames = [a for a in g.get("aannames") or [] if S.schoon_veld(str(a), firma)]

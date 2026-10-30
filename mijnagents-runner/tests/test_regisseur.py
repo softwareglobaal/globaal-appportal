@@ -871,6 +871,27 @@ def test_t45_prijsverslag_tot_in_de_chat():
     assert '"verslag"' in soorten and "prijsverslag" not in soorten, "De Bode stuurt een prijsverslag niet vanzelf door (X2)"
 
 
+def test_t45_bouwverslag_alleen_van_die_vraag():
+    """Afdeling Bouw (Codex X5, controle 3): De Regisseur leest van de bouwagents alleen het verslag met de sleutel van
+    de vraag die hij doorgaf; zonder sleutel alleen het laatste, nooit een lijst met verslagen van beide firma's."""
+    from datetime import date
+
+    from bouw import vraag as BQ
+    vraag_ha, vraag_hb = "firma: HA; werk: dak; gemeente: 3000 Leuven", "firma: HB; werk: dak; gemeente: 3000 Leuven"
+    vandaag = date(2026, 10, 30)
+    with Wereld("t45-bouw", datetime(2026, 10, 30, 9, 0, tzinfo=UTC)) as w:
+        w.item("aannemerszoeker", "mehdi", "aannemersverslag", "Aannemers dak (A)", "verslag A",
+               sleutel=BQ.sleutel(vraag_ha, vandaag))
+        w.item("aannemerszoeker", "mehdi", "aannemersverslag", "Aannemers dak (B)", "verslag B",
+               sleutel=BQ.sleutel(vraag_hb, vandaag))
+        een = R.klaargezet_lees("aannemerszoeker", "van", sleutel=BQ.sleutel(vraag_ha, vandaag))["items"]
+        assert [i["inhoud"] for i in een] == ["verslag A"], een
+        zonder = R.klaargezet_lees("aannemerszoeker", "van", n=20)["items"]
+        assert len(zonder) == 1, "zonder sleutel alleen het laatste verslag van een bouwagent"
+    assert BQ.sleutel(vraag_ha, vandaag).startswith("HA:") and BQ.sleutel(vraag_hb, vandaag).startswith("HB:")
+    assert BQ.sleutel(" " + vraag_ha + " ", vandaag) == BQ.sleutel(vraag_ha, vandaag), "De Regisseur stript, de runner ook"
+
+
 # ------------------------------------------------------------------------------------------------- T46 ---
 def test_t46_agent_ronde_slot_droog_en_kwartier():
     nu = datetime(2026, 10, 22, 7, 30, tzinfo=UTC)

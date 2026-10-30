@@ -7,6 +7,7 @@ nieuwe regel, bijvoorbeeld:
 De firma is altijd verplicht (overleg X1): zonder HA of HB werkt geen enkele agent van Bouw. Een vraag zonder veldnamen
 krijgt alleen de firma uit de tekst; de rest moet dan opnieuw gevraagd worden.
 """
+import hashlib
 import re
 
 from aankoop import privacy as P
@@ -19,6 +20,17 @@ SYNONIEMEN = {"vak": "werk", "taak": "werk", "werken": "werk", "gebied": "gemeen
               "km": "straal", "projectnummer": "project", "dossier": "project", "post": "lot", "pad": "map"}
 FIRMA_WOORDEN = ((S.HA, r"\b(?:ha|harc|h\s?-?\s?architects?)\b"), (S.HB, r"\b(?:hb|harm|harmonie\s?-?\s?bouw)\b"))
 STRAAL_STANDAARD = 25
+
+
+def vingerafdruk(tekst, vandaag):
+    """Het logboek bewaart nooit de vraag zelf, alleen een vingerafdruk (zoals De Prijsonderzoeker)."""
+    return hashlib.sha256(f"{vandaag}:{str(tekst or '').strip()}".encode()).hexdigest()[:12]
+
+
+def sleutel(tekst, vandaag):
+    """De sleutel van het verslag van een vraag: de firma en de vingerafdruk. De Regisseur rekent dezelfde sleutel uit
+    de vraag die hij doorgaf en leest alleen dat ene verslag (Codex X5, controle 3)."""
+    return f"{firma_uit(ontleed(tekst).get('firma') or '') or 'geen'}:{vingerafdruk(tekst, vandaag)}"
 
 
 def firma_uit(tekst):

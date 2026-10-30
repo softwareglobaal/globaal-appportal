@@ -120,6 +120,9 @@ OCHTEND_SLOT = os.path.join(DATA, "ochtend.slot")     # een tegelijk maakt het o
 WA_MAX = O.WA_MAX               # een antwoord via WhatsApp (R6): De Bode kort het in met ochtend.whatsapp_kort (REG-03)
 WA_MODEL_MAX = 700              # wat ik het model vooraf vraag, zodat er zelden iets moet worden ingekort
 DOSSIER_MAX = 20000
+# De afdeling Bouw (Codex X5, controle 3): van deze agents lees ik alleen het verslag van de vraag die ik doorgaf
+# (sleutel firma:vingerafdruk), en zonder sleutel alleen het laatste, nooit een lijst van beide firma's.
+BOUW_AGENTS = ("aannemerszoeker", "offertevergelijker")
 # Inhoud van een klaargezet item geef ik alleen voor deze soorten (R4), en nooit voor de soorten daaronder.
 INHOUD_SOORTEN = ("verslag", "dagbundel", "dagplan", "signaal", "verzoek", "ochtendbericht", "zoom-tekst", "zoom",
                   "prijsverslag",    # het antwoord van De Prijsonderzoeker, dat ik in de chat geef (overleg X2, Codex X5)
@@ -221,6 +224,7 @@ TOOLS = [
                                           "privé blijft '(privé)'.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "richting": {"type": "string", "enum": ["van", "voor", "beide"]},
                                                        "soort": {"type": "string"}, "status": {"type": "string", "enum": ["klaar", "alle"]},
+                                                       "sleutel": {"type": "string"},
                                                        "n": {"type": "integer"}}, "required": ["naam"]}},
     {"name": "noden", "description": "De open noden op het bord (wat een agent nodig heeft), optioneel van een agent of voor wie (mehdi, claude-code).",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "wie": {"type": "string"}}}},
@@ -256,9 +260,9 @@ TOOLS = [
                                            "(HA voor H-Architects, HB voor Harmonie Bouw; vraag het als Mehdi het niet zegt, kies nooit zelf), "
                                            "bv. 'firma: HB; werk: plafonneerwerk; omvang: 120 m2; gemeente: 3020 Herent; straal: 25; "
                                            "tegen: 15-11-2026' of 'firma: HA; project: 2145; lot: 06'; nooit de naam of het adres van een "
-                                           "bouwheer. Lees daarna het verslag met klaargezet (van die agent): alleen het item van die vraag "
-                                           "(de titel noemt de firma), nooit verslagen van beide firma's in een antwoord, en noem in een "
-                                           "antwoord over de ene firma de andere nooit.",
+                                           "bouwheer. Lees daarna het verslag met klaargezet en precies de velden uit lees_verslag (naam, "
+                                           "richting en sleutel): alleen het verslag van die vraag, nooit verslagen van beide firma's in "
+                                           "een antwoord, en noem in een antwoord over de ene firma de andere nooit.",
      "input_schema": {"type": "object", "properties": {"naam": {"type": "string"}, "deal_id": {"type": "integer"}, "dag": {"type": "string"}, "droog": {"type": "boolean"}, "vraag": {"type": "string"}}, "required": ["naam"]}},
     {"name": "voorstel", "description": "Zet een voorstel op het bord dat Mehdi moet goedkeuren vóór het uitgevoerd wordt. Runbooks: 'werkwijze-bijwerken' (parameters: agent, werkwijze = de volledige nieuwe tekst), 'pipedrive-dealtitel' (deal_id, titel), 'notitie' (tekst). Zonder runbook is het een signaal. Geeft het voorstel-ID terug zoals het bord het bewaarde; zonder ID staat er niets.",
      "input_schema": {"type": "object", "properties": {"actie": {"type": "string"}, "reden": {"type": "string"}, "runbook": {"type": "string"}, "parameters": {"type": "object"}}, "required": ["actie", "reden"]}},
@@ -310,7 +314,8 @@ def voer_tool_uit(naam, inp):
     if naam == "agent_verslag":
         return {"regels": werkverslag_lees(inp["naam"], inp.get("n") or 60, inp.get("onderwerp"))}
     if naam == "klaargezet":
-        return klaargezet_lees(inp.get("naam"), inp.get("richting") or "beide", inp.get("soort"), inp.get("status") or "klaar", inp.get("n") or 20)
+        return klaargezet_lees(inp.get("naam"), inp.get("richting") or "beide", inp.get("soort"), inp.get("status") or "klaar",
+                               inp.get("n") or 20, inp.get("sleutel"))
     if naam == "noden":
         return noden_lees(inp.get("naam"), inp.get("wie"))
     if naam == "kennis":
@@ -528,8 +533,13 @@ def ronde_starten(inp):
         uitkomst = "klaar" + (" (droog: niets geschreven)" if droog else "")
     else:
         uitkomst = f"mislukt met exitcode {code}; de reden staat in de hartslag en het werkverslag van {naam}"
-    return {"exit": code, "droog": droog, "hartslag": hartslag_na, "uitkomst": uitkomst,
-            "_bron": f"ronde van {naam} (exit {code}, {O.kort(nu_utc())})"}
+    uit = {"exit": code, "droog": droog, "hartslag": hartslag_na, "uitkomst": uitkomst,
+           "_bron": f"ronde van {naam} (exit {code}, {O.kort(nu_utc())})"}
+    if naam in BOUW_AGENTS and inp.get("vraag") and not droog:
+        from bouw import vraag as BQ
+        uit["lees_verslag"] = {"naam": naam, "richting": "van", "sleutel": BQ.sleutel(str(inp["vraag"]).strip()[:2000],
+                                                                                     datetime.now().date())}
+    return uit
 
 
 # ------------------------------------------------------- de leestools (R4) ---
@@ -573,7 +583,7 @@ def _item_prive(titel, inhoud):
     return isinstance(d, dict) and (bool(d.get("prive")) or _afdeling_prive(d.get("afdeling")))
 
 
-def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20):
+def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20, sleutel=None):
     """Wat een agent klaarzette of wat voor hem klaarstaat (R4, M3). Van een privé-agent (agent.prive = 1) en van een item
     met 'privé' in de titel, of met prive of afdeling prive in de inhoud (RZ3-01, _item_prive), alleen de titel
     '(privé)', nooit inhoud. Inhoud tot 3000 tekens alleen voor INHOUD_SOORTEN, zonder de regels die privé noemen of de
@@ -581,6 +591,8 @@ def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20):
     nu = nu_utc()
     naam = str(naam or "")
     n = max(1, min(int(n or 20), 100))
+    if naam in BOUW_AGENTS and not sleutel:
+        n = 1
     if richting in ("van", "voor"):
         waar, args = f"k.{richting}=?", [naam]
     else:
@@ -588,6 +600,9 @@ def klaargezet_lees(naam, richting="beide", soort=None, status="klaar", n=20):
     if soort:
         waar += " AND k.soort=?"
         args.append(soort)
+    if sleutel:
+        waar += " AND k.sleutel=?"
+        args.append(str(sleutel))
     if status != "alle":
         waar += " AND k.status='klaar'"
     try:

@@ -24,7 +24,8 @@ MIN_TEKST_PER_BLZ = 20
 MAX_BLZ = 40
 # Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
 BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
-SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|korting|voorschot", re.I)
+EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|na\s+korting|netto\s+tota|tota\w*\s+netto|te\s+betalen")
+SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|lot|deel|rubriek)|(?<!na )korting|voorschot", re.I)
 RAMING = re.compile(r"\b(?:raming|kostenraming|schatting|indicatief|indicatieve prijs|budgetprijs|richtprijs)\b", re.I)
 VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
 
@@ -49,6 +50,15 @@ def _laatste_bedrag(regel):
     gevonden = [bedrag(m.group(0)) for m in BEDRAG.finditer(regel)]
     gevonden = [b for b in gevonden if b is not None]
     return gevonden[-1] if gevonden else None
+
+
+def _eindtotaal(kandidaten):
+    """Codex X7 (controle 3): een regel die zegt dat ze het eindtotaal is (na korting, netto, te betalen) gaat voor;
+    anders de laatste, want een offerte eindigt met haar totaal. Nooit gewoon het grootste (dat kan bruto zijn)."""
+    if not kandidaten:
+        return None
+    hoogste = max(v for v, _ in kandidaten)
+    return [b for v, b in kandidaten if v == hoogste][-1]
 
 
 def _datum(tekst):
@@ -90,10 +100,11 @@ def lees(tekst_paginas):
             b = _laatste_bedrag(regel)
             if b is None or b <= 0:
                 continue
+            voorrang = 1 if EINDTOTAAL.search(laag) else 0
             if re.search(r"excl|exclusief|zonder btw|htva|netto|hors tva", laag):
-                excl.append(b)
+                excl.append((voorrang, b))
             elif re.search(r"incl|inclusief|tvac|te betalen|met btw", laag):
-                incl.append(b)
+                incl.append((voorrang, b))
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -103,10 +114,9 @@ def lees(tekst_paginas):
         m = re.search(r"geldig\w*[^.\n]{0,30}?(\d{1,3})\s*(?:kalender)?dagen", regel, re.I)
         if m and not uit["geldig_dagen"]:
             uit["geldig_dagen"] = int(m.group(1))
-    uit["excl"] = max(excl) if excl else None
-    uit["incl"] = max(incl) if incl else None
-    if len(set(excl)) > 1:
-        uit["redenen"].append("meer dan een eindtotaal exclusief btw; het grootste genomen, kijk het na")
+    uit["excl"], uit["incl"] = _eindtotaal(excl), _eindtotaal(incl)
+    if len({b for _, b in excl}) > 1:
+        uit["redenen"].append("meer dan een totaal exclusief btw; het eindtotaal genomen, kijk het na")
     return controleer(uit)
 
 
@@ -141,6 +151,9 @@ def redigeer(tekst, extra=()):
     t = re.sub(r"\b[A-ZÀ-Ý][a-zà-ÿ-]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof|berg|veld|dijk|singel|"
                r"vest|markt|pad|ring)\s+\d+[a-zA-Z]?(?:\s*(?:bus|/)\s*\w+)?", "[adres weggelaten]", t)
     t = re.sub(r"\b(?i:dhr|mevr|mr|mevrouw|meneer|de heer|familie|fam)\.?\s+[A-ZÀ-Ý][\w'-]+(?:\s+[A-ZÀ-Ý][\w'-]+)*",
+               "[naam weggelaten]", t)
+    # Codex X6 (controle 3): een regel die alleen een naam is (twee tot vier woorden met een hoofdletter)
+    t = re.sub(r"(?m)^\s*[A-ZÀ-Ý][a-zà-ÿ'-]+(?:\s+(?:(?:van|de|der|den|le|la|du)\s+)*[A-ZÀ-Ý][a-zà-ÿ'-]+){1,3}\s*$",
                "[naam weggelaten]", t)
     for stuk in extra:
         if stuk and len(stuk.strip()) >= 4:

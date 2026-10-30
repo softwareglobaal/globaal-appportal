@@ -65,9 +65,13 @@ def modelwerkwijze(werkwijze):
 def kennis_voor_model(collegas_tekst, lessen):
     """De gedeelde lessen (N13) en de collega's (N14) zoals ze naar het model gaan (Codex X13, controle 2): zonder elke
     regel die een van de twee firma's noemt."""
+    from aankoop import privacy as P
+    from .vraag import NAAM_NA
     regels = ["GEDEELDE LESSEN:"] + [f"- {l.get('les', '')}" for l in lessen or [] if isinstance(l, dict) and l.get("les")]
     regels += ["", str(collegas_tekst or "")]
-    return "\n".join(r for r in "\n".join(regels).splitlines() if not S.noemt_een_firma(r)).strip()
+    # Codex X4 (controle 3): ook geen regel met iets dat op een persoon, adres of nummer lijkt
+    return "\n".join(r for r in "\n".join(regels).splitlines()
+                     if not S.noemt_een_firma(r) and not P.gevonden(r) and not NAAM_NA.search(r)).strip()
 
 
 def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", kennis=""):
@@ -141,6 +145,25 @@ def afstand_km(a, b):
     return round(2 * r * math.asin(math.sqrt(h)), 1)
 
 
+def host(url):
+    try:
+        return urlsplit(url).netloc.lower()
+    except ValueError:
+        return ""
+
+
+def vestiging_bewezen(f, gelezen):
+    """Staat de postcode (of anders de gemeente) van de firma op een gelezen pagina van haar eigen website? Anders is
+    de afstand niet bewezen en komt ze bij na te kijken."""
+    eigen = host(O.schoon_url(f.get("url")))
+    teksten = " ".join(t or "" for u, t in (gelezen or {}).items() if host(u) == eigen and eigen)
+    postcode = re.sub(r"\D", "", str(f.get("postcode") or ""))
+    if len(postcode) == 4:
+        return re.search(rf"(?<!\d){postcode}(?!\d)", teksten) is not None
+    gemeente = str(f.get("gemeente") or "").strip()
+    return bool(gemeente) and gemeente.lower() in teksten.lower()
+
+
 def sleutel(f):
     """Om dubbels weg te halen: het ondernemingsnummer, anders het domein van de website."""
     if f.get("ondernemingsnummer"):
@@ -155,8 +178,11 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
     na te kijken, nooit groen. lokaliseer: 'postcode gemeente' -> {lat, lon} of None (Geopunt)."""
     gelezen_firmas, afgewezen = O.alleen_gelezen([f for f in firmas or [] if isinstance(f, dict)], gelezen)
     met_tekst = []
-    for f in gelezen_firmas:     # Codex X6: een gelezen pagina zonder tekst bewijst niets
-        if len((gelezen.get(O.schoon_url(f.get("url")), "") if isinstance(gelezen, dict) else "").strip()) < MIN_TEKST:
+    for f in gelezen_firmas:     # Codex X6 (controle 2): een gelezen pagina zonder tekst bewijst niets
+        url = O.schoon_url(f.get("url"))
+        if host(url) == KBO:     # Codex X2 (controle 3): de KBO is geen eigen pagina van de firma
+            afgewezen.append({"aanbod": f, "redenen": ["alleen een KBO-pagina, geen eigen pagina"]})
+        elif len((gelezen.get(url, "") if isinstance(gelezen, dict) else "").strip()) < MIN_TEKST:
             afgewezen.append({"aanbod": f, "redenen": ["pagina zonder leesbare tekst"]})
         else:
             met_tekst.append(f)
@@ -174,6 +200,9 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
             continue
         gezien.add(k)
         plaats = " ".join(str(x) for x in (f.get("postcode"), f.get("gemeente")) if x)
+        if plaats and not vestiging_bewezen(f, gelezen):
+            f["vestiging_onbewezen"] = True      # Codex X3 (controle 3): het model kan de gevraagde gemeente invullen
+            plaats = ""
         punt = None
         if plaats:
             try:

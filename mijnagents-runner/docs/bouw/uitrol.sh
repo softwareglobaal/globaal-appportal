@@ -3,7 +3,8 @@
 # 1. main binnenhalen (alleen --ff-only, geen autostash);
 # 2. de afdeling bouw op het bord (de lege afdeling harmoniebouw blijft ongemoeid, overleg K1);
 # 3. de generator voor beide agents: agentkaart en werkwijze op het bord. De generator wil geen bestaande runner met
-#    eigen code, dus de echte runner gaat even opzij en komt daarna terug uit git (de VM blijft gelijk aan GitHub, S1);
+#    eigen code; hij draait daarom in een tijdelijke kopie zonder die runner, zodat de echte werkboom nooit wijzigt
+#    (Codex X10, controle 3; de VM blijft gelijk aan GitHub, S1);
 # 4. de eerste ronde met controle, zonder vraag (kost niets, toetst de normen). Geen cron: ze werken op verzoek.
 set -euo pipefail
 cd ~/appportal
@@ -15,7 +16,10 @@ git pull --ff-only origin main
 git log --oneline -1
 cd mijnagents-runner
 PY=~/agents/.venv/bin/python
-trap 'git checkout -- aannemerszoeker.py offertevergelijker.py' EXIT
+KOPIE=$(mktemp -d /tmp/bouw-uitrol.XXXXXX)
+trap 'rm -rf "$KOPIE"' EXIT
+cp -a . "$KOPIE/mijnagents-runner"
+rm "$KOPIE/mijnagents-runner/aannemerszoeker.py" "$KOPIE/mijnagents-runner/offertevergelijker.py"
 
 $PY - <<'PYEOF'
 import sys
@@ -25,8 +29,7 @@ print("afdeling:", bord.call("/api/afdeling", {"naam": "bouw", "label": "Bouw", 
       "omschrijving": "Aannemers zoeken en offertes vergelijken, per vraag voor een firma: H-Architects of Harmonie Bouw."}))
 PYEOF
 
-mv aannemerszoeker.py /tmp/aannemerszoeker.echt.py
-$PY nieuwe-agent.py --naam aannemerszoeker --label "De Aannemerszoeker" --type bouw \
+(cd "$KOPIE/mijnagents-runner" && $PY nieuwe-agent.py --naam aannemerszoeker --label "De Aannemerszoeker" --type bouw \
   --rol "zoekt op verzoek firma's die een werk kunnen uitvoeren in een gebied, en zet per firma een prijsaanvraag klaar vanuit de juiste firma" \
   --mandaat "zoeken, keuren en mails als concept op het bord; nooit versturen of een firma contacteren" \
   --cadans "op verzoek" \
@@ -35,20 +38,16 @@ $PY nieuwe-agent.py --naam aannemerszoeker --label "De Aannemerszoeker" --type b
   --grens "nooit een mail versturen of een firma contacteren" \
   --grens "nooit een kenmerk van de andere firma in een stuk van de ene" \
   --grens "nooit de naam of het adres van een bouwheer naar buiten" \
-  --levert-aan regisseur --draait-op VM --werkwijze werkwijze/aannemerszoeker.md
-git checkout -- aannemerszoeker.py
+  --levert-aan regisseur --draait-op VM --werkwijze werkwijze/aannemerszoeker.md)
 
-mv offertevergelijker.py /tmp/offertevergelijker.echt.py
-$PY nieuwe-agent.py --naam offertevergelijker --label "De Offertevergelijker" --type bouw \
+(cd "$KOPIE/mijnagents-runner" && $PY nieuwe-agent.py --naam offertevergelijker --label "De Offertevergelijker" --type bouw \
   --rol "legt op verzoek de offertes van een lot naast elkaar en zet de verschillen en risico's op het bord" \
   --mandaat "lezen en vergelijken; nooit gunnen, aanbevelen, versturen of in Dropbox schrijven" \
   --cadans "op verzoek" \
   --mag "de offertemappen van die ene firma lezen" --mag "een offertevergelijking voor Mehdi klaarzetten" \
   --grens "nooit een inschrijver kiezen of aanbevelen" --grens "nooit iets in Dropbox schrijven" \
   --grens "nooit offerte-inhoud naar de AI zonder ja van Mehdi" --grens "nooit de andere firma noemen" \
-  --levert-aan regisseur --draait-op VM --werkwijze werkwijze/offertevergelijker.md
-git checkout -- offertevergelijker.py
-trap - EXIT
-git status --short
+  --levert-aan regisseur --draait-op VM --werkwijze werkwijze/offertevergelijker.md)
+git status --short -- .
 $PY nieuwe-agent.py --eerste-ronde aannemerszoeker --cron "# geen cron, op verzoek via De Regisseur"
 $PY nieuwe-agent.py --eerste-ronde offertevergelijker --cron "# geen cron, op verzoek via De Regisseur"

@@ -111,13 +111,13 @@ print("\nKandidaten keuren (X2, G2)")
 check("geldig ondernemingsnummer", Z.btw_geldig("BE 0537.405.239") == "0537.405.239")
 check("ongeldig ondernemingsnummer vervalt", Z.btw_geldig("0123.456.789") is None and Z.btw_geldig("12") is None)
 VUL = " Dakwerken, platte daken, EPDM, renovatie, zinkwerk, onderhoud en herstellingen in de regio." * 3
-GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV" + VUL,
+GELEZEN = {"https://dak-een.voorbeeld.com": "Dak Een BV, Dorpstraat 1, 3020 Herent" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0537405239":
                "Ondernemingsnummer 0537.405.239 Status: Actief" + VUL,
-           "https://dak-twee.voorbeeld.com": "Dak Twee" + VUL, "https://dak-ver.voorbeeld.com": "Dak Ver" + VUL,
+           "https://dak-twee.voorbeeld.com": "Dak Twee, 3000 Leuven" + VUL, "https://dak-ver.voorbeeld.com": "Dak Ver, 8000 Brugge" + VUL,
            "https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0403170701":
                "Ondernemingsnummer 0403.170.701 Status: Stopgezet" + VUL,
-           "https://dak-weg.voorbeeld.com": "Dak Weg" + VUL}
+           "https://dak-weg.voorbeeld.com": "Dak Weg, 3000 Leuven" + VUL}
 PUNTEN = {"3000 Leuven": {"lat": 50.879, "lon": 4.700}, "3020 Herent": {"lat": 50.905, "lon": 4.672},
           "8000 Brugge": {"lat": 51.209, "lon": 3.224}}
 firmas = [
@@ -336,6 +336,40 @@ tr = E._dropbox_zoek("dak", "/x", rpc=rpc_nep)
 check("X12 vervolgpagina's gelezen, met een grens", len(tr) == E.MAX_PAGINAS and oproepen[1] == "files/search/continue_v2")
 check("eigen mappen: een map die de andere firma noemt, telt niet", E.in_mappen(S.HA, "ruwbouw", zoek=lambda q, p: [
     {"soort": "folder", "naam": "01 Harmoniebouw - ruwbouw", "pad": "/Work All/01. H-A WORK/x/2999 S 1/Offerte/01 Harmoniebouw - ruwbouw"}]) == [])
+
+
+print("\nRegressie na controle 3 van Codex (X1 tot X11)")
+for nr in ("016/79.32.96", "016 79 32 96", "+32 (0)16 79.32.96", "0491/94.68.79"):
+    check(f"X1 het nummer van H-A in de vorm {nr} wordt herkend", not S.mag_weg(f"Bel {nr}", S.HB))
+check("X1 het ondernemingsnummer van HB zonder punten wordt herkend", not S.mag_weg("BE0537405239", S.HA))
+kern_nep = lambda sql: [{"code": "HARC", "kbo": "0999.999.996", "straat": "Voorbeeldlaan", "nr": "7", "weergave": ""},
+                        {"code": "HARM", "kbo": "", "straat": "", "nr": "", "weergave": ""}]
+check("X1 gegevens uit kern gelezen", S.laad_kern(kern_nep))
+check("X1 het adres van H-A uit kern wordt herkend", not S.mag_weg("Levering aan Voorbeeldlaan 7, Leuven", S.HB))
+check("X1 het ondernemingsnummer van H-A uit kern wordt herkend", not S.mag_weg("btw BE 0999 999 996", S.HB))
+check("X1 een gewoon nummer blijft toegelaten", S.mag_weg("Bel 0470 11 22 33 of mail info@dak.voorbeeld.com", S.HB))
+kbo_alleen = Z.keur([{"naam": "Dak Een", "url": K, "postcode": "3020", "gemeente": "Herent", "ondernemingsnummer": "0537.405.239"}],
+                    {K: "0537.405.239 Status: Actief 3020 Herent" + VUL}, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X2 een KBO-pagina alleen is geen eigen pagina", not kbo_alleen["goed"] and kbo_alleen["afgewezen"])
+ver = Z.keur([{"naam": "Dak Ver", "url": "https://dak-ver.voorbeeld.com", "postcode": "3000", "gemeente": "Leuven"}],
+             {"https://dak-ver.voorbeeld.com": "Dak Ver, 8000 Brugge" + VUL}, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+check("X3 een gemeente die niet op de site staat, maakt de firma niet dichtbij", not ver["goed"] and ver["na_te_kijken"]
+      and ver["na_te_kijken"][0].get("vestiging_onbewezen"))
+kn = Z.kennis_voor_model("- De Postwacht (post, mail): post", [{"les": "Klant: Jan Voorbeeld, Voorbeeldstraat 1 belde."},
+                                                               {"les": "Meet eerst."}])
+check("X4 geen persoon of adres in de kennis naar het model", "Voorbeeld" not in kn and "Meet eerst." in kn)
+check("X6 een losse naam op een eigen regel wordt weggehaald", "Jan Voorbeeld" not in F.redigeer("Offerte\nJan Voorbeeld\nRamen plaatsen"))
+x7 = F.lees(pdf("Totaal excl. btw 12.000,00", "Korting 1.000,00", "Totaal excl. btw na korting 11.000,00", "btw 6%"))
+check("X7 het totaal na korting wint van het bruto totaal", x7["excl"] == 11000.0, x7)
+x7b = F.lees(pdf("Totaal excl. btw 12.000,00", "Totaal excl. btw 9.500,00", "btw 6%"))
+check("X7 zonder aanduiding: het laatste totaal, met een melding", x7b["excl"] == 9500.0 and any("kijk het na" in r for r in x7b["redenen"]))
+oproepen.clear()
+tr = E._dropbox_zoek("dak", "/x", rpc=rpc_nep)
+check("X8 meer pagina's dan de grens: onvolledig, en dat wordt gezegd", tr.volledig is False and len(tr) == E.MAX_PAGINAS)
+onv = E.Onvolledig(); onv.volledig = False
+check("X8 het verslag zegt dat de eigen mappen niet volledig gelezen zijn", "niet alle treffers" in V.zoekverslag(
+    v, {}, res, onv, mails, {}, True, [], "2026-10-30"))
+check("X9 'onze groep D' is bouwtaal", S.mag_weg("Onze groep D zorgt voor de ventilatie.", S.HB))
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -26,7 +26,12 @@ def zoekwoorden(werk, maximum=2):
     return sorted(dict.fromkeys(woorden), key=len, reverse=True)[:maximum]
 
 
-MAX_PAGINAS = 5
+MAX_PAGINAS = 20
+
+
+class Onvolledig(list):
+    """Een lijst treffers waarvan Dropbox zei dat er meer zijn (Codex X8, controle 3): het verslag zegt het."""
+    volledig = True
 
 
 def _dropbox_zoek(query, pad, rpc=None):
@@ -35,15 +40,16 @@ def _dropbox_zoek(query, pad, rpc=None):
         import bronnen
         rpc = bronnen._rpc
     uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
-    treffers = []
+    treffers = Onvolledig()
     for _ in range(MAX_PAGINAS):
         for m in (uit or {}).get("matches") or []:
             meta = ((m.get("metadata") or {}).get("metadata")) or {}
             if meta.get("path_display"):
                 treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
         if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
-            break
+            return treffers
         uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
+    treffers.volledig = False
     return treffers
 
 
@@ -52,9 +58,12 @@ def in_mappen(firma, werk, zoek=None, maximum=12):
     in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet als de zoekfunctie ze teruggeeft)."""
     zoek = zoek or _dropbox_zoek
     basis = BASIS[firma]
-    gezien, uit = set(), []
+    gezien, uit = set(), Onvolledig()
     for woord in zoekwoorden(werk):
-        for t in zoek(woord, basis) or []:
+        treffers = zoek(woord, basis) or []
+        if getattr(treffers, "volledig", True) is False:
+            uit.volledig = False
+        for t in treffers:
             pad = t.get("pad") or ""
             laag = pad.lower()
             if not laag.startswith(basis.lower() + "/") or any(n in laag for n in NIET_ZOEKEN):

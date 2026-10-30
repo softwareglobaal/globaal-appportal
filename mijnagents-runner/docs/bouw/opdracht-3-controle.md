@@ -1,4 +1,4 @@
-# Controle door Codex: afdeling Bouw (commit 6bbc2e4 op tak bouwagents, na herstel)
+# Controle door Codex: afdeling Bouw (tak bouwagents, laatste commit, na herstel)
 
 Lees alleen; wijzig niets. Nummer je punten X1, X2, ... met een ernst (hoog, middel, laag) en een bestand:regel.
 
