@@ -16,6 +16,9 @@ stuk van de ene noemt de andere of laat een band vermoeden. Neem die regel ook i
 
 ## Wat je nagaat
 
+Eerst: zijn de vijftien punten van controle 2 (`docs/bouw/rapport-2-controle.md`) echt opgelost? De
+verwerking staat in `docs/bouw/verwerkt-2-controle.md`. Daarna dezelfde punten als toen, op de nieuwe code:
+
 1. De scheiding (`bouw/scheiding.py`, `bouw/mail.py`, de runners): kan een mail, een verslag of een vergelijking toch
    een kenmerk van de andere firma bevatten (naam in een andere schrijfwijze, domein, telefoon, adres, ondernemingsnummer,
    een pad of mapnaam, de naam van een gevonden kandidaat, de werkomschrijving van het model)? Kan de andere firma als
