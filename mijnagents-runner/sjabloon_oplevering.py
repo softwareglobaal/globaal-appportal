@@ -196,7 +196,7 @@ def naar_docx_pv(v, fotos=None):
         for i, b in enumerate(v["fotos"], 1):
             if b in fotos:
                 p = doc.add_paragraph(); p.paragraph_format.keep_with_next = True
-                p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
+                p.add_run().add_picture(io.BytesIO(sj.beeld_rechtop(fotos[b])), height=Cm(10.6))
                 q = alinea(na=10); r = q.add_run(f"Foto {i}"); r.bold = True; r.font.size = Pt(9)
     else:
         alinea("(gevels en elk niveau, genomen op de dag van de rondgang)", cursief=True)
