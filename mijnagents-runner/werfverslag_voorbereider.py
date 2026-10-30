@@ -664,7 +664,9 @@ def oude_fototabel(inhoud, datum, nummer):
 FOTOREDEN = {"geen_fotos": "geen foto's", "geen_venster": "geen bezoekvenster", "niet_in_fotomap": "geen foto in fotos/",
              "lijst_ontbreekt": "00 fotos.md ontbreekt", "jpg_ontbreekt": "alleen HEIC, geen JPG",
              "lijst_onleesbaar": "00 fotos.md onleesbaar", "tijd_ontbreekt": "opnametijd ontbreekt of valt buiten het venster"}
-FOTOHERSTEL = ("niet_in_fotomap", "lijst_ontbreekt", "jpg_ontbreekt")
+# jpg_ontbreekt hoort er pas bij als de wacht ook bij een gedeeltelijke levering JPG maakt (overleg W4 P3, X3): nu blijft
+# zo'n taak open en schrijft ze elke 30 minuten een nieuwe lijst (2405 18-10).
+FOTOHERSTEL = ("niet_in_fotomap", "lijst_ontbreekt")
 # Zo noemt de iCloud-wacht een export: uur en minuut, dan het begin van de Photos-uuid ("1015 1FA4D3F8.heic").
 ICLOUD_EXPORTNAAM = re.compile(r"\d{4} [0-9A-Fa-f]{8}\.[A-Za-z0-9]+")
 

@@ -325,11 +325,13 @@ def test_p3_fotobewijs_geeft_de_reden(monkeypatch):
 
 def test_p3_herstelbaar_aanvoerprobleem_geeft_een_taak(monkeypatch):
     for b, reden in ((_p3_bezoek("fotos/1130 AAAA0001.jpg", lijst=False), "lijst_ontbreekt"),   # JPG zonder lijst
-                     (_p3_bezoek("fotos/1130 AAAA0001.heic"), "jpg_ontbreekt"),                 # lijst, alleen HEIC
                      (_p3_bezoek("1130 AAAA0001.jpg"), "niet_in_fotomap")):                     # foto naast fotos/
         w4, taken = _p3(monkeypatch, b)
         assert w4["stand"] == "let_op" and w4["herstel"] == reden, reden
         assert len(taken) == 1 and V.FOTOREDEN[reden] in taken[0], reden
+    # Overleg W4 P3, X3: alleen HEIC wacht op JPG bij gedeeltelijke levering in de iCloud-wacht; tot dan geen taak.
+    w4, taken = _p3(monkeypatch, _p3_bezoek("fotos/1130 AAAA0001.heic"))
+    assert w4["stand"] == "let_op" and "herstel" not in w4 and taken == []
 
 
 def test_p3_geen_taak_bij_foto_buiten_het_venster(monkeypatch):
@@ -364,11 +366,11 @@ def test_p3_hersteltaak_eigen_sleutel_en_geen_botsing_met_e4_reden(monkeypatch):
     bid = "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f"
     reg = {"bezoek_id": bid, "project_ref": "h-architects:9999"}
     gewoon = V.fototaak("9999", "Werfstraat 1", "/project", b, [b], _p3_bak(), reg)
-    herstel = V.fototaak("9999", "Werfstraat 1", "/project", b, [b], _p3_bak(), reg, "jpg_ontbreekt")
+    herstel = V.fototaak("9999", "Werfstraat 1", "/project", b, [b], _p3_bak(), reg, "lijst_ontbreekt")
     assert gewoon["uniek"] == f"werf:h-architects:9999:{bid}:icloud-wacht" and "herstel" not in gewoon["inhoud"]
-    assert herstel["uniek"] == gewoon["uniek"] + ":jpg_ontbreekt"
+    assert herstel["uniek"] == gewoon["uniek"] + ":lijst_ontbreekt"
     # de iCloud-wacht leest 'reden' als E4-teken (mac/icloud_wacht.py taakvenster): de hersteltaak mag die niet zetten
-    assert herstel["inhoud"]["herstel"] == "jpg_ontbreekt" and "reden" not in herstel["inhoud"]
+    assert herstel["inhoud"]["herstel"] == "lijst_ontbreekt" and "reden" not in herstel["inhoud"]
 
 
 def test_p3_dedup_op_dossier_en_dag():
