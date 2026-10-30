@@ -479,6 +479,10 @@ def verwerk(conn, rij, droog=False):
     # zodat sales die deal in de pijplijn meteen ziet staan.
     if a.get("spoed"):
         titel = "SPOED · " + titel
+    # Postcode buiten Vlaanderen (30 okt 2026): de site houdt niets meer tegen.
+    # Sales zegt per mail af; zo tellen we ook de vraag buiten Vlaanderen.
+    if a.get("buiten_vlaanderen"):
+        titel = "BUITEN VLAANDEREN · " + titel
 
     if droog:
         waar = firma["naam"] if firma else "UNABO (standaard)"
@@ -555,6 +559,8 @@ def verwerk(conn, rij, droog=False):
         regels.append("Gevraagde diensten: " + ", ".join(a["diensten"]))
     if a.get("spoed"):
         regels.append("SPOED: de werken zijn bezig of af, of er is een brief of deadline van het VEKA. Vandaag bellen.")
+    if a.get("buiten_vlaanderen"):
+        regels.append("BUITEN VLAANDEREN: de postcode ligt niet in Vlaanderen. Zeg per mail af; het label in de titel houdt de vraag buiten Vlaanderen telbaar.")
     for k, lab in (("postcode", "Postcode"), ("vergunning", "Vergunning of melding ingediend"),
                    ("fase", "Fase van het project"), ("veka_brief", "Brief van het VEKA of deadline"),
                    ("deadline", "Datum van de brief of deadline")):
