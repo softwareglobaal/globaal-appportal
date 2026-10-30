@@ -1431,7 +1431,8 @@ dashboard erbovenop én meteen het model voor nieuwe apps (forward-auth tegel).
 - Schema `kern`: **`persoon`** (de hub), **`afdeling`**, **`firma`** + **`leverancier`**
   (gecontroleerde lookups). Elke
   persoon heeft een onveranderlijke `id` (UUID) - dé FK voor alle dashboards - plus o.a.
-  `voornaam`/`achternaam`, `email` (citext, uniek), `afdeling_id`, `rol`
+  `voornaam`/`achternaam`, `email` (citext, uniek; werk- en Zoom-adres, bewerkbaar op het
+  profiel sinds migratie 200), `afdeling_id`, `rol`
   (Lid/Hoofd/Partner/Management), `hr_nummer`, `locatie`, `in_dienst`, en de
   loginkoppeling `authentik_sub` + `authentik_username` (leeg = geen login).
   `email_agenda` (migratie 185, Mehdi 03-10-2026): het **agenda-adres**, meestal Gmail,

@@ -344,6 +344,13 @@ de firma waar hij partner is), zonder mail, zodat de afspraak in zijn eigen agen
 Iemand toevoegen is dit veld invullen op zijn profiel op organisatie.globaal.be.
 - *Niet* verwarren met het werkadres (`email`) of het privé-adres in de HR-laag.
 
+### E-mail (Zoom)
+Het werkadres van een persoon, dat ook zijn Zoom-adres is (`kern.persoon.email`, uniek,
+bewerkbaar sinds migratie 200, Mehdi 30-10-2026). Staat op zijn profiel en in de
+medewerkerslijst op organisatie.globaal.be.
+- *Niet* verwarren met het agenda-adres (`email_agenda`) of het e-mailregister op
+  communicatie.globaal.be, waar een adres ook een gedeelde postbus kan zijn.
+
 ### Contactcode
 De afkorting van **twee letters** van een firma in de naamregel van een contact in
 Google Contacts, die Xelion bij een oproep toont, bv. HA, UN, TK. Aan het
