@@ -45,16 +45,17 @@ def _regel(a):
 
 
 def _bewijsregel(a):
-    """Waarop de aanbeveling steunt, letterlijk van de gelezen pagina (Codex ronde 3): Mehdi ziet het bij het klikken
-    meteen terug, ook als de pagina meer varianten of een oude prijs toont."""
-    bewijs = a.get("bewijs") if isinstance(a.get("bewijs"), dict) else {}
-    delen = [f'{veld} "{_kort(bewijs[veld], 80)}"' for veld in ("prijs", "verzending", "opgeld", "veilingkosten")
-             if bewijs.get(veld)]
-    compat = a.get("compatibiliteit") if isinstance(a.get("compatibiliteit"), dict) else {}   # Codex X15, ronde 4
-    for eis, o in compat.items():
-        if isinstance(o, dict) and str(o.get("oordeel")).lower() == "ja" and o.get("citaat"):
-            delen.append(f'{eis} "{_kort(o["citaat"], 80)}"')
-    return "Bewijs op de pagina: " + "; ".join(delen) + "." if delen else "Bewijs op de pagina: geen citaat bewaard."
+    """Waarop de aanbeveling steunt: per bewijs de tekst zoals ze op de pagina staat, met wat eromheen staat, en de
+    pagina als die niet de aanbodpagina is (Codex ronde 3 en 5). Mehdi ziet zo een accessoire, een oude prijs of een
+    ander product dat het citaat alleen zou weglaten."""
+    ctx = a.get("context") if isinstance(a.get("context"), dict) else {}
+    if not ctx:
+        return "Bewijs op de pagina: geen citaat bewaard."
+    regels = ["Bewijs op de pagina:"]
+    for veld, (tekst, bron) in ctx.items():
+        waar = "" if bron == a.get("url") else f" ([bron]({bron}))"
+        regels.append(f'- {veld}: "{_kort(tekst, 200)}"{waar}')
+    return "\n".join(regels)
 
 
 def titel(gegevens, resultaat):

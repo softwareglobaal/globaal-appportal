@@ -34,12 +34,17 @@ KOSTWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|deliver
                          r"opgeld|premium|aufgeld|frais|kosten|\bfee\b|toeslag|borg|deposit|statiegeld", re.I)
 VERZENDWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison", re.I)
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
+# Algemene pagina's van een winkel waar verzending en voorwaarden voor elk aanbod staan.
+ALGEMEEN = re.compile(r"verzend|levering|shipping|delivery|versand|lieferung|livraison|voorwaarden|conditions|terms|agb|"
+                      r"cgv|faq|hulp|help|service|klantenservice|veiling|auction|kosten|fees|tarie", re.I)
 # "Gratis verzending" voor de prijs is geen kost en mag een juiste prijs niet weigeren (Codex X1, ronde 3).
 GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:verzending|levering|shipping|delivery|versand|"
                                r"lieferung|livraison)|(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)"
                                r"\s*(?::|is|ist|est)?\s*(?:gratis|free|kostenlos|gratuite?)", re.I)
 # Alleen een doorhaling of een zinseinde scheidt; "nu" niet, dat wiste een kostwoord ervoor (Codex X14, ronde 4).
 SCHEIDING = re.compile(r"~~|[.;|!?]\s")
+# Een vermelding tussen haakjes vlak na het bedrag, ook na een punt, hoort bij dat bedrag (Codex X1, ronde 5).
+NAHAAKJE = re.compile(r"^\W{0,3}\([^)]{0,25}\)")
 NEGATIE = re.compile(r"\b(?:geen|niet|no|not|kein\w*|pas de|sans|ohne)\b\W*$", re.I)
 # Een oude of doorgestreepte prijs is niet de prijs van vandaag (Codex X1, ronde 3).
 OUDE_PRIJS = re.compile(r"~~|adviesprijs|oude prijs|\bvan\s*:|\bwas\s*:|\bwas\b\s*[\u20ac$\u00a3]|uvp|\bstatt\b|vorher|"
@@ -121,6 +126,21 @@ def _zonder_gratis_verzending(tekst):
 
 
 def zonder_kostwoord(citaat, tekst, ervoor=40):
+    return vindplaats(citaat, tekst, ervoor) >= 0
+
+
+def context(citaat, tekst, plaats=None, rond=70):
+    """Het citaat met de tekst eromheen, zoals het op de pagina staat. Het verslag toont dit onder de aanbeveling,
+    zodat wat het citaat weglaat (een accessoire, een oude prijs, een ander product) zichtbaar is (Codex ronde 5)."""
+    citaat, tekst = _schoon(str(citaat or "")), _schoon(tekst)
+    i = tekst.find(citaat) if plaats is None or plaats < 0 else plaats
+    if i < 0 or not citaat:
+        return ""
+    begin, eind = max(0, i - rond), min(len(tekst), i + len(citaat) + rond)
+    return ("..." if begin else "") + tekst[begin:eind] + ("..." if eind < len(tekst) else "")
+
+
+def vindplaats(citaat, tekst, ervoor=40):
     """Staat het citaat minstens een keer op de pagina zonder een kostwoord (verzending, opgeld, kosten) of een teken
     van een oude prijs (doorgestreept, adviesprijs, "van") vlak ervoor of erin? Zo bewijst "499 euro" uit
     "Verzendkosten: 499 euro" nooit de productprijs (Codex X1, ronde 2), en "1.399" uit "~~1.399~~" ook niet (ronde 3).
@@ -128,16 +148,18 @@ def zonder_kostwoord(citaat, tekst, ervoor=40):
     citaat, tekst = _schoon(str(citaat or "")), _schoon(tekst)
     i = tekst.find(citaat)
     while i >= 0 and citaat:
-        # Binnen een doorgestreept stuk (~~ ... ~~) is het nooit de prijs van vandaag. Wat ervoor staat, telt alleen
+        # De eerste plaats waar het citaat als productprijs geldt, of -1. Binnen een doorgestreept stuk (~~ ... ~~) is het nooit de prijs van vandaag. Wat ervoor staat, telt alleen
         # tot het laatste scheidingsteken ("Adviesprijs 1.399. Nu 1.099": "Nu 1.099" is de prijs).
         if tekst[:i].count("~~") % 2 == 0:
             ervoor_tekst = SCHEIDING.split(tekst[max(0, i - ervoor):i])[-1]
-            erna_tekst = SCHEIDING.split(tekst[i + len(citaat):i + len(citaat) + 25])[0]   # "100 euro (oude prijs)"
+            erna = tekst[i + len(citaat):i + len(citaat) + 30]
+            erna_tekst = SCHEIDING.split(erna)[0]                                           # "100 euro (oude prijs)"
+            erna_tekst += " " + (NAHAAKJE.match(erna).group(0) if NAHAAKJE.match(erna) else "")  # "100 euro. (oude prijs)"
             stuk = _zonder_gratis_verzending(ervoor_tekst + citaat)
             if not KOSTWOORDEN.search(stuk) and not OUDE_PRIJS.search(stuk + erna_tekst):
-                return True
+                return i
         i = tekst.find(citaat, i + 1)
-    return False
+    return -1
 
 
 def bedrag_op_pagina(bedrag, tekst):
@@ -388,8 +410,31 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
     def winkeltekst(url):
         """De gelezen pagina's van dezelfde winkel: daar horen verzending, opgeld en voorwaarden van dit aanbod
         (Codex X12, ronde 4: een kostencitaat van een andere winkel bewijst niets)."""
-        host = urlparse(schoon_url(url)).netloc
-        return "\n".join(t for u, t in paginas.items() if urlparse(u).netloc == host)
+        return "\n".join(t for _, t in winkelpaginas(url))
+
+    def winkelpaginas(url):
+        """De eigen aanbodpagina en de algemene pagina's van dezelfde winkel (verzending, voorwaarden, hulp), niet de
+        pagina van een ander product (Codex X12, ronde 5)."""
+        eigen, host = schoon_url(url), urlparse(schoon_url(url)).netloc
+        return [(u, t) for u, t in paginas.items()
+                if u == eigen or (urlparse(u).netloc == host and ALGEMEEN.search(urlparse(u).path))]
+
+    def contexten(a, tekst):
+        """Per bewijs het citaat met de tekst eromheen en de pagina waar het staat, voor het verslag."""
+        uit = {}
+        b = _bewijs(a)
+        if b.get("prijs"):
+            uit["prijs"] = (context(b["prijs"], tekst, vindplaats(b["prijs"], tekst)), a["url"])
+        for veld in ("verzending", "opgeld", "veilingkosten"):
+            for u, t in winkelpaginas(a["url"]):
+                if b.get(veld) and citaat_op_pagina(b[veld], t):
+                    uit[veld] = (context(b[veld], t), u)
+                    break
+        compat = a.get("compatibiliteit") if isinstance(a.get("compatibiliteit"), dict) else {}
+        for eis, o in compat.items():
+            if isinstance(o, dict) and o.get("citaat") and citaat_op_pagina(o["citaat"], tekst):
+                uit[eis] = (context(o["citaat"], tekst), a["url"])
+        return uit
     goed, niet_compatibel, afgewezen = [], [], []
     gezien = set()
     for a in aanbiedingen or []:
@@ -409,6 +454,7 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen,
                                                                   winkeltekst(a["url"]) if paginas is not None else None)
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst)
+        rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",
                              r["totaal_eur"] if r["totaal_eur"] is not None else float("inf")))

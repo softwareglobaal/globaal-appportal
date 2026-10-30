@@ -35,9 +35,12 @@ wat daarmee compatibel is) volgen later.
 6. De code keurt en rekent: zonder link, gelezen pagina of bewezen prijs gaat een aanbod er niet in, de btw en de
    invoer rekent de code, het totaal in euro met de koersen van de ECB, en wat niet compatibel is komt apart. De
    eisen over netspanning en netfrequentie haalt de code zelf uit de vraag.
-7. Het verslag voor Mehdi begint met een beste keuze en een reserve die de code koos, dan de aanbiedingen met een
-   klikbare link (en een foto als die op de gelezen pagina staat) en een korte toelichting, dan wat niet compatibel
-   is, wat ik niet vond, en de volgende stap als voorstel.
+7. Het verslag voor Mehdi begint met een beste keuze en een reserve die de code koos, elk met het bewijs: de tekst
+   zoals ze op de pagina staat, met wat eromheen staat, en de bronpagina als die niet de aanbodpagina is. Dan de
+   aanbiedingen met een klikbare link (en een foto als die op de gelezen pagina staat) en een korte toelichting, wat
+   niet compatibel is, wat ik niet vond, en de volgende stap als voorstel.
+   Een verzendkost of veilingvoorwaarde telt alleen van de aanbodpagina of van de algemene pagina's van dezelfde
+   winkel (verzending, voorwaarden), nooit van de pagina van een ander product.
 8. Het verslag staat op het bord (soort prijsverslag). De Regisseur geeft het antwoord in de chat; De Bode stuurt
    het alleen door als Mehdi daar uitdrukkelijk om vraagt.
 

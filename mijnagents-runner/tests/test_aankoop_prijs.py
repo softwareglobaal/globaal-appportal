@@ -93,6 +93,11 @@ check("een kostwoord voor 'nu' telt nog (Codex X14, ronde 4)", "prijs niet bewez
 check("een oude prijs met de vermelding erna (Codex X1, ronde 4)", "prijs niet bewezen op de gelezen pagina" in
       A.keur(met_bewijs("Vloerwasser X1 100,00 euro", prijs=100), VANDAAG, R4))
 check("de prijs van vandaag wel", A.keur(met_bewijs("Vandaag 90,00 euro", prijs=90), VANDAAG, R4) == [])
+R5 = pagina("X1 100,00 euro. (oude prijs) Vandaag 90,00 euro.")
+check("een oude prijs met de vermelding na de punt (Codex X1, ronde 5)", "prijs niet bewezen op de gelezen pagina" in
+      A.keur(met_bewijs("X1 100,00 euro", prijs=100), VANDAAG, R5))
+check("een volgende prijs met een eigen label blijft geldig", A.keur(met_bewijs("Nu 1.099,00 €", prijs=1099), VANDAAG,
+      pagina("Nu 1.099,00 €. Adviesprijs 1.399,00 €")) == [])
 check("de huidige prijs wel, ook met gratis verzending ervoor", A.keur(met_bewijs("Nu 1.099,00 €", prijs=1099), VANDAAG, OUD) == []
       and A.keur(met_bewijs("Gratis verzending 1.099,00 €", prijs=1099), VANDAAG, OUD) == [])
 check("499 is niet 1499", not A.bedrag_op_pagina(499, "1499 euro"))
@@ -222,6 +227,17 @@ check("een stekkerbewijs van een ander product telt niet (Codex X2, ronde 4)", r
       and r["goed"][0]["compatibel"] == "onbekend")
 check("gratis verzending van een andere winkel bewijst niets (Codex X12, ronde 4)",
       "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"][0]["ontbreekt"]))
+paginas_y = dict(paginas, **{"https://winkel.voorbeeld.com/y": pagina("Product Y. Gratis verzending voor Y.")})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending voor Y."})], VANDAAG, KOERSEN,
+              paginas=paginas_y)
+check("gratis verzending van een ander product in dezelfde winkel bewijst niets (Codex X12, ronde 5)",
+      "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"][0]["ontbreekt"]))
+ACC = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 500,00 euro. Gratis verzending. Netstekker type C. "
+                                                  "Accessoire laadstation: Stekker type A/B.")}
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending."}, compatibiliteit={
+    "stekker type A/B": {"oordeel": "ja", "citaat": "Stekker type A/B."}})], VANDAAG, KOERSEN, ["stekker type A/B"], paginas=ACC)
+check("een accessoirecitaat staat met zijn context in het verslag (Codex X2, ronde 5)",
+      "Accessoire laadstation" in V.maak("v", {}, r, None, "2026-10-30"))
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro"}, verzending=7.95)],
               VANDAAG, KOERSEN, paginas=paginas)
 check("de verzendpagina van dezelfde winkel telt wel", r["beste"] is not None and r["beste"]["totaal_eur"] == 507.95, str(r["goed"]))
@@ -320,8 +336,10 @@ check("het verzonnen aanbod staat nergens in het verslag, ook niet via vrij advi
 check("de uitleg van het model staat bij het aanbod, niet in de aanbeveling", "toelichting: 60 Hz-versie, officiele dealer." in tekst
       and "officiele dealer" not in tekst.splitlines()[0])
 check("vrije modeltekst is begrensd", len(V._kort("x" * 500)) == 160)
-check("het verslag toont letterlijk waarop de aanbeveling steunt, ook de verzending", 'Bewijs op de pagina: prijs "X1 499,00 euro"; '
-      'verzending "gratis verzending"; netfrequentie 60 Hz "Netspanning 127 V, 60 Hz".' in tekst, tekst)
+bewijsdeel = tekst.split("Bewijs op de pagina:")[1].split("**Voorstel:**")[0] if "Bewijs op de pagina:" in tekst else ""
+check("het verslag toont het bewijs met de tekst eromheen (Codex ronde 5)", "- prijs:" in bewijsdeel
+      and "X1 499,00 euro, gratis verzending" in bewijsdeel and "- netfrequentie 60 Hz:" in bewijsdeel
+      and "Netspanning 127 V, 60 Hz" in bewijsdeel and "- verzending:" in bewijsdeel, bewijsdeel)
 check("het verslag zegt dat er niets gekocht is", "Ik kocht, bood en contacteerde niets." in tekst)
 check("bedrag in Belgische schrijfwijze", V.euro(1299.5) == "1.299,50 euro")
 check("titel met het beste totaal", V.titel(uit["gegevens"], r) == "Prijsonderzoek: vloerwasser X1 voor Suriname (beste 499,00 euro)")
