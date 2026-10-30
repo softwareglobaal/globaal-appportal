@@ -38,7 +38,9 @@ GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
 GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:verzending|levering|shipping|delivery|versand|"
                                r"lieferung|livraison)|(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)"
                                r"\s*(?::|is|ist|est)?\s*(?:gratis|free|kostenlos|gratuite?)", re.I)
-SCHEIDING = re.compile(r"~~|[.;|!?]\s|\b(?:nu|now|jetzt|maintenant|ahora)\b", re.I)
+# Alleen een doorhaling of een zinseinde scheidt; "nu" niet, dat wiste een kostwoord ervoor (Codex X14, ronde 4).
+SCHEIDING = re.compile(r"~~|[.;|!?]\s")
+NEGATIE = re.compile(r"\b(?:geen|niet|no|not|kein\w*|pas de|sans|ohne)\b\W*$", re.I)
 # Een oude of doorgestreepte prijs is niet de prijs van vandaag (Codex X1, ronde 3).
 OUDE_PRIJS = re.compile(r"~~|adviesprijs|oude prijs|\bvan\s*:|\bwas\s*:|\bwas\b\s*[\u20ac$\u00a3]|uvp|\bstatt\b|vorher|"
                         r"au lieu de|prix barr|\brrp\b|list price|vergelijkingsprijs|normale prijs|doorgestreept", re.I)
@@ -103,6 +105,21 @@ def citaat_op_pagina(citaat, tekst):
     return len(citaat) >= MIN_CITAAT and citaat in _schoon(tekst)
 
 
+def gratis_verzending(tekst):
+    """Zegt de tekst dat de verzending gratis is, zonder ontkenning ervoor ("geen gratis verzending", Codex X12, ronde 4)?"""
+    return any(not NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]) for m in GRATIS_VERZENDING.finditer(tekst or ""))
+
+
+def _zonder_gratis_verzending(tekst):
+    """De tekst zonder de niet-ontkende vermeldingen van gratis verzending: die zijn geen kost."""
+    stukken, vanaf = [], 0
+    for m in GRATIS_VERZENDING.finditer(tekst):
+        if not NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]):
+            stukken.append(tekst[vanaf:m.start()])
+            vanaf = m.end()
+    return " ".join(stukken + [tekst[vanaf:]])
+
+
 def zonder_kostwoord(citaat, tekst, ervoor=40):
     """Staat het citaat minstens een keer op de pagina zonder een kostwoord (verzending, opgeld, kosten) of een teken
     van een oude prijs (doorgestreept, adviesprijs, "van") vlak ervoor of erin? Zo bewijst "499 euro" uit
@@ -115,8 +132,9 @@ def zonder_kostwoord(citaat, tekst, ervoor=40):
         # tot het laatste scheidingsteken ("Adviesprijs 1.399. Nu 1.099": "Nu 1.099" is de prijs).
         if tekst[:i].count("~~") % 2 == 0:
             ervoor_tekst = SCHEIDING.split(tekst[max(0, i - ervoor):i])[-1]
-            stuk = GRATIS_VERZENDING.sub(" ", ervoor_tekst + citaat)
-            if not KOSTWOORDEN.search(stuk) and not OUDE_PRIJS.search(stuk):
+            erna_tekst = SCHEIDING.split(tekst[i + len(citaat):i + len(citaat) + 25])[0]   # "100 euro (oude prijs)"
+            stuk = _zonder_gratis_verzending(ervoor_tekst + citaat)
+            if not KOSTWOORDEN.search(stuk) and not OUDE_PRIJS.search(stuk + erna_tekst):
                 return True
         i = tekst.find(citaat, i + 1)
     return False
@@ -240,8 +258,9 @@ def totaal(aanbod, koersen, alle_tekst=None):
             if waarde:
                 return bool(VERZENDWOORDEN.search(citaat)) and bedrag_op_pagina(waarde, citaat)
             # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3)
-            return bool(GRATIS_VERZENDING.search(citaat) or (VERZENDWOORDEN.search(citaat)
-                                                            and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat))))
+            return gratis_verzending(_schoon(citaat)) or bool(
+                VERZENDWOORDEN.search(citaat) and not NEGATIE.search(citaat)
+                and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
         return bedrag_op_pagina(waarde, citaat)
 
     def euro_veld(veld, waarde):
@@ -276,7 +295,7 @@ def totaal(aanbod, koersen, alle_tekst=None):
         btw_in = aanbod.get("btw_inbegrepen")
         # Is de prijs met btw, dan is een consumentenverzending dat ook. Is de prijs zonder btw, dan moet de status van
         # de verzending apart gekend zijn; ze erft niet (Codex X9, ronde 3).
-        btw_verzending = aanbod.get("verzending_btw_inbegrepen", True if btw_in is True else None)
+        btw_verzending = aanbod.get("verzending_btw_inbegrepen")    # nooit geërfd (Codex X9, ronde 3 en 4)
         if btw_in is None or (verzending and btw_verzending is None):
             ontbreekt.append("btw")
         if btw_in is False:
@@ -345,7 +364,7 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
             if m:
                 bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), eigen_tekst or "")
             else:
-                bewezen = citaat_op_pagina(citaat, alle_tekst)
+                bewezen = citaat_op_pagina(citaat, eigen_tekst or "")     # van de eigen pagina (Codex X2, ronde 4)
             if not bewezen:
                 oordeel = "onbekend"
         waarden.append(oordeel)
@@ -365,6 +384,12 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
     paginas: {genormaliseerde url: tekst} van de gelezen pagina's; de runner geeft ze altijd mee."""
     from aankoop.onderzoek import schoon_url   # hier, zodat aanbod.py zonder de rest te testen blijft
     alle_tekst = "\n".join(paginas.values()) if paginas is not None else None
+
+    def winkeltekst(url):
+        """De gelezen pagina's van dezelfde winkel: daar horen verzending, opgeld en voorwaarden van dit aanbod
+        (Codex X12, ronde 4: een kostencitaat van een andere winkel bewijst niets)."""
+        host = urlparse(schoon_url(url)).netloc
+        return "\n".join(t for u, t in paginas.items() if urlparse(u).netloc == host)
     goed, niet_compatibel, afgewezen = [], [], []
     gezien = set()
     for a in aanbiedingen or []:
@@ -381,7 +406,8 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
             continue
         gezien.add(sleutel)
         rij = dict(a)
-        rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen, alle_tekst)
+        rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = totaal(a, koersen,
+                                                                  winkeltekst(a["url"]) if paginas is not None else None)
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst)
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",

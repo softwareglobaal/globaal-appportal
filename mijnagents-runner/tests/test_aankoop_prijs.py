@@ -39,7 +39,7 @@ VULLING = " Productomschrijving, specificaties, levering en retour volgens de vo
 def aanbod(**over):
     basis = {"titel": "Vloerwasser X1", "url": "https://winkel.voorbeeld.com/x1", "winkel": "Winkel", "land": "BE",
              "soort": "nieuw", "prijs": 500, "munt": "EUR", "btw_inbegrepen": True, "verzending": 0,
-             "gezien_op": "2026-10-30", "beschikbaar": True}
+             "verzending_btw_inbegrepen": True, "gezien_op": "2026-10-30", "beschikbaar": True}
     basis.update(over)
     return basis
 
@@ -87,6 +87,12 @@ check("de echte productprijs wel", A.keur(met_bewijs("Prijs: 999,00 euro", prijs
 OUD = pagina("MOVA V70 Ultra Adviesprijs ~~1.399,00 €~~ Nu 1.099,00 €. Gratis verzending 1.099,00 € in je mandje.")
 check("een doorgestreepte of adviesprijs is niet de prijs van vandaag (Codex X1, ronde 3)", "prijs niet bewezen op de gelezen pagina"
       in A.keur(met_bewijs("1.399,00 €", prijs=1399), VANDAAG, OUD))
+R4 = pagina("Vloerwasser X1 100,00 euro (oude prijs). Vandaag 90,00 euro. Verzendkosten nu 25,00 euro.")
+check("een kostwoord voor 'nu' telt nog (Codex X14, ronde 4)", "prijs niet bewezen op de gelezen pagina" in
+      A.keur(met_bewijs("nu 25,00 euro", prijs=25), VANDAAG, R4))
+check("een oude prijs met de vermelding erna (Codex X1, ronde 4)", "prijs niet bewezen op de gelezen pagina" in
+      A.keur(met_bewijs("Vloerwasser X1 100,00 euro", prijs=100), VANDAAG, R4))
+check("de prijs van vandaag wel", A.keur(met_bewijs("Vandaag 90,00 euro", prijs=90), VANDAAG, R4) == [])
 check("de huidige prijs wel, ook met gratis verzending ervoor", A.keur(met_bewijs("Nu 1.099,00 €", prijs=1099), VANDAAG, OUD) == []
       and A.keur(met_bewijs("Gratis verzending 1.099,00 €", prijs=1099), VANDAAG, OUD) == [])
 check("499 is niet 1499", not A.bedrag_op_pagina(499, "1499 euro"))
@@ -109,10 +115,12 @@ t = A.totaal(aanbod(prijs=1000, verzending=0, btw_inbegrepen=False), KOERSEN)
 check("een prijs zonder btw krijgt 21 procent erbij", t[0] == 1210.0 and "21 procent btw bijgeteld op de prijs" in t[2], str(t))
 t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False, verzending_btw_inbegrepen=True), KOERSEN)
 check("btw per kostenpost: 100 zonder btw plus 10 verzending met btw is 131 (Codex X9, ronde 2)", t[:2] == (131.0, []), str(t))
-t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False), KOERSEN)
+t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False, verzending_btw_inbegrepen=None), KOERSEN)
 check("prijs zonder btw en verzending zonder opgave: onvolledig, niet erven (Codex X9, ronde 3)", t[:2] == (None, ["btw"]), str(t))
-t = A.totaal(aanbod(prijs=100, verzending=10), KOERSEN)
-check("prijs met btw: een consumentenverzending ook", t[:2] == (110.0, []), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=10, verzending_btw_inbegrepen=None), KOERSEN)
+check("ook bij een prijs met btw erft de verzending niet (Codex X9, ronde 4)", t[:2] == (None, ["btw"]), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=0, verzending_btw_inbegrepen=None), KOERSEN)
+check("gratis verzending heeft geen btw-status nodig", t[:2] == (100.0, []), str(t))
 t = A.totaal(aanbod(soort="veiling", prijs=1000, verzending=50, veilingkosten=0), KOERSEN)
 check("een veilingprijs zonder opgeld is geen totaalprijs", t[:2] == (None, ["opgeld"]), str(t))
 t = A.totaal(aanbod(soort="veiling", prijs=1000, verzending=50, opgeld_pct=18), KOERSEN)
@@ -133,6 +141,11 @@ t = A.totaal(aanbod(prijs=500, verzending=0, bewijs={"verzending": "Gratis verze
 check("gratis verzending met citaat", t[:2] == (500.0, []), str(t))
 t = A.totaal(aanbod(prijs=500, verzending=0), KOERSEN, pagina("500 euro"))
 check("verzending 0 zonder citaat is niet bewezen", t[:2] == (None, ["verzending niet bewezen"]), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=0, bewijs={"verzending": "geen gratis verzending"}), KOERSEN,
+             pagina("100 euro, geen gratis verzending, verzending 25 euro"))
+check("geen gratis verzending is geen gratis verzending (Codex X12, ronde 4)", t[:2] == (None, ["verzending niet bewezen"]), str(t))
+check("gratis verzending zonder ontkenning", A.gratis_verzending("Gratis verzending vanaf 50 euro")
+      and not A.gratis_verzending("Helaas geen gratis verzending") and not A.gratis_verzending("no free shipping"))
 t = A.totaal(aanbod(prijs=100, verzending=0, bewijs={"verzending": "Gratis retourneren binnen 30 dagen"}), KOERSEN,
              pagina("100 euro. Gratis retourneren binnen 30 dagen. Verzending 25 euro."))
 check("gratis retourneren bewijst geen gratis verzending (Codex X12, ronde 3)", t[:2] == (None, ["verzending niet bewezen"]), str(t))
@@ -199,6 +212,22 @@ r = A.verwerk([aanbod(prijs=500), aanbod(url="https://b.voorbeeld.com/2", prijs=
 check("een beste keuze en een reserve (overleg X2)", r["beste"]["prijs"] == 480 and r["reserve"]["prijs"] == 500)
 r = A.verwerk([aanbod(soort="veiling", prijs=100, veilingkosten=0)], VANDAAG, KOERSEN)
 check("een veiling zonder opgeld wordt nooit het beste aanbod", r["beste"] is None and len(r["goed"]) == 1)
+paginas = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 500,00 euro. Netstekker type C."),
+           "https://andere.voorbeeld.com/y": pagina("Ander toestel Y. Stekker type A/B. Gratis verzending."),
+           "https://winkel.voorbeeld.com/verzending": pagina("Verzending: 7,95 euro voor elke bestelling.")}
+X1 = aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending."}, compatibiliteit={
+    "stekker type A/B": {"oordeel": "ja", "citaat": "Stekker type A/B."}})
+r = A.verwerk([X1], VANDAAG, KOERSEN, ["stekker type A/B"], paginas=paginas)
+check("een stekkerbewijs van een ander product telt niet (Codex X2, ronde 4)", r["beste"] is None
+      and r["goed"][0]["compatibel"] == "onbekend")
+check("gratis verzending van een andere winkel bewijst niets (Codex X12, ronde 4)",
+      "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"][0]["ontbreekt"]))
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro"}, verzending=7.95)],
+              VANDAAG, KOERSEN, paginas=paginas)
+check("de verzendpagina van dezelfde winkel telt wel", r["beste"] is not None and r["beste"]["totaal_eur"] == 507.95, str(r["goed"]))
+fout_type = A.verwerk([aanbod(compatibiliteit="past wel")], VANDAAG, KOERSEN)
+check("een compatibiliteit als tekst laat het verslag niet crashen (Codex X15, ronde 4)",
+      V.maak("v", {}, fout_type, None, "2026-10-30").startswith("**Aanbevolen:**"))
 paginas = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 500,00 euro. Gratis verzending")}
 BEW = {"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending"}
 r = A.verwerk([aanbod(bewijs=BEW), aanbod(url="https://andere.voorbeeld.com/x1", bewijs=BEW)], VANDAAG, KOERSEN, paginas=paginas)
@@ -291,8 +320,8 @@ check("het verzonnen aanbod staat nergens in het verslag, ook niet via vrij advi
 check("de uitleg van het model staat bij het aanbod, niet in de aanbeveling", "toelichting: 60 Hz-versie, officiele dealer." in tekst
       and "officiele dealer" not in tekst.splitlines()[0])
 check("vrije modeltekst is begrensd", len(V._kort("x" * 500)) == 160)
-check("het verslag toont letterlijk waarop de aanbeveling steunt", 'Bewijs op de pagina: prijs "X1 499,00 euro"; '
-      'netfrequentie 60 Hz "Netspanning 127 V, 60 Hz".' in tekst)
+check("het verslag toont letterlijk waarop de aanbeveling steunt, ook de verzending", 'Bewijs op de pagina: prijs "X1 499,00 euro"; '
+      'verzending "gratis verzending"; netfrequentie 60 Hz "Netspanning 127 V, 60 Hz".' in tekst, tekst)
 check("het verslag zegt dat er niets gekocht is", "Ik kocht, bood en contacteerde niets." in tekst)
 check("bedrag in Belgische schrijfwijze", V.euro(1299.5) == "1.299,50 euro")
 check("titel met het beste totaal", V.titel(uit["gegevens"], r) == "Prijsonderzoek: vloerwasser X1 voor Suriname (beste 499,00 euro)")
