@@ -25,6 +25,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, HIER)
 import bord  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 from aankoop import aanbod as A  # noqa: E402
 from aankoop import koersen as K  # noqa: E402
 from aankoop import onderzoek as O  # noqa: E402
@@ -55,6 +56,7 @@ def laad_env(pad):
 # die in ~/appportal/.env werkt. setdefault: het eerste bestand dat een waarde heeft, wint.
 laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def open_vragen():

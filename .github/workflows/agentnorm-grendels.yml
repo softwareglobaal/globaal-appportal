@@ -26,3 +26,5 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_mac_gesprekken.py
       # De Bouwwacht (K5, 27-10-2026): alarm als een dienst niet meer herbouwt na een git pull; alleen git en stdlib
       - run: python3 mijnagents-runner/tests/test_bouwwacht.py
+      # T-0064 (31-10-2026): elke runner die ~/agents/.env laadt, laadt eerst ~/appportal/.env, de ene sleutelbron
+      - run: python3 mijnagents-runner/tests/test_sleutelbron.py

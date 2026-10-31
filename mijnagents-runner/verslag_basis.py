@@ -36,7 +36,7 @@ import bronnen  # noqa: E402
 import schrijfregels  # noqa: E402
 import zoektaak as pz  # noqa: E402
 import verslagsoorten as vs  # noqa: E402
-import werfverslag_proef as wp  # noqa: E402  (leest bezoekmappen, bundelt bronnen, Claude-client, sleutel uit ~/agents/.env)
+import werfverslag_proef as wp  # noqa: E402  (leest bezoekmappen, bundelt bronnen, Claude-client, sleutel uit ~/appportal/.env)
 
 FOTO_EXT = (".heic", ".jpg", ".jpeg", ".png", ".webp")
 OPNAME_EXT = (".mp3", ".m4a", ".wav", ".mp4", ".mov")
