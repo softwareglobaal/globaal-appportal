@@ -43,9 +43,9 @@ def _env(pad):
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
-sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 _env("~/agents/.env")
 _env("~/appportal/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 MODEL = os.environ.get("WERFVERSLAG_MODEL", "claude-opus-5").strip()
 import bord  # noqa: E402
 import bronnen  # noqa: E402

@@ -151,8 +151,8 @@ def laad_env(pad):
         pass
 
 
-sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 laad_env("~/agents/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def _token():

@@ -19,6 +19,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, os.path.join(HIER, "..", "locatie"))
 import bord  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 import bronbeleid  # noqa: E402  de startgrens van het locatielogboek
 import locatiecontext as LC  # noqa: E402  gestructureerde locatiecontext (opdracht v1.4)
 import organisatie  # noqa: E402
@@ -54,6 +55,7 @@ def _env(pad):
 
 _env("~/appportal/.env")
 _env("~/appportal/mijnagents-data/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def db():
