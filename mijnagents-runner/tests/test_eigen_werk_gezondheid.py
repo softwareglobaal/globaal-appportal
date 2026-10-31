@@ -1,0 +1,79 @@
+"""Grendel op het blok 'Eigen werk en gezondheid' (Mehdi, 31-10-2026: Wispr, websites en Apple Watch in het Dagboek).
+
+- E01: een dag die een wacht zag, toont aantallen, ook 0; een dag zonder wacht is onbekend, nooit 0;
+- E02: de nieuwste ronde van een wacht met per_dag wint; een oud Wispr-item zonder per_dag telt voor zijn eigen dag;
+- E03: geen gezondheidsmetingen geeft de zin over Health Auto Export, metingen staan zonder kop;
+- E04: de Browserwacht houdt alleen de sitenaam, nooit het adres, en geen chrome:, file: of about:;
+- E05: zonder eigen (oude aanroep) blijft het blok weg en de tekst gelijk; geen gedachtestreepje.
+"""
+import importlib.util
+import os
+import sys
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+RUNNER = os.path.dirname(HIER)
+sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
+import dagvaststelling as V  # noqa: E402
+
+fout = 0
+
+
+def check(naam, ok, extra=""):
+    global fout
+    print(("  ok   " if ok else "  FOUT ") + naam, "" if ok else extra)
+    fout += 0 if ok else 1
+
+
+def laad(naam, pad):
+    spec = importlib.util.spec_from_file_location(naam, pad)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def dag(eigen=None):
+    v = V.vaststellen("2026-10-30", [], [], [], {}, [], "volledig", None, {}, lambda a: False, eigen=eigen)
+    return V.tekst(v)
+
+
+t = dag({"wispr": {"dictaten": 19, "woorden": 2599, "seconden": 902.5},
+         "websites": {"bezoeken": 0, "sites": 0, "top": []}, "gezondheid": None})
+check("E01 Wispr met aantallen", "- Wispr Flow: 19 dictaten, 2599 woorden, 15 min ingesproken" in t, t)
+check("E01 websites 0 als de wacht keek", "- websites: 0 bezoeken op 0 sites" in t, t)
+t = dag({"wispr": None, "websites": None, "gezondheid": None})
+check("E01 zonder wacht onbekend", "Wispr Flow: onbekend" in t and "websites: nog niet aangesloten" in t, t)
+check("E03 geen gezondheid", "Health Auto Export stuurt nog niets" in t)
+
+# dagbundelaar zonder zijn zware imports: alleen de leesfuncties
+src = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
+ns = {"json": __import__("json"), "os": os}
+start = src.index("def _inhoud(x):")
+eind = src.index("def lees_eigen(eerste):")
+exec(src[start:eind], ns)
+items = [{"uniek": "wispr:Mehdi:2026-10-29", "inhoud": '{"vandaag": {"dictaten": 3, "woorden": 40, "seconden": 30}}'},
+         {"uniek": "wispr:Mehdi:2026-10-31", "inhoud": '{"vandaag": {"dictaten": 0}, "per_dag": {"2026-10-30": {"dictaten": 19}, "2026-10-31": {"dictaten": 0}}}'},
+         {"uniek": "wispr:Mehdi:2026-10-30", "inhoud": '{"vandaag": {"dictaten": 7}}'}]
+pd = ns["per_dag_uit"](items, "wispr:Mehdi:", lambda i: i.get("vandaag"))
+check("E02 nieuwste ronde wint", pd["2026-10-30"]["dictaten"] == 19 and pd["2026-10-31"]["dictaten"] == 0, pd)
+check("E02 oud item telt voor zijn dag", pd["2026-10-29"]["dictaten"] == 3, pd)
+g = ns["gezondheid_regels"]("Gezondheid op 2026-10-30\n========================\nGeen metingen in deze periode.")
+check("E03 geen metingen is None", g is None, g)
+g = ns["gezondheid_regels"]("Gezondheid op 2026-10-30\n=====\nStappen: 8234\nRusthartslag: 58\n\nSlaap: 6u40")
+check("E03 metingen zonder kop", g == ["Stappen: 8234", "Rusthartslag: 58", "Slaap: 6u40"], g)
+t = dag({"wispr": None, "websites": None, "gezondheid": g})
+check("E03 gezondheid in het blok", "- gezondheid (Apple Watch):\n  - Stappen: 8234" in t, t)
+
+B = laad("browser_wacht", os.path.join(RUNNER, "mac", "browser_wacht.py"))
+check("E04 alleen de sitenaam", B.site("https://www.monday.com/boards/1?q=geheim") == "monday.com")
+check("E04 geen interne adressen", B.site("chrome://settings") is None and B.site("file:///Users/x") is None
+      and B.site("about:blank") is None)
+tl = B.tel([("Chrome", 1793350800, "monday.com"), ("Chrome", 1793350900, "monday.com"), ("Firefox", 1793351000, "claude.ai"),
+            ("Chrome", 1793351100, None)], ["2026-10-30", "2026-10-29"])
+check("E04 telling per dag, ook 0", tl["2026-10-29"]["bezoeken"] == 0 and tl["2026-10-30"]["bezoeken"] == 3
+      and tl["2026-10-30"]["top"][0] == ["monday.com", 2], tl)
+
+oud = dag()
+check("E05 zonder eigen geen blok", "Eigen werk en gezondheid" not in oud)
+check("E05 geen gedachtestreepje", "—" not in t + oud and "–" not in t + oud)
+print("eigen werk en gezondheid:", "alles ok" if not fout else f"{fout} fout")
+sys.exit(1 if fout else 0)

@@ -275,6 +275,7 @@ def dag_gegevens(dag, cijfers=None):
             "tegels": tg, "gesprekken": praat,
             "gepland": gepland(s.get("Gepland", [])), "niet_gepland": niet_gepland(s.get("Niet gepland", [])),
             "communicatie": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Communicatie", [])],
+            "eigen": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Eigen werk en gezondheid", [])],
             "versie": over[0] if over else ""}
 
 
@@ -297,6 +298,10 @@ BRONNEN = (
     ("Sms en iMessage", "Messages op je laptop", "nog niet", "nog niets: de teller wordt gebouwd"),
     ("Locatie", "GPS-tracker in je auto (server)", "elk uur", "plekken, projecten, ritten en km"),
     ("Foto's", "Photos op je laptop, alleen tijd en plaats", "elke avond 21:15", "nog niet in het Dagboek"),
+    ("Wispr Flow", "Wispr Flow op je laptop", "elke avond 21:30", "dictaten, woorden en minuten, nooit de tekst"),
+    ("Websites", "Chrome, Firefox en Safari op je laptop", "elk uur als de laptop wakker is",
+     "bezoeken en de meest bezochte sites, alleen de naam van de site"),
+    ("Gezondheid", "Apple Watch, via Health Auto Export op je iPhone", "elke ochtend", "stappen, hartslag, slaap"),
 )
 
 
@@ -336,7 +341,22 @@ def bron_stand(d, tekst, cijfers):
                        f"{km((cijfers.get('km') or 0) * 1000)} km, {getal(cijfers.get('verblijven')) or 0} plekken",
                        None if cijfers is None else ("gelezen" if cijfers.get("punten") else "geen meting")),
         "Foto's": rij("nog niet aangesloten", "niet aangesloten"),
+        **eigen_stand(secties(tekst).get("Eigen werk en gezondheid"), rij),
     }
+
+
+def eigen_stand(regels, rij):
+    """Wispr, websites en gezondheid uit het blok 'Eigen werk en gezondheid' van het dagbestand."""
+    if regels is None:
+        return {k: rij("nog niet in dit dagbestand", "onbekend") for k in ("Wispr Flow", "Websites", "Gezondheid")}
+    vind = {k: next((r.strip()[2:].split(": ", 1)[-1] for r in regels if r.strip().startswith("- " + k)), "")
+            for k in ("Wispr Flow", "websites", "gezondheid")}
+    w, s, g = vind["Wispr Flow"], vind["websites"], vind["gezondheid"]
+    return {"Wispr Flow": rij(w or "onbekend", "onbekend" if not w or w.startswith("onbekend") else "geteld"),
+            "Websites": rij(s.split(";")[0] or "onbekend",
+                            "niet aangesloten" if not s or s.startswith("nog niet") else "geteld"),
+            "Gezondheid": rij("geen gegevens" if not g or g.startswith("geen") else "gegevens van de Apple Watch",
+                              "geen gegevens" if not g or g.startswith("geen") else "gelezen")}
 
 
 @app.route("/bronnen")

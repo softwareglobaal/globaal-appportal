@@ -67,6 +67,12 @@
     {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
   </div>
 
+  <div class="kaart">
+    <h2>Eigen werk en gezondheid</h2>
+    {% for r in d['eigen'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
+    {% if not d['eigen'] %}<p class="zacht">Nog niet in dit dagbestand: Wispr, websites en gezondheid komen bij de volgende ronde van de Dagbundelaar.</p>{% endif %}
+  </div>
+
   {% if d['versie'] %}<p class="zacht klein">Dagbestand {{ d['versie'] }}.</p>{% endif %}
   {% endif %}
 </main>

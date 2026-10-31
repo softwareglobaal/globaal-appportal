@@ -42,6 +42,9 @@ P7. De bundel is het dagbestand op de server (mijnagents-data/dagboek/<jaar>/<da
     aantal in en uit, tijd van het laatste bericht, of het laatste van de ander kwam (wacht op antwoord), gemiste
     oproepen zonder terugbellen, met een verwijzing (privé blijft "privé"); per postvak de mails die op antwoord
     wachten (afzender, onderwerp, sinds), zonder tekst; de afspraken van vandaag, en in de laatste ronde ook morgen.
+P8. Eigen werk en gezondheid (Mehdi 31-10-2026): Wispr Flow (aantallen), websites (Browserwacht, alleen sitenaam)
+    en Apple Watch (Health Auto Export naar de Gezondheidswacht) als blok in het dagbestand, onbekend nooit 0.
+    Getypte tekst (toetsenbordregistratie) niet bouwen: ziet wachtwoorden; advies nee, keuze van Mehdi.
 
 ## Grenzen
 Niets verwijderen, live zetten of versturen zonder Mehdi's ja. Geen berichttekst bewaren zonder Mehdi's ja (P6).

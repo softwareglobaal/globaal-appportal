@@ -484,6 +484,55 @@ def kanaal_van_dag(stand, kanaal, dag, gedekt):
     return "aangesloten" if (kanaal, dag) in gedekt else "onbekend voor deze dag"
 
 
+WISPR_GEBRUIKER = os.environ.get("WISPR_GEBRUIKER", "Mehdi")
+
+
+def _inhoud(x):
+    try:
+        i = json.loads(x.get("inhoud") or "{}") if isinstance(x.get("inhoud"), str) else (x.get("inhoud") or {})
+    except ValueError:
+        return {}
+    return i if isinstance(i, dict) else {}
+
+
+def per_dag_uit(items, voorvoegsel, eigen_dag):
+    """Uit klaarzet-items van een wacht die elke ronde de laatste dagen meestuurt (per_dag): per dag de telling van de
+    nieuwste ronde die die dag zag. eigen_dag(inhoud) geeft de telling van de dag van het item zelf als per_dag ontbreekt
+    (een Wispr-item van voor 31-10-2026)."""
+    uit = {}
+    for x in sorted(items, key=lambda x: x["uniek"]):
+        i = _inhoud(x)
+        dag = x["uniek"][len(voorvoegsel):]
+        pd = i.get("per_dag")
+        if isinstance(pd, dict):
+            uit.update({d: t for d, t in pd.items() if isinstance(t, dict)})
+        elif eigen_dag(i) is not None:
+            uit[dag] = eigen_dag(i)
+    return uit
+
+
+def gezondheid_regels(samenvatting):
+    """De dagsamenvatting van de Gezondheidswacht (~/bin/gezondheid.py op de Mac) zonder kop; geen metingen is None."""
+    t = str(samenvatting or "")
+    if not t.strip() or "geen metingen" in t.lower():
+        return None
+    regels = [r.strip(" -") for r in t.splitlines()[1:] if r.strip() and not set(r.strip()) <= set("=-")]
+    return regels[:12] or None
+
+
+def lees_eigen(eerste):
+    """Wispr, websites en gezondheid per dag uit het bord (Mehdi, 31-10-2026). Een dag die geen wacht zag, ontbreekt:
+    onbekend, nooit nul."""
+    vw = f"wispr:{WISPR_GEBRUIKER}:"
+    wispr = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE ? AND uniek >= ?",
+                                     (vw + "%", vw + eerste)), vw, lambda i: i.get("vandaag"))
+    web = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'websites:%' AND uniek >= ?",
+                                   ("websites:" + eerste,)), "websites:", lambda i: None)
+    gez = {x["uniek"][11:]: gezondheid_regels(_inhoud(x).get("samenvatting")) for x in bord.db_lees(
+        "SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'gezondheid:%' AND uniek >= ?", ("gezondheid:" + eerste,))}
+    return lambda dag: {"wispr": wispr.get(dag), "websites": web.get(dag), "gezondheid": gez.get(dag)}
+
+
 def lees_agenda(dagen):
     """Alle afspraken van de dagen, met de archiefagenda's (Codex E2), per Brusselse dag; en welke agenda's niet gelezen
     werden (ook 'archief'; een privé-agenda zonder haar naam, F1). Alleen lezen. Ritten, hele dagen, feestdagen en
@@ -914,6 +963,11 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         "SELECT naam, status, taak, ts FROM status WHERE naam IN ('whatsapp-wacht', 'belwacht')")}
     kanalen = {k: kanaalstand(statussen.get(w), nu) for k, w in KANAALWACHTEN.items()}
     try:
+        eigen_van = lees_eigen(eerste)
+    except Exception as e:  # noqa: BLE001
+        ag.log("eigen", "fout", f"Wispr, websites en gezondheid niet gelezen ({type(e).__name__})")
+        eigen_van = lambda dag: {"wispr": None, "websites": None, "gezondheid": None}  # noqa: E731
+    try:
         ontvangen, verzonden, prive_postvakken = lees_mail(dagen)
         mailfout = ""
         # Wat de mailwachten al zagen en daarna naar een map buiten hun leeslijst sorteerden (Opgeruimd, Nieuwsbrieven),
@@ -952,7 +1006,7 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         kanalen_dag = {k: kanaal_van_dag(s, k, dag, gedekt) for k, s in kanalen.items()}
         zoomdag, chatdag = zoom.get(dag, ("onbekend", "onbekend"))
         v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoomdag, mail, kanalen_dag,
-                          prive_afspraak, locatiestand, chatstand=chatdag)
+                          prive_afspraak, locatiestand, chatstand=chatdag, eigen=eigen_van(dag))
         oud = _lees(dagpad(dag))
         # Het masker van het bord al voor het schrijven: bord, bestand en Dropbox dragen dezelfde tekst (E6)
         concept = ag.maskeer(V.tekst(v, prive_postvakken))

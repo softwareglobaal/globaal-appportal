@@ -27,6 +27,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 MARGE = timedelta(minutes=15)          # een gesprek dat zo dicht bij een afspraak ligt, hoort er mogelijk bij
 MIN_GESPREK = 2                        # kortere oproepen of sessies zijn geen ongepland gesprek
 MAX_NAAR = 5                           # zoveel ontvangers per postvak staan er bij naam; de rest als aantal
+MAX_SITES = 5                          # zoveel sites staan bij naam in het blok Eigen werk en gezondheid
 PLAUD_SAMEN = 0.5                      # zoveel van een Plaud-opname valt in een Zoom- of Fathom-gesprek: een dubbel
 # Woorden die in titels en namen staan maar geen persoon aanwijzen: Mehdi zelf, firma's, soorten afspraken.
 STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg", "intern", "interne", "bespreking",
@@ -37,7 +38,7 @@ STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg",
 GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
 CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
 OPROEP_VOORVOEGSELS = ("whatsapp-oproep:", "telefoon:")
-SECTIES = ("Gepland", "Niet gepland", "Communicatie")
+SECTIES = ("Gepland", "Niet gepland", "Communicatie", "Eigen werk en gezondheid")
 
 
 # ------------------------------------------------------------------------------------------------- dagen ---
@@ -229,7 +230,7 @@ def bewijs(a, gesprekken, locatie=None):
 
 # ------------------------------------------------------------------------------------------- vaststelling ---
 def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken, zoomstand, mail, kanalen,
-                prive_afspraak, locatiestand="", chatstand=None):
+                prive_afspraak, locatiestand="", chatstand=None, eigen=None):
     """De vaststelling van een dag als gewone gegevens.
 
     afspraken: de afspraken van die dag, met de archiefagenda's (zonder fout, hele dag of rit); ongelezen: de agenda's die
@@ -242,7 +243,10 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     zoomstand: 'volledig', 'ondergrens' of 'onbekend'. mail: van mail_telling, of None. kanalen: {'whatsapp': stand,
     'telefoon': stand} voor deze dag, met stand 'aangesloten', 'niet aangesloten' of een andere tekst ('stil sinds ...',
     'onbekend voor deze dag'): D2 en F5, de hartslag van de wacht en haar dekking van die dag, niet het bestaan van rijen.
-    prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive)."""
+    prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive).
+    eigen (31-10-2026, Mehdi: Wispr, websites en Apple Watch): {'wispr': {dictaten, woorden, seconden} of None,
+    'websites': {bezoeken, sites, top} of None, 'gezondheid': [regels] of None}; None is onbekend, nooit nul. Zonder
+    eigen (oude aanroep) blijft het blok weg."""
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
     gepland, gebruikt = [], set()
@@ -280,7 +284,33 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
         "telefoon": {"stand": kanalen.get("telefoon") or "niet aangesloten", "oproepen": len(tel),
                      "minuten": sum(int(g.get("minuten") or 0) for g in tel)},
         "mail": mail,
+        **({"eigen": eigen} if eigen is not None else {}),
     }
+
+
+def eigen_regels(e):
+    """Het blok 'Eigen werk en gezondheid': alleen aantallen en sitenamen, nooit de tekst van een dictaat of een adres."""
+    r = []
+    w = e.get("wispr")
+    if w is None:
+        r.append("- Wispr Flow: onbekend (de Wispr-wacht las deze dag niet)")
+    else:
+        r.append(f"- Wispr Flow: {int(w.get('dictaten') or 0)} dictaten, {int(w.get('woorden') or 0)} woorden, "
+                 f"{round(float(w.get('seconden') or 0) / 60)} min ingesproken")
+    s = e.get("websites")
+    if s is None:
+        r.append("- websites: nog niet aangesloten (Browserwacht op de laptop)")
+    else:
+        top = ", ".join(f"{x[0]} ({x[1]})" for x in (s.get("top") or [])[:MAX_SITES])
+        r.append(f"- websites: {int(s.get('bezoeken') or 0)} bezoeken op {int(s.get('sites') or 0)} sites"
+                 + (f"; meest: {top}" if top else ""))
+    g = e.get("gezondheid")
+    if not g:
+        r.append("- gezondheid: geen Apple Watch-gegevens (Health Auto Export stuurt nog niets)")
+    else:
+        r.append("- gezondheid (Apple Watch):")
+        r += [f"  - {x}" for x in g]
+    return r
 
 
 def _berichten(g):
@@ -425,6 +455,8 @@ def tekst(v, prive_postvakken=(), over=None):
                 naar = list(dict.fromkeys(p["naar"]))
                 regel += "; naar " + ", ".join(naar[:MAX_NAAR]) + (f" en {len(naar) - MAX_NAAR} meer" if len(naar) > MAX_NAAR else "")
             r.append(regel)
+    if "eigen" in v:
+        r += ["", "## Eigen werk en gezondheid", ""] + eigen_regels(v["eigen"])
     r += ["", "## Over deze vaststelling", ""]
     r += [f"- {x}" for x in over or []]
     return "\n".join(r).rstrip() + "\n"
