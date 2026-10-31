@@ -111,9 +111,17 @@ DAGBUNDELAAR_VAKKEN = (
     ("Communicatie", ("belwacht", "xelion-wacht", "sms-wacht", "whatsapp-wacht", "zoom-wacht", "zoom-archief",
                       "fathom-wacht", "plaud-wacht", "communicatie-bundelaar")),
     ("Agenda", ("agenda-wacht", "calendly-wacht")),
-    ("Waar en hoe", ("locatie-wacht", "icloud-wacht", "gezondheid-wacht")),
+    ("Locatie en foto's", ("locatie-wacht", "icloud-wacht")),
     ("Computer en online", ("browser-wacht", "youtube-wacht", "wispr-wacht")),
+    ("Gezondheid", ("gezondheid-wacht",)),
 )
+# Mehdi, 31-10-2026, op het voorstel: De Levenscoach staat naast Ai Angel, met het vak Gezondheid eronder; De
+# Mailregisseur staat boven de mailwachten. Alleen de plek op het organogram verandert, niet de groep van de agent.
+ORGANOGRAM_NAAST_ANGEL = "levenscoach"
+ORGANOGRAM_VAK_ONDER_NAAST = "Gezondheid"
+ORGANOGRAM_VAK_HOOFD = {"Mail": "mail-regisseur"}
+# Niet dagelijks (Mehdi): deze afdelingen staan onderaan apart, klein. Er wordt niets gewist.
+ORGANOGRAM_NIET_DAGELIJKS = ("organisatie", "unabo", "aankoop")
 
 
 def init_db():
@@ -2129,7 +2137,18 @@ def organogram():
     if rest:
         vakken.append(("Overig", rest))
     dagb = [(vak, leden) for vak, leden in vakken if leden]
+    alle = {a["naam"]: a for a in agents}
+    naast = alle.get(ORGANOGRAM_NAAST_ANGEL)
+    vak_naast = next(((v, l) for v, l in dagb if v == ORGANOGRAM_VAK_ONDER_NAAST), None)
+    dagb = [(v, l) for v, l in dagb if v != ORGANOGRAM_VAK_ONDER_NAAST]
+    hoofd = {v: alle[n] for v, n in ORGANOGRAM_VAK_HOOFD.items() if n in alle}
+    verplaatst = {a["naam"] for a in [naast, *hoofd.values()] if a}
+    agents = [a for a in agents if a["naam"] not in verplaatst]
+    leeg_na_verplaatsen = {a["type"] for a in alle.values() if a["naam"] in verplaatst} - {a["type"] for a in agents}
+    niet_dagelijks = [x for x in afd if x["naam"] in ORGANOGRAM_NIET_DAGELIJKS]
+    afd = [x for x in afd if x["naam"] not in ORGANOGRAM_NIET_DAGELIJKS and x["naam"] not in leeg_na_verplaatsen]
     return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb, dagb_boven=dagb_boven,
+                           naast=naast, vak_naast=vak_naast, hoofd=hoofd, niet_dagelijks=niet_dagelijks,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
 
 
