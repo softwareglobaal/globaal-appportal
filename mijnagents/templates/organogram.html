@@ -29,6 +29,7 @@
   .regie a.naam{background:var(--paper);border:1px solid var(--rand);border-radius:10px;padding:6px 14px}
   .dagb{width:100%;max-width:none;margin-bottom:14px}
   .dagb .rij{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
+  .leegplek{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13px;color:var(--zacht);font-style:italic}
   .dagb .wanneer{margin-left:auto;color:var(--zacht);font-size:12px;white-space:nowrap}
 </style>
 </head>
@@ -46,9 +47,13 @@
   <div class="afd groep dagb">
     <h2>Dagbundelaar</h2>
     <div class="rij">
-      {% for a in agents if a['type'] == 'dagbundelaar' %}
+      {% for a in dagb %}
+      {% if a.get('leeg') %}
+      <span class="naam leegplek"><span class="stip" style="border:1px dashed var(--zacht)"></span>{{ a['label'] }}<span class="wanneer">nog te bouwen</span></span>
+      {% else %}
       <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}" title="{{ a['toestand'] }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}<span class="wanneer">{{ a['laatste'] }}</span></a>
-      {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+      {% endif %}
+      {% endfor %}
     </div>
   </div>
   <div class="laag">

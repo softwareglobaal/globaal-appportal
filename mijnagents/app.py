@@ -74,13 +74,35 @@ def _sluit(_exc):
 
 # De groep Dagbundelaar op het bord: wie data levert voor het dagboek, De Dagbundelaar zelf en wie het dagboek
 # gebruikt om Mehdi werk uit handen te nemen. Een nieuwe agent voor het dagboek komt hier bij, nergens anders.
-DAGBUNDELAAR_AGENTS = (
-    "dagbundelaar", "mehdi-agent",
-    "agenda-wacht", "calendly-wacht", "locatie-wacht", "icloud-wacht",
-    "belwacht", "whatsapp-wacht", "communicatie-bundelaar", "fathom-wacht", "plaud-wacht",
-    "zoom-wacht", "zoom-archief",
-    "mail-mch", "mail-melo", "mail-prive", "mail-info-harc", "mail-hinv",
-)
+# Hier staat ook zijn naam op het bord (Mehdi, 31-10-2026: "zorg dat al mijn wachten goede benamingen hebben"):
+# De <kanaal>wacht, zoals Mehdi het kanaal noemt. Een agent die nog niet gebouwd is, staat op het organogram als
+# lege plek ("nog te bouwen"), zonder rij in de databank, zodat de Agentnorm hem niet als gezakt telt.
+DAGBUNDELAAR_AGENTS = {
+    "dagbundelaar": "De Dagbundelaar",
+    "mehdi-agent": "De Mehdi-agent",
+    "agenda-wacht": "De Agendawacht",
+    "calendly-wacht": "De Calendlywacht",
+    "locatie-wacht": "De Locatiewacht",
+    "icloud-wacht": "De Fotowacht",
+    "gezondheid-wacht": "De Gezondheidswacht",
+    "belwacht": "De Belwacht iPhone",
+    "xelion-wacht": "De Belwacht Xelion",
+    "sms-wacht": "De Sms-wacht",
+    "whatsapp-wacht": "De WhatsApp-wacht",
+    "communicatie-bundelaar": "De Communicatiebundelaar",
+    "fathom-wacht": "De Fathomwacht",
+    "plaud-wacht": "De Plaudwacht",
+    "zoom-wacht": "De Zoomwacht",
+    "zoom-archief": "De Zoomarchivaris",
+    "wispr-wacht": "De Wispr-wacht",
+    "browser-wacht": "De Websitewacht",
+    "youtube-wacht": "De YouTube-wacht",
+    "mail-mch": "De Mailwacht mch@",
+    "mail-info-harc": "De Mailwacht info@ H-Architects",
+    "mail-hinv": "De Mailwacht info@ H-Invest",
+    "mail-melo": "De Mailwacht Melodie",
+    "mail-prive": "De Mailwacht hotmail",
+}
 
 
 def init_db():
@@ -253,8 +275,8 @@ def init_db():
             conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
     # Mehdi, 31-10-2026: alle agents van de Dagbundelaar op één plek, niets dubbel. Ze verhuizen naar de groep
     # Dagbundelaar; geen kopie in hun oude groep. Deze lijst is de enige plek waar dat staat.
-    conn.execute(f"UPDATE agent SET type='dagbundelaar' WHERE naam IN ({','.join('?' * len(DAGBUNDELAAR_AGENTS))})",
-                 DAGBUNDELAAR_AGENTS)
+    conn.executemany("UPDATE agent SET type='dagbundelaar', label=? WHERE naam=?",
+                     [(label, naam) for naam, label in DAGBUNDELAAR_AGENTS.items()])
     conn.commit()
     _gesprek_log_kolommen(conn)
     conn.close()
@@ -2083,7 +2105,12 @@ def organogram():
             leeftijd = leeftijd_min(s["ts"])
             a["toestand"] = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
     klaar = conn.execute("SELECT voor, COUNT(*) n FROM klaarzet WHERE status='klaar' GROUP BY voor").fetchall()
-    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents,
+    # De groep Dagbundelaar in de vaste volgorde van DAGBUNDELAAR_AGENTS, met een lege plek voor wat nog niet bestaat.
+    per_naam = {a["naam"]: a for a in agents}
+    dagb = [per_naam.get(n) or {"naam": n, "label": label, "toestand": "onbekend", "laatste": "nog te bouwen", "leeg": True}
+            for n, label in DAGBUNDELAAR_AGENTS.items() if n in per_naam or mag_beslissen()]
+    dagb += [a for a in agents if a["type"] == "dagbundelaar" and a["naam"] not in DAGBUNDELAAR_AGENTS]
+    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
 
 
@@ -2573,7 +2600,7 @@ def api_agent():
         "rol=excluded.rol, mandaat=excluded.mandaat, mag=excluded.mag, "
         "grenzen=excluded.grenzen, cadans=excluded.cadans, tools=excluded.tools, "
         "eigenaar=excluded.eigenaar, actief=1, levert_aan=excluded.levert_aan, draait_op=excluded.draait_op",
-        (naam, p["label"], "dagbundelaar" if naam in DAGBUNDELAAR_AGENTS else p.get("type", ""),
+        (naam, DAGBUNDELAAR_AGENTS.get(naam, p["label"]), "dagbundelaar" if naam in DAGBUNDELAAR_AGENTS else p.get("type", ""),
          p.get("rol", ""), p.get("mandaat", ""),
          json.dumps(p.get("mag", [])), json.dumps(p.get("grenzen", [])),
          p.get("cadans", ""), json.dumps(p.get("tools", [])),
