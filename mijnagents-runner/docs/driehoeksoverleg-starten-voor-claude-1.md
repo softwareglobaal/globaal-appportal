@@ -10,7 +10,7 @@ Mehdi's toestellen staan in het Engels.
    `cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/dagboek-compleet-20261031/rapport.md -t "Dagboek compleet" < ~/dev/globaal-appportal/mijnagents-runner/docs/opdracht-driehoeksoverleg-dagboek-compleet.md`
 3. Start daarna het overleg over de Mehdi-agent:
    `cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/mehdi-agent-20261031/rapport.md -t "Mehdi-agent" < ~/dev/globaal-appportal/mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`
-4. Geef Mehdi de beslissing bovenaan elk verslag, hoogstens vijf regels per verslag, en de ene ja/nee-vraag over
-   berichttekst.
+4. Geef Mehdi de beslissing bovenaan elk verslag, hoogstens vijf regels per verslag. De vraag over berichttekst
+   staat al op een kaart bij Mehdi: stel ze niet nog eens.
 5. Zet de verslagen in de projectmap dagbundelaar als `rapport-dagboek-compleet.md` en `rapport-mehdi-agent.md`, of
    plak ze in de chat met Claude 2, zodat Claude 2 kan bouwen.

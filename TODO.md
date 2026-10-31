@@ -9,10 +9,14 @@
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
 - [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
       agent), geen enkele zonder bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0.
-- [ ] Driehoeksoverleg Mehdi-agent (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
+- [ ] Driehoeksoverleg Mehdi-agent, achteraf (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
       Claude 1 op de laptop samen met dat van het Dagboek (`docs/driehoeksoverleg-starten-voor-claude-1.md`).
-- [ ] Live zetten na Mehdi's ja en zonder open punten van ernst hoog of middel (AGENTNORM 8): kaart met de generator,
-      eerste ronde, cron (stappen in het ontwerp).
+- [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
+      eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).
+      De lijst staat op mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
+- [ ] Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
+      mij doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
+      Werfverslagvoorbereider al doet; eerst een dag meten welke agents taken krijgen, dan de ontvangers een voor een.
 - [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
       antwoord wacht, afspraken van morgen, zes keer per dag.
 - [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.

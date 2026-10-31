@@ -99,7 +99,7 @@ Claude Opus 5.5 kost 4 dollar per miljoen tokens in en 20 dollar per miljoen uit
 zijn dat twee tot zes rondes met Claude per dag: naar schatting 15 tot 60 dollar per maand. Ander model kiezen kan met
 `MEHDI_AGENT_MODEL`.
 
-## Live zetten, pas na Mehdi's ja
+## Live zetten (gedaan op 31-10-2026, op Mehdi's ja)
 
 Alles via `softwareglobaal/globaal-vm-beheer` (workflow vm):
 1. De code komt op de VM met de volgende pull van `~/appportal`; zonder kaart en cron doet ze niets.
@@ -118,3 +118,7 @@ Alles via `softwareglobaal/globaal-vm-beheer` (workflow vm):
    `~/agents/.venv/bin/python -c "import importlib.util as u, sys, tempfile; s = u.spec_from_file_location('na', 'nieuwe-agent.py'); m = u.module_from_spec(s); s.loader.exec_module(m); m.RUNNERMAP = tempfile.mkdtemp(); sys.exit(m.main(sys.argv[1:]))" --naam mehdi-agent --label "De Mehdi-agent" --type regie --prive --rol "zet de taken van Mehdi klaar uit de dagbundel, met concepten en voor wie" --mandaat "lezen en klaarzetten, nooit versturen" --cadans "zes keer per dag" --mag "taken klaarzetten" --mag "concepten schrijven" --grens "nooit iets versturen" --grens "alleen de dagbundel lezen" --levert-aan mehdi --werkwijze werkwijze/mehdi-agent.md`
 4. De eerste ronde, met elk uur toegestaan: `MEHDI_AGENT_UREN=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 nieuwe-agent.py --eerste-ronde mehdi-agent --cron "20 * * * *"`.
 5. De planning: `python3 planning/mehdi_agent_cron_zetten.py --zet`.
+
+Gedaan op 31-10-2026 op Mehdi's ja ("alles nu live", voor het driehoeksoverleg), in een run van de workflow vm
+(41240626256): pull van `~/appportal`, wachten tot het bord uitgerold was, stap 3, stap 4 (alle 14 normen ok, 2 items
+klaargezet), stap 5 (planning gezet en nagelezen).

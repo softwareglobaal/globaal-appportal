@@ -9,8 +9,10 @@ oneens wat er moet veranderen, met bestand en regel.
   kan, leert ze naar de juiste persoon of agent te sturen, en hem leert zijn dagen en werk beter te organiseren, tot zes
   keer per dag. Keuze van Mehdi dezelfde dag: de agent leest alleen de dagbundel en gaat alleen via de verwijzing in de
   bundel naar de bron.
-- Gebouwd, getest, niet live: `mijnagents-runner/mehdi_agent.py`, werkwijze `werkwijze/mehdi-agent.md`, ontwerp
-  `docs/ontwerp-mehdi-agent.md`, tests `tests/test_mehdi_agent.py`, planning `planning/mehdi-agent.cron`.
+- Gebouwd en getest: `mijnagents-runner/mehdi_agent.py`, werkwijze `werkwijze/mehdi-agent.md`, ontwerp
+  `docs/ontwerp-mehdi-agent.md`, tests `tests/test_mehdi_agent.py`, planning `planning/mehdi-agent.cron`. Live sinds
+  31-10-2026 op Mehdi's ja ("alles nu live"), voor dit overleg: dit overleg kijkt dus achteraf na, en een punt van
+  ernst hoog of middel wordt meteen hersteld.
 - Droog geprobeerd op de VM op 31-10-2026 met de echte dagbestanden van 29 en 30-10 (alleen lezend, niets op het bord):
   8 taken (6 voor Mehdi, 2 voor een agent, 0 voor een collega), geen enkele zonder bron geweigerd, 4 punten die de
   bundel miste, 19.064 tokens in een ronde.
@@ -36,11 +38,18 @@ M6. Leren: regels alleen uit wat Mehdi die ronde zei; een nummer uit de lijst ("
     via de bewaarde nummers. Veilig genoeg tegen een verkeerde taak sluiten?
 M7. Privacy: titels, werkverslag en logboek zonder namen; `--droog --stil` toont alleen de vorm, `--uit` schrijft het
     volledige resultaat met rechten 600; de repo is publiek en de tests gebruiken verzonnen namen.
-M8. Live zetten (ontwerp, laatste blok): de generator met een tijdelijke RUNNERMAP omdat de runner al eigen code heeft,
-    de eerste ronde met elk uur toegestaan, dan de cron met `mehdi_agent_cron_zetten.py --zet`. Klopt dat met
-    AGENTNORM.md hoofdstuk 8?
+M8. Live gezet (ontwerp, laatste blok): de generator met een tijdelijke RUNNERMAP omdat de runner al eigen code heeft,
+    de eerste ronde met elk uur toegestaan, dan de cron met `mehdi_agent_cron_zetten.py --zet`. Wat ontbreekt nog
+    tegenover AGENTNORM.md hoofdstuk 8?
+M9. Zichtbaarheid: het blok "Laatst klaargezet" op de agentpagina (`mijnagents/app.py`, `md_klaargezet`,
+    `templates/detail.html`, test `mijnagents/test_klaargezet_pagina.py`): alleen beheer, tekst ontsnapt, geen links.
+    Veilig genoeg, en is dit de juiste plek in plaats van iets nieuws?
+M10. Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor mij
+    doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
+    Werfverslagvoorbereider al doet voor De Plaudwacht en De Agendawacht; elke ontvanger leert zo'n taak een voor een
+    oppakken. Eens, of is er een betere bestaande weg?
 
 ## Grenzen
 
-Niets live zetten, verwijderen of versturen zonder Mehdi's ja. Berichttekst lezen is een keuze van Mehdi (kaart van
+Alleen lezen. Niets verwijderen of versturen zonder Mehdi's ja. Berichttekst lezen is een keuze van Mehdi (kaart van
 31-10-2026), geen punt om te beslissen.

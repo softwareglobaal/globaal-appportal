@@ -3242,7 +3242,7 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
   en valt bij falen terug op `appportal-regie:vorige`.
 
-### 14.18 De Mehdi-agent: taken uit de dagbundel *(gebouwd, nog niet live, 31-10-2026)*
+### 14.18 De Mehdi-agent: taken uit de dagbundel *(live sinds 31-10-2026)*
 
 - **Wat**: hostrunner `mijnagents-runner/mehdi_agent.py` (werkwijze `werkwijze/mehdi-agent.md`, ontwerp
   `mijnagents-runner/docs/ontwerp-mehdi-agent.md`). Leest alleen de dagbundel (de dagbestanden van De Dagbundelaar in
@@ -3263,5 +3263,6 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   van Mehdi veranderde. Zetten met `planning/mehdi_agent_cron_zetten.py --zet`, pas na Mehdi's ja en een gecontroleerde
   eerste ronde (stappen in het ontwerp). Grendels: `mijnagents-runner/tests/test_mehdi_agent.py`.
 - **Stand 31-10-2026**: droog geprobeerd op de VM met de echte dagbestanden (8 taken, geen zonder bron, 19.064
-  tokens); live pas na het driehoeksoverleg (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`) en
-  Mehdi's ja.
+  tokens), daarna live gezet op Mehdi's ja (workflow vm, run 41240626256): kaart met de generator, eerste ronde met
+  alle 14 normen ok, planning gezet en nagelezen. Het driehoeksoverleg
+  (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`) kijkt achteraf na.
