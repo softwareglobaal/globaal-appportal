@@ -77,9 +77,11 @@ def _sluit(_exc):
 # Hier staat ook zijn naam op het bord (Mehdi, 31-10-2026: "zorg dat al mijn wachten goede benamingen hebben"):
 # De <kanaal>wacht, zoals Mehdi het kanaal noemt. Een agent die nog niet gebouwd is, staat op het organogram als
 # lege plek ("nog te bouwen"), zonder rij in de databank, zodat de Agentnorm hem niet als gezakt telt.
+# Mehdi, 31-10-2026: drie lagen. Bovenaan Ai Angel (de Mehdi-agent), daaronder De Dagbundelaar, daaronder de wachten.
+DAGBUNDELAAR_BOVEN = ("mehdi-agent", "dagbundelaar")
 DAGBUNDELAAR_AGENTS = {
     "dagbundelaar": "De Dagbundelaar",
-    "mehdi-agent": "De Mehdi-agent",
+    "mehdi-agent": "Ai Angel",
     "agenda-wacht": "De Agendawacht",
     "calendly-wacht": "De Calendlywacht",
     "locatie-wacht": "De Locatiewacht",
@@ -2110,7 +2112,9 @@ def organogram():
     dagb = [per_naam.get(n) or {"naam": n, "label": label, "toestand": "onbekend", "laatste": "nog te bouwen", "leeg": True}
             for n, label in DAGBUNDELAAR_AGENTS.items() if n in per_naam or mag_beslissen()]
     dagb += [a for a in agents if a["type"] == "dagbundelaar" and a["naam"] not in DAGBUNDELAAR_AGENTS]
-    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb,
+    dagb_boven = [a for n in DAGBUNDELAAR_BOVEN for a in dagb if a["naam"] == n]
+    dagb = [a for a in dagb if a["naam"] not in DAGBUNDELAAR_BOVEN]
+    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb, dagb_boven=dagb_boven,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
 
 

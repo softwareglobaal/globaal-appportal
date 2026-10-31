@@ -7,6 +7,7 @@
 - G04: het organogram toont de groep Dagbundelaar met status en laatste ronde, elke agent precies één keer;
 - G05: de lege subgroep Communicatie verdwijnt van het bord en het organogram;
 - G06: elke agent van de groep draagt de vaste naam uit DAGBUNDELAAR_AGENTS, ook als hij zich anders meldt;
+- G08: drie lagen op het organogram: Ai Angel, daaronder De Dagbundelaar, daaronder het blok Wachten;
 - G07: een agent die nog niet gebouwd is, staat als lege plek "nog te bouwen" op het organogram, zonder databankrij.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -65,7 +66,11 @@ check("G03 belwacht verhuisd", type_van("belwacht") == "dagbundelaar", type_van(
 check("G03 icloud-wacht verhuisd", type_van("icloud-wacht") == "dagbundelaar", type_van("icloud-wacht"))
 
 html = C.get("/organogram", headers=BEHEER).get_data(as_text=True)
-check("G04 groep Dagbundelaar zichtbaar", "<h2>Dagbundelaar</h2>" in html)
+check("G04 blok Wachten zichtbaar", "<h2>Wachten</h2>" in html)
+i_angel, i_dagb, i_wacht = html.find(">Ai Angel<"), html.find(">De Dagbundelaar<"), html.find("<h2>Wachten</h2>")
+check("G08 drie lagen: Ai Angel boven De Dagbundelaar boven de wachten", -1 < i_angel < i_dagb < i_wacht,
+      f"{i_angel} {i_dagb} {i_wacht}")
+check("G08 Ai Angel en De Dagbundelaar niet in het blok Wachten", html.count(">Ai Angel<") == 1 and html.count(">De Dagbundelaar<") == 1)
 check("G04 elke agent één keer", html.count("De Belwacht iPhone<") == 1 and html.count("De Fotowacht<") == 1)
 check("G06 vaste naam ook bij een oude registratie", "De iCloud-wacht" not in html and ">De Belwacht<" not in html)
 check("G07 lege plek voor wat nog niet gebouwd is", "De Sms-wacht" in html and "De YouTube-wacht" in html
