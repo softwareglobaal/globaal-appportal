@@ -36,6 +36,23 @@
   </div>
 
   <div class="kaart">
+    <h2>Waar was ik</h2>
+    {% if ritten is none %}<span class="leeg">Het Locatie-dashboard is nu niet bereikbaar.</span>
+    {% elif buiten %}<span class="leeg">Deze dag valt voor de start van de meting.</span>
+    {% elif not ritten %}<span class="leeg">Geen meting op deze dag.</span>
+    {% else %}
+    <table class="lijst">
+    {% for r in ritten %}
+      <tr class="{{ r['soort'] }}"><td class="tijd">{{ r['van'] }}</td>
+        <td>{% if r['soort'] == 'plek' %}<b>{{ r['wat'] }}</b>{% else %}<span class="zacht">{{ r['wat'] }}</span>{% endif %}
+          <span class="zacht">tot {{ r['tot'] }}, {{ r['duur'] }}{% if r['extra'] %}, {{ r['extra'] }}{% endif %}</span></td></tr>
+    {% endfor %}
+    </table>
+    {% if auto %}<p class="zacht klein">Gemeten door de tracker in de auto: dit is waar de auto stond.</p>{% endif %}
+    {% endif %}
+  </div>
+
+  <div class="kaart">
     <h2>Communicatie</h2>
     {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
   </div>

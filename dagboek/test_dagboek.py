@@ -67,6 +67,32 @@ open(os.path.join(MAP, gisteren[:4], f"{gisteren}.json"), "w").write("{kapot")
 check("D06 kapotte telling valt niet", C.get("/", headers=MET).status_code == 200)
 alles = html + C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
 check("D07 geen gedachtestreepje", "—" not in alles and "–" not in alles)
+# Locatie: zonder dashboard (zoals hierboven) een vraagteken, met dashboard de echte dagindeling.
+html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
+check("D10 locatie onbereikbaar: zin", "Locatie-dashboard is nu niet bereikbaar" in html)
+check("D10 locatie onbereikbaar: tegel ?", "locatie niet bereikbaar" in html)
+LOC = json.load(open(os.path.join(PROEF, "locatie-2026-10-22.json")))
+
+
+def nep_locatie(pad):
+    if pad.startswith("/api/dagboek/2026-10-22"):
+        return LOC
+    if pad.startswith("/api/dagcijfers"):
+        return {"dagen": {gisteren: {"punten": 80, "km": 72.3, "verblijven": 3, "onderweg_min": 86}}}
+    return None
+
+
+A.haal_locatie = nep_locatie
+html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
+check("D08 plek met project", "project HARC 9004, Proefstraat 1" in html, html[-2500:])
+check("D08 thuis en rit met km", "<b>Thuis</b>" in html and "rit auto, 36,2 km" in html)
+check("D08 tracker in de auto", "waar de auto stond" in html)
+check("D08 tegel Onderweg op de dag", "72,3 km" in html and "3 plekken" in html)
+for ext in ("md", "json"):
+    shutil.copy(os.path.join(PROEF, f"2026-10-22.{ext}"), os.path.join(MAP, gisteren[:4], f"{gisteren}.{ext}"))
+html = C.get("/", headers=MET).get_data(as_text=True)
+check("D09 overzicht tegel Onderweg", "Onderweg" in html and "72,3 km" in html and "1u26 rijden" in html)
+check("D07 geen gedachtestreepje (locatie)", "—" not in html and "–" not in html)
 check("healthz", C.get("/healthz").get_json().get("ok") is True)
 
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")

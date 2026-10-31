@@ -9,6 +9,8 @@ eens de groep uit DAGBOEK_GROUPS.
 import json
 import os
 import re
+import time
+import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -24,6 +26,13 @@ MAAND = ("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "
 # De uitkomst per afspraak, zoals De Dagbundelaar ze vastlegt (dagvaststelling.bewijs), in gewone woorden.
 UITKOMST = {"bevestigd": ("doorgegaan", "groen"), "aanwijzing": ("waarschijnlijk", "oranje"),
             "geen spoor": ("geen spoor", "rood")}
+# Waar Mehdi was en hoe hij zich verplaatste komt uit het Locatie-dashboard (dezelfde dagindeling die De Dagbundelaar
+# gebruikt om afspraken te toetsen), over het interne netwerk en alleen lezend. Mehdi, 31-10-2026: "ik zie in de
+# dagboek niks van mijn verplaatsingen en waar ik naar toe geweest ben".
+LOCATIE = os.environ.get("LOCATIE_URL", "http://app-locatie:3031").rstrip("/")
+LOCATIE_CACHE = 300
+_cache = {}
+WIJZE = {"automotive": "auto", "cycling": "fiets", "walking": "te voet", "running": "lopend"}
 UITKOMST_RE = re.compile(r": (bevestigd|aanwijzing|geen spoor)(?: \((.*)\))?(?:\. Ging dit door\?)?$")
 
 
@@ -93,6 +102,92 @@ def niet_gepland(regels):
     return sorted(uit, key=lambda x: x["tijd"] or "99")
 
 
+def haal_locatie(pad):
+    """JSON van het Locatie-dashboard, of None als het niet bereikbaar is. Vijf minuten bewaard."""
+    bewaard = _cache.get(pad)
+    if bewaard and time.monotonic() - bewaard[0] < LOCATIE_CACHE:
+        return bewaard[1]
+    try:
+        with urllib.request.urlopen(LOCATIE + pad, timeout=8) as r:
+            d = json.load(r)
+    except Exception:  # noqa: BLE001  onbereikbaar of kapot: het dagboek toont dan een vraagteken
+        return None
+    _cache[pad] = (time.monotonic(), d)
+    return d
+
+
+def uur(epoch):
+    return datetime.fromtimestamp(epoch, BRUSSEL).strftime("%H:%M")
+
+
+def duur(m):
+    m = getal(m)
+    if m is None:
+        return "?"
+    return f"{m // 60}u{m % 60:02d}" if m >= 60 else f"{m} min"
+
+
+def km(meter):
+    return f"{(meter or 0) / 1000:.1f}".replace(".", ",")
+
+
+def onderweg_tegel(cijfers):
+    """De tegel Onderweg: km en plekken van de dag uit /api/dagcijfers. None: dashboard onbereikbaar."""
+    if cijfers is None:
+        return {"naam": "Onderweg", "groot": "?", "klein": "locatie niet bereikbaar"}
+    if not cijfers or not cijfers.get("punten"):
+        return {"naam": "Onderweg", "groot": "-", "klein": "geen meting", "uit": True}
+    return {"naam": "Onderweg", "groot": f"{km((cijfers.get('km') or 0) * 1000)} km",
+            "klein": f"{getal(cijfers.get('verblijven')) or 0} plekken, {duur(cijfers.get('onderweg_min'))} rijden"}
+
+
+def waar(s):
+    h = s.get("herkenning") or {}
+    p = h.get("project")
+    if h.get("zekerheid") == "onzeker" and h.get("kandidaten"):
+        return "een van: " + ", ".join(f"{k.get('firma') or ''} {k.get('nummer')}".strip() for k in h["kandidaten"])
+    if p:
+        return f"project {p.get('firma') or ''} {p.get('nummer')}".replace("  ", " ") + (
+            f", {p['adres']}" if p.get("adres") else "")
+    if h.get("plek") or s.get("plek"):
+        return h.get("plek") or s.get("plek")
+    if s.get("adres"):
+        return s["adres"]
+    if s.get("lat") is not None:
+        return f"{s['lat']:.4f}, {s['lon']:.4f}"
+    return "onbekende plek"
+
+
+def verplaatsingen(dagboek):
+    """De dag van het Locatie-dashboard als lijst: verblijven, ritten en stukken zonder meting, in volgorde.
+    None: niet bereikbaar. Leeg: geen meting op die dag."""
+    if dagboek is None:
+        return None
+    uit = []
+    for s in dagboek.get("indeling") or []:
+        if not isinstance(s, dict) or not isinstance(s.get("van"), (int, float)):
+            continue
+        regel = {"van": uur(s["van"]), "tot": uur(s.get("tot") or s["van"]), "duur": duur(s.get("minuten"))}
+        if s.get("soort") == "bezoek":
+            h = s.get("herkenning") or {}
+            regel.update(soort="plek", wat=waar(s), project=bool(h.get("project")),
+                         extra="kort gestopt" if h.get("aard") == "kort_stoppen" or s.get("stop") else "")
+        elif s.get("soort") == "verplaatsing":
+            regel.update(soort="rit", wat=f"rit {WIJZE.get(s.get('wijze'), '')}".strip() + f", {km(s.get('meter'))} km",
+                         project=False, extra="")
+        else:
+            regel.update(soort="gat", wat="geen meting", project=False, extra="")
+        uit.append(regel)
+    return uit
+
+
+def auto_spoor(dagboek):
+    """Volgt het dagboek de tracker in de auto (en niet Mehdi zelf)? Dan zegt het waar de auto stond."""
+    sporen = (dagboek or {}).get("sporen") or {}
+    rollen = [sp.get("rol") for sp in sporen.values() if isinstance(sp, dict)]
+    return bool(rollen) and "persoon" not in rollen
+
+
 def getal(x):
     return x if isinstance(x, int) and not isinstance(x, bool) else None
 
@@ -140,7 +235,7 @@ def tegels(t):
     ]
 
 
-def dag_gegevens(dag):
+def dag_gegevens(dag, cijfers=None):
     d = date.fromisoformat(dag)
     tekst, rauw = lees(dag, "md"), lees(dag, "json")
     try:
@@ -152,7 +247,7 @@ def dag_gegevens(dag):
     s = secties(tekst)
     over = [r[2:] for r in s.get("Over deze vaststelling", []) if r.startswith("- ")]
     return {"dag": dag, "naam": dagnaam(d), "kort": dagnaam(d, True), "er": tekst is not None,
-            "tegels": tegels(telling) if telling.get("vastgesteld") else None,
+            "tegels": (tegels(telling) + [onderweg_tegel(cijfers)]) if telling.get("vastgesteld") else None,
             "gepland": gepland(s.get("Gepland", [])), "niet_gepland": niet_gepland(s.get("Niet gepland", [])),
             "communicatie": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Communicatie", [])],
             "versie": over[0] if over else ""}
@@ -172,7 +267,13 @@ def overzicht():
     if not mag():
         abort(403)
     gisteren = vandaag() - timedelta(days=1)
-    dagen = [dag_gegevens((gisteren - timedelta(days=i)).isoformat()) for i in range(DAGEN)]
+    eerste = (gisteren - timedelta(days=DAGEN - 1)).isoformat()
+    lc = haal_locatie(f"/api/dagcijfers?van={eerste}&tot={gisteren.isoformat()}")
+    lc = lc.get("dagen") if isinstance(lc, dict) and isinstance(lc.get("dagen"), dict) else None
+    dagen = []
+    for i in range(DAGEN):
+        dag = (gisteren - timedelta(days=i)).isoformat()
+        dagen.append(dag_gegevens(dag, None if lc is None else lc.get(dag, {})))
     return render_template("overzicht.html", dagen=dagen, aantal=DAGEN)
 
 
@@ -185,5 +286,14 @@ def dag_pagina(dag):
     except ValueError:
         abort(404)
     vorige, volgende = d - timedelta(days=1), d + timedelta(days=1)
-    return render_template("dag.html", d=dag_gegevens(dag), vorige=vorige.isoformat(),
+    lb = haal_locatie(f"/api/dagboek/{dag}")
+    lb = lb if isinstance(lb, dict) and lb.get("datum") == dag else None
+    ritten = verplaatsingen(lb)
+    ind = [x for x in (lb or {}).get("indeling") or [] if isinstance(x, dict)]
+    rit = [x for x in ind if x.get("soort") == "verplaatsing"]
+    lc = None if lb is None else {"punten": len(lb.get("punten") or []), "km": sum(x.get("meter") or 0 for x in rit) / 1000,
+                                  "verblijven": sum(1 for x in ind if x.get("soort") == "bezoek"),
+                                  "onderweg_min": sum(x.get("minuten") or 0 for x in rit)}
+    return render_template("dag.html", d=dag_gegevens(dag, lc), vorige=vorige.isoformat(), ritten=ritten,
+                           auto=auto_spoor(lb), buiten=bool((lb or {}).get("buiten_reeks")),
                            volgende=volgende.isoformat() if volgende < vandaag() else None)
