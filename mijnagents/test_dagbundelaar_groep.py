@@ -5,7 +5,9 @@
 - G02: een agent die er niet bij hoort, houdt zijn eigen groep;
 - G03: een agent die al in een oude groep stond, verhuist bij de start van het bord (geen kopie in de oude groep);
 - G04: het organogram toont de groep Dagbundelaar met status en laatste ronde, elke agent precies één keer;
-- G05: de lege subgroep Communicatie verdwijnt van het bord en het organogram.
+- G05: de lege subgroep Communicatie verdwijnt van het bord en het organogram;
+- G06: elke agent van de groep draagt de vaste naam uit DAGBUNDELAAR_AGENTS, ook als hij zich anders meldt;
+- G07: een agent die nog niet gebouwd is, staat als lege plek "nog te bouwen" op het organogram, zonder databankrij.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -64,7 +66,14 @@ check("G03 icloud-wacht verhuisd", type_van("icloud-wacht") == "dagbundelaar", t
 
 html = C.get("/organogram", headers=BEHEER).get_data(as_text=True)
 check("G04 groep Dagbundelaar zichtbaar", "<h2>Dagbundelaar</h2>" in html)
-check("G04 elke agent één keer", html.count(">De Belwacht<") == 1 and html.count(">De iCloud-wacht<") == 1)
+check("G04 elke agent één keer", html.count("De Belwacht iPhone<") == 1 and html.count("De Fotowacht<") == 1)
+check("G06 vaste naam ook bij een oude registratie", "De iCloud-wacht" not in html and ">De Belwacht<" not in html)
+check("G07 lege plek voor wat nog niet gebouwd is", "De Sms-wacht" in html and "De YouTube-wacht" in html
+      and html.count("nog te bouwen") >= 5)
+C.post("/api/agent", headers=K, json={"naam": "sms-wacht", "label": "sms teller", "type": "prive"})
+html2 = C.get("/organogram", headers=BEHEER).get_data(as_text=True)
+check("G07 gebouwde agent krijgt zijn vaste naam en is geen lege plek",
+      html2.count("De Sms-wacht") == 1 and "sms teller" not in html2 and type_van("sms-wacht") == "dagbundelaar")
 VERWACHT = A._laatste_ronde(TS)
 check("G04 laatste ronde getoond", VERWACHT and VERWACHT in html, VERWACHT)
 check("G04 oude ronde met datum", A._laatste_ronde("2026-10-30T20:15:00+00:00") == "30-10 21:15")
