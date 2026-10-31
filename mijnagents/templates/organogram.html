@@ -31,6 +31,9 @@
   .dagb .rij{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
   a.laag-kop{display:flex;align-items:center;justify-content:center;gap:9px;font-size:15px;min-width:260px;padding:10px 20px}
   a.laag-kop .wanneer{margin-left:10px}
+  .vakken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;width:100%;margin-bottom:8px}
+  .vakken .afd{max-width:none}
+  .scheiding{width:100%;border-top:1px solid var(--rand);margin:18px 0}
   .leegplek{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13px;color:var(--zacht);font-style:italic}
   .wanneer{margin-left:auto;color:var(--zacht);font-size:12px;white-space:nowrap}
 </style>
@@ -50,10 +53,11 @@
   <a class="naam kop laag-kop" href="{{ url_for('detail', naam=a['naam']) }}" title="{{ a['toestand'] }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}<span class="wanneer">{{ a['laatste'] }}</span></a>
   <div class="lijn"></div>
   {% endfor %}
-  <div class="afd groep dagb">
-    <h2>Wachten</h2>
-    <div class="rij">
-      {% for a in dagb %}
+  <div class="vakken">
+    {% for vak, leden in dagb %}
+    <div class="afd vak">
+      <h2>{{ vak }}</h2>
+      {% for a in leden %}
       {% if a.get('leeg') %}
       <span class="naam leegplek"><span class="stip" style="border:1px dashed var(--zacht)"></span>{{ a['label'] }}<span class="wanneer">nog te bouwen</span></span>
       {% else %}
@@ -61,7 +65,9 @@
       {% endif %}
       {% endfor %}
     </div>
+    {% endfor %}
   </div>
+  <div class="scheiding"></div>
   <div class="laag">
     {% for afd in afdelingen if afd['naam'] not in ('regie', 'prive', 'prive-communicatie', 'dagbundelaar') %}
     <div class="afd">
