@@ -282,6 +282,88 @@ def vandaag():
     return datetime.now(BRUSSEL).date()
 
 
+# Alle bronnen van De Dagbundelaar (Mehdi, 31-10-2026: "geef mij een overzicht van wat al je bronnen zijn, zo kan ik
+# mee controleren of iets niet klopt"). Vast: waar het vandaan komt en hoe vaak. Per dag: wat het dagbestand zag.
+BRONNEN = (
+    ("Agenda", "je Google-agenda's (server)", "werkdagen 06:30, daarna elke 2 uur", "afspraken en of ze doorgingen"),
+    ("Zoom", "Zoom-account (server)", "2 keer per dag", "gesprekken met wie en hoe lang, aantal chats"),
+    ("Fathom", "Fathom-account (server)", "elk uur", "gesprekken met wie en hoe lang"),
+    ("Plaud", "Plaud-account (server)", "elk uur", "opnames met wie en hoe lang"),
+    ("Mail", "5 postvakken: mch, info H-Architects, H-Invest, Melodie, hotmail (server)", "elk uur 07-21",
+     "aantal binnen en verzonden, nooit de tekst"),
+    ("WhatsApp", "WhatsApp op je laptop", "elk uur als de laptop wakker is",
+     "berichten en oproepen per persoon, nooit de tekst"),
+    ("Telefoon", "oproepen van je iPhone, via je laptop", "elk uur als de laptop wakker is", "met wie en hoe lang"),
+    ("Sms en iMessage", "Messages op je laptop", "nog niet", "nog niets: de teller wordt gebouwd"),
+    ("Locatie", "GPS-tracker in je auto (server)", "elk uur", "plekken, projecten, ritten en km"),
+    ("Foto's", "Photos op je laptop, alleen tijd en plaats", "elke avond 21:15", "nog niet in het Dagboek"),
+)
+
+
+def bron_stand(d, tekst, cijfers):
+    """Per bron wat het dagbestand van die dag zag: een korte tekst en of het in orde is."""
+    t = d.get("telling") or {}
+    over = {}
+    for r in secties(tekst).get("Over deze vaststelling", []):
+        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon): (.+)$", r.strip())
+        if m:
+            over[m.group(1).lower()] = m.group(2)
+    tel = {}
+    for g in d["gesprekken"]:
+        tel[g["bron"]] = tel.get(g["bron"], 0) + 1
+    a = t.get("afspraken") if isinstance(t.get("afspraken"), dict) else {}
+    mail = t.get("mail") if isinstance(t.get("mail"), dict) else None
+    wa = t.get("whatsapp") if isinstance(t.get("whatsapp"), dict) else {}
+    tf = t.get("telefoon") if isinstance(t.get("telefoon"), dict) else {}
+
+    def rij(tekst_, stand):
+        goed = stand in ("volledig", "aangesloten", "afgesloten", "gelezen", "geteld")
+        return {"tekst": tekst_, "stand": stand or "onbekend", "goed": goed}
+
+    return {
+        "Agenda": rij(f"{getal(a.get('totaal')) or 0} afspraken", over.get("agenda")),
+        "Zoom": rij(f"{tel.get('Zoom', 0)} gesprekken, {getal(t.get('zoom_chats')) or 0} chats", over.get("zoom")),
+        "Fathom": rij(f"{tel.get('Fathom', 0)} gesprekken", "geteld"),
+        "Plaud": rij(f"{tel.get('Plaud', 0)} opnames", "geteld"),
+        "Mail": rij("niet gelezen" if mail is None else f"{getal(mail.get('binnen')) or 0} binnen, "
+                    f"{getal(mail.get('verzonden')) or 0} verzonden",
+                    None if mail is None else ("onvolledig" if mail.get("onvolledig") else "volledig")),
+        "WhatsApp": rij(f"{getal(wa.get('berichten')) or 0} berichten, {getal(wa.get('oproepen')) or 0} oproepen",
+                        wa.get("stand")),
+        "Telefoon": rij(f"{getal(tf.get('oproepen')) or 0} oproepen", tf.get("stand")),
+        "Sms en iMessage": rij("nog niet aangesloten", "niet aangesloten"),
+        "Locatie": rij("locatie niet bereikbaar" if cijfers is None else
+                       f"{km((cijfers.get('km') or 0) * 1000)} km, {getal(cijfers.get('verblijven')) or 0} plekken",
+                       None if cijfers is None else ("gelezen" if cijfers.get("punten") else "geen meting")),
+        "Foto's": rij("nog niet aangesloten", "niet aangesloten"),
+    }
+
+
+@app.route("/bronnen")
+def bronnen_pagina():
+    if not mag():
+        abort(403)
+    dag = request.args.get("dag") or (vandaag() - timedelta(days=1)).isoformat()
+    try:
+        date.fromisoformat(dag)
+    except ValueError:
+        abort(404)
+    lc = haal_locatie(f"/api/dagcijfers?van={dag}&tot={dag}")
+    lc = lc.get("dagen", {}).get(dag, {}) if isinstance(lc, dict) and isinstance(lc.get("dagen"), dict) else None
+    d = dag_gegevens(dag, lc)
+    tekst = lees(dag, "md")
+    rauw = lees(dag, "json")
+    try:
+        d["telling"] = json.loads(rauw) if rauw else {}
+    except ValueError:
+        d["telling"] = {}
+    if not isinstance(d["telling"], dict):
+        d["telling"] = {}
+    stand = bron_stand(d, tekst, lc) if tekst else {}
+    rijen = [{"naam": n, "waar": w, "vaak": v, "wat": x, "dag": stand.get(n)} for n, w, v, x in BRONNEN]
+    return render_template("bronnen.html", rijen=rijen, d=d)
+
+
 @app.route("/healthz")
 def healthz():
     return {"ok": True, "map": os.path.isdir(MAP)}

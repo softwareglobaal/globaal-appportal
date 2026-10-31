@@ -97,6 +97,13 @@ html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
 check("D11 blok gesprekken in Zoom, Fathom en Plaud", "Gesprekken in Zoom, Fathom en Plaud" in html
       and "<b>Ruben (H-AI &amp; ICT)</b> <span class=\"zacht\">Zoom, 25 min</span>" in html, html[:200])
 check("D11 tegel noemt de bron", "2 Zoom; 41 min" in html)
+r = C.get("/bronnen?dag=2026-10-22", headers=MET)
+html = r.get_data(as_text=True)
+check("D12 bronnen: alle tien met de stand van de dag", r.status_code == 200 and html.count("<tr><td><b>") == 10
+      and "2 gesprekken, 0 chats" in html and "2 oproepen" in html and " km, " in html, html[-1500:])
+check("D12 bronnen zonder groep 403", C.get("/bronnen", headers={"X-authentik-groups": "x"}).status_code == 403)
+check("D12 overzicht wijst naar bronnen", "alle bronnen" in C.get("/", headers=MET).get_data(as_text=True))
+check("D07 geen gedachtestreepje (bronnen)", "—" not in html and "–" not in html)
 check("healthz", C.get("/healthz").get_json().get("ok") is True)
 
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
