@@ -33,6 +33,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_geen_echte_namen.py",
     "mijnagents-runner/tests/test_hotmail_server.py",
     "mijnagents-runner/tests/test_keten.py",
+    "mijnagents-runner/tests/test_mehdi_agent.py",
     "mijnagents-runner/tests/test_plaud_wacht.py",
     "mijnagents-runner/tests/test_regisseur.py",
     "mijnagents-runner/tests/test_taken.py",

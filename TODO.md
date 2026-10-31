@@ -3,6 +3,17 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## De Mehdi-agent (31-10-2026)
+
+- [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
+      avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
+- [ ] Droog proberen op de VM met de echte dagbundel.
+- [ ] Live zetten na Mehdi's ja: kaart met de generator, eerste ronde, cron (stappen in het ontwerp).
+- [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
+      antwoord wacht, afspraken van morgen, zes keer per dag.
+- [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.
+- [ ] Later, na Mehdi's ja: runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
+
 ## Pipedrive-backup (19-10-2026)
 
 - [x] Nachtelijke backup van alle vijf administraties: VM + S3 (gegevens) en

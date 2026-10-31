@@ -1,0 +1,9 @@
+# De Mehdi-agent op de VM (ontwerp docs/ontwerp-mehdi-agent.md). De cron draait elk uur op :20; de agent kijkt zelf of
+# het een van zijn uren is in Brussel (MEHDI_AGENT_UREN, standaard 7, 10, 13, 16, 19 en 22 uur), twintig minuten na de
+# rondes van De Dagbundelaar. De VM draait in UTC en Debian-cron kent geen eigen tijdzone (CRON_TZ wordt genegeerd).
+# flock: nooit twee rondes tegelijk; timeout: een hangende ronde stopt na 40 minuten, zodat de hartslag niet op
+# 'actief' blijft staan. Geen % in een cronregel: cron leest dat als einde van de opdracht.
+# Op de VM zetten, pas na Mehdi's ja en een gecontroleerde eerste ronde (AGENTNORM.md 8):
+#   python3 mijnagents-runner/planning/mehdi_agent_cron_zetten.py          (tonen)
+#   python3 mijnagents-runner/planning/mehdi_agent_cron_zetten.py --zet    (zetten)
+20 * * * * /usr/bin/flock -n /tmp/mehdi-agent.lock /usr/bin/timeout 2400 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/mehdi_agent.py >> /home/ubuntu/agents/mehdi_agent.log 2>&1

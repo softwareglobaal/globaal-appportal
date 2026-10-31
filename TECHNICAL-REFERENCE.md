@@ -3241,3 +3241,18 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   globaal-regie uit: een push naar main daar is productie, zoals bij prive. Het haalt alleen `main` binnen, alleen met
   `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
   en valt bij falen terug op `appportal-regie:vorige`.
+
+### 14.18 De Mehdi-agent: taken uit de dagbundel *(gebouwd, nog niet live, 31-10-2026)*
+
+- **Wat**: hostrunner `mijnagents-runner/mehdi_agent.py` (werkwijze `werkwijze/mehdi-agent.md`, ontwerp
+  `mijnagents-runner/docs/ontwerp-mehdi-agent.md`). Leest alleen de dagbundel (de dagbestanden van De Dagbundelaar in
+  `mijnagents-data/dagboek`, vandaag en twee dagen terug), plus wat Mehdi tegen de agent zei (tabel `gesprek`, alleen
+  lezend), de collega's uit kern en de agents op het bord. Claude (`claude-opus-5-5`, strikt JSON-schema) maakt de taken;
+  de runner controleert ze zonder model (bron letterlijk in de bundel, ontvanger bestaat, privé blijft bij Mehdi).
+- **Uitvoer**: klaarzet voor Mehdi, `soort: taken` (lijst van de dag, uniek `mehdi-agent:taken:JJJJ-MM-DD`) en
+  `soort: verslag` ('s ochtends `Te doen vandaag`, 's avonds `Avondoverzicht` met een tip). Staat in
+  `mijnagents-data/mehdi-agent/staat.json`. Verstuurt nooit zelf iets; concepten stuurt Mehdi zelf.
+- **Ritme**: `planning/mehdi-agent.cron`, elk uur op :20; de agent draait alleen op de Brusselse uren van
+  `MEHDI_AGENT_UREN` (standaard 7, 10, 13, 16, 19, 22) en roept Claude tussendoor alleen aan als de bundel of een bericht
+  van Mehdi veranderde. Zetten met `planning/mehdi_agent_cron_zetten.py --zet`, pas na Mehdi's ja en een gecontroleerde
+  eerste ronde (stappen in het ontwerp). Grendels: `mijnagents-runner/tests/test_mehdi_agent.py`.
