@@ -26,6 +26,16 @@
   </div>
 
   <div class="kaart">
+    <h2>Gesprekken in Zoom, Fathom en Plaud</h2>
+    <table class="lijst">
+    {% for g in d['gesprekken'] %}
+      <tr><td class="tijd">{{ g['tijd'] }}</td>
+        <td><b>{{ g['wie'] }}</b> <span class="zacht">{{ g['bron'] }}, {{ g['min'] }} min</span></td></tr>
+    {% else %}<tr><td class="leeg">Geen gesprekken gevonden.</td></tr>{% endfor %}
+    </table>
+  </div>
+
+  <div class="kaart">
     <h2>Niet gepland</h2>
     <table class="lijst">
     {% for g in d['niet_gepland'] %}

@@ -188,6 +188,27 @@ def auto_spoor(dagboek):
     return bool(rollen) and "persoon" not in rollen
 
 
+GESPREK_RE = re.compile(r"(\d\d:\d\d) (Zoom|Fathom|Plaud), (\d+) min, ((?:[^;()\n]|\([^()\n]*\))*)")
+
+
+def gesprekken(tekst):
+    """Elk gesprek in Zoom, Fathom en Plaud dat het dagbestand noemt (bij een afspraak of niet gepland), een keer,
+    op tijd. Mehdi, 31-10-2026: "ik zie mijn zoom berichten niet, mijn fathom en mijn plaud ook niet"."""
+    gezien = {}
+    for m in GESPREK_RE.finditer(tekst or ""):
+        wie = re.sub(r"\s+en \d+ meer$", "", m.group(4).strip().rstrip("."))
+        gezien.setdefault((m.group(1), m.group(2)), {"tijd": m.group(1), "bron": m.group(2), "min": int(m.group(3)),
+                                                      "wie": wie})
+    return sorted(gezien.values(), key=lambda g: g["tijd"])
+
+
+def per_bron(lijst):
+    tel = {}
+    for g in lijst:
+        tel[g["bron"]] = tel.get(g["bron"], 0) + 1
+    return ", ".join(f"{n} {b}" for b, n in sorted(tel.items(), key=lambda x: -x[1]))
+
+
 def getal(x):
     return x if isinstance(x, int) and not isinstance(x, bool) else None
 
@@ -246,8 +267,12 @@ def dag_gegevens(dag, cijfers=None):
         telling = {}
     s = secties(tekst)
     over = [r[2:] for r in s.get("Over deze vaststelling", []) if r.startswith("- ")]
+    praat = gesprekken(tekst)
+    tg = (tegels(telling) + [onderweg_tegel(cijfers)]) if telling.get("vastgesteld") else None
+    if tg and praat:
+        tg[1]["klein"] = f"{per_bron(praat)}; {tg[1]['klein'].split(' in ')[0]}"
     return {"dag": dag, "naam": dagnaam(d), "kort": dagnaam(d, True), "er": tekst is not None,
-            "tegels": (tegels(telling) + [onderweg_tegel(cijfers)]) if telling.get("vastgesteld") else None,
+            "tegels": tg, "gesprekken": praat,
             "gepland": gepland(s.get("Gepland", [])), "niet_gepland": niet_gepland(s.get("Niet gepland", [])),
             "communicatie": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Communicatie", [])],
             "versie": over[0] if over else ""}

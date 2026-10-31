@@ -93,6 +93,10 @@ for ext in ("md", "json"):
 html = C.get("/", headers=MET).get_data(as_text=True)
 check("D09 overzicht tegel Onderweg", "Onderweg" in html and "72,3 km" in html and "1u26 rijden" in html)
 check("D07 geen gedachtestreepje (locatie)", "—" not in html and "–" not in html)
+html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
+check("D11 blok gesprekken in Zoom, Fathom en Plaud", "Gesprekken in Zoom, Fathom en Plaud" in html
+      and "<b>Ruben (H-AI &amp; ICT)</b> <span class=\"zacht\">Zoom, 25 min</span>" in html, html[:200])
+check("D11 tegel noemt de bron", "2 Zoom; 41 min" in html)
 check("healthz", C.get("/healthz").get_json().get("ok") is True)
 
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
