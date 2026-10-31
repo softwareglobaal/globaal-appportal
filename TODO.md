@@ -3,13 +3,13 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
-## De Mehdi-agent (31-10-2026)
+## Ai Angel, de Mehdi-agent (31-10-2026)
 
 - [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
 - [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
       agent), geen enkele zonder bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0.
-- [ ] Driehoeksoverleg Mehdi-agent, achteraf (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
+- [ ] Driehoeksoverleg Ai Angel, achteraf (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
       Claude 1 op de laptop samen met dat van het Dagboek (`docs/driehoeksoverleg-starten-voor-claude-1.md`).
 - [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
       eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).

@@ -3242,7 +3242,11 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
   en valt bij falen terug op `appportal-regie:vorige`.
 
-### 14.18 De Mehdi-agent: taken uit de dagbundel *(live sinds 31-10-2026)*
+### 14.18 Ai Angel (de Mehdi-agent): taken uit de dagbundel *(live sinds 31-10-2026)*
+
+- **Naam**: Ai Angel op het bord en in zijn teksten (keuze van Mehdi, 31-10-2026). De technische naam blijft
+  `mehdi-agent`: adres `/agent/mehdi-agent`, runner `mehdi_agent.py`, klaarzet-sleutels, planning. Het label komt uit
+  `DAGBUNDELAAR_AGENTS` in `mijnagents/app.py`. Via WhatsApp: "Ai Angel, ..." (De Bode herkent naam en label).
 
 - **Wat**: hostrunner `mijnagents-runner/mehdi_agent.py` (werkwijze `werkwijze/mehdi-agent.md`, ontwerp
   `mijnagents-runner/docs/ontwerp-mehdi-agent.md`). Leest alleen de dagbundel (de dagbestanden van De Dagbundelaar in

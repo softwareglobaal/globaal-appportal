@@ -1,4 +1,4 @@
-"""Grendels op De Mehdi-agent (ontwerp docs/ontwerp-mehdi-agent.md, 31-10-2026).
+"""Grendels op Ai Angel, technisch mehdi-agent (ontwerp docs/ontwerp-mehdi-agent.md, 31-10-2026).
 
 Mehdi's opdracht: de agent leest alleen de dagbundel, zet taken klaar, schrijft concepten, zegt voor wie een taak is
 (Mehdi, een collega of een agent), leert van zijn correcties en geeft 's ochtends een plan en 's avonds een overzicht
@@ -152,7 +152,7 @@ def test_werkwijze_haalt_de_norm_en_runner_door_de_ronde():
     spec = importlib.util.spec_from_file_location("nieuwe_agent", os.path.join(RUNNER, "nieuwe-agent.py"))
     na = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(na)
-    kaart = {"naam": "mehdi-agent", "label": "De Mehdi-agent", "rol": "zet taken klaar", "mandaat": "lezen en klaarzetten",
+    kaart = {"naam": "mehdi-agent", "label": "Ai Angel", "rol": "zet taken klaar", "mandaat": "lezen en klaarzetten",
              "cadans": "zes keer per dag", "mag": ["taken klaarzetten"], "grenzen": ["nooit iets versturen"]}
     assert na.controleer(kaart, ww) == []
     bron = open(os.path.join(RUNNER, "mehdi_agent.py"), encoding="utf-8").read()

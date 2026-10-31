@@ -1,4 +1,4 @@
-# Opdracht driehoeksoverleg: De Mehdi-agent nakijken voor hij live gaat
+# Opdracht driehoeksoverleg: Ai Angel (de Mehdi-agent) nakijken
 
 In drie hoeken overleggen. Claude, Codex en Gemini: lees alleen, stem per punt (eens / oneens / onthouding) en zeg bij
 oneens wat er moet veranderen, met bestand en regel.

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""De Mehdi-agent (Regie, alleen voor Mehdi): leest de dagbundel en zet zijn taken klaar.
+"""Ai Angel, technisch mehdi-agent (Regie, alleen voor Mehdi): leest de dagbundel en zet zijn taken klaar.
+Naam Ai Angel: keuze van Mehdi op 31-10-2026. De technische naam (bord, runner, sleutels, planning) blijft mehdi-agent.
 
 Opdracht van Mehdi (31-10-2026): De Dagbundelaar bundelt, de Mehdi-agent leest wat er binnenkwam en zet taken en to-do's
 klaar, doet wat hij kan (concepten), zegt voor wie een taak is (dispatchen, en leert van Mehdi's correcties) en coacht hem
@@ -252,7 +253,7 @@ def open_taken(staat):
 def systeem(werkwijze, collegas_bord, lessen):
     """Het regelboek letterlijk in de opdracht (N12), met de collega's op het bord (N14) en de gedeelde lessen (N13)."""
     delen = [
-        "Je bent De Mehdi-agent, de assistent van Mehdi Chegini, architect en CEO van een groep bedrijven in België, "
+        "Je bent Ai Angel, de assistent van Mehdi Chegini, architect en CEO van een groep bedrijven in België, "
         "Suriname en India. Hij heeft weinig tijd en leest niet graag: schrijf kort, in gewone Nederlandse taal, zonder "
         "emoji en zonder gedachtestreepjes. Je volgt je werkwijze hieronder; die is de waarheid.",
         "=== JOUW WERKWIJZE ===\n" + (werkwijze or "").strip(),
@@ -469,8 +470,8 @@ def lijst(staat, nu, ontbreekt=()):
     """De takenlijst als markdown, genummerd over alle groepen. Geeft (tekst, nummers): nummers {"1": id, ...}, zodat Mehdi
     in de volgende ronde een nummer kan noemen."""
     b = brussel(nu)
-    regels = [f"Bijgewerkt {b:%d-%m-%Y %H:%M}. Bijsturen kan op het bord of via WhatsApp, bijvoorbeeld: "
-              "\"Mehdi-agent, 2 is gedaan\" of \"Mehdi-agent, 3 gaat naar\" en dan de naam."]
+    regels = [f"Bijgewerkt {b:%d-%m-%Y %H:%M}. Bijsturen kan op het bord (vak Zeg iets tegen Ai Angel) of via "
+              "WhatsApp, bijvoorbeeld: \"Ai Angel, 2 is gedaan\" of \"Ai Angel, 3 gaat naar\" en dan de naam."]
     nummers, nr = {}, 0
     open_ = open_taken(staat)
     for voor, kop in (("mehdi", "Voor jou"), ("collega", "Voor een collega"), ("agent", "Voor een agent")):

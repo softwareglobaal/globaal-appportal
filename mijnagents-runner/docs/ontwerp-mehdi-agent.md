@@ -1,4 +1,7 @@
-# Ontwerp De Mehdi-agent, versie 1 (31-10-2026)
+# Ontwerp Ai Angel (de Mehdi-agent), versie 1 (31-10-2026)
+
+Naam Ai Angel: keuze van Mehdi op 31-10-2026. De technische naam blijft `mehdi-agent` (bord, adres, runner,
+klaarzet-sleutels, planning); het label op het bord komt uit `DAGBUNDELAAR_AGENTS` in `mijnagents/app.py`.
 
 Code: `mehdi_agent.py`. Werkwijze (zaad): `werkwijze/mehdi-agent.md`. Tests: `tests/test_mehdi_agent.py`.
 Planning: `planning/mehdi-agent.cron` met `planning/mehdi_agent_cron_zetten.py`.
