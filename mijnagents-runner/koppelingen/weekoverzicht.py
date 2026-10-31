@@ -94,6 +94,13 @@ def dag_samenvatting(dag, v, dagversie=None):
                      **{k: _getal(wa.get(k)) for k in ("gesprekken", "berichten", "oproepen", "minuten")}},
         "telefoon": {"stand": tel.get("stand") or "niet aangesloten",
                      **{k: _getal(tel.get(k)) for k in ("oproepen", "minuten")}},
+        # 31-10-2026: sms en iMessage, Xelion en foto's; foto's None is onbekend (De Fotowacht las die dag niet).
+        "sms": {"stand": (v.get("sms") or {}).get("stand") or "niet aangesloten",
+                **{k: _getal((v.get("sms") or {}).get(k)) for k in ("gesprekken", "berichten")}},
+        "xelion": {"stand": (v.get("xelion") or {}).get("stand") or "niet aangesloten",
+                   **{k: _getal((v.get("xelion") or {}).get(k)) for k in ("oproepen", "minuten", "gemist")}},
+        "fotos": None if not isinstance(v.get("fotos"), dict) else
+        {k: _getal(v["fotos"].get(k)) for k in ("aantal", "plekken")},
         # Alleen de totalen: de postvakken dragen namen van ontvangers en blijven in het dagbestand.
         "mail": None if mail is None else {"binnen": _getal(mail.get("binnen")), "verzonden": _getal(mail.get("verzonden")),
                                            "onvolledig": bool(mail.get("onvolledig"))},
@@ -107,7 +114,8 @@ def dag_samenvatting(dag, v, dagversie=None):
 TELLING_GETALLEN = {"afspraken": UITKOMSTEN + (PRIVE, "totaal"), "niet_gepland": ("gesprekken", "minuten", "bezoeken"),
                     "gesprekken": ("aantal", "minuten", "met_opname", "alleen_zoom"),
                     "whatsapp": ("gesprekken", "berichten", "oproepen", "minuten"), "telefoon": ("oproepen", "minuten"),
-                    "mail": ("binnen", "verzonden")}
+                    "mail": ("binnen", "verzonden"), "sms": ("gesprekken", "berichten"),
+                    "xelion": ("oproepen", "minuten", "gemist"), "fotos": ("aantal", "plekken")}
 
 
 def _stand(x):
@@ -120,7 +128,7 @@ def telling_schoon(dag, x):
     for veld, sleutels in TELLING_GETALLEN.items():
         bron = x.get(veld)
         uit[veld] = None if not isinstance(bron, dict) else {k: _getal(bron.get(k)) for k in sleutels}
-    for kanaal in ("whatsapp", "telefoon"):
+    for kanaal in ("whatsapp", "telefoon", "sms", "xelion"):
         if uit[kanaal] is not None:
             uit[kanaal]["stand"] = _stand(x[kanaal].get("stand")) or ONBEKEND
     if uit["mail"] is not None:

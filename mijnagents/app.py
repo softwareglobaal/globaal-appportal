@@ -799,8 +799,8 @@ def api_gesprekken_zetten():
 # Een gesprek is een rij van een gespreksbron die geen chat is (D7 en E1, ontwerp dagvaststelling; Codex P3 en Q8 bij
 # fase 2): een mail, een Zoom-chat of een WhatsApp-gesprek per dag (whatsapp:<sha1 jid>:<dag>) telt niet; een
 # WhatsApp-oproep (whatsapp-oproep:) en een telefoonoproep wel. Zoals koppelingen/dagvaststelling.soort.
-GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
-CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
+GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon", "sms", "xelion")
+CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:", "sms:")
 
 
 def telt_als_gesprek(rij):
@@ -1990,6 +1990,8 @@ BRON_WACHTEN = (
     ("mail-info-harc", "Mail info H-Architects", "VM"), ("mail-hinv", "Mail H-Invest", "VM"),
     ("mail-melo", "Mail Melodie", "VM"), ("mail-prive", "Mail hotmail", "VM"),
     ("whatsapp-wacht", "WhatsApp", "laptop"), ("belwacht", "Telefoon iPhone", "laptop"),
+    ("sms-wacht", "Sms en iMessage", "laptop"), ("xelion-wacht", "Telefoon Xelion", "VM"),
+    ("youtube-wacht", "YouTube", "laptop"),
     ("icloud-wacht", "Foto's (alleen tijd en plaats)", "laptop"), ("dagbundelaar", "De Dagbundelaar zelf", "VM"),
 )
 BRON_DAGEN = 14
@@ -2014,8 +2016,11 @@ def _bron_dag_cellen(e):
         mailstand = "niet gelezen"
     wa = e.get("whatsapp") if isinstance(e.get("whatsapp"), dict) else {}
     tel = e.get("telefoon") if isinstance(e.get("telefoon"), dict) else {}
+    sms = e.get("sms") if isinstance(e.get("sms"), dict) else {}
+    xel = e.get("xelion") if isinstance(e.get("xelion"), dict) else {}
     standen = {"agenda": st.get("agenda"), "locatie": st.get("locatie"), "zoom": st.get("zoom"), "mail": mailstand,
-               "whatsapp": wa.get("stand"), "telefoon": tel.get("stand")}
+               "whatsapp": wa.get("stand"), "telefoon": tel.get("stand"), "sms": sms.get("stand"),
+               "xelion": xel.get("stand")}
     return {k: {"stand": str(v or "onbekend"), "kleur": bron_kleur(v)} for k, v in standen.items()}
 
 
@@ -2027,7 +2032,7 @@ def _bron_uit_tekst(tekst):
         return None
     over = {}
     for regel in deel[1].splitlines():
-        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon): (.+)$", regel.strip())
+        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon|sms|Xelion): (.+)$", regel.strip())
         if m:
             over[m.group(1).lower()] = m.group(2).strip()
     if not over:
@@ -2040,7 +2045,8 @@ def _bron_uit_tekst(tekst):
         over["locatie"] = "niet gelezen"
     e = {"standen": {k: over.get(k) for k in ("agenda", "zoom", "locatie")},
          "mail": None if over.get("mail") in (None, "niet gelezen") else {"onvolledig": over["mail"] == "onvolledig"},
-         "whatsapp": {"stand": over.get("whatsapp")}, "telefoon": {"stand": over.get("telefoon")}}
+         "whatsapp": {"stand": over.get("whatsapp")}, "telefoon": {"stand": over.get("telefoon")},
+         "sms": {"stand": over.get("sms")}, "xelion": {"stand": over.get("xelion")}}
     return _bron_dag_cellen(e)
 
 
@@ -2092,7 +2098,7 @@ def bronnen_pagina():
              for x in dagen]
     rood = [w for w in wachten if w["kleur"] == "rood"]
     return render_template("bronnen.html", app_naam=APP_NAAM, wachten=wachten, rijen=rijen, rood=rood,
-                           kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon"))
+                           kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon", "sms", "xelion"))
 
 
 def _laatste_ronde(ts):

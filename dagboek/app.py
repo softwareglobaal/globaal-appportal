@@ -295,12 +295,16 @@ BRONNEN = (
     ("WhatsApp", "WhatsApp op je laptop", "elk uur als de laptop wakker is",
      "berichten en oproepen per persoon, nooit de tekst"),
     ("Telefoon", "oproepen van je iPhone, via je laptop", "elk uur als de laptop wakker is", "met wie en hoe lang"),
-    ("Sms en iMessage", "Messages op je laptop", "nog niet", "nog niets: de teller wordt gebouwd"),
+    ("Telefoon Xelion", "je gsm-lijn in de Xelion-centrale (server)", "elk uur", "met wie en hoe lang, gemiste oproepen"),
+    ("Sms en iMessage", "Messages op je laptop", "elk uur als de laptop wakker is",
+     "berichten per persoon, sms of iMessage, nooit de tekst"),
     ("Locatie", "GPS-tracker in je auto (server)", "elk uur", "plekken, projecten, ritten en km"),
-    ("Foto's", "Photos op je laptop, alleen tijd en plaats", "elke avond 21:15", "nog niet in het Dagboek"),
+    ("Foto's", "Photos op je laptop, alleen tijd en plaats", "elke avond 21:15", "aantal foto's en plekken"),
     ("Wispr Flow", "Wispr Flow op je laptop", "elke avond 21:30", "dictaten, woorden en minuten, nooit de tekst"),
     ("Websites", "Chrome, Firefox en Safari op je laptop", "elk uur als de laptop wakker is",
      "bezoeken en de meest bezochte sites, alleen de naam van de site"),
+    ("YouTube", "YouTube in de browser op je laptop", "elk uur als de laptop wakker is",
+     "video's, minuten en de titels die je het meest bekeek"),
     ("Gezondheid", "Apple Watch, via Health Auto Export op je iPhone", "elke ochtend", "stappen, hartslag, slaap"),
 )
 
@@ -320,6 +324,9 @@ def bron_stand(d, tekst, cijfers):
     mail = t.get("mail") if isinstance(t.get("mail"), dict) else None
     wa = t.get("whatsapp") if isinstance(t.get("whatsapp"), dict) else {}
     tf = t.get("telefoon") if isinstance(t.get("telefoon"), dict) else {}
+    sm = t.get("sms") if isinstance(t.get("sms"), dict) else {}
+    xe = t.get("xelion") if isinstance(t.get("xelion"), dict) else {}
+    fo = t.get("fotos") if isinstance(t.get("fotos"), dict) else None
 
     def rij(tekst_, stand):
         goed = stand in ("volledig", "aangesloten", "afgesloten", "gelezen", "geteld")
@@ -336,11 +343,15 @@ def bron_stand(d, tekst, cijfers):
         "WhatsApp": rij(f"{getal(wa.get('berichten')) or 0} berichten, {getal(wa.get('oproepen')) or 0} oproepen",
                         wa.get("stand")),
         "Telefoon": rij(f"{getal(tf.get('oproepen')) or 0} oproepen", tf.get("stand")),
-        "Sms en iMessage": rij("nog niet aangesloten", "niet aangesloten"),
+        "Telefoon Xelion": rij(f"{getal(xe.get('oproepen')) or 0} oproepen, {getal(xe.get('gemist')) or 0} gemist",
+                               xe.get("stand") or "niet aangesloten"),
+        "Sms en iMessage": rij(f"{getal(sm.get('berichten')) or 0} berichten in {getal(sm.get('gesprekken')) or 0} gesprekken",
+                               sm.get("stand") or "niet aangesloten"),
         "Locatie": rij("locatie niet bereikbaar" if cijfers is None else
                        f"{km((cijfers.get('km') or 0) * 1000)} km, {getal(cijfers.get('verblijven')) or 0} plekken",
                        None if cijfers is None else ("gelezen" if cijfers.get("punten") else "geen meting")),
-        "Foto's": rij("nog niet aangesloten", "niet aangesloten"),
+        "Foto's": rij("niet gelezen" if fo is None else f"{getal(fo.get('aantal')) or 0} foto's op "
+                      f"{getal(fo.get('plekken')) or 0} plekken", "onbekend" if fo is None else "geteld"),
         **eigen_stand(secties(tekst).get("Eigen werk en gezondheid"), rij),
     }
 
@@ -348,13 +359,15 @@ def bron_stand(d, tekst, cijfers):
 def eigen_stand(regels, rij):
     """Wispr, websites en gezondheid uit het blok 'Eigen werk en gezondheid' van het dagbestand."""
     if regels is None:
-        return {k: rij("nog niet in dit dagbestand", "onbekend") for k in ("Wispr Flow", "Websites", "Gezondheid")}
+        return {k: rij("nog niet in dit dagbestand", "onbekend") for k in ("Wispr Flow", "Websites", "YouTube", "Gezondheid")}
     vind = {k: next((r.strip()[2:].split(": ", 1)[-1] for r in regels if r.strip().startswith("- " + k)), "")
-            for k in ("Wispr Flow", "websites", "gezondheid")}
-    w, s, g = vind["Wispr Flow"], vind["websites"], vind["gezondheid"]
+            for k in ("Wispr Flow", "websites", "YouTube", "gezondheid")}
+    w, s, g, y = vind["Wispr Flow"], vind["websites"], vind["gezondheid"], vind["YouTube"]
     return {"Wispr Flow": rij(w or "onbekend", "onbekend" if not w or w.startswith("onbekend") else "geteld"),
             "Websites": rij(s.split(";")[0] or "onbekend",
                             "niet aangesloten" if not s or s.startswith("nog niet") else "geteld"),
+            "YouTube": rij(y.split(";")[0] or "nog niet aangesloten",
+                           "niet aangesloten" if not y else "onbekend" if y.startswith("onbekend") else "geteld"),
             "Gezondheid": rij("geen gegevens" if not g or g.startswith("geen") else "gegevens van de Apple Watch",
                               "geen gegevens" if not g or g.startswith("geen") else "gelezen")}
 

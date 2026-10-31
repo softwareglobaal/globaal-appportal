@@ -31,7 +31,9 @@ KENNIS_RONDE = re.compile(r"^ronde-id-([0-9a-f]{32}): 0 tekens, e3b0c442$", re.M
 
 # De rijen van een kanaal in de gesprekkentabel, op hun voorvoegsel (contract met dagbundelaar.kanaal_van_dag).
 KANALEN = {"whatsapp": ("whatsapp:", "whatsapp-oproep:", "dekking:whatsapp:"),
-           "telefoon": ("telefoon:", "dekking:telefoon:")}
+           "telefoon": ("telefoon:", "dekking:telefoon:"),
+           "sms": ("sms:", "dekking:sms:"),
+           "xelion": ("xelion:", "dekking:xelion:")}
 VELDEN = ("datum", "start", "minuten", "personen", "thema", "prive", "bron", "dubbel_van")
 
 

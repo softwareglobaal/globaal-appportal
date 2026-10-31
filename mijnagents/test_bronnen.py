@@ -10,6 +10,7 @@ Deze test legt vast:
 - B05: een dag zonder telling zegt "niet vastgesteld"; een weekoverzicht dat geen json is, laat de pagina niet vallen;
 - B06: geen gedachtestreepje; het bord linkt naar de pagina;
 - B07: een dag van de lopende week (nog in geen weekoverzicht) leest de standen uit het dagbestand.
+- sms en Xelion (31-10-2026): een dag zonder die stand is rood "onbekend", nooit groen.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -103,7 +104,7 @@ def b04_dagkleuren():
     cellen = re.findall(r'stip (\w+)"></span>([^<]*)', r)
     check("B04 kleuren per bron", cellen == [("groen", "volledig"), ("groen", "afgesloten"), ("oranje", "voorlopig"),
                                              ("oranje", "onvolledig"), ("rood", "niet aangesloten"),
-                                             ("groen", "aangesloten")], cellen)
+                                             ("groen", "aangesloten"), ("rood", "onbekend"), ("rood", "onbekend")], cellen)
 
 
 def b05_geen_telling():
@@ -142,7 +143,7 @@ def b07_lopende_week():
     check("B07 lopende week uit het dagbestand", cellen == [("groen", "volledig"), ("groen", "afgesloten"),
                                                            ("oranje", "voorlopig"), ("groen", "volledig"),
                                                            ("rood", "stil sinds 28-10 07:17"),
-                                                           ("groen", "aangesloten")], cellen)
+                                                           ("groen", "aangesloten"), ("rood", "onbekend"), ("rood", "onbekend")], cellen)
 
 
 if __name__ == "__main__":

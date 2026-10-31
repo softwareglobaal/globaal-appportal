@@ -1,5 +1,7 @@
 #!/bin/zsh
-# De WhatsApp-wacht en De Belwacht op Mehdi's Mac (ontwerp dagvaststelling v2.0, fase 2).
+# De WhatsApp-wacht, De Belwacht en (sinds 31-10-2026) De Sms-wacht op Mehdi's Mac (ontwerp dagvaststelling v2.0,
+# fase 2). De Sms-wacht heeft een eigen proefbewijs (PROEF_SMS): staat Messages nog niet klaar, dan blijven WhatsApp en
+# telefoon gewoon werken.
 #
 #   uitrol_mac_gesprekken.sh              eerst de wachten uit, dan de code naar origin/main in een eigen worktree,
 #                                         MacGesprekkenKopie bouwen als zijn bron veranderde, de LaunchAgents plaatsen
@@ -42,9 +44,10 @@ HMAP="$BASIS/mac-gesprekken"
 HELPER="$HMAP/MacGesprekkenKopie"
 VORIG="$HMAP/vorige"          # de vorige versie als geheel: COMMIT, de helper, BRON_SHA256 en de LaunchAgents
 PROEF="$HMAP/PROEF"
+PROEF_SMS="$HMAP/PROEF_SMS"
 uid=$(id -u)
-HELPERTAKEN=(be.globaal.mijnagents.kopie-whatsapp be.globaal.mijnagents.kopie-telefoon)
-WACHTEN=(be.globaal.mijnagents.whatsapp-wacht be.globaal.mijnagents.belwacht)
+HELPERTAKEN=(be.globaal.mijnagents.kopie-whatsapp be.globaal.mijnagents.kopie-telefoon be.globaal.mijnagents.kopie-sms)
+WACHTEN=(be.globaal.mijnagents.whatsapp-wacht be.globaal.mijnagents.belwacht be.globaal.mijnagents.sms-wacht)
 ALLE=($HELPERTAKEN $WACHTEN)
 
 laad() {
@@ -60,7 +63,7 @@ geladen() {
 wachten_uit() {
     # bootout stopt ook een ronde die nog loopt; de gedeelde ronde meldt dan fout (N11)
     for l in $WACHTEN; do "$LAUNCHCTL" bootout "gui/$uid/$l" >/dev/null 2>&1 || true; done
-    rm -f "$PROEF"
+    rm -f "$PROEF" "$PROEF_SMS"
 }
 
 wachten_echt_uit() {
@@ -74,9 +77,9 @@ wachten_echt_uit() {
 met_rondesloten() {
     # de wissel loopt met de rondesloten van beide wachten vast (zoals mac_gesprekken.slot ze neemt); loopt er nog een
     # ronde, dan geeft lockf meteen 75 en wisselt niets
-    mkdir -p -m 700 "$BASIS/whatsapp-wacht" "$BASIS/belwacht"
+    mkdir -p -m 700 "$BASIS/whatsapp-wacht" "$BASIS/belwacht" "$BASIS/sms-wacht"
     exec "$LOCKF" -k -t 0 "$BASIS/whatsapp-wacht/ronde.lock" "$LOCKF" -k -t 0 "$BASIS/belwacht/ronde.lock" \
-        /bin/zsh "$SCRIPT" "$@"
+        "$LOCKF" -k -t 0 "$BASIS/sms-wacht/ronde.lock" /bin/zsh "$SCRIPT" "$@"
 }
 
 stempel() {
@@ -113,7 +116,7 @@ if [[ $modus != controleer ]]; then
     vast "$HMAP/.uitrol.lock" || { print -u2 "Het uitrolslot zit niet vast; niets gedaan"; exit 64; }
 fi
 if [[ $modus == __* ]]; then
-    vast "$BASIS/whatsapp-wacht/ronde.lock" && vast "$BASIS/belwacht/ronde.lock" ||
+    vast "$BASIS/whatsapp-wacht/ronde.lock" && vast "$BASIS/belwacht/ronde.lock" && vast "$BASIS/sms-wacht/ronde.lock" ||
         { print -u2 "De rondesloten zitten niet vast; niets gewisseld"; exit 64; }
     [[ -n ${UITROL_SLEUTEL:-} && "$(cat "$HMAP/.uitrol.sleutel" 2>/dev/null)" == "$UITROL_SLEUTEL" ]] ||
         { print -u2 "Deze wissel hoort niet bij de uitrol die de sloten houdt; niets gewisseld"; exit 64; }
@@ -127,7 +130,7 @@ case $modus in
         met_rondesloten __installeer ;;
     __installeer) ;;
     proef)
-        rm -f "$PROEF"
+        rm -f "$PROEF" "$PROEF_SMS"
         "$PY" -I -c "
 import sys
 sys.path.insert(0, sys.argv[1] + '/koppelingen')
@@ -144,17 +147,41 @@ except M.MacFout as e:
     sys.exit(f'proef mislukt: {e.nood}')
 " "$WERK/mijnagents-runner"
         stempel > "$PROEF"
-        print "Proef geslaagd. Lees het werkverslag op het bord na en zet de wachten dan aan met: $0 aan"
+        print "Proef WhatsApp en telefoon geslaagd."
+        if "$PY" -I -c "
+import sys
+sys.path.insert(0, sys.argv[1] + '/koppelingen')
+import mac_gesprekken as M
+try:
+    pad, ts = M.kopie_vragen('sms')
+    M.wis(pad)
+    print(f'toegangsproef sms: ok onder launchd ({ts:%H:%M:%S} UTC)')
+    print(f'proefronde sms-wacht: ronde-id {M.proefronde(sys.argv[1] + \"/sms_wacht.py\", \"sms-wacht\")} bevestigd')
+except M.MacFout as e:
+    sys.exit(f'proef sms mislukt: {e.nood}')
+" "$WERK/mijnagents-runner"; then
+            stempel > "$PROEF_SMS"
+            print "Proef sms geslaagd."
+        else
+            print -u2 "De Sms-wacht blijft uit; WhatsApp en telefoon kunnen wel aan."
+        fi
+        print "Lees het werkverslag op het bord na en zet de wachten dan aan met: $0 aan"
         exit 0 ;;
     aan)
         [[ -f "$PROEF" && "$(cat "$PROEF")" == "$(stempel)" ]] ||
             { print -u2 "Geen geslaagde proef voor deze helper en deze code: eerst $0 proef"; exit 1; }
-        for l in $WACHTEN; do laad $l; done
+        for l in be.globaal.mijnagents.whatsapp-wacht be.globaal.mijnagents.belwacht; do laad $l; done
         print "De WhatsApp-wacht en De Belwacht staan aan (elk uur)."
+        if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" && -f "$AGENTS/be.globaal.mijnagents.sms-wacht.plist" ]]; then
+            laad be.globaal.mijnagents.sms-wacht
+            print "De Sms-wacht staat aan (elk uur)."
+        else
+            print "De Sms-wacht blijft uit: geen geslaagde sms-proef voor deze versie."
+        fi
         exit 0 ;;
     uit)
         wachten_uit
-        print "De WhatsApp-wacht en De Belwacht staan uit."
+        print "De WhatsApp-wacht, De Belwacht en De Sms-wacht staan uit."
         exit 0 ;;
     terug)
         [[ -f "$VORIG/COMMIT" && -x "$VORIG/MacGesprekkenKopie" ]] || { print -u2 "Geen vorige versie bewaard"; exit 1; }
@@ -168,7 +195,7 @@ except M.MacFout as e:
         for l in $ALLE; do
             if [[ -f "$VORIG/$l.plist" ]]; then cp -p "$VORIG/$l.plist" "$AGENTS/$l.plist"; else rm -f "$AGENTS/$l.plist"; fi
         done
-        for l in $HELPERTAKEN; do [[ -f "$AGENTS/$l.plist" ]] && laad $l; done
+        for l in $HELPERTAKEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
         print "Vorige versie teruggezet ($(cat "$VORIG/COMMIT")); de wachten staan uit. Daarna: $0 proef en $0 aan."
         exit 0 ;;
     controleer)
@@ -176,6 +203,8 @@ except M.MacFout as e:
         print "helper: $("$CODESIGN" -dv "$HELPER" 2>&1 | grep CDHash= || print ontbreekt)"
         if [[ -f "$PROEF" && "$(cat "$PROEF")" == "$(stempel)" ]]; then print "proef: geslaagd voor deze versie"
         else print "proef: ontbreekt of hoort bij een andere versie"; fi
+        if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" ]]; then print "proef sms: geslaagd voor deze versie"
+        else print "proef sms: ontbreekt of hoort bij een andere versie"; fi
         for l in $ALLE; do
             if geladen $l; then print "$l: geladen"; else print "$l: niet geladen"; fi
         done
@@ -217,9 +246,11 @@ fi
 # 3. De LaunchAgents; de helpertaken laden (ze lopen alleen op vraag).
 mkdir -p "$LOGS" "$AGENTS"
 for l in $ALLE; do
-    cp "$WERK/mijnagents-runner/mac/$l.plist" "$AGENTS/$l.plist"
+    # een versie van voor de Sms-wacht (REF of terug) heeft haar plists niet
+    if [[ -f "$WERK/mijnagents-runner/mac/$l.plist" ]]; then cp "$WERK/mijnagents-runner/mac/$l.plist" "$AGENTS/$l.plist"
+    else rm -f "$AGENTS/$l.plist"; fi
 done
-for l in $HELPERTAKEN; do laad $l; done
+for l in $HELPERTAKEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
 print "Geïnstalleerd: $sha"
 "$CODESIGN" -dv "$HELPER" 2>&1 | grep CDHash= || true
 if (( helper_nieuw )); then

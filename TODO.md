@@ -1305,3 +1305,12 @@ subdiscipline-statistieken.
 - [ ] Kennis unab.md aanvullen met de antwoorden die Office dagelijks geeft
 - [ ] Office-collega's in Authentik-groep `whatsapp`
 - [ ] Sjablonen voor berichten buiten het 24-uursvenster
+
+## Wachten van De Dagbundelaar nagekeken (2026-10-31)
+
+- [x] Fotowacht niet meer rood door werfverslagtaken die op gegevens wachten (icloud_wacht.py)
+- [x] Wispr-wacht: de serverwacht heet nu wispr-team-wacht, overschrijft de laptopwacht niet meer
+- [x] Sms-wacht, Belwacht Xelion en YouTube-wacht gebouwd; Dagbundelaar, weekoverzicht, Dagboek en /bronnen tonen ze
+- [ ] VM: git pull, sms-wacht/xelion-wacht/youtube-wacht registreren, cron xelion_wacht.py elk uur (wacht op Mehdi)
+- [ ] Laptop: docs/laptop-nieuwe-wachten-31-10.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
+- [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling

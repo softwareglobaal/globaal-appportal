@@ -72,6 +72,27 @@ tl = B.tel([("Chrome", 1793350800, "monday.com"), ("Chrome", 1793350900, "monday
 check("E04 telling per dag, ook 0", tl["2026-10-29"]["bezoeken"] == 0 and tl["2026-10-30"]["bezoeken"] == 3
       and tl["2026-10-30"]["top"][0] == ["monday.com", 2], tl)
 
+Y = laad("youtube_wacht", os.path.join(RUNNER, "mac", "youtube_wacht.py"))
+check("E06 alleen video's", Y.video("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=5") == "dQw4w9WgXcQ"
+      and Y.video("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ" and Y.video("https://www.youtube.com/shorts/abcdef12")
+      == "abcdef12" and Y.video("https://www.youtube.com/results?search_query=geheim") is None
+      and Y.video("https://www.youtube.com/") is None and Y.video("https://monday.com/watch?v=abcdefgh") is None)
+check("E06 titel zonder YouTube", Y.titel_schoon("(3) Werfbezoek uitleg - YouTube") == "Werfbezoek uitleg")
+ty = Y.tel([("Chrome", 1793350800, "a1b2c3d4", "Video A", 600.0), ("Chrome", 1793351800, "a1b2c3d4", "Video A", 99999.0),
+            ("Safari", 1793352000, "z9y8x7w6", "Video B", None)], ["2026-10-30", "2026-10-29"])
+check("E06 telling per dag", ty["2026-10-30"]["videos"] == 2 and ty["2026-10-30"]["keer"] == 3
+      and ty["2026-10-30"]["minuten"] == 190 and ty["2026-10-30"]["top"][0] == ["Video A", 2]
+      and ty["2026-10-29"] == {"videos": 0, "keer": 0, "minuten": 0, "top": []}, ty)
+check("E06 zonder duur onbekend", Y.tel([("Safari", 1793352000, "z9y8x7w6", "B", None)], ["2026-10-30"])["2026-10-30"]["minuten"] is None)
+t = dag({"wispr": None, "websites": None, "youtube": ty["2026-10-30"], "gezondheid": None})
+check("E06 YouTube in het blok", "- YouTube: 2 video's, 190 min; meest: Video A (2); Video B (1)" in t, t)
+t = dag({"wispr": None, "websites": None, "youtube": ty["2026-10-29"], "gezondheid": None})
+check("E06 0 als de wacht keek", "- YouTube: 0 video's, 0 min" in t, t)
+t = dag({"wispr": None, "websites": None, "youtube": None, "gezondheid": None})
+check("E06 onbekend zonder wacht", "- YouTube: onbekend (YouTube-wacht las deze dag niet)" in t, t)
+t2 = dag({"wispr": None, "websites": None, "gezondheid": None})
+check("E06 oude aanroep zonder YouTube-regel", "YouTube" not in t2, t2)
+
 oud = dag()
 check("E05 zonder eigen geen blok", "Eigen werk en gezondheid" not in oud)
 check("E05 geen gedachtestreepje", "—" not in t + oud and "–" not in t + oud)
