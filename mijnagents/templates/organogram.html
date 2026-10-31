@@ -27,6 +27,9 @@
   .leeg{color:var(--zacht);font-size:12px;font-style:italic}
   .regie{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
   .regie a.naam{background:var(--paper);border:1px solid var(--rand);border-radius:10px;padding:6px 14px}
+  .dagb{width:100%;max-width:none;margin-bottom:14px}
+  .dagb .rij{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
+  .dagb .wanneer{margin-left:auto;color:var(--zacht);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -40,8 +43,16 @@
     {% endfor %}
   </div>
   <div class="lijn"></div>
+  <div class="afd groep dagb">
+    <h2>Dagbundelaar</h2>
+    <div class="rij">
+      {% for a in agents if a['type'] == 'dagbundelaar' %}
+      <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}" title="{{ a['toestand'] }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}<span class="wanneer">{{ a['laatste'] }}</span></a>
+      {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+    </div>
+  </div>
   <div class="laag">
-    {% for afd in afdelingen if afd['naam'] not in ('regie', 'prive', 'prive-communicatie') %}
+    {% for afd in afdelingen if afd['naam'] not in ('regie', 'prive', 'prive-communicatie', 'dagbundelaar') %}
     <div class="afd">
       <h2>{{ afd['label'] }}</h2>
       {% for a in agents if a['type'] == afd['naam'] %}
@@ -54,12 +65,15 @@
       {% for a in agents if a['type'] == 'prive' %}
       <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}</a>
       {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+      {% set comm = agents | selectattr('type', 'equalto', 'prive-communicatie') | list %}
+      {% if comm %}
       <div class="sub">
         <h3>Communicatie</h3>
-        {% for a in agents if a['type'] == 'prive-communicatie' %}
+        {% for a in comm %}
         <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}</a>
-        {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+        {% endfor %}
       </div>
+      {% endif %}
     </div>
   </div>
 </main>

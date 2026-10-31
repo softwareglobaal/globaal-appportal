@@ -72,6 +72,17 @@ def _sluit(_exc):
         d.close()
 
 
+# De groep Dagbundelaar op het bord: wie data levert voor het dagboek, De Dagbundelaar zelf en wie het dagboek
+# gebruikt om Mehdi werk uit handen te nemen. Een nieuwe agent voor het dagboek komt hier bij, nergens anders.
+DAGBUNDELAAR_AGENTS = (
+    "dagbundelaar", "mehdi-agent",
+    "agenda-wacht", "calendly-wacht", "locatie-wacht", "icloud-wacht",
+    "belwacht", "whatsapp-wacht", "communicatie-bundelaar", "fathom-wacht", "plaud-wacht",
+    "zoom-wacht", "zoom-archief",
+    "mail-mch", "mail-melo", "mail-prive", "mail-info-harc", "mail-hinv",
+)
+
+
 def init_db():
     conn = sqlite3.connect(DB_PAD)
     conn.executescript(
@@ -229,6 +240,7 @@ def init_db():
         ("regie", "Regie", "Het overzicht, het gesprek met Mehdi en de voorstellen.", 10),
         ("h-architects", "H-Architects", "Het kantoor: contracten, dossiers, klanten.", 20),
         ("prive", "Privé", "Mehdi zelf: agenda, gegevens van de Mac, persoonlijke dossiers.", 30),
+        ("dagbundelaar", "Dagbundelaar", "Alles wat het dagboek van Mehdi voedt, De Dagbundelaar zelf en De Mehdi-agent.", 15),
     ):
         conn.execute("INSERT OR IGNORE INTO afdeling(naam, label, omschrijving, volgorde) VALUES(?,?,?,?)",
                      (naam, label, oms, volg))
@@ -239,6 +251,10 @@ def init_db():
                              ("prive", "INTEGER DEFAULT 0")):  # 1 = alleen zichtbaar voor beheer (Mehdi)
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
+    # Mehdi, 31-10-2026: alle agents van de Dagbundelaar op één plek, niets dubbel. Ze verhuizen naar de groep
+    # Dagbundelaar; geen kopie in hun oude groep. Deze lijst is de enige plek waar dat staat.
+    conn.execute(f"UPDATE agent SET type='dagbundelaar' WHERE naam IN ({','.join('?' * len(DAGBUNDELAAR_AGENTS))})",
+                 DAGBUNDELAAR_AGENTS)
     conn.commit()
     _gesprek_log_kolommen(conn)
     conn.close()
@@ -550,7 +566,9 @@ def bord():
     # Afdelingen in vaste volgorde, ook als ze (nog) geen agent hebben; onbekende types achteraan.
     volgorde = sorted(set(list(afd) + list(groepering)),
                       key=lambda n: (afd.get(n, {}).get("volgorde", 999), n))
-    groepering = {n: groepering.get(n, []) for n in volgorde}
+    # De oude subgroep Communicatie is sinds 31-10-2026 leeg (alles zit in Dagbundelaar): leeg niet meer tonen.
+    groepering = {n: groepering.get(n, []) for n in volgorde if n != "prive-communicatie" or groepering.get(n)}
+    volgorde = list(groepering)
     afdelingen = {n: afd.get(n, {"naam": n, "label": n, "omschrijving": ""}) for n in volgorde}
     open_voorstellen = db().execute(
         "SELECT v.*, a.label FROM voorstel v LEFT JOIN agent a ON a.naam=v.naam "
@@ -2036,6 +2054,19 @@ def bronnen_pagina():
                            kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon"))
 
 
+def _laatste_ronde(ts):
+    """Wanneer de agent laatst iets meldde, in Brusselse tijd: '14:05' vandaag, anders '30-10 14:05'."""
+    try:
+        t = datetime.fromisoformat(ts)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        t = t.astimezone(ZoneInfo("Europe/Brussels"))
+        vandaag = datetime.now(ZoneInfo("Europe/Brussels")).date()
+        return t.strftime("%H:%M") if t.date() == vandaag else t.strftime("%d-%m %H:%M")
+    except Exception:
+        return ""
+
+
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
 @app.route("/organogram")
 def organogram():
@@ -2047,6 +2078,7 @@ def organogram():
         a["levert_aan"] = _lijst(a["levert_aan"])
         s = st.get(a["naam"])
         a["toestand"] = "onbekend"
+        a["laatste"] = _laatste_ronde(s["ts"]) if s else "nog nooit"
         if s:
             leeftijd = leeftijd_min(s["ts"])
             a["toestand"] = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
@@ -2541,7 +2573,8 @@ def api_agent():
         "rol=excluded.rol, mandaat=excluded.mandaat, mag=excluded.mag, "
         "grenzen=excluded.grenzen, cadans=excluded.cadans, tools=excluded.tools, "
         "eigenaar=excluded.eigenaar, actief=1, levert_aan=excluded.levert_aan, draait_op=excluded.draait_op",
-        (naam, p["label"], p.get("type", ""), p.get("rol", ""), p.get("mandaat", ""),
+        (naam, p["label"], "dagbundelaar" if naam in DAGBUNDELAAR_AGENTS else p.get("type", ""),
+         p.get("rol", ""), p.get("mandaat", ""),
          json.dumps(p.get("mag", [])), json.dumps(p.get("grenzen", [])),
          p.get("cadans", ""), json.dumps(p.get("tools", [])),
          p.get("eigenaar", "mehdi"), nu(), json.dumps(p.get("levert_aan", [])), p.get("draait_op", "VM")),

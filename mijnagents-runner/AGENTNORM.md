@@ -18,6 +18,8 @@ GitHub 186). Welke sessie je ook aansprak, hij las andere regels en maakte daaro
 telkens andere fouten. Zeventien commits met 1105 regels code stonden alleen op
 de VM. Dat was geen domme AI, dat was een systeem zonder norm.
 
+Werkwijze sinds 31-10-2026: eerst een slimme agent, pas een programma als een stap stabiel en bekend is. Zie `docs/werkwijze-eerst-agent-dan-programma.md`.
+
 ## 1. Waar de waarheid staat
 
 Eén bron per soort gegeven. Wie iets anders leest, leest een kopie, en een kopie
