@@ -24,6 +24,7 @@ BE = ZoneInfo("Europe/Brussels")
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 import bronnen  # noqa: E402
 import dropbox_prive  # noqa: E402
 import organisatie  # noqa: E402
@@ -61,6 +62,7 @@ def laad_env(pad):
         pass
 
 
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 laad_env("~/agents/.env")
 
 

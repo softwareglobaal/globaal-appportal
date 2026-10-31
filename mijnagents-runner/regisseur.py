@@ -44,6 +44,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord as bordklant  # noqa: E402  de gedeelde bord-klant; bord() hieronder is mijn eigen oproep (tests vervangen R.bord)
 import contracten_mcp as mcp  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 import fathom  # noqa: E402  alleen MEHDI_FATHOM_ADRESSEN: Mehdi's eigen Fathom-account, een lijst (EIGEN-3)
 import ochtend as O  # noqa: E402
 import pipedrive  # noqa: E402
@@ -150,6 +151,7 @@ def laad_env(pad):
         pass
 
 
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 laad_env("~/agents/.env")
 
 

@@ -9,7 +9,7 @@ Twee stappen, naar het patroon van het contractsysteem (gegevens met herkomst, d
       beide in de bezoekmap in Dropbox als `<nr>-N werfverslag (concept).docx/.md`. Nooit overschrijven.
 
 Regels: niets verzinnen (E8): wat niet in de bronnen staat, krijgt "(in te vullen)" of "(na te kijken)".
-De sleutel ANTHROPIC_API_KEY komt uit ~/agents/.env; nooit in code of logboek.
+De sleutel ANTHROPIC_API_KEY komt alleen uit ~/appportal/.env (koppelingen/sleutelbron.py); nooit in code of logboek.
 """
 import io
 import contextlib
@@ -40,11 +40,13 @@ def _env(pad):
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 _env("~/agents/.env")
 _env("~/appportal/.env")
 MODEL = os.environ.get("WERFVERSLAG_MODEL", "claude-opus-5").strip()
-HIER = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bronnen  # noqa: E402
 import werfextractie as extractie  # noqa: E402

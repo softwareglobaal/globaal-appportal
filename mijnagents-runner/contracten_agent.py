@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import contracten_mcp as mcp  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 import pipedrive  # noqa: E402
 import nummerlezer  # noqa: E402
 import bronnen as bronnen_mod  # noqa: E402
@@ -61,6 +62,7 @@ def laad_env(pad):
         pass
 
 
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 laad_env("~/agents/.env")                        # ANTHROPIC_API_KEY
 
 
