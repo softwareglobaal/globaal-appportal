@@ -7,8 +7,12 @@
 
 - [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
-- [ ] Droog proberen op de VM met de echte dagbundel.
-- [ ] Live zetten na Mehdi's ja: kaart met de generator, eerste ronde, cron (stappen in het ontwerp).
+- [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
+      agent), geen enkele zonder bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0.
+- [ ] Driehoeksoverleg Mehdi-agent (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
+      Claude 1 op de laptop samen met dat van het Dagboek (`docs/driehoeksoverleg-starten-voor-claude-1.md`).
+- [ ] Live zetten na Mehdi's ja en zonder open punten van ernst hoog of middel (AGENTNORM 8): kaart met de generator,
+      eerste ronde, cron (stappen in het ontwerp).
 - [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
       antwoord wacht, afspraken van morgen, zes keer per dag.
 - [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.

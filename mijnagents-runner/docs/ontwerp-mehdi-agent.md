@@ -104,6 +104,12 @@ Alles via `softwareglobaal/globaal-vm-beheer` (workflow vm):
 2. Droog proberen, zonder bord of staat te raken (alleen de vorm in het logboek, het volledige resultaat in een
    bestand voor beheer):
    `MEHDI_AGENT_STAAT=/tmp/mehdi-proef.json ~/agents/.venv/bin/python ~/appportal/mijnagents-runner/mehdi_agent.py --droog --zaad --moment ochtend --stil --uit ~/appportal/mijnagents-data/mehdi-agent/droog.md`
+   Gedaan op 31-10-2026 (workflow vm, run 41232708315), met de code uit `git show` in een tijdelijke map zodat de pull
+   niets anders live zette: dagbestanden van 29 en 30-10, 8 taken (6 voor Mehdi, 2 voor een agent), geen enkele zonder
+   bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0. Volledig resultaat (rechten 600) in
+   `mijnagents-data/mehdi-agent/droog-20261031.md` op de VM.
+   Daarna, voor stap 3: het driehoeksoverleg (`opdracht-driehoeksoverleg-mehdi-agent.md`) zonder open punten van
+   ernst hoog of middel (AGENTNORM.md 8).
 3. Aanmaken met de generator. Die weigert een runner met eigen code, dus het skelet gaat naar een tijdelijke map
    (`RUNNERMAP`, zoals in `tests/test_nieuwe_agent.py`); de kaart en de werkwijze komen op het bord met alle controles
    van de generator. In `~/appportal/mijnagents-runner`:

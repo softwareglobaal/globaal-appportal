@@ -3256,3 +3256,6 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   `MEHDI_AGENT_UREN` (standaard 7, 10, 13, 16, 19, 22) en roept Claude tussendoor alleen aan als de bundel of een bericht
   van Mehdi veranderde. Zetten met `planning/mehdi_agent_cron_zetten.py --zet`, pas na Mehdi's ja en een gecontroleerde
   eerste ronde (stappen in het ontwerp). Grendels: `mijnagents-runner/tests/test_mehdi_agent.py`.
+- **Stand 31-10-2026**: droog geprobeerd op de VM met de echte dagbestanden (8 taken, geen zonder bron, 19.064
+  tokens); live pas na het driehoeksoverleg (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`) en
+  Mehdi's ja.
