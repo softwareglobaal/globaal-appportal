@@ -35,6 +35,13 @@ P5. De Dagbundelaar draait zes keer per dag in plaats van een keer per nacht (bi
 P6. Het dagbestand is de enige bron voor de Mehdi-agent: die leest alleen .json en .md, nooit zelf de wachten.
     GRENS: berichttekst. WhatsApp-, sms- en iMessage-tekst bewaren of laten lezen is een privacykeuze van Mehdi.
     Advies gevraagd: ja of nee, en zo ja alleen werk (geen privé) en alleen voor de Mehdi-agent, nooit op het bord.
+P7. De bundel is het dagbestand op de server (mijnagents-data/dagboek/<jaar>/<dag>.md en .json), hetzelfde bestand
+    dat naar Dropbox "Dagbundelaar/<jaar>/<dag>" gaat. Vaste regelvorm voor de Mehdi-agent: bovenaan het tijdstip van
+    maken; per gesprek in Fathom, Zoom, Plaud tijd, met wie, minuten, titel, samenvatting, actiepunten (tekst en wie)
+    en een verwijzing (fathom:<id>, plaud:<id>, zoom:<id>); per werkgesprek in WhatsApp, sms en telefoon met wie,
+    aantal in en uit, tijd van het laatste bericht, of het laatste van de ander kwam (wacht op antwoord), gemiste
+    oproepen zonder terugbellen, met een verwijzing (privé blijft "privé"); per postvak de mails die op antwoord
+    wachten (afzender, onderwerp, sinds), zonder tekst; de afspraken van vandaag, en in de laatste ronde ook morgen.
 
 ## Grenzen
 Niets verwijderen, live zetten of versturen zonder Mehdi's ja. Geen berichttekst bewaren zonder Mehdi's ja (P6).
