@@ -92,7 +92,7 @@ class ICloudStatus(unittest.TestCase):
         data.update(changes)
         return data
 
-    def fake_run(self, fotos, inhoud=None, geleverd=None, echt_jpg=False, nu=None, taak_id=12):
+    def fake_run(self, fotos, inhoud=None, geleverd=None, echt_jpg=False, nu=None, taak_id=12, ext=".jpg", jpg_lukt=True):
         m = self.module
         logs, exports = [], []
         m.taken_lezen = lambda: [{"id": taak_id, "inhoud": json.dumps(inhoud or self.inhoud())}]
@@ -106,11 +106,16 @@ class ICloudStatus(unittest.TestCase):
             n = len(selected) if geleverd is None else geleverd
             for f in selected[:n]:
                 f["geexporteerd"] = True
-                f["export"] = f["uuid"] + ".jpg"
+                f["export"] = f["uuid"] + ext
+                Path(doel, f["export"]).write_bytes(b"x")
             return n
         m.exporteer_naar = export
         m.exporteer_jpg_naar = self.export_jpg_orig if echt_jpg else export
-        m.jpeg_kopieen = lambda doel: 0
+        def jpeg_kopieen(doel):
+            for heic in Path(doel).glob("*.heic") if jpg_lukt else ():
+                heic.with_suffix(".jpg").write_bytes(b"jpg")
+            return 0
+        m.jpeg_kopieen = jpeg_kopieen
         class Klok(datetime):
             @classmethod
             def now(cls, tz=None):
@@ -148,6 +153,17 @@ class ICloudStatus(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertEqual(self.afgevinkt, [])
                 self.assertIn("fotolevering_gedeeltelijk", self.statussen[-1][1]["detail"])
+
+    def test_ha_heic_zonder_jpg_wordt_niet_afgevinkt(self):
+        # Overleg W4 P3, Codex X4: een hersteltaak komt maar één keer; een mislukte omzetting houdt haar open.
+        code, _, _ = self.fake_run([self.foto("eerste")], ext=".heic", jpg_lukt=False)
+        self.assertEqual(code, 1)
+        self.assertEqual(self.afgevinkt, [])
+        self.assertIn("omzetting_mislukt", self.statussen[-1][1]["detail"])
+        self.afgevinkt.clear()
+        code, _, _ = self.fake_run([self.foto("tweede")], ext=".heic", jpg_lukt=True, taak_id=13)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.afgevinkt, [13])
 
     def test_ontbrekend_venster_leest_geen_fotometadata(self):
         data = self.inhoud()
