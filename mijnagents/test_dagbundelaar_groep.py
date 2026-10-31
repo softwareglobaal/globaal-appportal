@@ -7,7 +7,8 @@
 - G04: het organogram toont de groep Dagbundelaar met status en laatste ronde, elke agent precies één keer;
 - G05: de lege subgroep Communicatie verdwijnt van het bord en het organogram;
 - G06: elke agent van de groep draagt de vaste naam uit DAGBUNDELAAR_AGENTS, ook als hij zich anders meldt;
-- G08: drie lagen op het organogram: Ai Angel, daaronder De Dagbundelaar, daaronder het blok Wachten;
+- G08: drie lagen op het organogram: Ai Angel, daaronder De Dagbundelaar, daaronder de wachten;
+- G09: de wachten staan in vakken per soort (Mail, Communicatie, ...), elke wacht in precies één vak;
 - G07: een agent die nog niet gebouwd is, staat als lege plek "nog te bouwen" op het organogram, zonder databankrij.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -66,11 +67,16 @@ check("G03 belwacht verhuisd", type_van("belwacht") == "dagbundelaar", type_van(
 check("G03 icloud-wacht verhuisd", type_van("icloud-wacht") == "dagbundelaar", type_van("icloud-wacht"))
 
 html = C.get("/organogram", headers=BEHEER).get_data(as_text=True)
-check("G04 blok Wachten zichtbaar", "<h2>Wachten</h2>" in html)
-i_angel, i_dagb, i_wacht = html.find(">Ai Angel<"), html.find(">De Dagbundelaar<"), html.find("<h2>Wachten</h2>")
+check("G04 vakken Mail en Communicatie zichtbaar", "<h2>Mail</h2>" in html and "<h2>Communicatie</h2>" in html)
+i_angel, i_dagb, i_wacht = html.find(">Ai Angel<"), html.find(">De Dagbundelaar<"), html.find("<h2>Mail</h2>")
+i_comm = html.find("<h2>Communicatie</h2>")
+check("G09 elke wacht in zijn vak", html.find("De Mailwacht mch@h-architects.be") < i_comm < html.find("De Belwacht iPhone"))
+check("G09 elke wacht in precies één vak", len({n for _, ns in A.DAGBUNDELAAR_VAKKEN for n in ns})
+      == sum(len(ns) for _, ns in A.DAGBUNDELAAR_VAKKEN)
+      == len(A.DAGBUNDELAAR_AGENTS) - len(A.DAGBUNDELAAR_BOVEN))
 check("G08 drie lagen: Ai Angel boven De Dagbundelaar boven de wachten", -1 < i_angel < i_dagb < i_wacht,
       f"{i_angel} {i_dagb} {i_wacht}")
-check("G08 Ai Angel en De Dagbundelaar niet in het blok Wachten", html.count(">Ai Angel<") == 1 and html.count(">De Dagbundelaar<") == 1)
+check("G08 Ai Angel en De Dagbundelaar niet in een vak", html.count(">Ai Angel<") == 1 and html.count(">De Dagbundelaar<") == 1)
 check("G04 elke agent één keer", html.count("De Belwacht iPhone<") == 1 and html.count("De Fotowacht<") == 1)
 check("G06 vaste naam ook bij een oude registratie", "De iCloud-wacht" not in html and ">De Belwacht<" not in html)
 check("G07 lege plek voor wat nog niet gebouwd is", "De Sms-wacht" in html and "De YouTube-wacht" in html

@@ -99,12 +99,21 @@ DAGBUNDELAAR_AGENTS = {
     "wispr-wacht": "De Wispr-wacht",
     "browser-wacht": "De Websitewacht",
     "youtube-wacht": "De YouTube-wacht",
-    "mail-mch": "De Mailwacht mch@",
-    "mail-info-harc": "De Mailwacht info@ H-Architects",
-    "mail-hinv": "De Mailwacht info@ H-Invest",
-    "mail-melo": "De Mailwacht Melodie",
-    "mail-prive": "De Mailwacht hotmail",
+    "mail-prive": "De Mailwacht mehdichegini@hotmail.com",
+    "mail-mch": "De Mailwacht mch@h-architects.be",
+    "mail-info-harc": "De Mailwacht info@h-architects.be",
+    "mail-hinv": "De Mailwacht info@h-invest.be",
+    "mail-melo": "De Mailwacht melodiebvba@gmail.com",
 }
+# Mehdi, 31-10-2026: de wachten in vakken per soort, zoals hij ze denkt. Elke wacht staat in precies één vak.
+DAGBUNDELAAR_VAKKEN = (
+    ("Mail", ("mail-prive", "mail-mch", "mail-info-harc", "mail-hinv", "mail-melo")),
+    ("Communicatie", ("belwacht", "xelion-wacht", "sms-wacht", "whatsapp-wacht", "zoom-wacht", "zoom-archief",
+                      "fathom-wacht", "plaud-wacht", "communicatie-bundelaar")),
+    ("Agenda", ("agenda-wacht", "calendly-wacht")),
+    ("Waar en hoe", ("locatie-wacht", "icloud-wacht", "gezondheid-wacht")),
+    ("Computer en online", ("browser-wacht", "youtube-wacht", "wispr-wacht")),
+)
 
 
 def init_db():
@@ -2113,7 +2122,13 @@ def organogram():
             for n, label in DAGBUNDELAAR_AGENTS.items() if n in per_naam or mag_beslissen()]
     dagb += [a for a in agents if a["type"] == "dagbundelaar" and a["naam"] not in DAGBUNDELAAR_AGENTS]
     dagb_boven = [a for n in DAGBUNDELAAR_BOVEN for a in dagb if a["naam"] == n]
-    dagb = [a for a in dagb if a["naam"] not in DAGBUNDELAAR_BOVEN]
+    per = {a["naam"]: a for a in dagb}
+    in_vak = {n for _, namen in DAGBUNDELAAR_VAKKEN for n in namen}
+    vakken = [(vak, [per[n] for n in namen if n in per]) for vak, namen in DAGBUNDELAAR_VAKKEN]
+    rest = [a for a in dagb if a["naam"] not in in_vak and a["naam"] not in DAGBUNDELAAR_BOVEN]
+    if rest:
+        vakken.append(("Overig", rest))
+    dagb = [(vak, leden) for vak, leden in vakken if leden]
     return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb, dagb_boven=dagb_boven,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
 
