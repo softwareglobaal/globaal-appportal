@@ -49,6 +49,8 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
    - `soort: verslag`, `Te doen vandaag DD-MM` ('s ochtends) en `Avondoverzicht DD-MM` met een tip ('s avonds). De Bode
      bundelt die in het ochtend- en avondbericht.
    Titels en werkverslag dragen geen namen.
+   Mehdi ziet de nieuwste lijst en het nieuwste verslag op https://mijnagents.globaal.be/agent/mehdi-agent, blok
+   "Laatst klaargezet" (alleen beheer; HTML en links uit een bron worden tekst).
 7. Lukt Claude niet, dan blijft de lijst van de vorige ronde staan, met een nood, en probeert de volgende ronde opnieuw.
 
 ## Doen en dispatchen in versie 1

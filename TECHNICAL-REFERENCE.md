@@ -3252,6 +3252,12 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
 - **Uitvoer**: klaarzet voor Mehdi, `soort: taken` (lijst van de dag, uniek `mehdi-agent:taken:JJJJ-MM-DD`) en
   `soort: verslag` ('s ochtends `Te doen vandaag`, 's avonds `Avondoverzicht` met een tip). Staat in
   `mijnagents-data/mehdi-agent/staat.json`. Verstuurt nooit zelf iets; concepten stuurt Mehdi zelf.
+- **Waar Mehdi het ziet**: op de pagina van de agent, https://mijnagents.globaal.be/agent/mehdi-agent, blok "Laatst
+  klaargezet" (de nieuwste takenlijst en het nieuwste verslag van die agent, alleen beheer). Dat blok staat op elke
+  agentpagina met een klaargezet item van soort `taken` of `verslag`; `md_klaargezet` in `mijnagents/app.py` ontsnapt
+  ruwe HTML en markdown-links, want de tekst komt uit bronnen via een model. Grendel:
+  `mijnagents/test_klaargezet_pagina.py` (in de Docker-build). De Bode noemt het verslag in zijn ochtend- en
+  avondbericht ("verslag van De Mehdi-agent ... alles op het bord").
 - **Ritme**: `planning/mehdi-agent.cron`, elk uur op :20; de agent draait alleen op de Brusselse uren van
   `MEHDI_AGENT_UREN` (standaard 7, 10, 13, 16, 19, 22) en roept Claude tussendoor alleen aan als de bundel of een bericht
   van Mehdi veranderde. Zetten met `planning/mehdi_agent_cron_zetten.py --zet`, pas na Mehdi's ja en een gecontroleerde

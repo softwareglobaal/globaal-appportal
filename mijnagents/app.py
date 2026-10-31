@@ -276,6 +276,19 @@ def md(tekst):
         return "<pre style='white-space:pre-wrap'>" + escape(tekst or "") + "</pre>"
 
 
+def md_klaargezet(tekst):
+    """Markdown die een agent klaarzette naar HTML, voor de pagina van die agent. Niet vertrouwd zoals md(): de tekst komt
+    uit bronnen (mail, berichten) via een model. Dus eerst ontsnapt (ruwe HTML wordt tekst), haken als entiteit (geen
+    links of afbeeldingen, dus geen javascript:-link), en elke regel blijft een regel (nl2br)."""
+    from html import escape
+    veilig = escape(tekst or "", quote=False).replace("[", "&#91;").replace("]", "&#93;")
+    try:
+        import markdown
+        return markdown.markdown(veilig, extensions=["nl2br", "sane_lists"])
+    except Exception:  # noqa: BLE001
+        return "<pre style='white-space:pre-wrap'>" + veilig + "</pre>"
+
+
 # ------------------------------------------------------------------ helpers ---
 def nu():
     return datetime.now(timezone.utc).isoformat()
@@ -2069,7 +2082,16 @@ def detail(naam):
     # geen werkstatus. Daarom alleen voor beheer (admin/manager); de groep
     # agents ziet de kaart en de status, niet het verslag.
     verslag, onderwerpen = [], []
+    # Wat de agent als laatste klaarzette (De Mehdi-agent, 31-10-2026): zijn takenlijst en zijn laatste verslag, zodat
+    # zijn pagina toont wat hij voor Mehdi deed. Inhoud, dus net als het werkverslag alleen voor beheer.
+    klaar_taken = klaar_verslag = None
     if mag_beslissen():
+        klaar_taken = db().execute(
+            "SELECT titel, inhoud, ts FROM klaarzet WHERE van=? AND soort='taken' ORDER BY id DESC LIMIT 1", (naam,)
+        ).fetchone()
+        klaar_verslag = db().execute(
+            "SELECT titel, inhoud, ts FROM klaarzet WHERE van=? AND soort='verslag' ORDER BY id DESC LIMIT 1", (naam,)
+        ).fetchone()
         verslag = db().execute(
             "SELECT * FROM logboek WHERE naam=? ORDER BY id DESC LIMIT 300", (naam,)
         ).fetchall()
@@ -2089,6 +2111,7 @@ def detail(naam):
         werkwijze_html=md(a["werkwijze"]), kennis_html=md(a["kennis"]), versies=versies,
         bewerken=request.args.get("bewerken") == "1",
         gesprekken=gesprekken_for_detail(naam) if mag_beslissen() else [], mdf=md,
+        klaar_taken=klaar_taken, klaar_verslag=klaar_verslag, mdk=md_klaargezet,
     )
 
 

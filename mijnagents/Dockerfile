@@ -38,5 +38,8 @@ RUN python3 test_bronnen.py
 # Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
 # geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
 RUN python3 test_felix.py
+# Grendel op het blok Laatst klaargezet op de pagina van een agent (De Mehdi-agent): alleen beheer, de nieuwste
+# takenlijst en het nieuwste verslag, ruwe HTML en markdown-links uit een bron worden tekst. Zie test_klaargezet_pagina.py.
+RUN python3 test_klaargezet_pagina.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

@@ -62,6 +62,20 @@
     {% endif %}
   </div>
 
+  {% if klaar_taken or klaar_verslag %}
+  <div class="blok" id="klaargezet">
+    <h2>Laatst klaargezet</h2>
+    {% if klaar_taken %}
+      <p style="margin:0 0 4px"><b>{{ klaar_taken['titel'] }}</b></p>
+      <div class="md">{{ mdk(klaar_taken['inhoud'])|safe }}</div>
+    {% endif %}
+    {% if klaar_verslag %}
+      <details{% if not klaar_taken %} open{% endif %} style="margin-top:10px"><summary><b>{{ klaar_verslag['titel'] }}</b></summary>
+      <div class="md">{{ mdk(klaar_verslag['inhoud'])|safe }}</div></details>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if a['mandaat'] %}
   <div class="blok"><h2>Mandaat</h2><p style="margin:0">{{ a['mandaat'] }}</p></div>
   {% endif %}
