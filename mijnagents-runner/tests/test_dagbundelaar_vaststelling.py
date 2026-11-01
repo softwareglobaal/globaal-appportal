@@ -6,7 +6,8 @@ Legt vast, zonder netwerk en zonder de echte mappen (alles in een tijdelijke map
 - een tweede ronde met dezelfde bronnen schrijft niets nieuws (geen versie 2, geen versies-map);
 - een nieuwe bron geeft versie 2, met versie 1 in versies/ en 'herzien: ...' in het blok over de vaststelling (D9);
 - toont het bord iets anders dan het bestand, dan faalt de ronde (teruglezen);
-- een ontvangstbewijs van de Mac met dezelfde sha256 sluit de Dropbox-nood; zonder bewijs staat ze open;
+- een ontvangstbewijs van de Mac met dezelfde sha256 sluit de Dropbox-nood; zonder bewijs staat ze open, maar pas als de
+  versie ouder is dan DROPBOX_TERMIJN (DB-1);
 - de kanaalstand komt uit de hartslag van de wacht (D2): skelet is niet aangesloten, een verse databankronde wel, een
   oude is stil;
 - het masker van het bord geldt al voor het schrijven: een privétekst staat nergens, ook niet in het bestand.
@@ -131,7 +132,7 @@ def test_versies_teruglezen_en_dropbox():
         assert w.items[f"vaststelling:{DAG}"]["inhoud"] == eerste, "bord en bestand dragen dezelfde tekst"
         assert "aanwijzing (auto ter plaatse 14:31-16:07" in eerste, eerste
         assert "info@h-architects.be: 2 binnen (2 koud)" in eerste, "gezien door de wachten telt mee, ontdubbeld"
-        assert any("Dropbox" in n for n in r.noden), "zonder ontvangstbewijs staat de Dropbox-nood open"
+        assert not any("Dropbox" in n for n in r.noden), "DB-1: een versie van deze ronde telt nog niet"
         assert any(n.startswith("WhatsApp:") for n in r.noden) and any(n.startswith("Telefoon:") for n in r.noden), r.noden
         assert not any(c.isdigit() for n in r.noden for c in n.split(":")[0]), "N10: geen aantal in een nood"
         # tweede ronde, zelfde bronnen: niets nieuws
@@ -153,6 +154,7 @@ def test_versies_teruglezen_en_dropbox():
         # een bewijs van een oudere versie telt niet
         with open(os.path.join(m, "ontvangst.txt"), "w") as f:
             f.write(f"{D._sha(eerste)}  ./2026/{DAG}.md\n")
+        _verouder(pad, 90)                                                  # DB-1: ouder dan de termijn
         r, _ = ronde(w)
         assert any("Dropbox" in n for n in r.noden), "oude versie in Dropbox"
 
@@ -814,10 +816,11 @@ def test_review_dropbox_ook_s_ochtends_over_het_venster():
         w = Wereld(m)
         ronde(w, dagen=("2026-11-05",))                                     # de nacht schreef een oudere dag
         ronde(w, dagen=("2026-10-01",))                                     # en haalde een dag van zes weken terug in
-        r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
-        dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
         pad = os.path.join(m, "dagboek", "2026", "2026-11-05.md")
         oud_pad = os.path.join(m, "dagboek", "2026", "2026-10-01.md")
+        _verouder(pad, 7 * 60), _verouder(oud_pad, 7 * 60)                  # DB-1: de nacht schreef ze uren geleden
+        r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
+        dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
         with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
             f.write(f"{D._sha(lees(pad))}  ./2026/2026-11-05.md\n{D._sha(lees(oud_pad))}  ./2026/2026-10-01.md\n")
         r2, d2 = ronde(w, dagen=("2026-11-10",))
@@ -1113,6 +1116,65 @@ def test_fase2_telling_naast_het_dagbestand():
         w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
         ronde(w)
         assert json.loads(lees(tpad))["dagversie"] == 2, "de telling volgt de versie van het dagbestand"
+
+
+def _verouder(pad, minuten):
+    """Het dagbestand alsof zijn huidige versie zoveel minuten geleden geschreven werd."""
+    t = (datetime.now(timezone.utc) - timedelta(minutes=minuten)).timestamp()
+    os.utime(pad, (t, t))
+
+
+def _bewijs(m, *teksten_per_dag):
+    with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
+        for dag, tekst in teksten_per_dag:
+            f.write(f"{D._sha(tekst)}  ./{dag[:4]}/{dag}.md\n")
+
+
+def test_db1_dropbox_termijn_per_bestandsversie():
+    """DB-1 (T-0118, T-0120): een dag telt pas als niet in Dropbox als zijn huidige versie ouder is dan twee syncrondes
+    (DROPBOX_TERMIJN) en het ontvangstbewijs een andere sha256 heeft. Tot 01-11-2026 vergeleek de nachtronde een dag die ze
+    net herschreef met het bewijs van de vorige versie, en opende zo na elke nacht een vals alarm; in het weekend bleef
+    het open, want daar is geen ochtendronde. De leeftijd van het ontvangstbewijs telt niet: de Mac schrijft het ook als
+    de rsync van het dagboek faalde."""
+    assert D.DROPBOX_TERMIJN == timedelta(minutes=75), D.DROPBOX_TERMIJN
+    dropbox = lambda r: [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]  # noqa: E731
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
+        r, d = ronde(w)
+        assert not dropbox(r) and "Dropbox open: 0" in d, "een versie die deze ronde schreef, kijkt de volgende na"
+        _bewijs(m, (DAG, lees(pad)))
+        _verouder(pad, 180)
+        # Nacht (vrijdag): een nagekomen gesprek geeft een nieuwe versie; het bewijs is nog van de vorige
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
+        r, d = ronde(w)
+        assert "versie 2" in lees(pad) and not dropbox(r) and "Dropbox open: 0" in d, (r.noden, d)
+        # Werkdagochtend: de versie is ouder dan twee syncrondes en het bewijs is er niet: nood open
+        _verouder(pad, 74)
+        r, d = ronde(w, dagen=("2026-11-10",))
+        assert not dropbox(r), "74 min is nog binnen de termijn"
+        _verouder(pad, 76)
+        r, d = ronde(w, dagen=("2026-11-10",))
+        assert dropbox(r) and "Dropbox open: 1" in d, (r.noden, d)
+        # Weekend: de Mac-sync liep (bewijs van versie 2); de nacht van zaterdag herschrijft de dag weer: geen nood
+        _bewijs(m, (DAG, lees(pad)))
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:c", start="21:00", minuten=10))
+        r, d = ronde(w)
+        assert "versie 3" in lees(pad) and not dropbox(r), r.noden
+        # Nacht van zondag: de Mac-sync liep weer (bewijs van versie 3), niets veranderd: geen nood
+        _bewijs(m, (DAG, lees(pad)))
+        _verouder(pad, 24 * 60)
+        r, d = ronde(w)
+        assert not dropbox(r) and "Dropbox open: 0" in d, (r.noden, d)
+        # Liep de Mac-sync niet meer (bewijs bleef van versie 2), dan opent de nood na de termijn
+        with open(os.path.join(m, "dagboek", "2026", "versies", f"{DAG} v2.md"), encoding="utf-8") as f:
+            _bewijs(m, (DAG, f.read()))
+        r, d = ronde(w)
+        assert dropbox(r) and "Dropbox open: 1" in d, (r.noden, d)
+        # Een vers ontvangstbewijs bewijst niets als zijn sha256 niet klopt (de rsync kan gefaald hebben)
+        os.utime(os.path.join(m, "ontvangst.txt"))
+        r, _ = ronde(w)
+        assert dropbox(r), r.noden
 
 
 def test_vol4_eigen_werk_en_gezondheid_standaard_uit():

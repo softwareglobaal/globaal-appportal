@@ -77,6 +77,8 @@ DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.path.join(DATA, "dagboek")                       # gaat naar Dropbox: Data uit Mehdi/Dagboek
 STAAT = os.path.join(DATA, "dagvaststelling-staat.json")      # per dag versie en hash; niet in de map dagboek
 ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de kopie in Dropbox, van de Mac-sync
+# DB-1 (T-0118): twee syncrondes van de Mac (elke 30 min) plus marge; een jongere versie telt nog niet als 'niet in Dropbox'
+DROPBOX_TERMIJN = timedelta(minutes=75)
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
 # Codex P7 (fase 2): een Mac die langer dan het venster sliep, leest bij het ontwaken tot zestig dagen terug. Een dag
 # buiten het venster met een nieuwere dekkingsrij dan zijn laatste vaststelling haalt de nacht in, hoogstens zeven.
@@ -407,6 +409,16 @@ def telpad(dag):
 
 def weekpad(week, soort):
     return os.path.join(DAGBOEK, week[:4], "week", f"{week}.{soort}")
+
+
+def versie_ouder_dan(dag, grens):
+    """DB-1: of de huidige versie van het dagbestand voor grens geschreven werd. Het bestand verandert alleen bij een
+    nieuwe versie (vastleggen schrijft een ongewijzigde dag niet opnieuw), dus zijn wijzigingstijd is die van de versie.
+    Geen bestand: niets om na te kijken."""
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(dagpad(dag)), timezone.utc) < grens
+    except OSError:
+        return False
 
 
 def ontvangst():
@@ -1102,8 +1114,13 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     # elke dag met een dagbestand tot INHAAL terug, ook 's ochtends: de ochtend legt alleen gisteren vast en sloot deze
     # nood anders elke werkdag zonder iets na te kijken, net voor het ochtendbericht, ook voor een ingehaalde dag ouder dan
     # het nachtvenster (review en Codex-controle 6, 27-10-2026).
+    # DB-1 (T-0118, T-0120): alleen een versie die ouder is dan DROPBOX_TERMIJN telt. Een versie die deze ronde net schreef,
+    # kan de Mac nog niet hebben; de volgende ronde kijkt ze na. Tot 01-11-2026 opende zo elke nachtronde een vals alarm,
+    # dat in het weekend open bleef. De leeftijd van het ontvangstbewijs zegt niets: de Mac schrijft het ook als de rsync
+    # van het dagboek faalde (planning/mac/data_uit_mehdi_sync.sh), dus alleen de sha256 bewijst.
     gekeken = sorted(set(dagen) | {d for d in V.venster(nu, INHAAL) if os.path.exists(dagpad(d))})
-    open_ = [d for d in gekeken if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
+    open_ = [d for d in gekeken if d < gisteren and versie_ouder_dan(dag=d, grens=nu - DROPBOX_TERMIJN)
+             and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
     if open_:
         r.nood("Dagboek nog niet bevestigd in Dropbox: de sync van Data uit Mehdi op de Mac haalt het niet op", wie="mehdi")
     if ongelezen:
