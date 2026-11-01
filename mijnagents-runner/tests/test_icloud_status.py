@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sqlite3
 import sys
 import tempfile
@@ -140,7 +140,7 @@ class ICloudStatus(unittest.TestCase):
 
     def test_geen_automatische_straalverruiming_bij_lege_selectie(self):
         code, exports, _ = self.fake_run([self.foto("tussen_300_600m", lat=50.004)])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [])
         self.assertEqual(self.afgevinkt, [])
         self.assertIn("fotoselectie_leeg", self.statussen[-1][1]["detail"])
@@ -158,6 +158,49 @@ class ICloudStatus(unittest.TestCase):
         self.statussen.clear()
         self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
         self.assertEqual(self.statussen[-1][0], "fout")
+
+    def logregels(self, logs):
+        return [r for pad, data in logs if pad == "/api/logboek" for r in data.get("regels", [])]
+
+    def wachtenpagina(self, regels, dag="2026-10-14"):
+        """De kleur van De Fotowacht op de wachtenpagina (mijnagents/wachten_dag.py) met deze werkverslagregels."""
+        spec = importlib.util.spec_from_file_location("wachten_dag_proef", Path(__file__).resolve().parents[2] / "mijnagents/wachten_dag.py")
+        wd = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wd)
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        con.execute("CREATE TABLE klaarzet (van, voor, soort, sleutel, titel, inhoud, uniek, status, ts)")
+        con.execute("CREATE TABLE logboek (id INTEGER PRIMARY KEY, naam, onderwerp, stap, tekst, detail, ts)")
+        van, _ = wd.grenzen(dag)
+        for r in regels:
+            con.execute("INSERT INTO logboek(naam, onderwerp, stap, tekst, ts) VALUES(?,?,?,?,?)",
+                        (r["naam"], r.get("onderwerp", ""), r["stap"], r["tekst"], van))
+        return wd.per_wacht(con, "icloud-wacht", "De Fotowacht", dag)["kleur"]
+
+    def test_foto1_wachtende_taak_is_melding_exit_0_en_niet_rood(self):
+        # T-0120 FOTO-1: een taak zonder venster wacht op de voorbereider. Geen stap 'fout', exit 0, niet rood op de
+        # wachtenpagina, en hoogstens één melding per taak per dag (tot 01-11 elke 30 minuten een rode regel).
+        data = self.inhoud()
+        data.pop("start")
+        code, _, logs = self.fake_run([], inhoud=data)
+        regels = self.logregels(logs)
+        self.assertEqual(code, 0)
+        self.assertEqual([r["stap"] for r in regels], ["melding"])
+        self.assertIn("bezoekvenster_ontbreekt", regels[0]["detail"])
+        self.assertNotEqual(self.wachtenpagina(regels), "rood")
+        code, _, logs = self.fake_run([], inhoud=data)
+        self.assertEqual((code, self.logregels(logs)), (0, []))
+        self.assertEqual(self.statussen[-1][0], "klaar")
+
+    def test_foto1_gedeeltelijke_levering_is_fout_en_exit_1(self):
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
+        regels = self.logregels(logs)
+        self.assertEqual(code, 1)
+        self.assertIn("fout", [r["stap"] for r in regels])
+        self.assertEqual(self.wachtenpagina(regels), "rood")
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
+        self.assertEqual(code, 1)
+        self.assertIn("fout", [r["stap"] for r in self.logregels(logs)])
 
     def test_lege_of_gedeeltelijke_export_wordt_nooit_afgevinkt(self):
         for n in (0, 1):
@@ -184,7 +227,7 @@ class ICloudStatus(unittest.TestCase):
         data.pop("start")
         self.module.fotos_van = lambda day: self.fail("ontbrekend venster mag geen foto's lezen")
         code, exports, _ = self.fake_run([], inhoud=data)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [])
         self.assertEqual(self.afgevinkt, [])
         self.assertEqual(self.lezingen, [])
@@ -220,7 +263,7 @@ class ICloudStatus(unittest.TestCase):
 
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [["goed"]])
         self.assertEqual(self.afgevinkt, [])
         self.assertIn("fotoselectie_onbeslist", self.statussen[-1][1]["detail"])
@@ -230,7 +273,7 @@ class ICloudStatus(unittest.TestCase):
                      self.inhoud(start="2026-10-14T11:00:00"), self.inhoud(bezoek_id=None), self.inhoud(straal_m=600)):
             with self.subTest(gegevens=data):
                 code, exports, _ = self.fake_run([self.foto("fictief")], inhoud=data)
-                self.assertEqual(code, 1)
+                self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
                 self.assertEqual(exports, [])
                 self.assertEqual(self.afgevinkt, [])
                 self.assertEqual(self.lezingen, [])
@@ -306,7 +349,7 @@ class ICloudStatus(unittest.TestCase):
         fotos = [self.foto("eerste")]
         for nu in ("2026-10-14T11:00:00+00:00", "2026-10-14T11:44:59+00:00"):
             code, exports, _ = self.fake_run(fotos, inhoud=data, nu=nu)
-            self.assertEqual((code, exports[-1], self.afgevinkt), (1, ["eerste"], []))
+            self.assertEqual((code, exports[-1], self.afgevinkt), (0, ["eerste"], []))
         self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
         code, _, _ = self.fake_run(fotos, inhoud=data, nu="2026-10-14T11:45:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
@@ -320,7 +363,7 @@ class ICloudStatus(unittest.TestCase):
         tweede = self.foto("tweede")
         self.fake_run([eerste], inhoud=data, nu="2026-10-14T11:00:00+00:00")
         code, exports, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T11:46:00+00:00")
-        self.assertEqual((code, exports, self.afgevinkt), (1, [["eerste", "tweede"]], []))
+        self.assertEqual((code, exports, self.afgevinkt), (0, [["eerste", "tweede"]], []))
         self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T12:31:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
@@ -332,7 +375,7 @@ class ICloudStatus(unittest.TestCase):
         self.fake_run([eerste], inhoud=data, nu="2026-10-14T15:59:59+00:00")
         self.assertEqual(self.afgevinkt, [])
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:00:00+00:00")
-        self.assertEqual((code, self.afgevinkt), (1, []))
+        self.assertEqual((code, self.afgevinkt), (0, []))
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:30:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
         nieuw = self.inhoud_tkn(bezoek_ref="verslagopdracht:13")
@@ -356,11 +399,11 @@ class ICloudStatus(unittest.TestCase):
                 self.statussen.clear()
                 self.afgevinkt.clear()
                 code, exports, _ = self.fake_run([self.foto("goed")], inhoud={**basis, **changes})
-                self.assertEqual((code, exports, self.afgevinkt, self.lezingen), (1, [], [], []))
+                self.assertEqual((code, exports, self.afgevinkt, self.lezingen), (0, [], [], []))
                 self.assertIn(fout, self.statussen[-1][1]["detail"])
         ontbreekt = {**basis, "projectmap": "/Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand"}
         code, exports, _ = self.fake_run([self.foto("goed")], inhoud=ontbreekt)
-        self.assertEqual((code, exports), (1, []))
+        self.assertEqual((code, exports), (0, []))
         self.assertIn("fotomap_ontbreekt", self.statussen[-1][1]["detail"])
         self.assertFalse(Path(self.module.DROPBOX_LOKAAL, "Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand").exists())
 
@@ -470,6 +513,40 @@ class ICloudStatus(unittest.TestCase):
         self.assertIn("omzetting_mislukt", self.statussen[-1][1]["detail"])
         self.assertFalse((doel / "00 fotos.md").exists())
         self.assertFalse((doel / "IMG_0004.jpg").exists())
+
+    def test_vol18_bs_fototaak_van_het_commandocentrum_houdt_dezelfde_uitkomst(self):
+        # T-0120 VOL-18: de fototaak van de keten Barsten en scheuren, gemaakt zoals commandocentrum.py:321-379 ze maakt
+        # (taakinhoud), levert, vinkt af en schrijft één 00 fotos.md zoals voor FOTO-1 en FOTO-6. Wat de keten leest (bord-
+        # taak, fotomap, manifest, hartslag) blijft gelijk; alleen wachten geeft geen exit 1 en geen rode regel meer.
+        runner = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(runner / "plaud"))
+        spec = importlib.util.spec_from_file_location("commandocentrum_vol18", runner / "commandocentrum.py")
+        cc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cc)
+        project = "/Work/TKN BURO WORK/1 Projects/2026/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"
+        rij = {"uniek": "afspraak:bs1", "dossier": "3999", "firma": "UNAB", "klant": "Proefklant", "adres": "Proeflaan 23, 9998 Proefgem",
+               "datum": "2026-10-21", "start": "2026-10-21T08:00:00+02:00", "einde": "2026-10-21T10:00:00+02:00",
+               "titel": "BS bezoek", "agenda": "werk", "deal_id": ""}
+        oud = {**rij, "id": 77, "dossiermap": project, "bezoekmap": project, "pakket": {}, "taken": []}
+        data, _ = cc.taakinhoud(rij, oud, cc.vs.SOORTEN["barsten-scheuren"], "barsten-scheuren")
+        (Path(self.module.DROPBOX_LOKAAL) / PurePosixPath(data["doelmap"]).parent.as_posix().lstrip("/")).mkdir(parents=True)
+        doel = Path(self.module.taakdoel(data))
+        nu = "2026-10-21T20:00:00+00:00"
+        goed = self.foto("goed", "2026-10-21T07:00:00+00:00")
+        # wachten: geen foto in het venster
+        code, exports, logs = self.fake_run([self.foto("ver", lat=50.01)], inhoud=data, nu=nu)
+        self.assertEqual((code, exports, self.afgevinkt, doel.joinpath("00 fotos.md").exists()), (0, [], [], False))
+        self.assertEqual((self.statussen[-1][0], [r["stap"] for r in self.logregels(logs)]), ("klaar", ["melding"]))
+        # gedeeltelijk: een eigen fout, zoals voorheen
+        code, exports, _ = self.fake_run([goed, self.foto("tweede", "2026-10-21T07:05:00+00:00")], inhoud=data, nu=nu, geleverd=1)
+        self.assertEqual((code, self.afgevinkt, doel.joinpath("00 fotos.md").exists()), (1, [], False))
+        self.assertEqual(self.statussen[-1][0], "fout")
+        # volledig: geleverd, afgevinkt, één manifest
+        code, exports, _ = self.fake_run([goed], inhoud=data, nu=nu, taak_id=13)
+        self.assertEqual((code, exports, self.afgevinkt), (0, [["goed"]], [13]))
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 1)
+        self.assertIn("verslagopdracht:77", (doel / "00 fotos.md").read_text())
+        self.assertEqual(self.statussen[-1][0], "klaar")
 
     def test_hartslag_vermeldt_versie_of_onbekend(self):
         m = self.module

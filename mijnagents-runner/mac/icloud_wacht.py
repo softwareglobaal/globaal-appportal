@@ -42,6 +42,7 @@ SELECTIE_RUST_MIN = 45
 # Hetzelfde vangnet als verslag_basis.ZONDER_TAKEN_UUR; de geïsoleerde Mac-starter kan de VM-module niet importeren.
 ZONDER_TAKEN_UUR = 6
 SELECTIE_STAAT = os.path.expanduser("~/.config/mijnagents/icloud_selecties")
+MELDING_STAAT = os.path.expanduser("~/.config/mijnagents/icloud_meldingen.json")
 # Redenen waarbij de wacht zelf faalde (export of omzetting); al de rest is een taak die op gegevens wacht.
 WACHTFOUTEN = frozenset({"exportresultaat_ongeldig", "omzetting_mislukt", "fotolevering_gedeeltelijk"})
 DAG = None
@@ -638,6 +639,41 @@ def selectie_stabiel(it, d, fotos, nu):
     return not eerder_gemeten and na_vangnet
 
 
+class MeldingenVandaag:
+    """Welke taak met welke reden vandaag al gemeld is (T-0120 FOTO-1), alleen op deze Mac. Een onleesbare staat geeft
+    hoogstens een melding te veel, nooit een te weinig; een nieuwe dag begint leeg."""
+
+    def __init__(self):
+        self.dag = datetime.now(ZoneInfo("Europe/Brussels")).date().isoformat()
+        try:
+            oud = json.loads(Path(MELDING_STAAT).read_text(encoding="utf-8"))
+            self.gemeld = set(oud.get("gemeld") or []) if oud.get("dag") == self.dag else set()
+        except (OSError, ValueError, AttributeError, TypeError):
+            self.gemeld = set()
+        self.nieuw = False
+
+    def eerste(self, kid, code):
+        sleutel = f"{kid}:{code}"
+        if sleutel in self.gemeld:
+            return False
+        self.gemeld.add(sleutel)
+        self.nieuw = True
+        return True
+
+    def bewaar(self):
+        if not self.nieuw:
+            return
+        pad = Path(MELDING_STAAT)
+        try:
+            pad.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            tijdelijk = pad.with_name(f".{pad.name}.{os.getpid()}")
+            tijdelijk.write_text(json.dumps({"dag": self.dag, "gemeld": sorted(self.gemeld)}), encoding="utf-8")
+            os.chmod(tijdelijk, 0o600)
+            os.replace(tijdelijk, pad)
+        except OSError as e:
+            print("meldingstaat niet bewaard:", type(e).__name__, file=sys.stderr)
+
+
 def taken():
     """Geen afvinkactie zonder volledige levering voor het bevestigde bezoek."""
     lijst = taken_lezen()
@@ -645,13 +681,21 @@ def taken():
         return {"gedaan": 0, "open": 0}
     hartslag("actief", taak=f"{len(lijst)} foto-taak/taken van de voorbereider")
     regels, gedaan, open_, redenen = [], 0, 0, {}
+    gemeld = MeldingenVandaag()
 
     def blokkeer(it, code):
+        # T-0120 FOTO-1: alleen een fout van de wacht zelf (WACHTFOUTEN) is stap 'fout'. Een taak die op gegevens van de
+        # voorbereider wacht, is een 'melding', hoogstens één keer per taak en reden per dag: tot 01-11 schreef elke ronde
+        # (elke 30 minuten) een rode regel, en stond De Fotowacht elke dag rood zonder dat ze zelf faalde.
         nonlocal open_
         open_ += 1
         redenen[code] = redenen.get(code, 0) + 1
-        regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "fout",
-                       "tekst": "fototaak blijft open", "detail": json.dumps({"regel": code, "klaarzet_id": it.get("id")})})
+        detail = json.dumps({"regel": code, "klaarzet_id": it.get("id")})
+        if code in WACHTFOUTEN:
+            regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "fout", "tekst": "fototaak blijft open", "detail": detail})
+        elif gemeld.eerste(it.get("id"), code):
+            regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "melding",
+                           "tekst": "fototaak wacht op gegevens van de voorbereider", "detail": detail})
 
     for it in lijst:
         try:
@@ -739,6 +783,7 @@ def taken():
         gedaan += 1
     if regels:
         bord("/api/logboek", {"regels": regels})
+    gemeld.bewaar()
     # 31-10-2026: alleen een fout van de wacht zelf (export of omzetting) zet hem op fout. Een taak zonder venster, zonder
     # foto's op die plek of die nog rust nodig heeft, wacht op gegevens van de voorbereider: de taak blijft open en staat
     # in het detail, maar de Fotowacht leverde wel (anders stond hij weken rood door oude werfverslagtaken).
@@ -759,7 +804,8 @@ def _werk():
             sys.exit("geen token")
         uit = taken()
         print("taken:", json.dumps(uit, sort_keys=True))
-        return 1 if uit["open"] else 0
+        # T-0120 FOTO-1: exit 1 alleen bij een eigen fout; een uitzondering geeft main() al 1.
+        return 1 if any(r in WACHTFOUTEN for r in uit.get("redenen", {})) else 0
     if not TOKEN:
         print("geen token in ~/.config/mijnagents/token", file=sys.stderr)
         sys.exit(1)
