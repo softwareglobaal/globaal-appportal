@@ -508,7 +508,10 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
         r.nood("Een zoektaak voor De Plaudwacht heeft een ongeldige bezoekmap; er is niets geleverd", wie="claude-code")
     oudste = min((t.get("aangemaakt") or t.get("ts") or "" for t in taken), default="")
     toest = m["meta"].get("toestanden") or {}
+    # PLAUD-9 (T-0120): de korte wachtende (onder een minuut) apart, maar ook in de wachtteller; een ouder manifest
+    # zonder die telling geeft onbekend, nooit 0
     tellers.update(manifest=m["meta"]["aantal"], wacht_op_transcript_archief=toest.get("wacht_op_transcript", 0),
+                   kort_wachtend_archief=m["meta"].get("kort_wachtend", "onbekend"),
                    onvolledig_archief=toest.get("onvolledig", 0), open_zoektaken=len(taken), oudste_zoektaak=oudste[:10],
                    aanmelding_mac=status.get("uitkomst", "onbekend"), invoer_van=m["meta"]["gemaakt"][:16])
     return code

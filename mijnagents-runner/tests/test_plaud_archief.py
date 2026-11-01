@@ -316,6 +316,27 @@ def test_manifest_toont_echte_toestand_zonder_links():
     shutil.rmtree(d)
 
 
+def test_plaud9_korte_wachtende_opnames_apart_geteld_en_niet_uit_de_wachtteller():
+    """PLAUD-9 (T-0120): 47 van de 87 wachtende opnames waren korter dan een minuut. Ze komen apart in het manifest (meta
+    kort_wachtend), maar blijven wachtend: drie pogingen bewijzen niet dat er nooit een transcript komt (Codex). De
+    opnames zelf veranderen niet, zodat elke lezer (ook de zoektaken van barsten en scheuren) hetzelfde ziet."""
+    d = doel()
+    kort = op(ID1, link=False)
+    kort["duration"] = 6000                                        # 6 seconden
+    bouw_map.bouw(kort, d, haler=Haler())
+    bouw_map.bouw(op(ID2, link=False, start="2026-09-18T08:00:00"), d, haler=Haler())          # 10 min, wacht
+    id3 = "of_" + "c" * 32
+    kort_klaar = op(id3, start="2026-09-19T08:00:00")
+    kort_klaar["duration"] = 30000                                 # kort, maar met transcript: telt niet mee
+    bouw_map.bouw(kort_klaar, d, haler=Haler())
+    m = manifest.bouw(d)
+    assert m["toestanden"] == {"wacht_op_transcript": 2, "compleet": 1}, m
+    assert m["kort_wachtend"] == 1, m
+    per = {o["plaud_id"]: o for o in manifest.lees(d)["opnames"]}
+    assert set(per[ID1]) == set(per[ID2]), "geen nieuw veld per opname"
+    shutil.rmtree(d)
+
+
 # ----------------------------------------------------- nacontrole v1.1 (12-10-2026) ---
 def test_bestaande_map_met_onbekende_eigenaar_is_niet_vrij():
     """P1-6: corrupte metadata naast audio en transcript; een andere opname met dezelfde naam."""

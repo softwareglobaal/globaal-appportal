@@ -930,6 +930,20 @@ def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
     assert not [t for s, t in w.logs if t.startswith("geen dossierkopie")], w.logs
 
 
+def test_plaud9_korte_wachtende_staan_apart_en_blijven_in_de_wachtteller():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", transcript=False)
+    w.opname(ID2, "10-09 kort", "2026-10-09T09:05:00", minuten=0.1, transcript=False)
+    w.push()
+    _, tel, _ = w.ronde()
+    assert tel["wacht_op_transcript_archief"] == 2 and tel["kort_wachtend_archief"] == 1, tel
+    m = json.loads((w.invoer / "00 manifest.json").read_text())
+    del m["meta"]["kort_wachtend"]                                  # een manifest van voor PLAUD-9
+    (w.invoer / "00 manifest.json").write_text(json.dumps(m))
+    _, tel, _ = w.ronde()
+    assert tel["kort_wachtend_archief"] == "onbekend", tel
+
+
 def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     sys.path.insert(0, os.path.join(HIER, "planning"))
     import plaud_cron_zetten as Z
