@@ -98,25 +98,6 @@ def meet(rol, geval, budget, vraag=None):
     return uit
 
 
-def eerdere_vragen(uitmap, dag):
-    """Hoeveel modelvragen de proeven van die dag al deden (uit hun proefbestand): zo omzeilt een herhaalde proef de
-    vijf per dag niet, zonder dat de proef de dagteller van de nachtronde aanraakt."""
-    n = 0
-    try:
-        namen = os.listdir(uitmap)
-    except OSError:
-        return 0
-    for naam in namen:
-        if naam.startswith("proef-") and naam.endswith(".json"):
-            try:
-                with open(os.path.join(uitmap, naam), encoding="utf-8") as f:
-                    d = json.load(f)
-                n += int(d.get("modelvragen") or 0) if str(d.get("ts") or "")[:10] == dag else 0
-            except (OSError, ValueError, AttributeError, TypeError):
-                continue
-    return n
-
-
 def proef(maand, vraag=None, uitmap=None, nu=None):
     """Het pad van het proefbestand. vraag: in een test het nepmodel."""
     nu = nu or datetime.now().astimezone()
@@ -125,9 +106,9 @@ def proef(maand, vraag=None, uitmap=None, nu=None):
     rijen = [dict(r) for r in AR.db().execute("select * from gesprek_log where bron in ('fathom','plaud') and datum "
                                               "between ? and ? order by datum, start", (van, tot))]
     lijst, projecten = AR.afspraken(van, tot), bewaarde_projecten()
-    keuze, tekort = kies([AR.geval_van(g, lijst, projecten) for g in rijen], GA.zoom_gevallen(van, tot))
-    budget = GA.Budget(nu.strftime("%Y-%m-%d"), teller=None)    # de dagteller van de nachtronde telt mee, maar blijft
-    budget.vandaag += eerdere_vragen(uitmap, nu.strftime("%Y-%m-%d"))
+    keuze, tekort = kies([AR.geval_van(g, lijst, projecten) for g in rijen], GA.zoom_gevallen(van, tot))  # Fathom: archiefmap
+    # de dagteller van de nachtronde en de eerdere proeven van vandaag tellen mee; de dagteller blijft ongemoeid
+    budget = GA.Budget(nu.strftime("%Y-%m-%d"), teller=None, proefmap=uitmap)
     begin, voor = budget.vandaag, GA.weekbenutting()[0]
     gevallen = [meet(rol, g, budget, vraag) for rol, g in keuze if g]
     werk = [g for g in gevallen if g["record"] and not g["record"].get("prive")]
@@ -142,7 +123,11 @@ def proef(maand, vraag=None, uitmap=None, nu=None):
                "prive_alleen_regel": all(g.get("alleen_privegesprek", True) for g in gevallen),
                "tokens": sum(g["tokens"] for g in gevallen), "duur_s": round(sum(g["duur_s"] for g in gevallen), 2),
                "weekvenster_voor": voor, "weekvenster_na": GA.weekbenutting()[0], "gesprekken": gevallen}
-    pad = os.path.join(uitmap, f"proef-{maand}-{nu.strftime('%Y%m%d-%H%M%S')}.json")
+    stam, n = os.path.join(uitmap, f"proef-{maand}-{nu.strftime('%Y%m%d-%H%M%S')}"), 1
+    pad = stam + ".json"
+    while os.path.exists(pad):                      # een tweede proef in dezelfde seconde overschrijft de eerste niet
+        n += 1
+        pad = f"{stam}-{n}.json"
     return GA.schrijf_600(pad, uitslag), uitslag
 
 

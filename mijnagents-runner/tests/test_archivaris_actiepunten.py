@@ -722,6 +722,51 @@ def test_alleen_analyse_vindt_ook_een_hernoemde_fathommap():
     assert json.load(open(os.path.join(uitvoer, "fathom", "rec9500.json"), encoding="utf-8"))["samenvatting_van"] == "fathom"
 
 
+
+# ------------------------------------------------------------------------------- Codex T-0120 toets 2 ---
+def test_proef_en_nachtronde_tellen_elkaars_modelvragen_mee():
+    """Vijf modelvragen in drie proeven, daarna de nachtronde dezelfde dag: geen vraag meer. En omgekeerd: vier in de
+    nachtronde, dan krijgt de proef er nog een. Twee proeven in dezelfde seconde geven twee bestanden."""
+    vraag = NepVraag()
+    pad, u, nieuw, gewijzigd, scherm = _proef(True, vraag, keer=3, naam="proefdata-samen")
+    uitvoer = os.path.join(THUIS, "proefdata-samen", "gespreksanalist")
+    with vervangen((GA, "MODEL_AAN", True), (GA, "UITVOER", uitvoer)):
+        nacht = GA.Budget("2026-11-02", limiet=LIMIET)
+        _meet(0.40)
+        assert nacht.vandaag == 5 and GA.verwerk(_plaud()[0], nacht, vraag)[1] == "al 5 gesprekken naar het model vandaag"
+    basis = os.path.join(THUIS, "proefdata-omgekeerd", "gespreksanalist")
+    GA.schrijf_600(os.path.join(basis, "teller.json"), {"dag": "2026-11-02", "vragen": 4})
+    vraag = NepVraag()
+    with vervangen((GA, "UITVOER", basis)):
+        pad, u, *_ = _proef(True, vraag, naam="proefdata-omgekeerd")
+    assert u["modelvragen"] == 1 and len(vraag.vragen) == 3, "1 op 02-11 (4 al in de nacht), 2 voor main() op vandaag"
+    assert json.load(open(os.path.join(basis, "teller.json")))["vragen"] == 4, "de proef raakt de dagteller niet"
+    namen = sorted(n for n in os.listdir(os.path.join(THUIS, "proefdata-samen", "gespreksanalist", "proef"))
+                   if n.startswith("proef-2026-10-20261102-030000"))
+    assert len(namen) == 1
+    with vervangen((AR, "db", _db([])), (AR, "afspraken", lambda van, tot: []), (AR, "ag", GeenBord()),
+                   (GA, "UITVOER", os.path.join(THUIS, "zelfde-seconde")), (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg"))):
+        nu = AR.datetime(2026, 11, 2, 4, 0).astimezone()
+        a, _ = PR.proef("2026-10", NepVraag(), nu=nu)
+        b, _ = PR.proef("2026-10", NepVraag(), nu=nu)
+    assert a != b and os.path.exists(a) and os.path.exists(b), (a, b)
+
+
+def test_archiefmap_zoekt_op_het_id_zelf_en_niet_op_een_stukje_tekst():
+    ander = os.path.join(DATA, "fathom-data", "2026-10-25 0900 ander gesprek")
+    _schrijf(os.path.join(ander, "gesprek.json"), {"recording_id": "rec96001", "url": "https://fathom.video/calls/rec96001"})
+    juist = os.path.join(DATA, "fathom-data", "2026-10-25 1100 hernoemd juist")
+    _schrijf(os.path.join(juist, "gesprek.json"), {"recording_id": "rec9600"})
+    assert AR.archiefmap({"uniek": "fathom:rec9600", "archief": ander}) == juist, "een oud pad naar een ander gesprek telt niet"
+    assert AR.archiefmap({"uniek": "fathom:rec9600", "archief": os.path.join(DATA, "fathom-data", "weg")}) == juist
+    assert AR.archiefmap({"uniek": "fathom:rec960", "archief": ""}) == "", "rec960 is niet rec9600 of rec96001"
+    zonder_id = os.path.join(DATA, "fathom-data", "2026-10-25 1300 zonder id")
+    _schrijf(os.path.join(zonder_id, "gesprek.json"), {"title": "oud"})
+    assert AR.archiefmap({"uniek": "fathom:rec9700", "archief": zonder_id}) == zonder_id, "zonder id: zoals vroeger"
+    g = {"uniek": "fathom:rec9600", "bron": "fathom", "archief": ander, "datum": "2026-10-25", "start": "11:00", "minuten": 5}
+    assert AR.geval_van(g, [], {})["map"] == juist and AR.geval_van(g, [], {}, "")["map"] == ""
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in list(globals().items()):

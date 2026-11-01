@@ -370,19 +370,41 @@ def weekbenutting(bestand=None, nu=None):
     return (max(waarden) if waarden else None), gezien
 
 
+def proefvragen(dag, proefmap):
+    """Hoeveel modelvragen de proeven van die dag deden (veld modelvragen in hun proefbestand, gespreksanalist_proef.py).
+    Een onleesbaar proefbestand telt niet mee."""
+    n = 0
+    try:
+        namen = os.listdir(proefmap)
+    except OSError:
+        return 0
+    for naam in namen:
+        if not (naam.startswith("proef-") and naam.endswith(".json")):
+            continue
+        try:
+            with open(os.path.join(proefmap, naam), encoding="utf-8") as f:
+                d = json.load(f)
+            n += int(d.get("modelvragen") or 0) if str(d.get("ts") or "")[:10] == dag else 0
+        except (OSError, ValueError, AttributeError, TypeError):
+            continue
+    return n
+
+
 class Budget:
     """Mag er nog een gesprek naar het model? Hoogstens MAX_PER_DAG per dag (teller.json in UITVOER; een mislukte vraag
     telt mee), en alleen met een meting van het weekvenster die hoogstens MAX_OUDERDOM oud is en onder WEEKGRENS ligt.
     Na elke vraag moet er een nieuwe meting zijn. Anders stopt het model voor de rest van de ronde: onbekend of oud is
     geen ruimte (Codex T-0120 toets 1). De meting komt van elke agent op het abonnement (Ai Angel, ANGEL-3). Een fout van
-    het abonnement stopt het ook (stop, fout). teller=None: alleen in het geheugen (de proef), vanaf de stand in het
-    bestand."""
+    het abonnement stopt het ook (stop, fout). De stand van de dag is de dagteller van de nachtronde plus de
+    modelvragen van de proeven van die dag (hun proefbestand, veld modelvragen): zo telt elk de ander mee (Codex T-0120
+    toets 2). teller=None: alleen in het geheugen (de proef)."""
 
-    def __init__(self, dag, teller="", limiet=None, klok=time.time):
+    def __init__(self, dag, teller="", limiet=None, klok=time.time, proefmap=None):
         self.dag, self.limiet, self.klok = dag, limiet, klok
         self.bestand = os.path.join(UITVOER, "teller.json")
+        self.proefmap = proefmap or os.path.join(UITVOER, "proef")
         self.teller = self.bestand if teller == "" else teller
-        self.vandaag, self.sinds, self.stop, self.fout = self._stand(), None, None, None
+        self.vandaag, self.sinds, self.stop, self.fout = self._stand() + proefvragen(self.dag, self.proefmap), None, None, None
 
     def _stand(self):
         try:

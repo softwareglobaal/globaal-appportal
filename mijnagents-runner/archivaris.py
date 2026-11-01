@@ -221,22 +221,43 @@ def weekoverzicht(week):
     return len(rijen)
 
 
+def _hoort_bij(pad, sleutel):
+    """Is deze gesprek.json van dit gesprek? Op het recording_id (of de url) van Fathom, of het plaud_id: True of False;
+    None als het bestand geen id draagt. Een onleesbaar bestand is van niemand."""
+    try:
+        with open(pad, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(d, dict):
+        return False
+    ids = {str(d[k]) for k in ("recording_id", "plaud_id") if d.get(k) not in (None, "")}
+    if d.get("url"):
+        ids.add(str(d["url"]).rstrip("/").rsplit("/", 1)[-1])
+    return (sleutel in ids) if ids else None
+
+
 def archiefmap(g):
-    """De map met gesprek.json van dit gesprek; de map kan hernoemd zijn (Belgische tijd, Prive): dan zoek ik op uniek.
-    '' als er geen is."""
+    """De map met gesprek.json van dit gesprek, of ''. Het pad uit de gesprekkentabel telt als die gesprek.json bij dit
+    gesprek hoort (zonder id, zoals vroeger: ja); anders kan de map hernoemd zijn (Belgische tijd, Prive) en zoek ik op
+    het id zelf, nooit op een stukje tekst (Codex T-0120 toets 2: rec9500 is niet rec95001)."""
+    sleutel = g["uniek"].split(":", 1)[-1]
     map_ = g.get("archief") or ""
-    if map_ and os.path.exists(os.path.join(map_, "gesprek.json")):
+    if map_ and _hoort_bij(os.path.join(map_, "gesprek.json"), sleutel) is not False:
         return map_
-    kandidaten = [p for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True)
-                  if g["uniek"].split(":", 1)[-1] in open(p, encoding="utf-8", errors="ignore").read()]
-    return os.path.dirname(kandidaten[0]) if kandidaten else ""
+    for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True):
+        if _hoort_bij(p, sleutel):
+            return os.path.dirname(p)
+    return ""
 
 
 def geval_van(g, lijst, projecten, gevonden=None):
-    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json (gevonden: de map
-    die de labelronde vond, ook als ze hernoemd is), het label dat ik gaf en het bewezen H-A-nummer, zoals in de
-    labelronde (ha_projectnummer)."""
-    map_ = gevonden or g.get("archief") or ""
+    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json, het label dat ik
+    gaf en het bewezen H-A-nummer, zoals in de labelronde (ha_projectnummer). Fathom: de map die archiefmap() vond
+    (gevonden, '' als er geen is; None: nu zoeken), nooit een oud pad dat naar een ander gesprek wijst."""
+    map_ = g.get("archief") or ""
+    if g.get("bron") == "fathom":
+        map_ = archiefmap(g) if gevonden is None else gevonden
     if g.get("bron") == "plaud":    # De Plaudwacht noemt de map op de Mac; op de VM staat transcript.json in plaud-invoer
         deel = map_[len(GA.PLAUD_OP_MAC):].split("/")[0] if map_.startswith(GA.PLAUD_OP_MAC) else ""
         map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel else ""
@@ -313,11 +334,11 @@ def _ronde(r, van, tot, vandaag, alleen=False):
         twijfel, tel, weken = [], Counter(), set()
         for g in gesprekken:
             map_ = archiefmap(g)
+            gevonden[g["uniek"]] = map_
             if not map_:
                 overgeslagen += 1
                 continue
             gj = os.path.join(map_, "gesprek.json")
-            gevonden[g["uniek"]] = map_
             d = json.load(open(gj, encoding="utf-8"))
             sleutel = (g["datum"], g["start"])
             c = corr.get(sleutel)
