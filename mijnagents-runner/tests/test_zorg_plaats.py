@@ -255,7 +255,7 @@ class ZorgPlaats(unittest.TestCase):
         bron = inspect.getsource(W._ronde)      # de romp van de ronde, sinds NA09-rest (01-11-2026) apart van main()
         rit = "reistijd_zetten(rit_items, dag_grens, niet_op_kaart=niet_op_kaart)"
         vraag = "vragen_in_agenda(rit_items, niet_op_kaart=niet_op_kaart)"
-        nood = "adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart)"
+        nood = "adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, starts=gevraagd)"   # T-0120 AG-4
         for stap in (rit, vraag, nood):
             self.assertIn(stap, bron)
         self.assertLess(bron.index(rit), bron.index(vraag))

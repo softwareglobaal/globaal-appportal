@@ -6203,9 +6203,26 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     return gemaakt, al, geen_adres, fout, regels
 
 
+def adres_bekend(a, info, projecten):
+    """Of een buitenafspraak een bestemming heeft, uit dezelfde bronnen als de reistijd en de adresvraag: het adresveld
+    (ook thuis), de projectmap, een plek uit locatie.globaal.be en een vaste plek. Een bron die niet antwoordt, telt als
+    niet gevonden. T-0120 AG-4: tot 01-11-2026 kende 'zonder adres' alleen het adresveld en de projectmap, en meldde het
+    afspraken waar de reistijd wel een adres voor vond."""
+    if is_thuis_adres(a.get("locatie") or "") or _bruikbare_locatie(a.get("locatie")):
+        return True
+    if info["nummer"] and info["nummer"] in projecten and _bruikbare_locatie(projecten[info["nummer"]].get("adres")):
+        return True
+    try:
+        plek, _ = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
+        _woord, vast = vaste_plek(a.get("titel") or "") if not plek else (None, None)
+    except Exception:  # noqa: BLE001
+        plek = vast = None
+    return bool(plek or vast and _bruikbare_locatie(vast.get("adres")))
+
+
 def onvolledige_afspraken(items, vandaag):
     """Regel van Mehdi (11-09-2026): elke klantafspraak draagt een projectnummer; online volstaat
-    het nummer, buiten moet er ook een adres zijn (uit de agenda of uit de projectmap).
+    het nummer, buiten moet er ook een adres zijn (uit dezelfde bronnen als de reistijd, adres_bekend).
     Prospecten (PO/PB) hebben nog geen nummer: daar vraag ik alleen een adres bij buiten."""
     projecten = projectadressen.index()
     uit = []
@@ -6215,14 +6232,12 @@ def onvolledige_afspraken(items, vandaag):
         info = lees_titel(a["titel"])
         if info["reistijd"] or info["soort"] == "IN" or not (info["firma"] or info["buiten"]):
             continue
-        adres = a.get("locatie") or ""
-        fysiek = bool(adres) and not adres.lower().startswith("http")
         wat = []
         if info["soort"] in ("KB", "KO") and not info["nummer"]:
             wat.append("geen projectnummer")
         if info["soort"] in ("KB", "PB") or info["buiten"]:
-            if not fysiek and not (info["nummer"] in projecten):
-                wat.append("geen adres (niet in agenda, geen projectmap met dit nummer)")
+            if not adres_bekend(a, info, projecten):
+                wat.append("geen adres (niet in de agenda, de projectmap, locatie.globaal.be of de vaste plekken)")
         if wat:
             uit.append(f"{a['start'][:16]} {a['titel'][:60]} ({KALENDERS.get(a['kalender'], '')[:12]}): " + ", ".join(wat))
     return uit
@@ -6857,18 +6872,8 @@ def _adresvragen(items, nu=None, uren=24 * RIT_VOORUIT_ALLES, projecten=None, ni
         if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
             continue
         niet_gevonden = (a.get("kalender"), a.get("id"), a.get("start")) in (niet_op_kaart or ())
-        if not niet_gevonden:
-            if is_thuis_adres(a.get("locatie") or "") or _bruikbare_locatie(a.get("locatie")):
-                continue
-            if info["nummer"] and info["nummer"] in projecten and _bruikbare_locatie(projecten[info["nummer"]].get("adres")):
-                continue
-            try:
-                plek, _ = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
-                woord, vast = vaste_plek(a.get("titel") or "") if not plek else (None, None)
-            except Exception:  # noqa: BLE001
-                plek = vast = None
-            if plek or vast and _bruikbare_locatie(vast.get("adres")):
-                continue
+        if not niet_gevonden and adres_bekend(a, info, projecten):   # dezelfde bronnen als 'zonder adres' (AG-4)
+            continue
         id_ = a.get("id") or hashlib.sha256(f"{a.get('kalender')}|{a.get('start')}|{a.get('titel')}".encode()).hexdigest()[:16]
         zin = (f"Mehdi, het adres van de buitenafspraak van {start:%d-%m %H:%M} vind ik niet op de kaart; "
                "schrijf het zoals op de kaart (straat nummer, postcode gemeente)." if niet_gevonden else
@@ -7208,8 +7213,9 @@ def vragen_in_agenda(items, nu=None, niet_op_kaart=None):
     return gezet, weg
 
 
-def adres_vraag_noden(items, nu=None, niet_op_kaart=None):
-    """Een stabiele nood voor een adresvraag die niet zichtbaar in de afspraak kon worden gezet."""
+def adres_vraag_noden(items, nu=None, niet_op_kaart=None, starts=None):
+    """Een stabiele nood voor een adresvraag die niet zichtbaar in de afspraak kon worden gezet. starts: een set die de
+    starttijd (tot op de minuut) krijgt van elke afspraak met zo'n nood, voor adres_noden (T-0120 AG-4)."""
     vragen = _adresvragen(items, nu, niet_op_kaart=niet_op_kaart)
     per_id = {a.get("id"): a for a in items}
     uit = []
@@ -7220,7 +7226,28 @@ def adres_vraag_noden(items, nu=None, niet_op_kaart=None):
                       and any(s in (a.get("omschrijving") or "").split("\n", 1)[0]
                               for s in ("zet het adres erin", "vind ik niet op de kaart"))):
             uit.append({"tekst": f"{zin} VR niet mogelijk ({sleutel})", "wie": "mehdi"})
+            if starts is not None and a:
+                starts.add((a.get("start") or "")[:16])
     return uit
+
+
+def adres_noden(zonder_rit, onvolledig, gevraagd=()):
+    """De noden over projectnummer, adres en reistijd, zo dat een afspraak in hoogstens een staat (T-0120 AG-4; tot
+    01-11-2026 stond een afspraak zonder adres in drie noden). Voorrang: de adresvraag van adres_vraag_noden (gevraagd:
+    hun starttijden), dan de reden waarom de reistijd ontbreekt (zonder_rit_indelen), dan 'zonder adres' voor wat de
+    reistijd niet zag (onvolledige_afspraken). Een ontbrekend projectnummer is een eigen nood: online volstaat het nummer,
+    dus geen adresmelding. Een afspraak herken ik aan haar starttijd tot op de minuut, vooraan elke regel."""
+    gevraagd = set(gevraagd)
+    noden, gemeld = [], set(gevraagd)
+    for reden, rij in (zonder_rit or {}).items():
+        if any(r[:16] not in gevraagd for r in rij):
+            noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
+        gemeld.update(r[:16] for r in rij)
+    if any("geen projectnummer" in r for r in onvolledig or ()):
+        noden.append({"tekst": "Klantafspraken zonder projectnummer in de titel: zet het nummer erin", "wie": "mehdi"})
+    if any("geen adres" in r and r[:16] not in gemeld for r in onvolledig or ()):
+        noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen", "wie": "mehdi"})
+    return noden
 
 
 def belvenster_uren(nu):
@@ -8087,7 +8114,6 @@ def _ronde(rd):
                                  "titel": f"Buitenafspraak zonder reistijd: {reden}",
                                  "uniek": f"agenda-reistijd-{reden[:18]}:{vandaag}",
                                  "inhoud": "\n".join("- " + x for x in rij[:30])})
-            noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
         if te_krap:
             rit_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
                                  "titel": "Te krap: je komt te laat", "uniek": f"agenda-te-krap:{vandaag}:{dag_grens or 'alle'}",
@@ -8114,9 +8140,6 @@ def _ronde(rd):
         if niet_conform and "geen firmacode" not in titel_fouten:
             noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
                           "wie": "mehdi"})
-        if onvolledig:
-            noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
-                          "wie": "mehdi"})
         # De plaatsen van Lara horen in locatie.globaal.be, niet in een lijst van mij.
         try:
             bekend = {(x.get("naam") or "").lower() for x in plekken()}
@@ -8132,7 +8155,10 @@ def _ronde(rd):
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
         vg, vw = vragen_in_agenda(rit_items, niet_op_kaart=niet_op_kaart)
-        noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart))
+        gevraagd = set()
+        noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, starts=gevraagd))
+        # T-0120 AG-4: nummer, adres en reistijd na de adresvragen, zo dat een afspraak in hoogstens een nood staat
+        noden.extend(adres_noden(zonder_rit, onvolledig, gevraagd))
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG and geplande_start():

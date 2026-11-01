@@ -340,6 +340,12 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
 - UNABO, Harmoniebouw en Contrax hebben (nog) geen mappen met adres in de naam;
   daar telt alleen het adresveld van de afspraak. Zodra die mappen dezelfde
   naamregel volgen, lees ik ze mee.
+- **Welke bron telt** (T-0120 AG-4, 01-11-2026): voor "zonder adres" dezelfde als
+  voor de reistijd: het adresveld, de projectmap, een plek uit locatie.globaal.be
+  en een vaste plek (`adres_bekend`). Een ontbrekend projectnummer is een eigen
+  melding ("zonder projectnummer"), ook online. Een afspraak staat in hoogstens
+  een melding: eerst de adresvraag, dan de reden van de reistijd, dan "zonder adres"
+  (`adres_noden`).
 
 ## B2B en de leverancier (mandaat van Mehdi, 22-09-2026)
 
