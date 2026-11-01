@@ -14,7 +14,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, render_template, request
+from flask import Flask, abort, render_template, request, url_for
 
 app = Flask(__name__)
 MAP = os.environ.get("DAGBOEK_MAP", "/dagboek")
@@ -402,7 +402,8 @@ def bronnen_pagina():
 # over het interne netwerk met het token van het bord, alleen lezend. Voorlopig alleen de laatste dagen (WACHT_DAGEN).
 BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/")
 BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
-WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "3"))
+# Mehdi, 01-11-2026: alleen de laatste dagen (vandaag en de drie dagen ervoor), niet meer.
+WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
 
 
@@ -435,31 +436,104 @@ def locatie_items(dag):
              "fout": False} for r in ritten if r["soort"] != "gat"]
 
 
-@app.route("/wachten")
-def wachten_pagina():
-    if not mag():
-        abort(403)
+def wachten_dag(dag):
+    """Alle wachten van één dag uit het bord, met de Locatiewacht uit het Locatie-dashboard erbij, of None."""
+    gegevens = haal_wachten(dag)
+    if not gegevens:
+        return None
+    for vak in gegevens["vakken"]:
+        for w in vak.get("wachten") or []:
+            if w.get("naam") == "locatie-wacht" and not w.get("items"):
+                li = locatie_items(dag)
+                if li:
+                    w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
+                             kleur="groen" if w.get("kleur") != "rood" else "rood")
+            w["kort"] = wacht_kort(w)
+            w["fouten_kort"] = fouten_kort(w.get("fouten") or [])
+    alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
+    gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
+    gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
+    return gegevens
+
+
+def fouten_kort(fouten):
+    """Dezelfde fout tien keer op een dag is één regel met een aantal (de Fotowacht meldt elke ronde hetzelfde)."""
+    uit = []
+    for f in fouten:
+        t = str(f.get("tekst") or "")
+        if uit and uit[-1]["tekst"] == t:
+            uit[-1]["aantal"] += 1
+            uit[-1]["tijd"] = f.get("tijd") or uit[-1]["tijd"]
+        else:
+            uit.append({"tijd": f.get("tijd") or "", "tekst": t, "aantal": 1})
+    return uit
+
+
+def wacht_kort(w):
+    """Eén regel per wacht op de tegel: de fout, anders de open melding, anders het eerste item, anders het oordeel."""
+    if w.get("leesfout"):
+        return "kon niet lezen: " + str(w["leesfout"])
+    if w.get("fouten"):
+        return "fout: " + str(w["fouten"][-1].get("tekst") or "")
+    if w.get("items"):
+        it = w["items"][0]
+        return " ".join(x for x in (it.get("tijd") or "", it.get("wie") or "", it.get("wat") or "") if x)
+    if w.get("noden"):
+        return "open: " + str(w["noden"][0])
+    return str(w.get("oordeel") or "")
+
+
+def dagkeuze(d, naam=None):
+    """De knoppen voor de laatste WACHT_DAGEN dagen; vandaag heet vandaag. Met naam: naar die wacht op die dag."""
     eerste = vandaag() - timedelta(days=WACHT_DAGEN - 1)
-    dagen = [(eerste + timedelta(days=i)) for i in range(WACHT_DAGEN)]
+    uit = []
+    for i in range(WACHT_DAGEN):
+        x = eerste + timedelta(days=i)
+        tekst = dagnaam(x, True)
+        if x == vandaag():
+            tekst = "vandaag, " + tekst
+        pad = url_for("wacht_pagina", naam=naam, dag=x.isoformat()) if naam else url_for("wachten_pagina", dag=x.isoformat())
+        uit.append({"dag": x.isoformat(), "naam": tekst, "actief": x == d, "pad": pad})
+    return uit
+
+
+def wacht_dag_uit_vraag():
     dag = request.args.get("dag") or vandaag().isoformat()
     try:
-        d = date.fromisoformat(dag)
+        return date.fromisoformat(dag)
     except ValueError:
         abort(404)
-    gegevens = haal_wachten(dag)
+
+
+@app.route("/wachten")
+def wachten_pagina():
+    """Alle wachten van één dag als tegels (Mehdi, 01-11-2026: "per dag alle wachten zien"). Tik op een tegel: de wacht."""
+    if not mag():
+        abort(403)
+    d = wacht_dag_uit_vraag()
+    gegevens = wachten_dag(d.isoformat())
+    return render_template("wachten.html", g=gegevens, naam=dagnaam(d), dag=d.isoformat(), keuze=dagkeuze(d),
+                           uitleg=KLEUR_UITLEG)
+
+
+@app.route("/wachten/<naam>")
+def wacht_pagina(naam):
+    """Eén wacht op één dag: zijn fouten, open meldingen, alle items en het werkverslag (Mehdi, 01-11-2026: "hun data
+    lezen per dag in de wacht zelf"). De dagknoppen blijven bij deze wacht."""
+    if not mag():
+        abort(403)
+    d = wacht_dag_uit_vraag()
+    gegevens = wachten_dag(d.isoformat())
+    w, vak = None, ""
     if gegevens:
-        for vak in gegevens["vakken"]:
-            for w in vak.get("wachten") or []:
-                if w.get("naam") == "locatie-wacht" and not w.get("items"):
-                    li = locatie_items(dag)
-                    if li:
-                        w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
-                                 kleur="groen" if w.get("kleur") != "rood" else "rood")
-        alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
-        gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
-        gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
-    keuze = [{"dag": x.isoformat(), "naam": dagnaam(x, True), "actief": x == d} for x in dagen]
-    return render_template("wachten.html", g=gegevens, naam=dagnaam(d), keuze=keuze, uitleg=KLEUR_UITLEG)
+        for v in gegevens["vakken"]:
+            for x in v.get("wachten") or []:
+                if x.get("naam") == naam:
+                    w, vak = x, v.get("vak") or ""
+        if w is None:
+            abort(404)
+    return render_template("wacht.html", g=gegevens, w=w, vak=vak, naam=naam, dagnaam_=dagnaam(d), dag=d.isoformat(),
+                           keuze=dagkeuze(d, naam), uitleg=KLEUR_UITLEG, is_vandaag=d == vandaag())
 
 
 @app.route("/healthz")

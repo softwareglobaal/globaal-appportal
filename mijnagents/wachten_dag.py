@@ -111,10 +111,15 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
             if isinstance(t, dict) and t:
                 wat = f"{wat}: {_telling_tekst(t)}"
         titel = str(r["titel"] or "")
-        tijd = titel[len(dag) + 1:len(dag) + 6] if titel.startswith(dag + " ") and re.match(r"\d\d:\d\d", titel[len(dag) + 1:]) else uur(r["ts"])
+        tijd = uur(r["ts"])
         if titel.startswith(dag + " "):
+            # "2026-10-31 20:25-20:56: 22 foto's bij ...": de eerste tijd is de tijd, de rest is wat; een bereik komt erachter.
             wat = titel[len(dag) + 1:]
-            wat = wat[5:].strip() if re.match(r"\d\d:\d\d", wat) else wat
+            m = re.match(r"(\d\d:\d\d)(?:-(\d\d:\d\d))?:?\s*", wat)
+            if m:
+                tijd, wat = m.group(1), wat[m.end():].strip()
+                if m.group(2) and m.group(2) != m.group(1):
+                    wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
         items.append(_item(tijd, r["soort"] or "item", wat))
     return items
 

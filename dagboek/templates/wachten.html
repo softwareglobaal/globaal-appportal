@@ -4,11 +4,11 @@
 <header>
   <h1>Wachten</h1>
   <a href="{{ url_for('overzicht') }}">alle dagen</a>
-  <span class="zacht klein">Per wacht wat er binnenkwam. Tik op een wacht om de items te zien.</span>
+  <span class="zacht klein">Per dag alle wachten. Tik op een wacht om zijn gegevens van die dag te lezen.</span>
 </header>
 <main>
   <nav class="dagkeuze">
-    {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ url_for('wachten_pagina', dag=k['dag']) }}">{{ k['naam'] }}</a>{% endfor %}
+    {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ k['pad'] }}">{{ k['naam'] }}</a>{% endfor %}
   </nav>
   {% if not g %}
     <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
@@ -25,37 +25,15 @@
   </div>
   {% for vak in g['vakken'] %}
     <h3 class="vak">{{ vak['vak'] }}</h3>
+    <div class="wachttegels">
     {% for w in vak['wachten'] %}
-    <details class="kaart wacht"{% if w['kleur'] == 'rood' %} open{% endif %}>
-      <summary>
-        <span class="stip {{ w['kleur'] }}"></span>
-        <b>{{ w['label'] }}</b>
-        <span class="aantal">{{ w['aantal'] }}</span>
-        <span class="zacht klein oordeel">{{ w['oordeel'] }}{% if w['rondes'] %}, {{ w['rondes'] }} {{ 'regel' if w['rondes'] == 1 else 'regels' }} in het werkverslag{% endif %}{% if w['status'] and w['status']['laatste'] %}, laatst {{ w['status']['laatste'] }}{% endif %}</span>
-      </summary>
-      {% if w['leesfout'] %}<p class="foutregel">Kon niet lezen: {{ w['leesfout'] }}</p>{% endif %}
-      {% for f in w['fouten'] %}<p class="foutregel">{{ f['tijd'] }} fout: {{ f['tekst'] }}</p>{% endfor %}
-      {% for n in w['noden'] %}<p class="nood">Open melding: {{ n }}</p>{% endfor %}
-      {% if w['gedekt'] is not none %}<p class="zacht klein">Dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}.</p>{% endif %}
-      {% if w['items'] %}
-      <table class="lijst">
-        <tr class="kop"><td>Tijd</td><td>Van wie of wat</td><td>Kort</td></tr>
-        {% for it in w['items'] %}
-        <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}</td></tr>
-        {% endfor %}
-      </table>
-      {% else %}
-      <p class="leeg">Niets binnengekomen op deze dag.</p>
-      {% endif %}
-      {% if w['log'] %}
-      <details class="verslag"><summary class="zacht klein">Werkverslag van deze dag ({{ w['rondes'] }} {{ 'regel' if w['rondes'] == 1 else 'regels' }})</summary>
-        <table class="lijst">
-          {% for r in w['log'] %}<tr{% if r['fout'] %} class="fout"{% endif %}><td class="tijd">{{ r['tijd'] }}</td><td class="zacht klein">{{ r['stap'] }}</td><td class="klein">{{ r['tekst'] }}</td></tr>{% endfor %}
-        </table>
-      </details>
-      {% endif %}
-    </details>
+      <a class="tegel wacht kleur-{{ w['kleur'] }}" href="{{ url_for('wacht_pagina', naam=w['naam'], dag=dag) }}">
+        <div class="kop"><span class="stip {{ w['kleur'] }}"></span><span class="naam">{{ w['label'] }}</span></div>
+        <div class="groot">{{ w['aantal'] }}</div>
+        <div class="klein regel {{ 'fouttekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</div>
+      </a>
     {% endfor %}
+    </div>
   {% endfor %}
   {% endif %}
   <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Nooit de tekst van een bericht.</p>
@@ -67,20 +45,17 @@
   .samen .cijfers{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
   .samen .groot{font-size:24px;font-weight:700}
   h3.vak{margin:20px 4px 8px;font-size:13px;color:var(--zacht);text-transform:uppercase;letter-spacing:.08em}
-  details.wacht summary{cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;list-style:none}
-  details.wacht summary::-webkit-details-marker{display:none}
-  details.wacht .aantal{margin-left:auto;font-size:20px;font-weight:700}
-  details.wacht .oordeel{flex-basis:100%;padding-left:20px}
-  details.wacht[open] > summary{margin-bottom:10px}
-  table.lijst{border-collapse:collapse;width:100%}
-  table.lijst td{padding:6px;border-top:1px solid var(--rand);vertical-align:top;overflow-wrap:anywhere}
-  td.tijd{white-space:nowrap;width:52px;color:var(--zacht)}
-  tr.kop td{border-top:0;color:var(--zacht);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
-  tr.fout td{color:var(--rood)}
-  .foutregel{color:var(--rood);margin:4px 0}
-  .nood{color:var(--oranje);margin:4px 0}
-  details.verslag{margin-top:10px}
-  details.verslag summary{cursor:pointer}
-  @media (max-width:600px){table.lijst tr.kop{display:none} table.lijst td{font-size:14px;padding:5px 4px}}
+  .wachttegels{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  a.tegel.wacht{display:block;color:inherit;text-decoration:none;border:1px solid var(--rand);min-height:104px}
+  a.tegel.wacht:hover{border-color:var(--accent)}
+  a.tegel.wacht.kleur-rood{border-color:var(--rood)}
+  .tegel .kop{display:flex;gap:6px;align-items:center;min-width:0}
+  .tegel .kop .naam{font-size:13px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+  .tegel .kop .stip{margin-top:1px}
+  .tegel .regel{color:var(--zacht);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
+  .tegel .fouttekst{color:var(--rood)}
+  .tegel.kleur-grijs .groot{color:var(--grijs)}
+  @media (max-width:900px){.wachttegels{grid-template-columns:repeat(3,1fr)}}
+  @media (max-width:600px){.wachttegels{grid-template-columns:repeat(2,1fr)}}
 </style>
 {% endblock %}

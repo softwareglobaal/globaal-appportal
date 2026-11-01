@@ -144,11 +144,29 @@ A.haal_locatie = lambda pad: None
 r = C.get("/wachten?dag=2026-10-31", headers=MET)
 html = r.get_data(as_text=True)
 check("D14 wachten laadt", r.status_code == 200, r.status_code)
-check("D14 items per wacht", "De WhatsApp-wacht" in html and "Sara Proef" in html and "09:15" in html, html[-3000:])
-check("D14 fout zichtbaar en open", "kopie niet leesbaar" in html and "Full Disk Access ontbreekt" in html
-      and "<details class=\"kaart wacht\" open>" in html)
-check("D14 lege wacht zegt het", "Niets binnengekomen op deze dag." in html)
+check("D14 tegel per wacht met link", "De WhatsApp-wacht" in html and 'href="/wachten/whatsapp-wacht?dag=2026-10-31"' in html
+      and 'href="/wachten/sms-wacht?dag=2026-10-31"' in html, html[-3000:])
+check("D14 tegel toont het eerste item", "09:15 Sara Proef 3 berichten" in html)
+check("D14 tegel toont de fout", "fout: kopie niet leesbaar" in html)
 check("D14 telling", "1</span> fout" in html and "2</span> items binnen" in html, html[:3000])
+check("D14 dagknoppen", "vandaag, " in html and html.count('class="dagkeuze"') == 1)
+r = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET)
+html = r.get_data(as_text=True)
+check("D14 wacht laadt", r.status_code == 200, r.status_code)
+check("D14 wacht items", "Sara Proef" in html and "09:15" in html and "Tom Proef" in html and "2</span> items binnen" in html,
+      html[-3000:])
+check("D14 wacht werkverslag", "2 gesprekken" in html and "21:37" in html)
+check("D14 wacht dagknoppen blijven bij de wacht", 'href="/wachten/whatsapp-wacht?dag=' in html
+      and 'href="/wachten?dag=2026-10-31"' in html)
+html = C.get("/wachten/sms-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 wacht fout en open melding", "kopie niet leesbaar" in html and "Full Disk Access ontbreekt" in html)
+check("D14 lege wacht zegt het", "Niets binnengekomen op deze dag." in html)
+check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
+check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
+A.haal_wachten = lambda dag: None
+html = C.get("/wachten/sms-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 wacht, bord onbereikbaar: zin", "Het bord antwoordt niet" in html)
+A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 geen datum 404", C.get("/wachten?dag=gisteren", headers=MET).status_code == 404)
 check("D07 geen gedachtestreepje (wachten)", "—" not in html and "–" not in html)
 
