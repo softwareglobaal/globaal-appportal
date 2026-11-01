@@ -564,7 +564,7 @@ dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen"
          "vandaag": "2026-10-17", "DAG_ARG": None,
          "geplande_start": lambda: True, "HANDKLEUREN": [], "open_na": [], "ROUTES_GESTOPT": False,
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
-         "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": [],
+         "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": [], "onvolledig_a": [],
          "zonder_rit": {}, "adres_noden": W.adres_noden}   # T-0120 AG-4: de adresnoden staan nu in de staart
 # fase 1 (overleg 27-10-2026): de weeknood en de noodlijst van een dagronde staan nu ook aan het einde van de ronde
 dummy.update({"weekconsolidatie_noden": lambda: [], "weekconsolidatie_fout": lambda: ""})

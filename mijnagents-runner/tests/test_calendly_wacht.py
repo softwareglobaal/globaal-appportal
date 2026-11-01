@@ -194,5 +194,37 @@ finally:
     else:
         sys.modules["agenda_wacht"] = _echt
 
+# Met de echte De Agendawacht (Codex-toets 1): de late import werkt en leest via haar eigen lezer, met het archief.
+# Google is nagebootst in koppelingen.agenda; niets gaat naar buiten.
+sys.path[:0] = [str(ROOT / "planning")]
+os.environ["BELLEN_UIT"] = "1"
+os.environ.setdefault("AGENDA_WHATSAPP_WACHTRIJ", os.path.join(PROEF_HOME.name, "agenda-whatsapp.json"))
+import organisatie as ORGANISATIE  # noqa: E402
+ORGANISATIE.firmas = lambda maximum_uren=24: [{"code": "HARC", "code_contact": "HA", "code_agenda": "HA",
+                                                "naam": "H-Architects", "land": "BE", "actief": True}]
+import agenda_wacht as ECHT  # noqa: E402
+_gelezen_echt = []
+
+
+def _nep_lezer(van, tot, schrijf_leesstand=True):
+    kal = os.environ.get("CONTRACTEN_KALENDERS", "")
+    _gelezen_echt.append((kal, van, tot, schrijf_leesstand))
+    if "archief" in kal:
+        return [{"kalender": "archief@proef.test", "id": "a1", "titel": "proef", "start": "2026-11-07T09:00:00+01:00"}]
+    return [{"kalender": ECHT.WERKAGENDA, "id": "w1", "titel": "proef", "start": "2026-11-06T13:00:00+01:00"}]
+
+
+_oud_echt = (ECHT.agenda.afspraken, ECHT.agenda.kalendernamen)
+ECHT.agenda.afspraken = _nep_lezer
+ECHT.agenda.kalendernamen = lambda: {"archief@proef.test": "ZZ ARCHIEF proef", ECHT.WERKAGENDA: "werk"}
+try:
+    st, ong = CW.agenda_starts(-15, 15)
+finally:
+    ECHT.agenda.afspraken, ECHT.agenda.kalendernamen = _oud_echt
+check("CL-2 met de echte De Agendawacht: haar agenda's en haar archief, alleen lezend (geen leesstand)",
+      st == {"2026-11-06T13:00", "2026-11-07T09:00"} and ong == [] and len(_gelezen_echt) == 2
+      and all(x[3] is False for x in _gelezen_echt) and "archief@proef.test" in _gelezen_echt[1][0]
+      and ECHT.WERKAGENDA in _gelezen_echt[0][0], (st, ong, _gelezen_echt))
+
 print(f"calendly-wacht: {ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -2,10 +2,13 @@
 
 - AG-3: twee titelredenen met hetzelfde begin geven twee sleutels, dus twee blijvende borditems;
 - AG-4: 'zonder adres' kent dezelfde adresbronnen als de reistijd (vaste plek, locatie.globaal.be, projectmap); een KO
-  zonder nummer geeft alleen de nummermelding; een afspraak zonder adres staat in hoogstens een nood; een B&S-bezoek
-  geeft dezelfde uitkomst als voordien;
+  zonder nummer geeft alleen de nummermelding; elke afspraak staat in hoogstens een nood, ook zonder nummer en adres
+  samen, en twee afspraken op dezelfde minuut blijven twee; een B&S-bezoek geeft dezelfde uitkomst als voordien;
 - AG-5: 'Link doorsturen of titel nakijken' is een signaal per dag, met de regels van alle rondes van die dag samen
-  (57 dagrondes op 29-10-2026 gaven 57 signalen); een nieuwe dag begint leeg; geen sleutel op de inhoud.
+  (57 dagrondes op 29-10-2026 gaven 57 signalen); een nieuwe dag begint leeg; geen sleutel op de inhoud; ook na het
+  oppakken komen nieuwe regels op het bord;
+- op het echte bord (mijnagents/app.py, tijdelijke databank): de twee titelsignalen van AG-3 blijven twee items, en een
+  ingekorte privétitel uit een titelsignaal komt als '(privé)' op de wachtenpagina, zonder rest (AG-2, Codex-toets 1).
 
 Verzonnen voorbeelden, geen echte namen. Draaien: python3 mijnagents-runner/tests/test_agenda_meldingen.py
 """
@@ -88,36 +91,60 @@ try:
     bs_zonder = dict(bs, locatie="")
     check("AG-4 B&S: zonder adresveld en zonder projectmap blijft het bezoek gemeld (zoals voordien)",
           len(W.onvolledige_afspraken([bs_zonder], MORGEN)) == 1 and len(W._adresvragen([bs_zonder])) == 1)
-    ko = W.onvolledige_afspraken([afspraak("Mehdi: [HA-KO] proefklant", "11:00", "https://zoom.example.test/j/1")], MORGEN)
-    nood_ko = W.adres_noden({}, ko, set())
+    TEKST = {"nummer": "Klantafspraken zonder projectnummer in de titel: zet het nummer erin",
+             "adres": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
+             "rit": "Buitenafspraken zonder reistijd, reden: geen adres in de agenda"}
+
+    def teksten(noden):
+        return [n["tekst"] for n in noden]
+
+    ko_a = afspraak("Mehdi: [HA-KO] proefklant", "11:00", "https://zoom.example.test/j/1")
+    ko = W.onvolledig_per_afspraak([ko_a], MORGEN)
     check("AG-4 een KO zonder nummer geeft alleen de nummermelding",
-          [n["tekst"] for n in nood_ko] == ["Klantafspraken zonder projectnummer in de titel: zet het nummer erin"], nood_ko)
+          teksten(W.adres_noden({}, ko, [])) == [TEKST["nummer"]], ko)
 
     # Een afspraak van 08:00 zonder adres: de reistijd zegt 'geen adres in de agenda', de adresvraag kon geen VR zetten,
     # en 'zonder adres' ziet haar ook. Tot 01-11-2026 waren dat drie meldingen voor dezelfde afspraak.
-    _start = f"{MORGEN}T08:00"
-    zr = {"geen adres in de agenda": [f"{_start} !! Mehdi: [HA-PB] proefprospect"], "adres niet gevonden": []}
-    drie = W.adres_noden(zr, geen, {_start})
-    check("AG-4 een afspraak geeft een melding: de adresvraag gaat voor, de rest zwijgt", drie == [], drie)
-    twee = W.adres_noden(zr, geen, set())
+    pb = afspraak("!! Mehdi: [HA-PB] proefprospect", "08:00")
+    geen_a = W.onvolledig_per_afspraak([pb], MORGEN)
+    zr = {"geen adres in de agenda": [f"{pb['start'][:16]} {W._toon(pb, 50)}"], "adres niet gevonden": []}
+    check("AG-4 een afspraak geeft een melding: de adresvraag gaat voor, de rest zwijgt", W.adres_noden(zr, geen_a, [pb]) == [])
     check("AG-4 zonder adresvraag blijft de reden van de reistijd de enige melding",
-          [n["tekst"] for n in twee] == ["Buitenafspraken zonder reistijd, reden: geen adres in de agenda"], twee)
-    los = W.adres_noden({}, geen, set())
-    check("AG-4 wat de reistijd niet zag, krijgt nog 'zonder adres'",
-          [n["tekst"] for n in los] == ["Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen"], los)
-    ander = W.adres_noden({"rit zonder afspraak": [f"{MORGEN}T16:00 Reistijd: proef: rit zonder afspraak"]}, [], {_start})
+          teksten(W.adres_noden(zr, geen_a, [])) == [TEKST["rit"]])
+    check("AG-4 wat de reistijd niet zag, krijgt nog 'zonder adres'", teksten(W.adres_noden({}, geen_a, [])) == [TEKST["adres"]])
+    ander = W.adres_noden({"rit zonder afspraak": [f"{MORGEN}T16:00 Reistijd: proef: rit zonder afspraak"]}, [], [pb])
     check("AG-4 een andere reden van de reistijd blijft gewoon gemeld",
-          [n["tekst"] for n in ander] == ["Buitenafspraken zonder reistijd, reden: rit zonder afspraak"], ander)
+          teksten(ander) == ["Buitenafspraken zonder reistijd, reden: rit zonder afspraak"], ander)
 
-    gevraagd = set()
-    W.adres_vraag_noden([afspraak("!! Mehdi: [HA-PB] proefprospect", "08:00")], starts=gevraagd)
-    check("AG-4 adres_vraag_noden geeft de starttijd door van elke adresvraag die een nood werd", gevraagd == {_start}, gevraagd)
+    # Codex-toets 1: een klantbezoek zonder nummer en zonder adres staat in een nood, niet in twee
+    kb = afspraak("Mehdi: [HA-KB] proefklant zonder nummer", "14:00")
+    kb_a = W.onvolledig_per_afspraak([kb], MORGEN)
+    check("AG-4 een klantbezoek zonder nummer en zonder adres: in het signaal allebei, in de noden een",
+          "geen projectnummer" in kb_a[0][1] and any(w.startswith("geen adres") for w in kb_a[0][1])
+          and teksten(W.adres_noden({}, kb_a, [])) == [TEKST["adres"]], kb_a)
+    kb_rit = {"geen adres in de agenda": [f"{kb['start'][:16]} {W._toon(kb, 50)}"]}
+    check("AG-4 hetzelfde bezoek met een reistijdreden: alleen die reden", teksten(W.adres_noden(kb_rit, kb_a, [])) == [TEKST["rit"]])
+    # Codex-toets 1: twee afspraken op dezelfde minuut drukken elkaars nood niet weg
+    tweede = dict(afspraak("!! Mehdi: [HA-PB] andere proefprospect", "08:00"), id="id-tweede")
+    beide = W.onvolledig_per_afspraak([pb, tweede], MORGEN)
+    check("AG-4 twee afspraken op dezelfde minuut: de adresvraag van de ene verbergt de andere niet",
+          teksten(W.adres_noden({}, beide, [pb])) == [TEKST["adres"]], beide)
+    check("AG-4 twee afspraken op dezelfde minuut: de reistijdregel van de ene verbergt de andere niet",
+          teksten(W.adres_noden(zr, beide, [])) == [TEKST["rit"], TEKST["adres"]])
+    check("AG-4 de regels van het signaal blijven zoals voordien (een per afspraak)",
+          W.onvolledige_afspraken([pb], MORGEN) == [W.onvolledig_regel(pb, geen_a[0][1])]
+          and W.onvolledige_afspraken([pb], MORGEN)[0].startswith(f"{pb['start'][:16]} {pb['titel']} ("))
+
+    gevraagd = []
+    W.adres_vraag_noden([afspraak("!! Mehdi: [HA-PB] proefprospect", "08:00")], gevraagd=gevraagd)
+    check("AG-4 adres_vraag_noden geeft elke afspraak door waarvan de adresvraag een nood werd",
+          [(g["id"], g["start"]) for g in gevraagd] == [(pb["id"], pb["start"])], gevraagd)
 finally:
     W.plek_zoeken, W.vaste_plek, W.projectadressen.index = _oud4
 RONDE = inspect.getsource(W._ronde)
 check("AG-4 de ronde meldt nummer, adres en reistijd via adres_noden, na de adresvragen",
-      RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig, gevraagd))")
-      > RONDE.index("adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, starts=gevraagd)")
+      RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd))")
+      > RONDE.index("adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, gevraagd=gevraagd)")
       and "Buitenafspraken zonder reistijd, reden" not in RONDE and "Buitenafspraken zonder adres" not in RONDE)
 
 # --- AG-5: een signaal 'Link doorsturen of titel nakijken' per dag, de regels van alle rondes samen
@@ -168,6 +195,79 @@ gezet.clear()
 linkronde("2026-10-31", "2026-11-07", ["2026-11-07T09:00 proef na een kapot bestand"])
 check("AG-5 een onleesbaar staatbestand geeft geen fout, alleen de regels van nu",
       gezet and gezet[-1]["inhoud"] == "- 2026-11-07T09:00 proef na een kapot bestand", gezet)
+
+# --- Op het echte bord (Codex-toets 1): AG-3 twee items, AG-5 na het oppakken, AG-2 privé van titel tot pagina
+import importlib.util  # noqa: E402
+import sqlite3  # noqa: E402
+os.environ["AGENTS_DB"] = os.path.join(PROEF_HOME.name, "bord.db")
+os.environ["AGENTS_TOKEN"] = "proef"
+_bordmap = str(ROOT.parent / "mijnagents")
+sys.path.insert(0, _bordmap)
+try:
+    _spec = importlib.util.spec_from_file_location("bord_app_proef", ROOT.parent / "mijnagents" / "app.py")
+    BORD = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(BORD)
+    import wachten_dag as WD  # noqa: E402
+finally:
+    sys.path.remove(_bordmap)
+BC = BORD.app.test_client()
+TOKEN = {"X-Agents-Token": "proef"}
+
+
+def bord_zet(items, van="agenda-wacht"):
+    r = BC.post("/api/klaarzet", json={"items": [dict(it, van=van) for it in items]}, headers=TOKEN)
+    assert r.status_code == 200, r.get_data(as_text=True)
+
+
+def bord_rijen(sql, args=()):
+    con = sqlite3.connect(os.environ["AGENTS_DB"])
+    con.row_factory = sqlite3.Row
+    try:
+        return [dict(x) for x in con.execute(sql, args).fetchall()]
+    finally:
+        con.close()
+
+
+_dag3 = "2026-10-26"
+for reden in (A, B):
+    bord_zet([{"voor": "mehdi", "soort": "signaal", "sleutel": _dag3, "titel": f"Titels: {reden}",
+               "uniek": W.titel_uniek(reden, _dag3), "inhoud": f"- {_dag3}T10:00 afspraak bij {reden}"}])
+_titels = bord_rijen("SELECT titel, status FROM klaarzet WHERE uniek LIKE ?", (f"agenda-titel-%:{_dag3}",))
+check("AG-3 op het bord: twee redenen met hetzelfde begin blijven twee klare items",
+      sorted(x["titel"] for x in _titels) == [f"Titels: {A}", f"Titels: {B}"] and {x["status"] for x in _titels} == {"klaar"},
+      _titels)
+
+# AG-5: het dagsignaal wordt opgepakt; een latere ronde met een nieuwe regel zet het weer klaar met alle regels
+gezet.clear()
+NEP_AG = type("BordAg", (), {"klaarzet": staticmethod(lambda items: bord_zet(items))})()
+linkronde("2026-10-28", "2026-11-09", ["2026-11-09T09:00 proef eerste: link doorsturen"])
+_id = bord_rijen("SELECT id FROM klaarzet WHERE uniek='agenda-zoom-titel:2026-10-28'")[0]["id"]
+BC.post(f"/api/klaarzet/{_id}/opgepakt", json={"door": "proefagent"}, headers=TOKEN)
+linkronde("2026-10-28", "2026-11-10", ["2026-11-10T09:00 proef tweede: link doorsturen"])
+_na = bord_rijen("SELECT status, inhoud FROM klaarzet WHERE uniek='agenda-zoom-titel:2026-10-28'")
+check("AG-5 op het bord: na het oppakken komen de nieuwe regels erbij en staat het signaal weer klaar",
+      len(_na) == 1 and _na[0]["status"] == "klaar" and "proef eerste" in _na[0]["inhoud"] and "proef tweede" in _na[0]["inhoud"]
+      and bord_rijen("SELECT count(*) AS n FROM klaarzet_revisie WHERE uniek='agenda-zoom-titel:2026-10-28'")[0]["n"] == 1, _na)
+
+# AG-2: een privéafspraak met een lange titel in een titelsignaal ([:58]) komt als '(privé)' op het bord en de pagina
+_prive_kal = next(iter(W.PRIVE_KALENDERS))
+_pt = "Mehdi: [HA-KO] proefgesprek met een heel lange titel die privé blijft tot op het einde"
+_pa = {"kalender": _prive_kal, "id": "p1", "titel": _pt, "start": "2026-10-27T09:00:00+01:00", "locatie": ""}
+_ag = W.bord.Agent("agenda-wacht")
+_ag.prive(W.prive_teksten([_pa]))
+_oud_call, W.bord.call = W.bord.call, lambda pad, payload=None, method=None: bord_zet(payload["items"]) or {}
+try:
+    _ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": "2026-10-27", "titel": "Titels: geen firmacode",
+                   "uniek": W.titel_uniek("geen firmacode", "2026-10-27"), "inhoud": f"- {_pa['start'][:16]} {_pt[:58]}"}])
+finally:
+    W.bord.call = _oud_call
+_rij = bord_rijen("SELECT inhoud FROM klaarzet WHERE sleutel='2026-10-27'")
+with BORD.app.app_context():
+    _pagina = WD.dag(BORD.db(), "2026-10-27", {"agenda-wacht": "De Agendawacht"}, (), ("agenda-wacht",))
+_regels = [r for w in _pagina["vakken"][0]["wachten"] for it in w["items"] for r in it.get("regels", [])]
+check("AG-2 een ingekorte privétitel uit een titelsignaal komt als '(privé)' op de pagina, zonder rest",
+      _rij and _rij[0]["inhoud"] == "- 2026-10-27T09:00 (privé)" and _regels == ["2026-10-27T09:00 (privé)"], (_rij, _regels))
+check("AG-2 het masker kent elke inkorting van een titel die naar het bord gaat (ook 58)", 58 in W.KORT_LENGTES)
 
 print(f"agenda-meldingen: {ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

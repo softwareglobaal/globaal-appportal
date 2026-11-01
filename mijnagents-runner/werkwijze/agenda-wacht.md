@@ -344,8 +344,9 @@ Een afspraak is online of ter plaatse bij de klant. Voor allebei geldt:
   voor de reistijd: het adresveld, de projectmap, een plek uit locatie.globaal.be
   en een vaste plek (`adres_bekend`). Een ontbrekend projectnummer is een eigen
   melding ("zonder projectnummer"), ook online. Een afspraak staat in hoogstens
-  een melding: eerst de adresvraag, dan de reden van de reistijd, dan "zonder adres"
-  (`adres_noden`).
+  een melding: eerst de adresvraag, dan de reden van de reistijd, dan "zonder adres",
+  dan "zonder projectnummer" (`adres_noden`; het signaal noemt wel alles wat
+  ontbreekt). Een afspraak herken ik aan haar start en titel samen.
 
 ## B2B en de leverancier (mandaat van Mehdi, 22-09-2026)
 
