@@ -530,6 +530,8 @@ class Rondeverslag:
     def noden_bij_breuk(self, nieuw):
         return None
 
+    fout_melden = W.bord.Agent.fout_melden      # de echte breukmelding van de ronde (overleg 13), op deze nabootsing
+
 
 def in_de_ronde(code, call=None):
     """Voer code uit zoals main() het doet: binnen de gedeelde ronde, met de ronde als rd (NA09-rest, 01-11-2026).

@@ -223,16 +223,18 @@ class Agent:
         print(self.maskeer(f"  [{stap}] {tekst}"))
 
     def log_verstuur(self):
-        """Het werkverslag naar het bord. De regels blijven bewaard tot het bord ze aannam (Codex NA56, 01-11-2026): tot
-        dan wiste een verzendfout ze, nu gaan ze met de volgende poging mee."""
+        """Het werkverslag naar het bord, in hoogstens een poging (overleg 13, D1): de regels gaan weg, ook als het
+        versturen mislukt of onderbroken wordt. Opnieuw sturen kan pas als het bord dubbels herkent (NA60): een antwoord
+        dat verloren ging na een geslaagde boeking gaf anders hetzelfde verslag twee keer. De regels staan ook in de
+        uitvoer van de cron."""
         if not self._log:
             return
         try:
             call("/api/logboek", {"regels": self.maskeer(self._log)})
         except Exception as e:  # noqa: BLE001
             print("logboek mislukt:", e, file=sys.stderr)
-            return
-        self._log = []
+        finally:
+            self._log = []
 
     def werkwijze_lezen(self):
         """De werkwijze zoals ze nu op het bord staat. Een lege tekst is een antwoord en komt terug;
@@ -271,13 +273,38 @@ class Agent:
         noden gaan mee op de lijst (X4). Is die lijst onbekend, dan stuurt de ronde er geen (het bord zou anders
         alles sluiten), en staan hun teksten in het detail, zodat ze niet stil verdwijnen."""
         nieuw = [n for n in noden if n["tekst"] != tekst] + [{"tekst": tekst, "wie": wie}]
-        self.log_verstuur()
-        lijst = self.noden_bij_breuk(nieuw)
-        detail = f"{tekst}{f' ({reden})' if reden else ''}; ronde gestopt voor het werk"
-        if lijst is None and len(nieuw) > 1:
-            detail += "; ook: " + "; ".join(n["tekst"] for n in nieuw[:-1])
-        self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
+        signalen = self.fout_melden(taak, f"{tekst}{f' ({reden})' if reden else ''}; ronde gestopt voor het werk",
+                                    nieuw, ook=[n["tekst"] for n in nieuw[:-1]])
+        if signalen:
+            signalen[0].al_gemeld = True       # de ronde meldt het niet nog eens (Ronde.__enter__)
+            raise signalen[0]
         raise RondeGestopt(tekst) from oorzaak
+
+    def fout_melden(self, taak, detail, nieuw, ook=(), verslag=True, nood_ophalen=True):
+        """De fouthartslag van een ronde die niet afliep (N11), ook als onderweg een stopsignaal binnenkomt (SIGTERM als
+        SystemExit, Ctrl-C; NA61, overleg 13). Eerst het werkverslag (verslag), dan de noodlijst (noden_bij_breuk, als
+        nood_ophalen), dan de hartslag. Na een signaal geen bordoproep meer behalve de hartslag: die gaat dan uit zonder
+        noodlijst, zodat het bord niets sluit, met wat de ronde vond (ook) in het detail. Geeft de signalen die onderweg
+        binnenkwamen; de aanroeper laat het eerste door. De hartslag zelf is een eenmalige beste poging: een signaal
+        daarin, of een reeks signalen, vangt niemand nog op (AGENTNORM 5)."""
+        signalen, lijst = [], None
+        for stap in ((self.log_verstuur,) if verslag else ()) + \
+                ((lambda: self.noden_bij_breuk(nieuw),) if nood_ophalen else ()):
+            if signalen:
+                break
+            try:
+                uit = stap()
+            except BaseException as e:  # een Exception vangen log_verstuur en open_noden zelf
+                signalen.append(e)
+                continue
+            if stap is not self.log_verstuur:
+                lijst = uit
+        if lijst is None and ook:
+            detail += "; ook: " + "; ".join(ook)
+        if signalen:
+            detail += "; daarna " + "; ".join(f"{type(s).__name__}: {str(s)[:60]}" for s in signalen)
+        self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
+        return signalen
 
     def noden_bij_breuk(self, nieuw):
         """De noodlijst voor een ronde die niet afliep. Het bord sluit elke open nood die niet in de lijst
@@ -402,12 +429,15 @@ class Ronde:
         except RondeGestopt:
             raise
         except BaseException as e:
+            if getattr(e, "al_gemeld", False):
+                raise
             # Codex NA15: een fout in de startfase liet de agent op "actief" staan, want __exit__ draait dan
             # niet. Ook hier geldt N11: nooit blijven hangen op actief. BaseException: ook SIGTERM (als
-            # SystemExit, keten.py en de timeout van De Regisseur) en Ctrl-C (ontwerp regie-zoom v1.2, J1).
-            self.agent.log_verstuur()
-            self.agent.hartslag("fout", taak=self.taak, detail=f"{type(e).__name__}: {str(e)[:180]}",
-                                nood=self.agent.noden_bij_breuk(self._noden))
+            # SystemExit, keten.py en de timeout van De Regisseur) en Ctrl-C (ontwerp regie-zoom v1.2, J1). Een tweede
+            # signaal tijdens het melden houdt de fouthartslag niet meer tegen; de oorspronkelijke oorzaak gaat door
+            # (overleg 13, X2).
+            self.agent.fout_melden(self.taak, f"{type(e).__name__}: {str(e)[:180]}", self._noden,
+                                   ook=[n["tekst"] for n in self._noden])
             raise
         return self
 
@@ -455,12 +485,13 @@ class Ronde:
                 onderbrekingen.append(e)
         if fout is not None or onderbrekingen:
             # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
-            # die ze niet meer kon nakijken.
-            self.agent.hartslag("fout", taak=self.taak,
-                                detail="; daarna ".join(f"{type(x).__name__}: {str(x)[:180]}"
-                                                        for x in [fout] + onderbrekingen if x is not None),
-                                nood=self.agent.noden_bij_breuk(self._noden))
-            if onderbrekingen:
+            # die ze niet meer kon nakijken. Kwam al een signaal, dan haalt ze de noodlijst niet meer op (NA61).
+            onderbrekingen += self.agent.fout_melden(
+                self.taak, "; daarna ".join(f"{type(x).__name__}: {str(x)[:180]}"
+                                            for x in [fout] + onderbrekingen if x is not None),
+                self._noden, ook=[n["tekst"] for n in self._noden], verslag=False, nood_ophalen=not onderbrekingen)
+            # het eerste signaal gaat door: dat van het werk zelf (return False), anders het eerste bij het afsluiten
+            if onderbrekingen and (fout is None or isinstance(fout, Exception)):
                 raise onderbrekingen[0]
             return False
         self.agent.hartslag("klaar" if not self._noden else "waakt",
