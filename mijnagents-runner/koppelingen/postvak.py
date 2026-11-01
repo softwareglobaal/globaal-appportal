@@ -611,6 +611,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                 continue  # zonder datum of zonder sleutel kan ik het niet volgen (resultaattoets K5)
             regel = regel_voor(regels, adres, b.get("van"))
             soort, waarom = trieer(b, eigen, bekend, regel, opl)
+            waarom = met_relaylabel(waarom, b.get("van"))
             ond = schoon(b.get("onderwerp"))
             wacht = werkdagen_tussen(d, nu)
             opvolging, door, wanneer, naar = "geen", "", "", ""
@@ -752,6 +753,19 @@ def rommel_kandidaten(alle, eigen=(), bekend=frozenset(), veilig=frozenset()):
 
 def kort_waarom(w):
     return (w or "")[:200]
+
+
+# Apple "Hide My Email" (MAIL-5, overleg 01-11-2026, X5 2-1): de echte afzender staat gecodeerd in het relay-adres. De wacht
+# ziet een onbekende; alleen een label in waarom, de afzender nooit overschreven en niet ontcijferd.
+APPLE_RELAY = ("privaterelay.appleid.com",)
+RELAY_LABEL = "via Apple Hide My Email"
+
+
+def met_relaylabel(waarom, van):
+    """waarom met het label erachter als het bericht via Apple Hide My Email kwam; zo kort dat het label nooit wegvalt."""
+    if not zelfde_domein(_domein((van or "").lower()), APPLE_RELAY):
+        return waarom
+    return f"{(waarom or '')[:200 - len(RELAY_LABEL) - 2]}; {RELAY_LABEL}" if waarom else RELAY_LABEL
 
 
 class _Droog:

@@ -259,6 +259,21 @@ def test_beantwoord_in_de_ronde_en_oude_punten():
     assert tel["verzonden_volledig"]
 
 
+def test_apple_hide_my_email_alleen_een_label():
+    """MAIL-5 (overleg 01-11-2026, X5 2-1): mail via Apple Hide My Email (privaterelay.appleid.com) stond als onbekende
+    afzender. Alleen een label in waarom; de afzender wordt nooit overschreven en niet ontcijferd. Verzonnen adressen."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    relay = "proef_at_voorbeeld_test_q1w2e3@privaterelay.appleid.com"
+    alle, _, _, _ = _ronde([_in(1, relay, "Vraag over een verbouwing", "2026-10-16T10:00:00+02:00"),
+                            _in(2, "klant@voorbeeld.test", "Vraag over de verbouwing", "2026-10-16T11:00:00+02:00")], nu)
+    a, b = alle["Vraag over een verbouwing"], alle["Vraag over de verbouwing"]
+    assert a["waarom"].endswith("via Apple Hide My Email") and a["van"] == relay, a
+    assert a["soort"] == b["soort"], "het label verandert de soort niet"
+    assert "Apple" not in b["waarom"], b
+    lang = postvak.met_relaylabel("x" * 300, relay)
+    assert len(lang) <= 200 and lang.endswith("via Apple Hide My Email"), "het label valt nooit weg door het afkappen"
+
+
 def test_verdwenen_en_zonder_sleutel():
     """Resultaattoets 19-10-2026: een open punt binnen het venster dat niet meer in het volledig gelezen postvak staat, wordt
     'verdwenen' (K4); een bericht zonder Message-ID en zonder uid wordt overgeslagen (K5)."""
