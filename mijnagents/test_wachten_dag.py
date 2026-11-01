@@ -12,6 +12,8 @@
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
 - W12 (TEL-4, WA-7): een gemiste oproep (buiten:gemist) heet 'telt niet als gesprek', nooit 'dubbel'; een vervallen
   rij 'niet meer in de bron'; alleen een echte dubbel blijft 'dubbel, telt niet';
+- W13 (TEL-8): een gesprekswacht met een dekkingsrij voor die dag en geen enkel item is groen 'gelezen, niets gebeurd',
+  niet grijs of oranje: de dag is gelezen en er was niets;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -128,6 +130,23 @@ check("W12 vervallen en echte dubbel", wat[2] == "telefoon, inkomend, niet meer 
       and wat[3] == "telefoon, inkomend, dubbel, telt niet", wat)
 check("W12 privé gemist zonder naam", bel["items"][4]["wie"] == "privégesprek"
       and wat[4] == "gemist, telt niet als gesprek", bel["items"][4])
+
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:xelion:2026-10-30','2026-10-30','',0,'',1,'dekking','buiten:dekking','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:sms:2026-10-30','2026-10-30','',0,'',1,'dekking','buiten:dekking','x')")
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('sms-wacht','','gelezen','0 berichten',"
+            "'2026-10-30T10:00:00+00:00')")
+con.commit()
+con.close()
+d30 = C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()
+w30 = {x["naam"]: x for v in d30["vakken"] for x in v["wachten"]}
+check("W13 gelezen zonder ronde: niets gebeurd", w30["xelion-wacht"]["oordeel"] == "gelezen, niets gebeurd"
+      and w30["xelion-wacht"]["kleur"] == "groen" and w30["xelion-wacht"]["aantal"] == 0, w30["xelion-wacht"]["oordeel"])
+check("W13 gelezen met ronde: niets gebeurd", w30["sms-wacht"]["oordeel"] == "gelezen, niets gebeurd"
+      and w30["sms-wacht"]["kleur"] == "groen", w30["sms-wacht"]["oordeel"])
+check("W13 niet gelezen blijft grijs", w30["belwacht"]["kleur"] == "grijs", w30["belwacht"]["oordeel"])
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

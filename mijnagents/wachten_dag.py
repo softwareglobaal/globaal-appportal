@@ -188,6 +188,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         oordeel, kleur = "fout", "rood"
     elif items:
         oordeel, kleur = "binnen", "groen"
+    elif gedekt:
+        # TEL-8: de wacht las de dag helemaal en er was niets (een lijn met een oproep per maand): geen grijs of oranje
+        oordeel, kleur = "gelezen, niets gebeurd", "groen"
     elif log:
         oordeel, kleur = "draaide, niets binnen", "oranje"
     else:
