@@ -76,7 +76,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
 {
   "vraag_kort": "de vraag in een zin, zonder namen",
   "aannames": ["wat je aannam omdat het niet in de vraag stond"],
-  "eisen": ["elke andere eis waar een aanbod aan moet voldoen, kort"],
+  "eisen": ["elke andere eigenschap van het product of de levering die een pagina kan bevestigen, kort; niet de koper (privé of firma) en niet de prijs"],
   "aanbiedingen": [
     {"titel": "exacte productnaam en variant", "url": "de URL bovenaan de tekst die lees_pagina gaf",
      "modelcode": "de volledige modelcode of het typenummer zoals het op de aanbodpagina staat, of null",
@@ -108,13 +108,15 @@ veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 a
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
 btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met lees_pagina las en de prijs daar zag.
 Elk citaat in bewijs en compatibiliteit kopieer je letterlijk van een pagina die je met lees_pagina las; zonder citaat
-telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel. Een
+telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel; een
+eis over de koper of de prijs hoort niet in eisen. Een
 eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en
 citeer je de tekst waaruit dat blijkt. Netspanning en netfrequentie staan zelden op een winkelpagina: zoek en lees dan
 een pagina van de fabrikant, de handleiding of het specificatieblad van precies die modelcode, en geef die pagina als
 bewijs_url; dat telt als dezelfde modelcode op de aanbodpagina en op die bewijspagina staat, of als de aanbodpagina
-dat document zelf linkt (de regel "Documenten:" bovenaan de tekst van lees_pagina) en het hetzelfde model noemt. Lees
-daarom eerst de handleiding of het specificatieblad dat de winkelpagina linkt. In niet_nagekeken
+dat document zelf linkt (de regel "Documenten:" bovenaan de tekst van lees_pagina) en het hetzelfde model noemt, of
+als een andere gelezen winkelpagina met dezelfde EAN-code dat document linkt. Lees daarom eerst de handleiding of het
+specificatieblad dat een winkelpagina van dit product linkt. In niet_nagekeken
 komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina niet leesbaar was; die worden nooit
 aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
 ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een

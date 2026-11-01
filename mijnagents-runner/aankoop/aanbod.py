@@ -42,6 +42,8 @@ LANDCODE_BE = re.compile(r"(?<![A-Za-z])BE(?![A-Za-z])")
 PRODUCTPAGINA = re.compile(r'"price"\s*:|product:price:amount', re.I)
 # Een modelnaam in een tarief (P70, V70, X1, MOVA-RC-V70ULC): dan geldt het tarief voor dat product (overleg 29, X2).
 MODELNAAM = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{1,6}-?\d{1,5}[A-Za-z]*(?![A-Za-z0-9])")
+# Een EAN of GTIN met zijn label: "Barcodenummer: 6978794734941", "EAN-code\n6978...", '"gtin13": "6978..."' (overleg 35).
+GTIN = re.compile(r"(?<![A-Za-z])(?:ean|gtin|barcode)(?:\d{1,2}|[a-z-]*)[^0-9]{0,20}?(?<!\d)(\d{13})(?!\d)", re.I)
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
 # Een "past" vlak na zo'n woord kan over iets anders gaan dan het toestel zelf (Codex X2, ronde 6).
 ACCESSOIRE = re.compile(r"accessoire|accessory|accessories|zubeh|optione|optional|los verkrijgbaar|apart verkrijgbaar|"
@@ -76,6 +78,9 @@ OUDE_PRIJS = re.compile(r"~~|adviesprijs|oude prijs|\bvan\s*:|\bwas\s*:|\bwas\b\
 ZESTIG_HZ = {"suriname": "Suriname", "verenigde staten": "VS", "amerika": "VS", "usa": "VS", "canada": "Canada"}
 EIS_HZ = "netfrequentie {} Hz"
 EIS_V = "netspanning {} V"
+# Een modelcode die de vraag zelf noemt, is bindend: een andere kleur of variant wordt nooit aanbevolen (overleg 35, X1).
+EIS_MODEL = "modelcode {}"
+MODELCODE_IN_VRAAG = re.compile(r"\b(?:modelcode|typenummer|artikelnummer|fabrikantcode)\s*:?\s*([A-Za-z0-9][A-Za-z0-9./-]{3,}[A-Za-z0-9])")
 
 
 def _getal(waarde):
@@ -107,8 +112,9 @@ def _datum(waarde):
 
 
 def eisen_uit_vraag(vraag):
-    """De eisen over netspanning en netfrequentie die de vraag zelf stelt, in vaste woorden. Het model beoordeelt elk
-    aanbod op precies deze tekst; een eis die het niet beoordeelt, is onbekend en dus nooit de beste keuze."""
+    """De eisen over netspanning en netfrequentie die de vraag zelf stelt, in vaste woorden, en de modelcode die ze
+    noemt. Het model beoordeelt elk aanbod op precies deze tekst; een eis die het niet beoordeelt, is onbekend en dus
+    nooit de beste keuze. De modelcode toetst de code zelf (oordeel_per_eis)."""
     tekst = (vraag or "").lower()
     eisen = []
     hz = re.findall(r"\b(50|60)\s?hz\b", tekst)
@@ -118,6 +124,8 @@ def eisen_uit_vraag(vraag):
         eisen.append(EIS_HZ.format(h))
     for v in dict.fromkeys(re.findall(r"\b(1[01]\d|12[07]|2[234]0)\s?v(?:olt)?\b", tekst)):
         eisen.append(EIS_V.format(v))
+    for code in dict.fromkeys(c for c in MODELCODE_IN_VRAAG.findall(vraag or "") if any(t.isdigit() for t in c)):
+        eisen.append(EIS_MODEL.format(code))
     return eisen
 
 
@@ -421,6 +429,13 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
 
 # Eisen die de code uit de vraag haalt, met wat een citaat moet bevatten om "ja" te bewijzen.
 _EIS_BEWIJS = re.compile(r"^(netfrequentie|netspanning) (\d+) (Hz|V)$")
+_EIS_MODEL = re.compile(r"^modelcode (\S+)$")
+
+
+def bindend(eis):
+    """Houdt deze eis zonder bevestiging een aanbeveling tegen? Netspanning, netfrequentie en de modelcode uit de vraag;
+    een eigen eis van het model niet, die sluit alleen uit met "nee" (overleg 35, A en X1)."""
+    return bool(_EIS_BEWIJS.match(str(eis)) or _EIS_MODEL.match(str(eis)))
 _ANDERE_HZ = {"60": "50", "50": "60"}
 # Een spanningsbereik zoals 220-240 V of 100~240V; specificatiebladen schrijven het zo (overleg 9, X1).
 _SPANNING_BEREIK = re.compile(r"(?<![\d.,])(\d{2,3})\s?v?\s?(?:-|–|~|/|tot|to|bis|à)\s?(\d{2,3})\s?v(?:olts?)?\b")
@@ -500,14 +515,51 @@ def _accessoire_ervoor(citaat, tekst):
     return i >= 0 and bool(ACCESSOIRE.search(tekst[max(0, i - VOOR_EIS):i + len(citaat)]))
 
 
-def gelinkt_document(bron_url, eigen_tekst, bron, aanbod):
+def _gtin_geldig(code):
+    """Klopt het controlecijfer van deze EAN/GTIN (GS1, modulo 10)?"""
+    cijfers = [int(c) for c in code]
+    som = sum(c * (3 if i % 2 == 0 else 1) for i, c in enumerate(reversed(cijfers[:-1])))
+    return (10 - som % 10) % 10 == cijfers[-1]
+
+
+def gtins(tekst):
+    """De EAN-13-codes met label en geldig controlecijfer op een pagina (overleg 35, G3)."""
+    return {c for c in GTIN.findall(str(tekst or "")) if _gtin_geldig(c)}
+
+
+def _linkt(tekst, bron_url):
+    """Staat bron_url op de regel "Documenten:" van deze gelezen tekst?"""
+    from aankoop.onderzoek import schoon_url
+    regel = next((r for r in str(tekst or "").splitlines() if r.startswith("Documenten: ")), "")
+    return schoon_url(bron_url) in {schoon_url(u) for u in regel[len("Documenten: "):].split()}
+
+
+def ean_pagina(eigen_tekst, paginas, aanbod, past):
+    """De url van een andere gelezen pagina met dezelfde EAN als de aanbodpagina (elk precies een EAN met label en
+    geldig controlecijfer) waarvoor past(tekst) geldt, of None. Het aanbod mag het model niet tegenspreken: een
+    modelcode van het aanbod en elke modelnaam in zijn titel (V70) staan ook op die pagina (overleg 35, C en K3)."""
+    eigen_gtin = gtins(eigen_tekst)
+    if len(eigen_gtin) != 1:
+        return None
+    code = aanbod.get("modelcode")
+    namen = {n.lower() for n in MODELNAAM.findall(str(aanbod.get("titel") or ""))}
+    for u, t in (paginas or {}).items():
+        if (t != eigen_tekst and gtins(t) == eigen_gtin and (not code or modelcode_op(code, t))
+                and namen <= {n.lower() for n in MODELNAAM.findall(t)} and past(t)):
+            return u
+    return None
+
+
+def gelinkt_document(bron_url, eigen_tekst, bron, aanbod, paginas=None):
     """Linkt de aanbodpagina zelf dit document (de regel "Documenten:" van de leestool) en noemt het hetzelfde model
     als het aanbod (V70 uit "MOVA V70 Ultra Complete")? Dan koppelt de winkel het aan dit product, ook zonder de
     volledige modelcode erin: de handleiding van Vanden Borre noemt "MOVA V70 Ultra Complete" en het basisstation
-    RCVE0707, niet MOVA-RC-V70ULC-WHT (overleg 33, M2, X2)."""
-    from aankoop.onderzoek import schoon_url
-    regel = next((r for r in str(eigen_tekst or "").splitlines() if r.startswith("Documenten: ")), "")
-    if schoon_url(bron_url) not in {schoon_url(u) for u in regel[len("Documenten: "):].split()}:
+    RCVE0707, niet MOVA-RC-V70ULC-WHT (overleg 33, M2, X2).
+
+    Ook goed: een andere gelezen pagina linkt het document en toont dezelfde EAN als de aanbodpagina, elk precies een
+    EAN met label en geldig controlecijfer. Een EAN wijst een handelsartikel eenduidig aan: RoboCleaners toont alleen
+    de barcode, Vanden Borre dezelfde barcode met de handleiding (overleg 35, M3, C)."""
+    if not _linkt(eigen_tekst, bron_url) and not ean_pagina(eigen_tekst, paginas, aanbod, lambda t: _linkt(t, bron_url)):
         return False
     eigen = {n.lower() for n in MODELNAAM.findall(f"{aanbod.get('titel') or ''} {aanbod.get('modelcode') or ''}")}
     return bool(eigen & {n.lower() for n in MODELNAAM.findall(str(bron or ""))})
@@ -554,6 +606,15 @@ def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=No
         o = oordelen.get(eis, "onbekend")
         oordeel, citaat = (o.get("oordeel"), o.get("citaat")) if isinstance(o, dict) else (o, None)
         oordeel = str(oordeel or "onbekend").lower()
+        mc = _EIS_MODEL.match(eis)
+        if mc and alle_tekst is not None:
+            # De modelcode uit de vraag toetst de code zelf, los van het oordeel van het model: op de aanbodpagina, of
+            # op een gelezen pagina met dezelfde EAN (overleg 35, X1 en C).
+            code = mc.group(1)
+            gevonden = modelcode_op(code, eigen_tekst or "") or ean_pagina(eigen_tekst, paginas, aanbod,
+                                                                          lambda t: modelcode_op(code, t))
+            waarden.append("ja" if gevonden else "nee" if oordeel == "nee" else "onbekend")
+            continue
         if oordeel == "ja" and alle_tekst is not None:
             m = _EIS_BEWIJS.match(eis)
             bron_url = bewijspagina(aanbod, o, paginas) if m else None
@@ -563,7 +624,7 @@ def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=No
                 # Ook de aanbodpagina mag de waarde niet tegenspreken: "basisstation 50 Hz" op de winkelpagina weegt
                 # zwaarder dan een handleiding die alleen de robot beschrijft (Codex controle 11).
                 gekoppeld = ((modelcode_op(code, eigen_tekst or "") and modelcode_op(code, bron))
-                             or gelinkt_document(bron_url, eigen_tekst or "", bron, aanbod))
+                             or gelinkt_document(bron_url, eigen_tekst or "", bron, aanbod, paginas))
                 bewezen = (gekoppeld and not _twee_regios(bron)
                            and not tegenstrijdig(m.group(3).lower(), m.group(2), eigen_tekst or "")
                            and _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron))
@@ -580,6 +641,25 @@ def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=No
                 oordeel = "onbekend"
         waarden.append(oordeel)
     return waarden
+
+
+def via_ean(aanbod, eisen, per_eis, eigen_tekst, paginas):
+    """{eis: url} voor elke bevestigde eis die alleen via een pagina met dezelfde EAN bewezen is, zodat het verslag die
+    herkomst noemt (overleg 35, K3)."""
+    compat = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
+    code = aanbod.get("modelcode")
+    uit = {}
+    for eis, w in zip(eisen, per_eis):
+        mc, m = _EIS_MODEL.match(str(eis)), _EIS_BEWIJS.match(str(eis))
+        if w != "ja" or not (mc or m):
+            continue
+        if mc and not modelcode_op(mc.group(1), eigen_tekst or ""):
+            uit[eis] = ean_pagina(eigen_tekst, paginas, aanbod, lambda t: modelcode_op(mc.group(1), t))
+        bron_url = bewijspagina(aanbod, compat.get(eis), paginas) if m else None
+        if bron_url and not _linkt(eigen_tekst, bron_url) and not (
+                modelcode_op(code, eigen_tekst or "") and modelcode_op(code, paginas.get(bron_url, ""))):
+            uit[eis] = ean_pagina(eigen_tekst, paginas, aanbod, lambda t: _linkt(t, bron_url))
+    return {e: u for e, u in uit.items() if u}
 
 
 def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
@@ -651,11 +731,17 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
             else totaal(a, koersen))
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst, paginas)
         rij["per_eis"] = oordeel_per_eis(a, eisen, alle_tekst, tekst, paginas) if eisen else []
+        rij["niet_bevestigd"] = [e for e, w in zip(eisen, rij["per_eis"]) if w != "ja"]
+        # Bindend zijn netspanning, netfrequentie en de modelcode uit de vraag; een eigen eis van het model sluit alleen
+        # uit met "nee" en staat anders als niet bevestigd in het verslag (overleg 35, A en X1).
+        rij["kandidaat"] = (rij["totaal_eur"] is not None and rij["compatibel"] != "nee"
+                            and not any(bindend(e) for e in rij["niet_bevestigd"]))
+        rij["via_ean"] = via_ean(a, eisen, rij["per_eis"], tekst, paginas) if paginas is not None else {}
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
-    goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",
+    goed.sort(key=lambda r: (r["totaal_eur"] is None, not r["kandidaat"], r["compatibel"] != "ja",
                              r["totaal_eur"] if r["totaal_eur"] is not None else float("inf")))
-    kandidaten = [r for r in goed if r["totaal_eur"] is not None and r["compatibel"] == "ja"]
+    kandidaten = [r for r in goed if r["kandidaat"]]
     beste = kandidaten[0] if kandidaten else None
     reserve = kandidaten[1] if len(kandidaten) > 1 else None
     return {"goed": goed, "niet_compatibel": niet_compatibel, "afgewezen": afgewezen, "beste": beste, "reserve": reserve}

@@ -38,7 +38,9 @@ def _regel(a):
         delen.append("geen factuur met btw")
     if a.get("foto"):
         delen.append(f"[foto]({a['foto']})")
-    if a.get("compatibel") == "onbekend":
+    if a.get("niet_bevestigd"):
+        delen.append("niet bevestigd: " + "; ".join(a["niet_bevestigd"]))
+    elif a.get("compatibel") == "onbekend":
         delen.append("compatibiliteit niet bevestigd")
     delen += a.get("uitleg") or []
     if a.get("waarom"):
@@ -57,6 +59,10 @@ def _bewijsregel(a):
     for veld, (tekst, bron) in ctx.items():
         waar = "" if bron == a.get("url") else f" ([bron]({bron}))"
         regels.append(f'- {veld}: "{_kort(tekst, 600)}"{waar}')
+    for eis, pagina in (a.get("via_ean") or {}).items():
+        regels.append(f"- {eis}: via dezelfde EAN als [deze pagina]({pagina})")     # herkomst (overleg 35, K3)
+    if a.get("niet_bevestigd"):
+        regels.append("- niet bevestigd: " + "; ".join(a["niet_bevestigd"]))     # overleg 35, A
     return "\n".join(regels)
 
 

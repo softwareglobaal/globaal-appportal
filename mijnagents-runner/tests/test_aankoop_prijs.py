@@ -236,6 +236,71 @@ check("een gelinkt document van een ander model telt niet (overleg 33, X2)",
 check("een gelinkt document over een optioneel laadstation telt niet (overleg 33, X2)",
       hand_oordeel(met_hand(citaat="Rated Input 220-240 V / 50-60 Hz", bewijs_url=DOC, **V70),
                    {WINKEL: WPAG_DOC, DOC: HPAG_DOC.replace("Base Station", "Optioneel laadstation")}) == "onbekend")
+print("Overleg 35: eigen eisen, modelcode uit de vraag, dezelfde EAN")
+EAN = "6978794734941"
+check("een EAN telt met label en geldig controlecijfer, alleen met 13 cijfers (overleg 35, G3)",
+      A.gtins(f"Barcodenummer: {EAN}") == {EAN} and A.gtins(f"EAN-code\n{EAN}\nFabrikantcode") == {EAN}
+      and A.gtins(f'"gtin13": "{EAN}"') == {EAN} and A.gtins("EAN 6978794734942") == set()
+      and A.gtins(f"artikel {EAN}") == set() and A.gtins("UPC barcode 036000291452") == set())
+check("de modelcode uit de vraag wordt een vaste eis", A.eisen_uit_vraag(
+      "MOVA V70 Ultra Complete (modelcode MOVA-RC-V70ULC-WHT), naar Suriname") ==
+      ["netfrequentie 60 Hz", "modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een robotstofzuiger") == [])
+check("een eis over de koper hoort niet in eisen (overleg 35, B)", "niet de koper" in O.VORM
+      and "dezelfde EAN-code" in O.VORM)
+RC, VB = "https://robo.voorbeeld.com/v70", "https://keten.voorbeeld.be/v70"
+RCPAG = pagina(f"Mova Robot Vacuum V70 Ultra Complete\nBarcodenummer: {EAN}\nNu 949,00 euro. "
+               "Verzending naar België: 12,50 euro.")
+VBPAG = pagina(f"Documenten: {DOC}\nMOVA V70 ULTRA COMPLETE WHITE. Nu 1.399,00 euro. Gratis levering aan huis. "
+               f"EAN-code\n{EAN}\nFabrikantcode\nMOVA-RC-V70ULC-WHT")
+EISEN35 = ["netfrequentie 60 Hz", "netspanning 220 V", "modelcode MOVA-RC-V70ULC-WHT",
+           "levering in Belgie tegen half november"]
+HAND = {"oordeel": "ja", "citaat": "Rated Input 220-240 V / 50-60 Hz", "bewijs_url": DOC}
+
+
+def rc(**over):
+    return aanbod(**{"titel": "Mova Robot Vacuum V70 Ultra Complete", "url": RC, "winkel": "RoboCleaners", "prijs": 949,
+                     "verzending": 12.5, "bewijs": {"prijs": "Nu 949,00 euro",
+                                                    "verzending": "Verzending naar België: 12,50 euro"},
+                     "compatibiliteit": {"netfrequentie 60 Hz": HAND, "netspanning 220 V": HAND}, **over})
+
+
+VBA = aanbod(titel="MOVA V70 ULTRA COMPLETE WHITE", url=VB, winkel="Vanden Borre", prijs=1399, verzending=0,
+             modelcode="MOVA-RC-V70ULC-WHT", bewijs={"prijs": "Nu 1.399,00 euro", "verzending": "Gratis levering aan huis"},
+             compatibiliteit={"netfrequentie 60 Hz": HAND, "netspanning 220 V": HAND})
+P35 = {RC: RCPAG, VB: VBPAG, DOC: HPAG_DOC}
+r = A.verwerk([VBA, rc()], VANDAAG, KOERSEN, EISEN35, paginas=P35)
+check("zelfde EAN: de goedkoopste winkel gebruikt de handleiding van de andere en wordt aanbevolen (overleg 35, M3, K5)",
+      r["beste"] and r["beste"]["url"] == RC and r["reserve"]["url"] == VB
+      and r["beste"]["per_eis"] == ["ja", "ja", "ja", "onbekend"]
+      and r["beste"]["niet_bevestigd"] == ["levering in Belgie tegen half november"], str(r["beste"] or r["goed"]))
+check("het verslag noemt de herkomst via de EAN en wat niet bevestigd is (overleg 35, A en K3)",
+      r["beste"]["via_ean"] == {e: VB for e in EISEN35[:3]} and "via dezelfde EAN" in V.maak("v", {}, r, "2026-10-30",
+      "2026-10-30") and "niet bevestigd: levering in Belgie tegen half november" in V.maak("v", {}, r, "2026-10-30",
+      "2026-10-30"), str(r["beste"].get("via_ean")))
+r = A.verwerk([VBA, rc(titel="Mova Robot Vacuum P70 Ultra")], VANDAAG, KOERSEN, EISEN35, paginas=P35)
+rij = next(x for x in r["goed"] if x["url"] == RC)
+check("zelfde EAN maar een ander model in de titel: geen bewijs, nooit aanbevolen (overleg 35, K3, K5)",
+      r["beste"]["url"] == VB and rij["per_eis"][:3] == ["onbekend"] * 3 and not rij["kandidaat"], str(rij["per_eis"]))
+r = A.verwerk([rc(modelcode="MOVA-RC-V70ULC-BLK")], VANDAAG, KOERSEN, EISEN35, paginas=P35)
+check("zelfde EAN maar een andere modelcode bij het aanbod: geen bewijs (overleg 35, K3)", r["beste"] is None
+      and r["goed"][0]["per_eis"][:3] == ["onbekend"] * 3)
+r = A.verwerk([rc()], VANDAAG, KOERSEN, EISEN35, paginas={RC: RCPAG.replace("Barcodenummer", f"EAN 4006381333931 Barcodenummer"),
+                                                           VB: VBPAG, DOC: HPAG_DOC})
+check("twee EAN-codes op de aanbodpagina koppelen niets", r["beste"] is None)
+ZWART = "https://goedkoop.voorbeeld.com/v70-zwart"
+r = A.verwerk([aanbod(titel="MOVA V70 Ultra Complete Black", url=ZWART, prijs=899, modelcode="MOVA-RC-V70ULC-BLK",
+                      bewijs={"prijs": "Nu 899,00 euro", "verzending": "Gratis verzending."},
+                      compatibiliteit={e: {"oordeel": "ja", "citaat": "Ingang 220-240 V, 50/60 Hz"} for e in EISEN35[:2]})],
+              VANDAAG, KOERSEN, EISEN35, paginas={ZWART: pagina(
+                  "MOVA V70 Ultra Complete Black, typenummer MOVA-RC-V70ULC-BLK. Nu 899,00 euro. Gratis verzending. "
+                  "Ingang 220-240 V, 50/60 Hz.")})
+check("een andere modelcode dan de vraag wordt nooit aanbevolen, ook goedkoper en met netwaarden (overleg 35, X1, X5)",
+      r["beste"] is None and r["goed"][0]["per_eis"] == ["ja", "ja", "onbekend", "onbekend"]
+      and "modelcode MOVA-RC-V70ULC-WHT" in r["goed"][0]["niet_bevestigd"], str(r["goed"][0]["per_eis"]))
+r = A.verwerk([rc(compatibiliteit=dict(rc()["compatibiliteit"], **{EISEN35[3]: "nee"}))], VANDAAG, KOERSEN, EISEN35,
+              paginas=P35)
+check("een eigen eis van het model met nee sluit uit (overleg 35, A)", r["beste"] is None and len(r["niet_compatibel"]) == 1)
+
 check("een handleiding van een andere modelcode telt niet", hand_oordeel(met_hand(), {
       WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200US")}) == "onbekend")
 check("een langere modelcode op de handleiding is een andere variant (VX-200EUX)", hand_oordeel(met_hand(), {
@@ -300,7 +365,8 @@ r = A.verwerk([
 ], VANDAAG, KOERSEN, eisen)
 check("het goedkoopste maar niet compatibele aanbod staat apart", [a["prijs"] for a in r["niet_compatibel"]] == [300])
 check("het beste is compatibel en volledig", r["beste"]["url"] == "https://b.voorbeeld.com/1")
-check("geen reserve als er maar een volledig en compatibel aanbod is", r["reserve"] is None)
+check("een eigen eis van het model zonder oordeel houdt de reserve niet tegen, maar staat erbij (overleg 35, A)",
+      r["reserve"]["url"] == "https://d.voorbeeld.com/1" and r["reserve"]["niet_bevestigd"] == ["stekker type A/B"])
 check("onvolledig totaal komt achteraan", r["goed"][-1]["url"] == "https://c.voorbeeld.com/1")
 check("zonder link afgewezen, met reden", any("geen werkende link" in a["redenen"] for a in r["afgewezen"]))
 check("dezelfde link twee keer telt een keer", any(a["redenen"] == ["dubbel"] for a in r["afgewezen"]))
@@ -328,8 +394,8 @@ ACC = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 500,00 euro. Gratis verz
                                                   "Accessoire laadstation: Stekker type A/B.")}
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending."}, compatibiliteit={
     "stekker type A/B": {"oordeel": "ja", "citaat": "Stekker type A/B."}})], VANDAAG, KOERSEN, ["stekker type A/B"], paginas=ACC)
-check("een past vlak na het woord accessoire telt niet (Codex X2, ronde 6)", r["beste"] is None
-      and r["goed"][0]["compatibel"] == "onbekend")
+check("een past vlak na het woord accessoire telt niet (Codex X2, ronde 6)",
+      r["goed"][0]["compatibel"] == "onbekend" and r["goed"][0]["niet_bevestigd"] == ["stekker type A/B"])
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro"}, verzending=7.95)],
               VANDAAG, KOERSEN, paginas=paginas)
 check("een verzendkost van een andere pagina zonder Belgie of alle bestellingen in het citaat telt niet (overleg 29, X2)",
@@ -1090,6 +1156,9 @@ check("het werkverslag toont per eis het oordeel van model en code, een eigen ei
                   "code": "ja"},
                  {"eis": "eis 2", "model": "onbekend", "citaat": None, "bewijs_url": None, "code": "onbekend"}]
       and GEHEIM not in str(regels), str(regels))
+
+check("het werkverslag telt sleutels die geen eis zijn, zonder hun tekst (overleg 35, D)",
+      PO.andere_sleutels({"compatibiliteit": {"netspanning 220 V": "ja", GEHEIM: "ja"}}, ["netspanning 220 V"]) == 1)
 
 bron = open(Path(PO.__file__), encoding="utf-8").read()
 check("de runner zet geen API-sleutel klaar voor de prijsvraag (overleg 14)", "sleutelbron" not in bron

@@ -94,6 +94,13 @@ def per_eis(rij, eisen):
     return uit
 
 
+def andere_sleutels(rij, eisen):
+    """Hoeveel sleutels in compatibiliteit geen eis zijn, zonder hun tekst: zo wordt een sleutelverschil zichtbaar
+    (overleg 35, D)."""
+    compat = rij.get("compatibiliteit") if isinstance(rij.get("compatibiliteit"), dict) else {}
+    return len(set(compat) - set(eisen))
+
+
 def zet_klaar(vraag, titel, tekst, vandaag):
     ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": vandaag.isoformat(), "titel": titel,
                   "uniek": f"prijsonderzoek:{vingerafdruk(vraag, vandaag)}", "inhoud": tekst}])
@@ -153,7 +160,7 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     ag.log("prijsvraag", "bron", f"vraag {va}: bewijs per aanbod in het verslag",
            [{"url": x.get("url"), "ontbreekt": x.get("ontbreekt"), "compatibel": x.get("compatibel"),
              "btw": [x.get("btw_inbegrepen"), x.get("verzending_btw_inbegrepen")], "verzending": x.get("verzending"),
-             "bewijs": x.get("bewijs"), "eisen": per_eis(x, eisen)}
+             "bewijs": x.get("bewijs"), "eisen": per_eis(x, eisen), "andere_sleutels": andere_sleutels(x, eisen)}
             for x in res["goed"] + res["niet_compatibel"]])
     # Het verslag zelf noemt de vraag; het staat in het klaargezette item, niet in het logboek (Codex X3, ronde 2).
     ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi (soort {SOORT})")
