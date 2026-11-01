@@ -311,6 +311,19 @@ def terug_lezen(gezet, lees=None):
 
 
 def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None):
+    """Een ronde. CB-3 (T-0120): elke ronde laat een regel in het werkverslag, alleen aantallen, ook een ronde die niets
+    klaarzette (de wachtenpagina leest alleen het werkverslag en zei anders 'Geen ronde'); een ronde die breekt, een
+    regel met stap fout, zonder de tekst van de fout (die kan een naam dragen)."""
+    try:
+        dagen = _werk(r, vandaag, lees, collegas, zet, terug)
+    except Exception as e:
+        ag.log("ronde", "fout", f"ronde gebroken ({type(e).__name__}); niets zeker klaargezet")
+        raise
+    ag.log("ronde", "bevinding", r.detail)
+    return dagen
+
+
+def _werk(r, vandaag, lees, collegas, zet, terug):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         # N2: zonder grenzen geen werk. De vaste vorm staat in bord.grenzen.

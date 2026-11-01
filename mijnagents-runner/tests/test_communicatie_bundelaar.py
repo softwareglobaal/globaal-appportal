@@ -334,6 +334,37 @@ def test_cb1_mac_kanalen_eigen_kanaal_en_prive_geteld():
     assert C.kanaal("zoom:chat:kanaal-proef-123:2026-10-25") == "groepschat", "Zoom zoals het was"
 
 
+def test_cb3_werkverslag_een_regel_per_ronde_zonder_naam():
+    """CB-3: elke ronde schrijft een regel in het werkverslag (stap bevinding) met alleen aantallen, ook een ronde die
+    niets klaarzette; zonder die regel zegt de wachtenpagina 'Geen ronde op deze dag' (wachten_dag.py leest alleen het
+    werkverslag, de ronde stuurt alleen wat gelogd is). Een ronde die breekt, schrijft een regel met stap fout."""
+    log = []
+    oud = C.ag.log
+    C.ag.log = lambda onderwerp, stap, tekst, detail="": log.append((onderwerp, stap, tekst))
+
+    def kapot(sql, args=()):
+        raise bord.BordOnbekend("databank van het bord ontbreekt")
+    try:
+        r, _, _, _ = ronde()
+        assert log == [("ronde", "bevinding", r.detail)] and "contacten" in r.detail, log
+        for naam in ("Zeta", "Omega", "Sigma", "Tau", "Robotfirma", "meldingen@"):
+            assert naam not in json.dumps(log), naam
+        for proef in (dict(lees=kapot), dict(collegas=lambda: []), dict(werkwijze="# Werkwijze\n\nIk bundel.\n")):
+            log.clear()
+            r, gezet, dagen, _ = ronde(**proef)
+            assert dagen is None and gezet == [] and log == [("ronde", "bevinding", r.detail)] and r.detail, (proef, log)
+        log.clear()
+        try:
+            C.werk(NepRonde(), vandaag=VANDAAG, lees=lambda sql, args=(): [] if sql == C.SQL_EERDER else list(RIJEN),
+                   collegas=lambda: COLLEGAS, zet=lambda its: 1 / 0, terug=lambda its: [])
+            raise AssertionError("de ronde brak niet")
+        except ZeroDivisionError:
+            pass
+        assert len(log) == 1 and log[0][:2] == ("ronde", "fout") and "ZeroDivisionError" in log[0][2], log
+    finally:
+        C.ag.log = oud
+
+
 def test_vreemde_met_voornaam_van_collega_is_geen_collega():
     rijen = [rij("fathom:1", "Mehdi, Zeta Vreemdeling", 10), rij("fathom:2", "Mehdi Chegini, Zeta", 5),
              rij("mail:<y2@voorbeeld.test>", "Mehdi Vreemd")]
