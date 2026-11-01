@@ -18,7 +18,7 @@ Wat Mehdi elke dag deed, in een oogopslag. Bron van waarheid: De Dagbundelaar.
   Dagbundelaar leest ze van het bord (items `wispr:Mehdi:<dag>`, `websites:<dag>`, `gezondheid:<dag>`).
   Laptopstappen: `mijnagents-runner/docs/dagbundelaar/opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md`.
 - Wachten (sinds 01-11-2026, pagina `/wachten`): per wacht van de groep Dagbundelaar wat er die dag binnenkwam,
-  voorlopig voor vandaag en gisteren (`WACHT_DAGEN`). Per wacht het aantal items, de items zelf (tijd, van wie of
+  voorlopig vandaag en de twee dagen ervoor (`WACHT_DAGEN`). Per wacht het aantal items, de items zelf (tijd, van wie of
   wat, kort) en het werkverslag van die dag. Groen: kwam binnen. Oranje: draaide, niets binnen. Rood: fout.
   Grijs: geen ronde. De gegevens komen van het bord (`/api/wachten/dag`, `mijnagents/wachten_dag.py`) over het
   interne netwerk met `AGENTS_TOKEN`; antwoordt het bord niet, dan zegt de pagina dat.

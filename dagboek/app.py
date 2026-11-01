@@ -402,7 +402,7 @@ def bronnen_pagina():
 # over het interne netwerk met het token van het bord, alleen lezend. Voorlopig alleen de laatste dagen (WACHT_DAGEN).
 BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/")
 BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
-WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "2"))
+WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "3"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
 
 
