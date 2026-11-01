@@ -11,7 +11,8 @@ Het taalmodel zoekt; deze module beslist wat in het verslag mag. Regels die nooi
    de code). Ontbreekt er iets, dan staat het aanbod er met "totaal onvolledig" en kan het nooit als beste of reserve.
 4. Een aanbod dat niet past bij een eis staat apart onder "niet compatibel" en wordt nooit aanbevolen. De eisen over
    netspanning en netfrequentie haalt de code zelf uit de vraag (eisen_uit_vraag), zodat ze er ook staan als het model
-   ze vergeet (Codex X2).
+   ze vergeet (Codex X2). Het bewijs daarvoor mag van een gelezen pagina van de fabrikant, de handleiding of het
+   specificatieblad komen, als dezelfde volledige modelcode op die pagina en op de aanbodpagina staat (overleg 9, X1).
 
 Draaien van de tests: python3 mijnagents-runner/tests/test_aankoop_prijs.py
 """
@@ -350,6 +351,39 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None):
 # Eisen die de code uit de vraag haalt, met wat een citaat moet bevatten om "ja" te bewijzen.
 _EIS_BEWIJS = re.compile(r"^(netfrequentie|netspanning) (\d+) (Hz|V)$")
 _ANDERE_HZ = {"60": "50", "50": "60"}
+# Een spanningsbereik zoals 220-240 V of 100~240V; specificatiebladen schrijven het zo (overleg 9, X1).
+_SPANNING_BEREIK = re.compile(r"(?<![\d.,])(\d{2,3})\s?v?\s?(?:-|–|~|/|tot|to|bis|à)\s?(\d{2,3})\s?v(?:olts?)?\b")
+
+
+def _waarde_in(eenheid, waarde, citaat):
+    """Noemt het citaat de gevraagde waarde? Bij spanning telt ook een bereik dat ze omvat (220-240 V voor 220 V)."""
+    c = _schoon(citaat).lower()
+    if re.search(rf"(?<![\d.,]){waarde}\s?{eenheid}", c):
+        return True
+    return eenheid == "v" and any(int(a) <= int(waarde) <= int(b) for a, b in _SPANNING_BEREIK.findall(c))
+
+
+def _twee_regios(tekst):
+    """Noemt een bewijspagina netspanningen van twee streken (een losse 100 tot 130 V naast 200 tot 250 V), dan is niet
+    duidelijk welke variant het aanbod is (overleg 9, K1 en X1). Een breed bereik als 100-240 V is een toestel voor
+    allebei en telt hier niet mee."""
+    t = _schoon(tekst).lower()
+    smal = [(int(a), int(b)) for a, b in _SPANNING_BEREIK.findall(t) if int(b) - int(a) < 50]
+    los = [int(v) for v in re.findall(r"(?<![\d.,])(\d{3})\s?v(?:olts?)?\b", _SPANNING_BEREIK.sub(" ", t))]
+    waarden = los + [x for paar in smal for x in paar]
+    return any(100 <= v <= 130 for v in waarden) and any(200 <= v <= 250 for v in waarden)
+
+
+def modelcode_op(code, tekst):
+    """Staat deze volledige modelcode op de pagina? Hoofdletters, spaties en streepjes tellen niet, maar een langere
+    code (RLV77CEX of RLV77CE-X naast RLV77CE) is een andere variant. Een code korter dan vijf tekens, of zonder cijfer
+    of letter, bewijst niets."""
+    tekens = [c for c in str(code or "").lower() if c.isalnum()]
+    if len(tekens) < 5 or not any(c.isdigit() for c in tekens) or not any(c.isalpha() for c in tekens):
+        return False
+    patroon = (r"(?<![a-z0-9])(?<![a-z0-9][-/.])" + r"[\s\-/.]?".join(map(re.escape, tekens))
+               + r"(?![a-z0-9])(?![-/.][a-z0-9])")
+    return bool(re.search(patroon, _schoon(tekst).lower()))
 
 
 def _netwaarde_bewezen(eenheid, waarde, citaat, eigen_tekst):
@@ -358,7 +392,7 @@ def _netwaarde_bewezen(eenheid, waarde, citaat, eigen_tekst):
     niet duidelijk welke variant dit aanbod is en blijft het onbekend (Codex X2, ronde 3: een 60 Hz-citaat van een
     Amerikaanse variant bewijst niets voor het Europese model op dezelfde pagina)."""
     c = _schoon(citaat).lower()
-    if not citaat_op_pagina(citaat, eigen_tekst) or not re.search(rf"(?<!\d){waarde}\s?{eenheid}", c):
+    if not citaat_op_pagina(citaat, eigen_tekst) or not _waarde_in(eenheid, waarde, citaat):
         return False
     if eenheid == "hz":
         beide = re.compile(r"50\s?(?:/|-|en|tot|to|bis|à)\s?60\s?hz|60\s?(?:/|-|en|tot|to|bis|à)\s?50\s?hz")
@@ -379,14 +413,27 @@ def _accessoire_ervoor(citaat, tekst):
     return i >= 0 and bool(ACCESSOIRE.search(tekst[max(0, i - VOOR_EIS):i + len(citaat)]))
 
 
-def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
+def bewijspagina(aanbod, o, paginas):
+    """De url van een andere gelezen pagina die het model als bewijs voor een eis gaf, of None als het bewijs van de
+    aanbodpagina zelf komt (overleg 9, X1)."""
+    from aankoop.onderzoek import schoon_url
+    u = schoon_url(o.get("bewijs_url")) if isinstance(o, dict) else ""
+    return u if u and paginas is not None and u != schoon_url(aanbod.get("url")) else None
+
+
+def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
     """"ja", "nee" of "onbekend" tegen de eisen. Zonder eisen is het "ja".
 
-    aanbod["compatibiliteit"] is {eis: {"oordeel": "ja"|"nee"|"onbekend", "citaat": "..."}} (of alleen het oordeel).
-    Een eis die er niet in staat, is onbekend. Met de gelezen tekst geldt "ja" alleen met een citaat (Codex X2):
-    netspanning en netfrequentie van de eigen aanbodpagina, met die waarde en zonder twijfel over de variant
-    (_netwaarde_bewezen); een andere eis van een gelezen pagina. Anders wordt het "onbekend". "nee" wordt altijd
-    geloofd: dat kan nooit tot een verkeerde aanbeveling leiden."""
+    aanbod["compatibiliteit"] is {eis: {"oordeel": "ja"|"nee"|"onbekend", "citaat": "...", "bewijs_url": "..."}} (of
+    alleen het oordeel). Een eis die er niet in staat, is onbekend. Met de gelezen tekst geldt "ja" alleen met een
+    citaat (Codex X2): netspanning en netfrequentie van de eigen aanbodpagina, met die waarde en zonder twijfel over de
+    variant (_netwaarde_bewezen); een andere eis van een gelezen pagina. Anders wordt het "onbekend". "nee" wordt altijd
+    geloofd: dat kan nooit tot een verkeerde aanbeveling leiden.
+
+    Netspanning en netfrequentie mogen ook van een andere gelezen pagina komen (bewijs_url: fabrikant, handleiding,
+    specificatieblad), maar alleen als de modelcode van het aanbod op de aanbodpagina en op die pagina staat, die
+    pagina geen netspanningen van twee streken noemt, en er geen woord als accessoire voor het citaat staat (overleg 9,
+    X1 en K1). paginas is {genormaliseerde url: tekst} van de gelezen pagina's."""
     if not eisen:
         return "ja"
     oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
@@ -397,11 +444,17 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None):
         oordeel = str(oordeel or "onbekend").lower()
         if oordeel == "ja" and alle_tekst is not None:
             m = _EIS_BEWIJS.match(eis)
-            if m:
-                bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), eigen_tekst or "")
+            bron_url = bewijspagina(aanbod, o, paginas) if m else None
+            bron = (paginas or {}).get(bron_url, "") if bron_url else (eigen_tekst or "")
+            if bron_url:
+                code = aanbod.get("modelcode")
+                bewezen = (modelcode_op(code, eigen_tekst or "") and modelcode_op(code, bron) and not _twee_regios(bron)
+                           and _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron))
+            elif m:
+                bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron)
             else:
-                bewezen = citaat_op_pagina(citaat, eigen_tekst or "")     # van de eigen pagina (Codex X2, ronde 4)
-            if bewezen and _accessoire_ervoor(str(citaat or ""), eigen_tekst or ""):
+                bewezen = citaat_op_pagina(citaat, bron)     # van de eigen pagina (Codex X2, ronde 4)
+            if bewezen and _accessoire_ervoor(str(citaat or ""), bron):
                 bewezen = False
             if not bewezen:
                 oordeel = "onbekend"
@@ -444,8 +497,12 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
                     break
         compat = a.get("compatibiliteit") if isinstance(a.get("compatibiliteit"), dict) else {}
         for eis, o in compat.items():
-            if isinstance(o, dict) and o.get("citaat") and citaat_op_pagina(o["citaat"], tekst):
-                uit[eis] = (context(o["citaat"], tekst, rond=VOOR_EIS), a["url"])
+            if not (isinstance(o, dict) and o.get("citaat")):
+                continue
+            bron_url = bewijspagina(a, o, paginas) if _EIS_BEWIJS.match(str(eis)) else None
+            bron = paginas.get(bron_url, "") if bron_url else tekst
+            if citaat_op_pagina(o["citaat"], bron):        # het bewijs met zijn pagina, ook als die niet de aanbodpagina is
+                uit[eis] = (context(o["citaat"], bron, rond=VOOR_EIS), bron_url or a["url"])
         return uit
     goed, niet_compatibel, afgewezen = [], [], []
     gezien = set()
@@ -465,7 +522,7 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         rij = dict(a)
         rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = (
             totaal(a, koersen, winkeltekst(a["url"]), tekst) if paginas is not None else totaal(a, koersen))
-        rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst)
+        rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst, paginas)
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",

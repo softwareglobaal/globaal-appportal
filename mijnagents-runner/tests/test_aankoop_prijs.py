@@ -192,6 +192,52 @@ check("een toestel voor 50/60 Hz is ja", A.compatibel(aanbod(compatibiliteit={"n
 check("ja met een verzonnen citaat is onbekend", A.compatibel(aanbod(compatibiliteit={"netfrequentie 60 Hz": {
       "oordeel": "ja", "citaat": "Werkt op 60 Hz overal"}}), ["netfrequentie 60 Hz"], SPEC) == "onbekend")
 
+print("Spanning en frequentie uit de handleiding van hetzelfde model (overleg 9, X1, K1, X6)")
+HZV = ["netfrequentie 60 Hz", "netspanning 220 V"]
+WINKEL = "https://winkel.voorbeeld.com/x1"
+HANDL = "https://fabrikant.voorbeeld.com/x1-handleiding"
+WPAG = pagina("Vloerwasser X1 Complete, typenummer VX-200EU. Nu 500,00 euro.")
+HPAG = pagina("Technische gegevens VX-200EU. Basisstation: ingang 220-240 V~ 50/60 Hz, 80 W.")
+
+
+def met_hand(code="VX-200EU", citaat="ingang 220-240 V~ 50/60 Hz", bewijs_url=HANDL, **over):
+    return aanbod(modelcode=code, compatibiliteit={e: {"oordeel": "ja", "citaat": citaat, "bewijs_url": bewijs_url}
+                                                   for e in HZV}, **over)
+
+
+def hand_oordeel(a, paginas):
+    return A.compatibel(a, HZV, "\n".join(paginas.values()), paginas.get(WINKEL, ""), paginas)
+
+
+check("een handleiding met dezelfde modelcode bewijst 220 V en 60 Hz (bereik 220-240 V en 50/60 Hz)",
+      hand_oordeel(met_hand(), {WINKEL: WPAG, HANDL: HPAG}) == "ja")
+check("een handleiding van een andere modelcode telt niet", hand_oordeel(met_hand(), {
+      WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200US")}) == "onbekend")
+check("een langere modelcode op de handleiding is een andere variant (VX-200EUX)", hand_oordeel(met_hand(), {
+      WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200EUX")}) == "onbekend")
+check("zonder modelcode op de aanbodpagina telt de handleiding niet", hand_oordeel(met_hand(), {
+      WINKEL: pagina("Vloerwasser X1 Complete. Nu 500,00 euro."), HANDL: HPAG}) == "onbekend")
+check("een te korte modelcode bewijst niets", hand_oordeel(met_hand(code="X1"), {
+      WINKEL: WPAG + " X1", HANDL: HPAG + " X1"}) == "onbekend")
+check("een handleiding met ook 120 V voor een andere streek telt niet (K1)", hand_oordeel(met_hand(), {
+      WINKEL: WPAG, HANDL: HPAG + " Versie Noord-Amerika: 120 V 60 Hz."}) == "onbekend")
+check("een bewijspagina die niet gelezen is, telt niet", hand_oordeel(met_hand(), {WINKEL: WPAG}) == "onbekend")
+check("een citaat dat niet op de bewijspagina staat, telt niet", hand_oordeel(met_hand(citaat="ingang 110-240 V 50/60 Hz"), {
+      WINKEL: WPAG, HANDL: HPAG}) == "onbekend")
+check("een past vlak na accessoire op de handleiding telt niet", hand_oordeel(met_hand(citaat="lader 220-240 V~ 50/60 Hz"), {
+      WINKEL: WPAG, HANDL: HPAG + " Accessoire: externe lader 220-240 V~ 50/60 Hz."}) == "onbekend")
+check("alleen 230 V bewijst geen 220 V", hand_oordeel(met_hand(citaat="ingang 230 V~ 50/60 Hz"), {
+      WINKEL: WPAG, HANDL: HPAG + " Basisstation ingang 230 V~ 50/60 Hz."}) == "onbekend")
+check("50 Hz alleen op de handleiding is geen 60 Hz", hand_oordeel(met_hand(citaat="ingang 220-240 V~ 50 Hz"), {
+      WINKEL: WPAG, HANDL: pagina("Technische gegevens VX-200EU. Basisstation: ingang 220-240 V~ 50 Hz.")}) == "onbekend")
+EIGEN60 = pagina("Vloerwasser X1, typenummer VX-200EU. Nu 500,00 euro. Ingang 220-240 V, 50/60 Hz.")
+check("een citaat van de eigen pagina werkt nog zoals voorheen", A.compatibel(aanbod(compatibiliteit={
+      e: {"oordeel": "ja", "citaat": "Ingang 220-240 V, 50/60 Hz"} for e in HZV}), HZV, EIGEN60, EIGEN60, {WINKEL: EIGEN60}) == "ja")
+r = A.verwerk([met_hand(bewijs={"prijs": "Nu 500,00 euro"}, verzending=None)], VANDAAG, KOERSEN, HZV,
+              paginas={WINKEL: WPAG, HANDL: HPAG})
+check("het verslag toont het handleidingbewijs met de link naar de handleiding",
+      r["goed"][0]["compatibel"] == "ja" and r["goed"][0]["context"]["netfrequentie 60 Hz"][1] == HANDL, str(r["goed"][0].get("context")))
+
 print("Compatibiliteit en rangorde")
 eisen = ["netfrequentie 60 Hz", "stekker type A/B"]
 check("een eis die nee is maakt het niet compatibel", A.compatibel(aanbod(compatibiliteit={e: "nee" for e in eisen}), eisen) == "nee")
@@ -305,6 +351,7 @@ class NepClient:
     def __init__(self, antwoorden):
         self.antwoorden, self.vragen = list(antwoorden), []
         self.messages = self
+        self.beta = self                # client.beta.messages.create, voor het takenbudget (overleg 9, X3)
 
     def create(self, **kw):
         kw = dict(kw, messages=[dict(m, content=list(m["content"]) if isinstance(m["content"], list) else m["content"])
@@ -368,6 +415,43 @@ r = A.verwerk([aanbod(prijs=500), aanbod(url="https://b.voorbeeld.com/2", prijs=
 tekst = V.maak("v", {"vervolgvraag": "Is het voor privé of voor een firma?"}, r, "2026-10-30", "2026-10-30")
 check("de reserve en de vervolgvraag staan bovenaan", "**Reserve:**" in tekst.split("## Aanbiedingen")[0]
       and "**Vraag aan jou:** Is het voor privé of voor een firma?" in tekst)
+
+print("Takenbudget, verbruik en gezien-niet-nagekeken (overleg 9, X3, X4)")
+check("het takenbudget gaat mee als advies, met de beta", nep.vragen[0]["output_config"].get("task_budget") ==
+      {"type": "tokens", "total": O.TAAK_BUDGET} and nep.vragen[0].get("betas") == [O.BETA_BUDGET] and O.TAAK_BUDGET == 250000)
+check("de paginagrens is 10.000 tokens met 6 zoek- en 6 leesbeurten (G2, G5)",
+      (O.MAX_PAGINA_TOKENS, O.MAX_ZOEKEN, O.MAX_LEZEN) == (10000, 6, 6))
+check("de tellers per aanvraag komen terug", len(uit["tellers"]) == 3 and uit["tellers"][0]["input"] == 1000
+      and set(uit["tellers"][0]) == {"input", "output", "cache_schrijven", "cache_lezen", "zoek", "lees"})
+check("de kost in dollar uit input en output (Opus 5.5: 4 en 20 per miljoen)", uit["kosten"] == round((3000 * 4 + 600 * 20) / 1e6, 2)
+      and O.kosten([{"input": 400000, "output": 5000}], "claude-opus-5-5") == 1.7)
+check("geslaagde en mislukte leesbeurten apart", O.leesbeurten(BLOKKEN) == (1, 1))
+ZOEK = [{"type": "web_search_tool_result", "content": [
+            {"type": "web_search_result", "url": "https://markt.voorbeeld.com/a", "title": "X1 tweedehands 380 euro"},
+            {"type": "web_search_result", "url": "https://media.voorbeeld.com/x1", "title": "X1 kopen"}]},
+        {"type": "text", "text": "Gezien", "citations": [{"type": "web_search_result_location", "url": "https://media.voorbeeld.com/x1",
+                                                           "cited_text": "X1 Complete nu voor 949,00 euro"}]}]
+zoek = O.zoekresultaten(ZOEK)
+check("zoekresultaten met titel en geciteerde tekst", set(zoek) == {"https://markt.voorbeeld.com/a", "https://media.voorbeeld.com/x1"}
+      and "949,00" in zoek["https://media.voorbeeld.com/x1"])
+gz = O.alleen_gezien([
+    {"titel": "X1 markt", "url": "https://markt.voorbeeld.com/a", "prijs": 380, "citaat": "X1 tweedehands 380 euro", "reden": "niet leesbaar"},
+    {"titel": "X1 media", "url": "https://media.voorbeeld.com/x1", "prijs": 949, "citaat": "nu voor 949,00 euro"},
+    {"titel": "X1 verzonnen", "url": "https://verzonnen.voorbeeld.com/z", "prijs": 10, "citaat": "10 euro"},
+    {"titel": "X1 andere prijs", "url": "https://markt.voorbeeld.com/a", "prijs": 300, "citaat": "X1 tweedehands 380 euro"},
+    {"titel": "X1 al gelezen", "url": "https://winkel.voorbeeld.com/x1", "prijs": 499}], {**zoek, "https://winkel.voorbeeld.com/x1": "X1"},
+    ["https://winkel.voorbeeld.com/x1"])
+check("alleen urls uit een zoekresultaat van deze ronde, een keer, niet als ze al gelezen in het verslag staan",
+      [x["url"] for x in gz] == ["https://markt.voorbeeld.com/a", "https://media.voorbeeld.com/x1"], str(gz))
+check("de prijs blijft alleen met een citaat uit hetzelfde zoekresultaat", [x["prijs"] for x in gz] == [380, 949])
+gz2 = O.alleen_gezien([{"titel": "X1", "url": "https://markt.voorbeeld.com/a", "prijs": 250, "citaat": "X1 tweedehands 380 euro"}], zoek)
+check("een prijs die niet in het citaat staat, verdwijnt; de link blijft", gz2[0]["prijs"] is None)
+r = A.verwerk([], VANDAAG, KOERSEN)
+tekst = V.maak("v", {}, r, "2026-10-30", "2026-10-30", gz, {"tokens": 401000, "kosten": 1.7})
+check("gezien-niet-nagekeken staat apart met klikbare link en is nooit de aanbeveling",
+      tekst.startswith("**Geen aanbeveling:**") and "## Gezien, niet nagekeken (nooit aanbevolen)" in tekst
+      and "- [X1 markt](https://markt.voorbeeld.com/a): 380 EUR volgens het zoekresultaat; niet leesbaar" in tekst, tekst)
+check("het verbruik staat in de controleregel", "Verbruik: 401000 tokens, ongeveer 1.7 dollar." in tekst)
 
 print("Plafonds en reservemodel")
 nep = NepClient([NepAntwoord(STUK1, "pause_turn", (O.MAX_TOKENS + 1, 100)), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
@@ -452,6 +536,11 @@ class NepRonde:
 
 
 GEHEIM = "Proefvraag-zeven-zeven"
+PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
+                                  "tokens": 600000, "kosten": 2.4, "tellers": [], "leesbeurten": (0, 0),
+                                  "zoekopdrachten": 0, "stop": "end_turn", "model": "m"}
+PO.werk(NepRonde(), "vloerwasser X1")
+check("meer dan 2 dollar voor een vraag wordt een nood (overleg 9, K5)", any("2.4 dollar" in n for n in noden), str(noden))
 PO.O.onderzoek = lambda *a, **k: {"gegevens": None, "gelezen": {}, "tekst": "", "tokens": 10, "zoekopdrachten": 0,
                                   "stop": "end_turn", "model": "m"}
 PO.werk(NepRonde(), f"vloerwasser {GEHEIM}")
