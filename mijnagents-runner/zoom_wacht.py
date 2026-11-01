@@ -2052,12 +2052,69 @@ def droog(a, klok):
             if dag_van(x["s"]["start"]) == d:
                 print(f"      {brussel(x['s']['start']).strftime('%H:%M')} {minuten(x['s'])} min, {ruimte_van(x['s'], w['ik'])}: "
                       f"{x['toestand'] if x['gesprek'] else 'alleen Mehdi'}")
+    vroegst = {}
+    for s in w["sessies"].values():
+        for b in s.get("bronnen") or []:
+            vroegst[b] = min(vroegst.get(b, dag_van(s["start"])), dag_van(s["start"]))
+    # WACHT-1: hoe ver Zoom teruggaat, per bron de vroegste dag met een sessie in het venster
+    print("   vroegste sessie per bron: " + ("; ".join(f"{b} {vroegst[b]}" for b in sorted(vroegst)) or "geen"))
+    rijen_meten(w, info)
     if a.koppel_sinds:
         koppel_sinds(None, a.koppel_sinds, klok, w["ik"], False, droog=True)
         buiten_herzien(None, a.koppel_sinds, w["eerste"], w["ik"], False, droog=True)
     if getattr(a, "account", False) and ZA.scan_aan(eigen):
         ZA.droog(w, klok)
     return 0
+
+
+RIJ_SOORTEN = ("alleen Zoom", "met Fathom", "alleen Mehdi", "niet in deze ronde")
+
+
+def rijen_meten(w, info):
+    """WACHT-4 (meting 01-11-2026: de dagbundel telde 16 tot 21 oktober 9 gesprekken 'alleen in Zoom' meer dan de
+    dagregel; de oorzaak is niet gemeten). Alleen in --droog en alleen lezend (bord.db_lees): per afgelopen dag van het
+    venster de leidende rijen zoom:meeting (dubbel_van leeg) naast de sessies van deze ronde en de dagregel op het bord.
+    Een leidende rij hoort bij een gesprek zonder Fathom ('alleen Zoom'); elke andere (met Fathom, alleen Mehdi, of een
+    sessie die deze ronde niet zag) staat er met haar uuid, nooit met een naam of onderwerp. Het verschil is het aantal
+    leidende rijen min de gesprekken zonder Fathom van de dagregel. Herstellen komt pas na deze meting."""
+    try:
+        rijen = bord.db_lees("SELECT uniek, datum, COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log "
+                             "WHERE uniek LIKE 'zoom:meeting:%' AND datum BETWEEN ? AND ?", (w["eerste"], w["vandaag"]))
+        regels = {r["uniek"]: _inhoud(r) for r in bord.db_lees(
+            "SELECT uniek, inhoud FROM klaarzet WHERE van=? AND uniek LIKE 'zoom:dag:%'", (NAAM,))}
+    except bord.BordOnbekend as e:
+        print(f"   rijen tegen de dagregel: niet gelezen ({e.reden})")
+        return
+    sessie = {x["s"]["uuid"]: x for x in info}
+    per_dag, afwijkend = defaultdict(Counter), defaultdict(list)
+    for r in rijen:
+        if r["dubbel_van"]:
+            continue
+        x = sessie.get(r["uniek"][len("zoom:meeting:"):])
+        soort = ("niet in deze ronde" if x is None else "alleen Mehdi" if not x["gesprek"]
+                 else "met Fathom" if x["toestand"] == "fathom" else "alleen Zoom")
+        per_dag[r["datum"]][soort] += 1
+        if soort != "alleen Zoom":
+            afwijkend[r["datum"]].append(f"{r['uniek']} ({soort})")
+    print("   rijen tegen de dagregel (WACHT-4), per dag:")
+    dag = date.fromisoformat(w["eerste"])
+    while dag < date.fromisoformat(w["vandaag"]):
+        d = dag.isoformat()
+        dag += timedelta(days=1)
+        tel, inhoud = per_dag.get(d, Counter()), regels.get(f"zoom:dag:{d}")
+        n = sum(tel.values())
+        if not n and inhoud is None:
+            continue
+        g, f = (inhoud or {}).get("gesprekken"), (inhoud or {}).get("met_fathom")
+        if not isinstance(g, int) or not isinstance(f, int):
+            regel = "dagregel ontbreekt" if inhoud is None else "dagregel zonder telling (oude vorm of onbekend)"
+            verschil = ""
+        else:
+            regel, verschil = f"dagregel {g} gesprekken, {f} met Fathom ({g - f} zonder)", f"; verschil {n - (g - f):+d}"
+        soorten = ", ".join(f"{tel[k]} {k}" for k in RIJ_SOORTEN if tel.get(k))
+        print(f"   {d}: {regel}; leidende rijen {n}" + (f": {soorten}" if soorten else "") + verschil)
+        for x in sorted(afwijkend.get(d, [])):
+            print(f"      {x}")
 
 
 # ------------------------------------------------------------------ main ---

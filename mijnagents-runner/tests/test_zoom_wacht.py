@@ -1236,7 +1236,8 @@ def test_t27_inhaal_droog_schrijft_niets():
     w = Wereld(bewezen=False)
     dag_twintig(w)
     assert w.ronde(NU, "--inhaal", "14", "--droog") is None
-    posts = [(p, q) for p, q in w.bord.oproepen if q is not None]
+    # WACHT-4: --droog leest de gesprekkentabel en de dagregels alleen lezend (db_lees, mode=ro); dat is geen post
+    posts = [(p, q) for p, q in w.bord.oproepen if q is not None and p != "db_lees"]
     assert not posts, f"--droog stuurde iets naar het bord: {[p for p, _ in posts]}"
     assert not w.zoom.downloads_gevraagd() and not os.path.exists(ZW.ZOOM_DATA) and not os.path.exists(ZW.STAAT)
     assert "2026-10-07" in w.uitvoer and "2026-10-20: 16 gesprekken, 14 met Fathom" in w.uitvoer, w.uitvoer
@@ -3655,6 +3656,39 @@ def test_t0120_wacht6_onleesbare_chats_per_soort_zonder_naam():
     assert w2.ronde(datetime(2026, 11, 1, 7, 20, tzinfo=UTC), "--inhaal", "35") is None
     bron = _bronregel(w2)
     assert "1 chatgesprek(ken) niet leesbaar" in bron and "(per soort: niet leesbaar 1 kanaal)" in bron, bron
+
+
+@bord_nodig
+def test_t0120_wacht4_droog_legt_de_rijen_naast_de_dagregel():
+    """WACHT-4 (meting 01-11-2026): de dagbundel telde op 16 tot 21 oktober 9 gesprekken 'alleen in Zoom' meer dan de
+    dagregel, en de oorzaak is niet gemeten. --droog legt nu per dag de leidende rijen zoom:meeting (dubbel_van leeg)
+    naast de sessies van de ronde en de dagregel: per soort een aantal, het verschil, en de uuid van elke rij die niet
+    klopt; nooit een naam of onderwerp, en niets naar het bord. Herstellen komt pas na die meting op de VM."""
+    w = Wereld()
+    w.zoom.sessie("rij-zoom", bxl("2026-10-17 10:00"), 30)
+    s2 = w.zoom.sessie("rij-fathom", bxl("2026-10-17 11:00"), 30)
+    w.zoom.opname(s2)
+    w.fathom_opname("771", s2)
+    nu = datetime(2026, 10, 18, 7, 20, tzinfo=UTC)
+    assert w.ronde(nu) is None
+    _, inhoud = w.dagregel("2026-10-17")
+    assert inhoud["gesprekken"] == 2 and inhoud["met_fathom"] == 1, inhoud
+    # een rij van de oude Zoomwacht voor een sessie die geen bron meer geeft, en een Fathom-sessie zonder dubbel_van
+    w.bord.call("/api/gesprekken", {"rijen": [{"uniek": "zoom:meeting:oud-v1", "datum": "2026-10-17", "start": "09:00",
+                                               "minuten": 20, "personen": "Proefpersoon Oud", "thema": "Oud overleg",
+                                               "prive": False, "bron": "zoom"}]})
+    with sqlite3.connect(w.bord.pad) as c:
+        c.execute("UPDATE gesprek_log SET dubbel_van='' WHERE uniek='zoom:meeting:rij-fathom'")
+    assert w.ronde(nu + timedelta(minutes=5), "--droog") is None
+    uit = w.uitvoer
+    assert ("2026-10-17: dagregel 2 gesprekken, 1 met Fathom (1 zonder); leidende rijen 3: 1 alleen Zoom, 1 met Fathom, "
+            "1 niet in deze ronde; verschil +2") in uit, uit
+    assert "zoom:meeting:oud-v1 (niet in deze ronde)" in uit and "zoom:meeting:rij-fathom (met Fathom)" in uit, uit
+    assert "zoom:meeting:rij-zoom" not in uit, "een rij die klopt, staat er niet met haar uuid"
+    assert "vroegste sessie per bron:" in uit and "rapport 2026-10-17" in uit, uit
+    for verboden in ("Proefpersoon", "Oud overleg", "Ypsilon"):
+        assert verboden not in uit, verboden
+    assert not [(p, q) for p, q in w.bord.oproepen if q is not None and p != "db_lees"], "--droog stuurt niets naar het bord"
 
 
 if __name__ == "__main__":
