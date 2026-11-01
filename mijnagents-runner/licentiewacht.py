@@ -62,7 +62,10 @@ def gebruik_uit_bord():
             d = json.loads(r["inhoud"])
         except ValueError:
             continue
-        laatste[(d.get("dienst", r["van"]), d.get("gebruiker", r["sleutel"]))] = d
+        k = (d.get("dienst", r["van"]), d.get("gebruiker", r["sleutel"]))
+        # T-0120 WISPR-2: een inhaalronde werkt het item van een oude dag later bij; de nieuwste gebruiksdag telt
+        if k not in laatste or str(d.get("dag") or "") >= str(laatste[k].get("dag") or ""):
+            laatste[k] = d
     return laatste
 
 
