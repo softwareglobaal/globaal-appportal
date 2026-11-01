@@ -229,12 +229,13 @@ class Agent:
         uitvoer van de cron."""
         if not self._log:
             return
+        # eerst losmaken, dan versturen (Codex NA63): een signaal tussen versturen en wissen liet anders aangenomen
+        # regels staan, en de ronde stuurde ze bij het afsluiten nog eens
+        regels, self._log = self._log, []
         try:
-            call("/api/logboek", {"regels": self.maskeer(self._log)})
+            call("/api/logboek", {"regels": self.maskeer(regels)})
         except Exception as e:  # noqa: BLE001
             print("logboek mislukt:", e, file=sys.stderr)
-        finally:
-            self._log = []
 
     def werkwijze_lezen(self):
         """De werkwijze zoals ze nu op het bord staat. Een lege tekst is een antwoord en komt terug;
@@ -423,8 +424,10 @@ class Ronde:
             for naam, inhoud in self._bronnen.items())
 
     def __enter__(self):
-        self.agent.hartslag("actief", taak=self.taak)
         try:
+            # ook de eerste hartslag valt onder de bescherming (Codex NA62): een signaal terwijl het bord "actief" al
+            # aannam, liet de agent anders op actief staan
+            self.agent.hartslag("actief", taak=self.taak)
             self._begin()
         except RondeGestopt:
             raise
