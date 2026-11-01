@@ -183,7 +183,8 @@ def keur(proef, uitslag):
     for stuk in (proef.get("referentie") or []):
         uit.append((f"verslag noemt referentie '{stuk}'", stuk.lower() in laag, "uit de PDF nagerekend, buiten de repo"))
     if "letters" in v:
-        n = sum(1 for regel in tekst.splitlines() if regel.startswith("- Inschrijver "))
+        sleutel = tekst.split("## Welke offerte is welke letter", 1)[-1] if "## Welke offerte" in tekst else ""
+        n = sum(1 for regel in sleutel.splitlines() if regel.startswith("- Inschrijver "))
         uit.append((f"precies {v['letters']} bestanden met een letter", n == v["letters"], f"{n} met een letter"))
     for stuk in v.get("bevat") or []:
         uit.append((f"verslag noemt '{stuk}'", stuk.lower() in laag, ""))

@@ -1380,6 +1380,8 @@ check("twee inschrijvers met toevallig hetzelfde nummer blijven apart; een kopie
 from bouw import proefbank as PB  # noqa: E402
 _p = F.lees(pdf("Offerte 12", "Totaal 1.000,00 EUR", "Optie 1.210,00 EUR", "Voorwaarden volgen."))
 check("Codex 29: een optie op de regel na een kaal totaal is geen inclusief", _p["incl"] is None and _p["excl"] is None, _p)
+_p = F.lees(pdf("Offerte 12b", "Totaal 1.000,00 EUR", "X 1.210,00 EUR", "Voorwaarden volgen."))
+check("Codex 30: ook een woord van een letter naast het bedrag maakt er geen totaal van", _p["incl"] is None, _p)
 _p = F.lees(pdf("Offerte 13", "Transport incl. BTW 50,00 EUR", "Voorwaarden volgen."))
 check("Codex 29: 'Transport incl. BTW 50,00' is geen totaal", _p["incl"] is None, _p)
 _p = F.lees(pdf("Offerte 14", "De vorige som 210,00 EUR is af. Totaal 1.000,00 EUR", "Incl. BTW 1.210,00 EUR", "Einde."))

@@ -218,7 +218,10 @@ KAAL_WOORD = {"eur", "euro", "incl", "inclusief", "btw", "tvac", "totaal", "tota
 
 
 def alleen_bedrag(regel):
-    return all(w.lower() in KAAL_WOORD for w in re.findall(r"[A-Za-zÀ-ÿ]{2,}", regel))
+    """Draagt de regel niets dan een bedrag? B.T.W. telt als btw en E als euro (729,40 E); elk ander woord, ook van een
+    letter, maakt er geen totaal van (Codex 30: "X 1.210,00 EUR")."""
+    regel = re.sub(r"\bb\.\s?t\.\s?w\.?", " btw ", regel, flags=re.I)
+    return all(w.lower() in KAAL_WOORD or w in ("E", "e") for w in re.findall(r"[A-Za-zÀ-ÿ]+", regel))
 
 
 def _losse_bedragen(regel):
