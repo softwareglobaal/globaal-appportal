@@ -7781,9 +7781,9 @@ def main():
     WACHTRIJ_KLAAR = _wachtrij_begin()
     try:
         # Eerst het regelboek, zoals voordien, en pas dan "actief" (Codex NA76): zonder regelboek meld ik fout zonder
-        # eerst actief te zeggen; komt die melding niet aan, dan blijft mijn vorige status staan. De ronde leest het
-        # daarna nog eens, voor haar kennis.
-        ag.werkwijze(taak="agenda in het oog")
+        # eerst actief te zeggen; komt die melding niet aan, dan blijft mijn vorige status staan. De ronde krijgt deze
+        # lezing mee en leest niet nog eens (NA77).
+        werkwijze = ag.werkwijze(taak="agenda in het oog")
         if not agenda.beschikbaar():
             ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
             print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
@@ -7792,7 +7792,7 @@ def main():
         # las (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, met een eigen
         # kennisregel. De terugkijkstand en het kleurherstel gaan bewust niet door de ronde: ze zouden de hartslag en de
         # kennis van deze ronde overschrijven.
-        with ag.ronde("agenda in het oog") as r:
+        with ag.ronde("agenda in het oog", werkwijze=werkwijze) as r:
             _ronde(r)
     except bord.RondeGestopt as e:
         print(f"ronde gestopt: {e}", file=sys.stderr)

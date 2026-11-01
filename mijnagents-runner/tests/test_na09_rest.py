@@ -783,6 +783,30 @@ def test_na76_agendawacht_zegt_geen_actief_zonder_regelboek():
         uit = AW.main()
     assert uit == 1 and "actief" not in [s["status"] for s in draad.statussen("agenda-wacht")], (uit, draad.statussen())
 
+
+def test_na77_agendawacht_leest_haar_regelboek_een_keer():
+    """Codex NA77: na NA76 las de Agendawacht haar regelboek twee keer; faalde alleen de tweede lezing even, dan stopte
+    een geldige ronde. Nu krijgt de ronde de eerste lezing mee: een lezing, het werk begint, en de kennis noemt ze."""
+    import agenda_wacht as AW  # noqa: PLC0415
+    draad = Draad(werkwijze="# Agendawacht\n\nRegel.", open_noden=[])
+    draad.fouten["/api/agent/agenda-wacht/werkwijze"] = [None, urllib.error.URLError("even weg (proef)")]
+    gedaan = []
+    with op_het_bord(draad), vervangen((AW.agenda, "beschikbaar", lambda: True), (AW, "slot_nemen", lambda *a, **k: None),
+                                       (AW, "_wachtrij_begin", lambda: True),
+                                       (AW, "_ronde", lambda rd: gedaan.append(rd.werkwijze))):
+        uit = AW.main()
+    assert uit == 0 and gedaan == ["# Agendawacht\n\nRegel."], (uit, gedaan, draad.statussen())
+    assert draad.gevraagd.count("/api/agent/agenda-wacht/werkwijze") == 1, draad.gevraagd
+    _ronde_kennis(draad, "agenda-wacht")
+    draad = Draad(open_noden=[])
+    with op_het_bord(draad):
+        try:
+            with bord.Agent("proef").ronde("proef", werkwijze="  "):
+                gedaan.append("begonnen")
+        except bord.RondeGestopt:
+            pass
+    assert "begonnen" not in gedaan and draad.statussen("proef")[-1]["status"] == "fout", draad.statussen("proef")
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0

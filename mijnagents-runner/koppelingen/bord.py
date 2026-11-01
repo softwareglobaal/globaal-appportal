@@ -362,7 +362,7 @@ class Agent:
             it.setdefault("van", self.naam)
         return call("/api/klaarzet", {"items": self.maskeer(items)}) if items else {"nieuw": 0, "bestaand": 0}
 
-    def ronde(self, taak="ronde", bronnen=None, begin_noden=None):
+    def ronde(self, taak="ronde", bronnen=None, begin_noden=None, werkwijze=None):
         """De standaarddoorgang van een ronde. Zie AGENTNORM.md.
 
         Wie hiermee werkt haalt vanzelf N4 (melden welk regelboek je las), N11
@@ -381,20 +381,24 @@ class Agent:
         De Bode met het bellen en het alarm, die voor de ronde lopen (X4, ontwerp regie-zoom v1.2). Ze staan
         in de ronde alsof ze met r.nood() gemeld zijn, en gaan ook mee als de ronde stopt.
 
+        werkwijze: de werkwijze die de agent net met ag.werkwijze() las, zodat de ronde ze niet nog eens leest (Codex
+        NA77: een tweede lezing kon met een tijdelijke fout een geldige ronde stoppen). Leeg stopt de ronde ook dan.
+
         Is de werkwijze op het bord onbekend of leeg, dan stopt de ronde voor het werk begint:
         een nood, hartslag "fout" en RondeGestopt (NA09). Zonder regelboek werkt geen agent.
         """
-        return Ronde(self, taak, bronnen or {}, begin_noden or ())
+        return Ronde(self, taak, bronnen or {}, begin_noden or (), werkwijze)
 
 
 class Ronde:
     """Eén ronde van een agent, van hartslag tot hartslag."""
 
-    def __init__(self, agent, taak, bronnen, begin_noden=()):
+    def __init__(self, agent, taak, bronnen, begin_noden=(), werkwijze=None):
         self.agent = agent
         self.taak = taak
         self.detail = ""
         self.werkwijze = ""
+        self._gelezen = werkwijze      # al gelezen met ag.werkwijze(), of None: dan leest de ronde zelf
         self._bronnen = {}
         self._noden = []
         # Weet de agent niet welke van zijn noden nog gelden (de open lijst van het bord was onleesbaar en hij kon ze niet
@@ -463,7 +467,12 @@ class Ronde:
         # NA09 (Codex, 16-10-2026): tot dan gaf een leesfout een lege werkwijze en werkte de agent gewoon
         # door zonder regelboek, zonder dat iemand het zag. Onbekend is niet leeg, en leeg is geen regelboek:
         # werkwijze() stopt de ronde dan zelf, voor het werk begint; de begin_noden gaan dan mee (X4).
-        self.werkwijze = self.agent.werkwijze(taak=self.taak, noden=self._noden)
+        if self._gelezen is None:
+            self.werkwijze = self.agent.werkwijze(taak=self.taak, noden=self._noden)
+        elif not self._gelezen.strip():
+            self.agent.zonder_regelboek("Werkwijze leeg op het bord", "mehdi", self.taak, noden=self._noden)
+        else:
+            self.werkwijze = self._gelezen
         self._bronnen.setdefault("werkwijze op het bord", self.werkwijze)
         # Norm N13: wat een agent leert, leest elke agent. De gedeelde lessen gaan elke
         # ronde mee als bron, zodat ze in de kennis staan en een taalmodel ze in zijn
