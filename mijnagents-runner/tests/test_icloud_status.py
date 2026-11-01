@@ -261,6 +261,19 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(len(versies), 1)
         self.assertIn("Venster:", versies[0].read_text())
 
+    def test_foto6_gelijke_selectie_geeft_geen_nieuw_fotolijstje(self):
+        # T-0120 FOTO-6 (T-0107): een open H-A-taak schreef elke 30 minuten een nieuw '00 fotos <tijd>.md' (150 in een
+        # bezoekmap). Nu alleen een nieuwe lijst als de inhoud verschilt van de laatste.
+        data = self.inhoud(lat=50.0, lon=4.0)
+        doel = Path(self.module.taakdoel(data))
+        for _ in range(2):
+            self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 1)
+        self.fake_run([self.foto("goed"), self.foto("nog_een"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
+        self.fake_run([self.foto("goed"), self.foto("nog_een"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
+
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])
         self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout

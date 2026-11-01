@@ -639,6 +639,17 @@ def selectie_stabiel(it, d, fotos, nu):
     return not eerder_gemeten and na_vangnet
 
 
+def zelfde_als_laatste_lijst(doel, tekst):
+    """T-0120 FOTO-6 (T-0107): is de laatste '00 fotos*.md' in de bezoekmap gelijk aan deze tekst? De versies dragen een
+    sorteerbare tijdstempel na '00 fotos'; het origineel zonder stempel is de oudste. Niets wordt gewist of herschreven."""
+    versies = sorted(p for p in Path(doel).glob("00 fotos *.md") if p.is_file())
+    laatste = versies[-1] if versies else Path(doel, "00 fotos.md")
+    try:
+        return laatste.is_file() and laatste.read_text(encoding="utf-8") == tekst
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 class MeldingenVandaag:
     """Welke taak met welke reden vandaag al gemeld is (T-0120 FOTO-1), alleen op deze Mac. Een onleesbare staat geeft
     hoogstens een melding te veel, nooit een te weinig; een nieuwe dag begint leeg."""
@@ -749,7 +760,7 @@ def taken():
               f"Reden venster: {d.get('reden') or ('TKN-afspraak van de Agendawacht' if tkn else 'H-A-afspraak van de Agendawacht')}.", "",
               "## Geleverde foto's en opnametijden"]
         md.extend(f"- {f['vastgelegd_utc']} | {f.get('export') or f.get('bestand')}" for f in binnen if f.get("geexporteerd"))
-        if not tkn:
+        if not tkn and not zelfde_als_laatste_lijst(doel, "\n".join(md) + "\n"):
             manifest = os.path.join(doel, "00 fotos.md")
             if os.path.exists(manifest):
                 stempel = datetime.now(ZoneInfo("Europe/Brussels")).strftime("%Y%m%dT%H%M%S%f")
