@@ -448,8 +448,9 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
 
     Netspanning en netfrequentie mogen ook van een andere gelezen pagina komen (bewijs_url: fabrikant, handleiding,
     specificatieblad), maar alleen als de modelcode van het aanbod op de aanbodpagina en op die pagina staat, die
-    pagina geen netspanningen van twee streken noemt, en er geen woord als accessoire voor het citaat staat (overleg 9,
-    X1 en K1). paginas is {genormaliseerde url: tekst} van de gelezen pagina's."""
+    pagina geen netspanningen van twee streken noemt, geen van beide pagina's de waarde tegenspreekt (tegenstrijdig), en
+    er geen woord als accessoire voor het citaat staat (overleg 9, X1 en K1; Codex controle 10 en 11). paginas is
+    {genormaliseerde url: tekst} van de gelezen pagina's."""
     if not eisen:
         return "ja"
     oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
@@ -464,7 +465,10 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
             bron = (paginas or {}).get(bron_url, "") if bron_url else (eigen_tekst or "")
             if bron_url:
                 code = aanbod.get("modelcode")
+                # Ook de aanbodpagina mag de waarde niet tegenspreken: "basisstation 50 Hz" op de winkelpagina weegt
+                # zwaarder dan een handleiding die alleen de robot beschrijft (Codex controle 11).
                 bewezen = (modelcode_op(code, eigen_tekst or "") and modelcode_op(code, bron) and not _twee_regios(bron)
+                           and not tegenstrijdig(m.group(3).lower(), m.group(2), eigen_tekst or "")
                            and _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron))
             elif m:
                 bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron)

@@ -34,8 +34,22 @@ BETA_BUDGET = "task-budgets-2026-03-13"
 PRIJZEN = {"claude-opus-5-5": (4.0, 20.0), "claude-opus-5": (5.0, 25.0)}
 ZOEK_DOLLAR = 0.01             # webzoeken kost 10 dollar per duizend zoekopdrachten (Codex controle 10)
 # Een prijs in "gezien, niet nagekeken" moet haar munt in het citaat tonen (Codex controle 10).
-MUNTTEKENS = {"EUR": ("€", "eur"), "USD": ("$", "usd"), "GBP": ("£", "gbp"), "CHF": ("chf",), "PLN": ("zł", "pln"),
-              "SEK": ("sek", "kr"), "DKK": ("dkk", "kr")}
+MUNTTEKENS = {"EUR": ("€", "eur", "euro"), "USD": ("$", "usd"), "GBP": ("£", "gbp"), "CHF": ("chf",),
+              "PLN": ("zł", "pln"), "SEK": ("sek", "kr"), "DKK": ("dkk", "kr")}
+GETAL = r"\d[\d.,'\u202f\xa0 ]*\d|\d"
+
+
+def _munt_bij_bedrag(prijs, munt, citaat):
+    """Staat de munt vlak voor of na dit bedrag in het citaat, als los teken of woord? "949 USD" bewijst geen 949 euro,
+    ook niet als er ergens "Europa" staat (Codex controle 11)."""
+    from aankoop.aanbod import bedrag_op_pagina
+    c = str(citaat or "").lower()
+    for t in MUNTTEKENS.get(munt, ()):
+        tt = rf"\b{re.escape(t)}\b" if t.isalpha() else re.escape(t)
+        for m in re.finditer(rf"(?:{tt})\s?({GETAL})|({GETAL})\s?(?:,-|,–)?\s?(?:{tt})", c):
+            if bedrag_op_pagina(prijs, m.group(1) or m.group(2)):
+                return True
+    return False
 MAX_HERVATTEN = 6
 RESERVE_MODEL = "claude-opus-5"     # het model dat De Ontwikkelaar op de VM gebruikt (overleg K5)
 
@@ -173,8 +187,8 @@ def leesbeurten(blokken):
 def alleen_gezien(items, zoek, opgenomen=()):
     """De lijst "gezien, niet nagekeken" (overleg 9, X4): alleen met een url en een prijs die in hetzelfde zoekresultaat
     van deze ronde stonden, en niet als de url al als gelezen aanbod in het verslag staat. De prijs moet in het citaat
-    staan, met haar munt en zonder kostwoord als verzending of opgeld ervoor of erin (Codex controle 10: "Shipping 19
-    euro" is geen productprijs). Een rij zonder bewezen prijs valt weg. Deze lijst komt nooit in verwerk(), dus nooit
+    staan, met haar munt vlak bij het bedrag en zonder kostwoord als verzending of opgeld ervoor of erin (Codex controle
+    10 en 11: "Shipping 19 euro" is geen productprijs, "Europa 949 USD" geen 949 euro). Een rij zonder bewezen prijs valt weg. Deze lijst komt nooit in verwerk(), dus nooit
     als beste of reserve."""
     from aankoop.aanbod import bedrag_op_pagina, zonder_kostwoord   # hier, zoals schoon_url in aanbod.verwerk
     al = {schoon_url(u) for u in opgenomen}
@@ -187,7 +201,7 @@ def alleen_gezien(items, zoek, opgenomen=()):
             continue
         munt, citaat = str(it.get("munt") or "EUR").upper(), str(it.get("citaat") or "")
         if (it.get("prijs") is None or not zonder_kostwoord(citaat, zoek[url]) or not bedrag_op_pagina(it["prijs"], citaat)
-                or not any(t in citaat.lower() for t in MUNTTEKENS.get(munt, ()))):
+                or not _munt_bij_bedrag(it["prijs"], munt, citaat)):
             continue
         gezien.add(url)
         uit.append({"titel": str(it.get("titel") or "aanbod"), "url": it.get("url"), "reden": str(it.get("reden") or ""),

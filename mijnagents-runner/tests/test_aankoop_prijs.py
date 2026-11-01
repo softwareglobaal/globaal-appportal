@@ -221,6 +221,10 @@ check("een regioaanhangsel na een liggend streepje is een andere variant (VX-200
 check("een robot op 50/60 Hz naast een basisstation op 230 V 50 Hz bewijst niets (Codex controle 10)", hand_oordeel(
       met_hand(citaat="Robot: 220-240 V, 50/60 Hz"), {WINKEL: WPAG, HANDL: pagina(
           "Technische gegevens VX-200EU. Robot: 220-240 V, 50/60 Hz. Basisstation: 230 V, 50 Hz.")}) == "onbekend")
+check("een winkelpagina met basisstation op 50 Hz wint van een handleiding met 50/60 Hz voor de robot (Codex controle 11)",
+      hand_oordeel(met_hand(citaat="Robot: 220-240 V, 50/60 Hz"), {
+          WINKEL: WPAG + " Basisstation: 220-240 V, 50 Hz.",
+          HANDL: pagina("Technische gegevens VX-200EU. Robot: 220-240 V, 50/60 Hz.")}) == "onbekend")
 check("ook op de eigen pagina spreekt een losse 50 Hz een 50/60 Hz-citaat tegen", A.compatibel(aanbod(compatibiliteit={
       "netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Ingang 100-240 V, 50/60 Hz"}}), ["netfrequentie 60 Hz"],
       BEIDE + " Lader: 50 Hz.", BEIDE + " Lader: 50 Hz.") == "onbekend")
@@ -461,6 +465,10 @@ check("een prijs die niet in het citaat staat: de rij valt weg (X4: url en prijs
 zoek_v = {"https://w.voorbeeld.com/x": "X1 Complete. Shipping 19 euro. Price 949 USD"}
 check("een verzendkost is geen productprijs (Codex controle 10)", O.alleen_gezien(
       [{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 19, "munt": "EUR", "citaat": "Shipping 19 euro"}], zoek_v) == [])
+check("de munt hoort bij het bedrag, Europa is geen euro (Codex controle 11)", O.alleen_gezien(
+      [{"titel": "X1", "url": "https://w.voorbeeld.com/e", "prijs": 949, "munt": "EUR", "citaat": "MOVA Europa 949 USD"}],
+      {"https://w.voorbeeld.com/e": "MOVA Europa 949 USD"}) == [] and O._munt_bij_bedrag(1299, "EUR", "nu € 1.299,00")
+      and O._munt_bij_bedrag(949, "EUR", "voor 949,- euro") and not O._munt_bij_bedrag(949, "EUR", "949 USD of 19 euro"))
 check("de munt moet in het citaat staan", O.alleen_gezien(
       [{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 949, "munt": "EUR", "citaat": "Price 949 USD"}], zoek_v) == []
       and len(O.alleen_gezien([{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 949, "munt": "USD",
