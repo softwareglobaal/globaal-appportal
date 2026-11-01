@@ -83,8 +83,9 @@ met_rondesloten() {
 }
 
 stempel() {
-    # waaraan het proefbewijs hoort: de cdhash van de helper en de commit van de code
-    print "$("$CODESIGN" -dv "$HELPER" 2>&1 | grep -m1 CDHash= | cut -d= -f2) $(git -C "$WERK" rev-parse HEAD)"
+    # waaraan het proefbewijs hoort: de cdhash van de helper en de commit van de code. TEL-7 (T-0067): -dv toont geen
+    # CDHash, pas -dvvv; ^CDHash= laat de regels CandidateCDHash staan
+    print "$("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' | cut -d= -f2) $(git -C "$WERK" rev-parse HEAD)"
 }
 
 bewaar_vorige() {
@@ -200,7 +201,7 @@ except M.MacFout as e:
         exit 0 ;;
     controleer)
         print "code: $(git -C "$WERK" rev-parse HEAD 2>/dev/null || print ontbreekt)"
-        print "helper: $("$CODESIGN" -dv "$HELPER" 2>&1 | grep CDHash= || print ontbreekt)"
+        print "helper: $("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' || print ontbreekt)"
         if [[ -f "$PROEF" && "$(cat "$PROEF")" == "$(stempel)" ]]; then print "proef: geslaagd voor deze versie"
         else print "proef: ontbreekt of hoort bij een andere versie"; fi
         if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" ]]; then print "proef sms: geslaagd voor deze versie"
@@ -252,7 +253,7 @@ for l in $ALLE; do
 done
 for l in $HELPERTAKEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
 print "Geïnstalleerd: $sha"
-"$CODESIGN" -dv "$HELPER" 2>&1 | grep CDHash= || true
+"$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' || true
 if (( helper_nieuw )); then
     print "NIEUWE HELPER: Mehdi geeft $HELPER Full Disk Access (System Settings > Privacy & Security > Full Disk Access)."
 fi

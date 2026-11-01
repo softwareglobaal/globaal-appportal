@@ -1179,6 +1179,30 @@ def test_r5_proefronde_eist_een_eigen_bevestigde_ronde():
         assert "return M.BEZET" in bron and "ronde gelukt, ronde-id:{ronde_id}" in bron
 
 
+def test_tel7_echte_codesign_geeft_de_cdhash():
+    """TEL-7 (T-0067, WA-9): codesign -dv toont geen CDHash, dus het proefbewijs hing aan geen enkele helper. Met de
+    echte codesign van deze Mac (alleen als die er is): stempel() geeft de cdhash van een ad hoc getekend programma."""
+    if not (shutil.which("cc") and os.path.exists("/usr/bin/codesign") and shutil.which("zsh")):
+        print("   (overgeslagen: geen cc of codesign)")
+        return
+    script = RUNNER / "mac" / "uitrol_mac_gesprekken.sh"
+    with tempfile.TemporaryDirectory() as map_:
+        m = Path(map_)
+        (m / "a.c").write_text("int main(void) { return 0; }\n")
+        subprocess.run(["cc", "-o", str(m / "a"), str(m / "a.c")], check=True, capture_output=True)
+        subprocess.run(["/usr/bin/codesign", "-s", "-", "-o", "runtime", "-i", "proef.a", "-f", str(m / "a")], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "init", "-q", str(m / "w")], check=True)
+        subprocess.run(["git", "-C", str(m / "w"), "-c", "user.email=p@p", "-c", "user.name=p", "commit", "-q",
+                        "--allow-empty", "-m", "p"], check=True)
+        echt = subprocess.run(["/usr/bin/codesign", "-dvvv", str(m / "a")], capture_output=True, text=True).stderr
+        stempel = subprocess.run(["zsh", "-c", f"source <(sed -n '/^stempel()/,/^}}/p' '{script}'); "
+                                  f"HELPER='{m / 'a'}' WERK='{m / 'w'}' CODESIGN=/usr/bin/codesign stempel"],
+                                 capture_output=True, text=True, check=True).stdout
+    cdhash = re.search(r"^CDHash=([0-9a-f]{40})$", echt, re.M).group(1)
+    assert stempel.split()[0] == cdhash, (stempel, cdhash)
+
+
 def test_r6_drie_uitrollen_en_terug():
     """De uitrol met nagebootste launchctl, codesign en cc: drie versies na elkaar, dan terug naar de vorige als
     geheel (code, helper, LaunchAgents); de wachten gaan uit voor elke wissel en aan alleen met een proefbewijs."""
@@ -1193,7 +1217,9 @@ def test_r6_drie_uitrollen_en_terug():
         geladen = m / "geladen"
         (stub / "launchctl").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nif [ \"$1\" = print ]; then\n"
                                         f"  case \"$2\" in *wacht) [ -f '{geladen}' ] && exit 0;; esac\n  exit 1\nfi\nexit 0\n")
-        (stub / "codesign").write_text("#!/bin/sh\n[ \"$1\" = -dv ] && echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2\nexit 0\n")
+        # zoals de echte codesign: -dv toont geen CDHash, pas -dvvv (TEL-7); de Candidate-regels lijken erop
+        (stub / "codesign").write_text("#!/bin/sh\nif [ \"$1\" = -dvvv ]; then echo \"CandidateCDHash sha256=ff\" >&2; "
+                                       "echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2; fi\nexit 0\n")
         (stub / "cc").write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in -o) uit=$2; shift;; *.c) bron=$1;; esac; shift; done\n"
                                  "cp \"$bron\" \"$uit\"; chmod +x \"$uit\"\n")
         for s in stub.iterdir():
@@ -1292,6 +1318,9 @@ def test_r6_drie_uitrollen_en_terug():
         stempel = subprocess.run(["zsh", "-c", f"source <(sed -n '/^stempel()/,/^}}/p' '{script}'); "
                                   f"HELPER='{helper}' WERK='{werk}' CODESIGN='{stub / 'codesign'}' stempel"],
                                  capture_output=True, text=True, check=True).stdout
+        # TEL-7 (T-0067): het proefbewijs begint met de cdhash van precies deze helper, nooit leeg
+        assert re.fullmatch(r"[0-9a-f]{8} [0-9a-f]{40}\n", stempel), stempel
+        assert re.search(r"helper: CDHash=[0-9a-f]{8}\n", uitrol("controleer")), uitrol("controleer")
         (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
