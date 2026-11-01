@@ -360,18 +360,19 @@ def sleutel_nood(gesprekken):
 
 
 def main():
-    if not fathom.beschikbaar():
-        ag.hartslag("actief", taak="Fathom ophalen")
-        ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
-        # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en kon
-        # het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder een
-        # fout op en eindigt zo ook niet op 0.
-        return 1
-    # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de personentabel, of geen ronde; en wat ik las
-    # (N4), de lessen (N13) en de collega's (N14). Een fout of een stopsignaal (SIGTERM als SystemExit, Ctrl-C) zet de
-    # ronde zelf op fout, en wat al open stond blijft open (N11, J1, K3).
     afgesloten = False
     try:
+        if not fathom.beschikbaar():
+            ag.hartslag("actief", taak="Fathom ophalen")
+            ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
+            afgesloten = True
+            # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en
+            # kon het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder
+            # een fout op en eindigt zo ook niet op 0.
+            return 1
+        # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de personentabel, of geen ronde; en wat ik las
+        # (N4), de lessen (N13) en de collega's (N14). Een fout of een stopsignaal (SIGTERM als SystemExit, Ctrl-C) zet
+        # de ronde zelf op fout, en wat al open stond blijft open (N11, J1, K3).
         try:
             with ag.ronde("Fathom ophalen") as r:
                 _ronde(r)
@@ -382,9 +383,10 @@ def main():
         afgesloten = True
         return 0
     finally:
-        # Vangnet zoals voor 01-11 (overleg 15, F3): een signaal op een moment dat de ronde het zelf niet meer kon melden
-        # (de time-out van de keten, een tweede signaal), liet de hartslag op actief. Kwam haar fouthartslag niet aan,
-        # dan hier nog een, zonder noodlijst, zodat wat open stond open blijft. Een eenmalige beste poging, zoals op main.
+        # Vangnet zoals voor 01-11 (overleg 15, F3; Codex NA74 ook voor het pad zonder sleutel): een signaal op een moment
+        # dat de ronde het zelf niet meer kon melden (de time-out van de keten, een tweede signaal), liet de hartslag op
+        # actief. Kwam haar fouthartslag niet aan, dan hier nog een, zonder noodlijst, zodat wat open stond open blijft.
+        # Een eenmalige beste poging, zoals op main.
         if not afgesloten and ag.laatste_status != "fout":
             ag.hartslag("fout", taak="ronde afgebroken", detail="ronde afgebroken voor het einde (time-out of stopsignaal)")
 

@@ -83,7 +83,9 @@ class Draad:
 
     def antwoord(self, pad, volledig, payload):
         if self.fouten.get(pad):
-            raise self.fouten[pad].pop(0)
+            fout = self.fouten[pad].pop(0)          # None: deze oproep lukt, de volgende uit de lijst niet
+            if fout is not None:
+                raise fout
         m = re.match(r"^/api/agent/([^/]+)/werkwijze$", pad)
         if m and payload is None:
             w = self.werkwijzen.get(m.group(1), self.werkwijze)
@@ -713,6 +715,53 @@ def _kapotte_uitvoer(stuk):
         urllib.request.urlopen = echt
     assert isinstance(uit, SystemExit) and uit.code == 130, repr(uit)
     assert draad.statussen("proef")[-1]["status"] == "fout", draad.statussen("proef")
+
+
+# ------------------------------------------------------------------------- Codex ronde 19: terugval tegenover main ---
+def test_na73_fouthartslag_die_niet_aankwam_krijgt_een_tweede_poging():
+    """Codex NA73: kwam de fouthartslag van de ronde niet aan (een tijdelijke verzendfout), dan bleef de agent op actief;
+    op main stuurden De Archivaris, De Fathomwacht en De Levenscoach toevallig nog een tweede. Nu probeert de ronde het
+    een tweede keer, zonder noodlijst. Zo bij stoppen zonder regelboek, bij een fout bij de start en bij het afsluiten."""
+    weg = urllib.error.URLError("bord even weg (proef)")
+    for wat, werkwijze, werkfout in (("zonder regelboek", "", None), ("start", {"raar": 1}, None),
+                                    ("afsluiten", WW, ValueError("werk kapot"))):
+        draad = Draad(werkwijze=werkwijze, open_noden=[])
+        draad.fouten["/agent-status"] = [None, weg]          # actief komt aan, de eerste fouthartslag niet
+        with op_het_bord(draad):
+            try:
+                with bord.Agent("proef").ronde("proef"):
+                    if werkfout is not None:
+                        raise werkfout
+            except (bord.RondeGestopt, ValueError):
+                pass
+        statussen = draad.statussen("proef")
+        assert [s["status"] for s in statussen] == ["actief", "fout"] and "nood" not in statussen[-1], (wat, statussen)
+    draad = Draad(werkwijze="", open_noden=[])
+    draad.fouten["/agent-status"] = [None, weg]
+    uit, gelezen = _archivaris(draad)
+    assert not gelezen and draad.statussen("archivaris")[-1]["status"] == "fout", draad.statussen("archivaris")
+
+
+def test_na75_mac_mailwacht_zet_pas_actief_na_regelboek_en_wachtwoord():
+    """Codex NA75: de Mac-mailwacht meldde actief voor de wachtwoordcontrole. Faalde daarna de melding "rust", dan bleef
+    ze op actief; op main bleef de vorige status. Nu pas actief als regelboek en wachtwoord er zijn."""
+    draad = Draad(werkwijze="# Mailwacht\n\nRegel.")
+    echt = draad.antwoord
+
+    def antwoord(pad, volledig, payload):
+        if pad == "/agent-status" and payload.get("status") == "rust":
+            raise urllib.error.URLError("bord even weg (proef)")
+        return echt(pad, volledig, payload)
+
+    draad.antwoord = antwoord
+    with op_het_bord(draad), vervangen((MW, "wachtwoord", lambda account: ""), (MW.imaplib, "IMAP4_SSL", _GeenImap),
+                                       (MW, "token", lambda: "proef"),
+                                       (sys, "argv", ["mail_wacht.py", "--account", "proef@h-architects.be", "--naam", "mail-proef"])):
+        try:
+            MW.main()
+        except (OSError, SystemExit):
+            pass
+    assert "actief" not in [s["status"] for s in draad.statussen("mail-proef")], draad.statussen("mail-proef")
 
 if __name__ == "__main__":
     import traceback

@@ -316,6 +316,10 @@ class Agent:
         if signalen:
             detail += "; daarna " + "; ".join(f"{type(s).__name__}: {str(s)[:60]}" for s in signalen)
         self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
+        if not self.hartslag_ok:
+            # Codex NA73: kwam de fouthartslag niet aan (een tijdelijke verzendfout), dan bleef de agent op actief; op main
+            # stuurden de oudere runners toevallig nog een tweede. Nu een tweede poging, zonder noodlijst (er sluit niets).
+            self.hartslag("fout", taak=taak, detail=detail)
         return signalen
 
     def noden_bij_breuk(self, nieuw):
