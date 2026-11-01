@@ -17,7 +17,7 @@
   <div class="kaart samen">
     <h2>{{ naam }}</h2>
     <div class="cijfers">
-      <div><span class="groot">{{ g['items'] }}</span> items binnen</div>
+      <div><span class="groot">{{ 'minstens ' if g['onvolledig'] }}{{ g['items'] }}</span> items binnen{% if g['onvolledig'] %} <span class="zacht klein">(een wacht is niet gelezen)</span>{% endif %}</div>
       {% for k, uitleg_ in uitleg.items() %}
       <div><span class="stip {{ k }}"></span> <span class="groot">{{ g['telling'][k] }}</span> {{ uitleg_ }}</div>
       {% endfor %}

@@ -128,16 +128,16 @@ check("D14 bord onbereikbaar: zin, geen lege dag", "Het bord antwoordt niet" in 
 WACHTEN = {"dag": "2026-10-31", "items": 2, "telling": {}, "vakken": [
     {"vak": "Communicatie", "wachten": [
         {"naam": "whatsapp-wacht", "label": "De WhatsApp-wacht", "kleur": "groen", "oordeel": "binnen", "aantal": 2,
-         "rondes": 3, "gedekt": True, "leesfout": "", "noden": [], "fouten": [], "status": {"laatste": "21:37"},
+         "rondes": 3, "gedekt": True, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": {"laatste": "21:37"},
          "items": [{"tijd": "09:15", "wie": "Sara Proef", "wat": "3 berichten", "fout": False},
                    {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False}],
          "log": [{"tijd": "21:37", "stap": "bron", "tekst": "2 gesprekken", "fout": False}]},
         {"naam": "sms-wacht", "label": "De Sms-wacht", "kleur": "rood", "oordeel": "fout", "aantal": 0, "rondes": 1,
-         "gedekt": None, "leesfout": "", "noden": ["Full Disk Access ontbreekt"], "status": None,
+         "gedekt": None, "leesfout": "", "logfout": "", "noden": ["Full Disk Access ontbreekt"], "status": None,
          "fouten": [{"tijd": "11:00", "stap": "fout", "tekst": "kopie niet leesbaar", "fout": True}], "items": [],
          "log": [{"tijd": "11:00", "stap": "fout", "tekst": "kopie niet leesbaar", "fout": True}]},
         {"naam": "locatie-wacht", "label": "De Locatiewacht", "kleur": "grijs", "oordeel": "niets binnen, geen ronde",
-         "aantal": 0, "rondes": 0, "gedekt": None, "leesfout": "", "noden": [], "status": None, "fouten": [],
+         "aantal": 0, "rondes": 0, "gedekt": None, "leesfout": "", "logfout": "", "noden": [], "status": None, "fouten": [],
          "items": [], "log": []}]}]}
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 A.haal_locatie = lambda pad: None
@@ -191,6 +191,17 @@ check("D14 leesfout is onbekend, niet leeg", "onbekend</span> items binnen" in h
       and "Onbekend: het bord kon deze wacht niet lezen (niet gelezen (OperationalError))" in html, html[-3000:])
 html = C.get("/wachten?dag=2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 tegel bij leesfout toont ?", ">?</div>" in html and "kon niet lezen: niet gelezen (OperationalError)" in html)
+check("D14 dagtotaal is minstens als een wacht niet gelezen is", "minstens 2</span> items binnen" in html, html[:3000])
+LOG = json.loads(json.dumps(WACHTEN))
+LOG["vakken"][0]["wachten"][0].update(logfout="werkverslag niet gelezen (OperationalError)", kleur="rood", log=[], rondes=0)
+A.haal_wachten = lambda dag: json.loads(json.dumps(LOG))
+html = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 werkverslag niet gelezen: items blijven, werkverslag onbekend", "Sara Proef" in html and "2</span> items binnen" in html
+      and "onbekend</span> regels in het werkverslag" in html and "Geen ronde op deze dag" not in html
+      and "het bord kon het werkverslag niet lezen" in html, html[-3500:])
+check("D14 dag buiten de vier dagen is 404", C.get("/wachten?dag=2020-01-01", headers=MET).status_code == 404
+      and C.get("/wachten/whatsapp-wacht?dag=2020-01-01", headers=MET).status_code == 404
+      and C.get("/wachten?dag=" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)

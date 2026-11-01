@@ -454,6 +454,8 @@ def wachten_dag(dag):
     alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
     gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
     gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
+    # Eén wacht niet gelezen: dan is het dagtotaal niet volledig (Codex 01-11): "minstens" in plaats van een vol getal.
+    gegevens["onvolledig"] = any(w.get("leesfout") for w in alle)
     return gegevens
 
 
@@ -511,11 +513,15 @@ def dagkeuze(d, naam=None):
 
 
 def wacht_dag_uit_vraag():
+    """De gevraagde dag, alleen binnen de laatste WACHT_DAGEN dagen (Mehdi 01-11: alleen die dagen); anders 404."""
     dag = request.args.get("dag") or vandaag().isoformat()
     try:
-        return date.fromisoformat(dag)
+        d = date.fromisoformat(dag)
     except ValueError:
         abort(404)
+    if not vandaag() - timedelta(days=WACHT_DAGEN - 1) <= d <= vandaag():
+        abort(404)
+    return d
 
 
 @app.route("/wachten")

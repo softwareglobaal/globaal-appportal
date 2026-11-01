@@ -18,15 +18,16 @@
     <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
       <div><span class="groot">{{ 'onbekend' if w['leesfout'] else w['aantal'] }}</span> items binnen</div>
-      <div><span class="groot">{{ w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 else 'regels' }} in het werkverslag</div>
+      <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
       {% if is_vandaag and w['status'] and w['status']['laatste'] %}<div>laatste ronde <span class="groot">{{ w['status']['laatste'] }}</span></div>{% endif %}
       {% if w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
     </div>
   </div>
-  {% if w['leesfout'] or w['fouten'] or w['stand_fout'] %}
+  {% if w['leesfout'] or w['logfout'] or w['fouten'] or w['stand_fout'] %}
   <div class="kaart">
     <h2 class="rood-tekst">Fout</h2>
     {% if w['leesfout'] %}<p class="foutregel">Kon niet lezen: {{ w['leesfout'] }}</p>{% endif %}
+    {% if w['logfout'] %}<p class="foutregel">Kon niet lezen: {{ w['logfout'] }}</p>{% endif %}
     {% if w['stand_fout'] %}<p class="foutregel">{{ w['stand_fout'] }}</p>{% endif %}
     {% for f in w['fouten_kort'] %}<p class="foutregel">{{ f['tijd'] }} {{ f['tekst'] }}{% if f['aantal'] > 1 %} <span class="zacht">({{ f['aantal'] }} keer)</span>{% endif %}</p>{% endfor %}
   </div>
@@ -54,8 +55,10 @@
     {% endif %}
   </div>
   <div class="kaart">
-    <h2>Werkverslag van deze dag ({{ w['rondes'] }})</h2>
-    {% if w['log'] %}
+    <h2>Werkverslag van deze dag ({{ 'onbekend' if w['logfout'] else w['rondes'] }})</h2>
+    {% if w['logfout'] %}
+    <p class="leeg">Onbekend: het bord kon het werkverslag niet lezen ({{ w['logfout'] }}). Dat is niet hetzelfde als geen ronde.</p>
+    {% elif w['log'] %}
     <table class="lijst">
       {% for r in w['log'] %}<tr{% if r['fout'] %} class="fout"{% endif %}><td class="tijd">{{ r['tijd'] }}</td><td class="zacht klein">{{ r['stap'] }}</td><td class="klein">{{ r['tekst'] }}</td></tr>{% endfor %}
     </table>

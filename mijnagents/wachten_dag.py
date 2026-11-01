@@ -75,14 +75,28 @@ def _item(tijd, wie, wat, fout=False):
     return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout)}
 
 
+def is_prive_gesprek(r):
+    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé.
+    De vlag prive=1 alleen betekent "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke rij); die
+    rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
+    return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
+
+
 def lees_gesprekken(conn, bron, dag):
-    rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van "
-                         "FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start", (dag, bron)).fetchall()
+    rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
+                         "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
+                         "ORDER BY start", (dag, bron)).fetchall()
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
             if str(r["uniek"] or "").startswith(f"dekking:{bron}:"):
                 gedekt = True
+            continue
+        if is_prive_gesprek(r):
+            # RZ2-01: van een privégesprek alleen "privégesprek, N min", zonder naam of onderwerp.
+            wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "",
+                                        "dubbel, telt niet" if r["dubbel_van"] else "") if x)
+            items.append(_item(uur(r["start"]), "privégesprek", wat))
             continue
         wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "", kort(r["thema"], 100),
                                     "dubbel, telt niet" if r["dubbel_van"] else "") if x)
@@ -136,7 +150,8 @@ def lees_log(conn, wacht, van, tot):
 
 def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     van, tot = grenzen(dag)
-    items, gedekt, leesfout = [], None, ""
+    items, gedekt, leesfout, logfout = [], None, "", ""
+    # Items en werkverslag apart gelezen en apart gemeld (Codex 01-11): faalt het een, dan blijft het ander staan.
     try:
         if wacht in GESPREK_BRON:
             items, gedekt = lees_gesprekken(conn, GESPREK_BRON[wacht], dag)
@@ -148,14 +163,14 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     try:
         log = lees_log(conn, wacht, van, tot)
     except Exception as e:  # noqa: BLE001
-        log, leesfout = [], leesfout or f"werkverslag niet gelezen ({type(e).__name__})"
+        log, logfout = [], f"werkverslag niet gelezen ({type(e).__name__})"
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
     st = dict(status) if status else None
     # De hartslag is alleen de stand van nu: hij telt alleen mee voor vandaag.
     status_fout = bool(st and dag == datetime.now(BRUSSEL).date().isoformat()
                        and str(st.get("status")) in ("fout", "error"))
-    if leesfout or fouten or status_fout:
+    if leesfout or logfout or fouten or status_fout:
         oordeel, kleur = "fout", "rood"
     elif items:
         oordeel, kleur = "binnen", "groen"
@@ -165,7 +180,7 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
             "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten, "log": log[-MAX_LOG:],
-            "gedekt": gedekt, "leesfout": leesfout, "noden": list(noden),
+            "gedekt": gedekt, "leesfout": leesfout, "logfout": logfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
 
