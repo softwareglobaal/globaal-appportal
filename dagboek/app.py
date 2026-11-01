@@ -443,10 +443,13 @@ def wachten_dag(dag):
         return None
     for vak in gegevens["vakken"]:
         for w in vak.get("wachten") or []:
-            if w.get("naam") == "locatie-wacht" and not w.get("items"):
+            if w.get("naam") == "locatie-wacht":
+                # LOC-1: ook op een dag met het bord-item "Locatielogboek <dag>" (elke vorige dag) de plekken en ritten
                 li = locatie_items(dag)
                 if li:
-                    w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
+                    items = sorted((w.get("items") or []) + li, key=lambda x: x.get("tijd") or "99")
+                    w.update(items=items, aantal=len(items),
+                             oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
                              kleur="groen" if w.get("kleur") != "rood" else "rood")
             w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)

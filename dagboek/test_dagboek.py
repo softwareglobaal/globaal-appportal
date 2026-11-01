@@ -8,7 +8,8 @@ De Dagbundelaar ze schrijft (gemaakt met mijnagents-runner/koppelingen/dagvastst
 - D05: het overzicht toont de tegels van een vastgestelde dag, en "Nog niet vastgesteld" voor een dag zonder bestand;
 - D06: een onbekend getal wordt een vraagteken; een kapotte telling laat de pagina niet vallen;
 - D07: geen gedachtestreepje;
-- D30 (WISPR-3): een fout-hartslag van een vorige dag staat als tekst met zijn dag, niet als fout van vandaag.
+- D30 (WISPR-3): een fout-hartslag van een vorige dag staat als tekst met zijn dag, niet als fout van vandaag;
+- D31 (LOC-1): de Locatiewacht toont haar plekken en ritten ook op een dag met een bord-item.
 """
 import json
 import os
@@ -218,6 +219,18 @@ A.haal_wachten = lambda dag: json.loads(json.dumps(OUD))
 html = C.get("/wachten?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
 check("D30 oude fout-hartslag: tekst met zijn dag", "stand van nu (sinds 30-10 23:45): fout: portaal niet gelezen" in html,
       html[-2500:])
+# D31 (LOC-1): een vorige dag met het bord-item "Locatielogboek" toont ook de plekken en ritten van het Locatie-dashboard.
+MET_ITEM = json.loads(json.dumps(WACHTEN))
+MET_ITEM["dag"] = "2026-10-30"
+MET_ITEM["vakken"][0]["wachten"][2].update(kleur="groen", oordeel="binnen", aantal=1, rondes=1, items=[
+    {"tijd": "21:30", "wie": "locatie", "wat": "Locatielogboek 2026-10-30", "fout": False}])
+LOC30 = dict(LOC, datum="2026-10-30")
+A.haal_wachten = lambda dag: json.loads(json.dumps(MET_ITEM))
+A.haal_locatie = lambda pad: json.loads(json.dumps(LOC30)) if pad.startswith("/api/dagboek/2026-10-30") else None
+html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
+check("D31 vorige dag: bord-item en ritten samen", "Locatielogboek 2026-10-30" in html and "rit auto, 36,2 km" in html
+      and "Thuis" in html and "6</span> items binnen" in html, html[-3000:])
+A.haal_locatie = lambda pad: None
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
