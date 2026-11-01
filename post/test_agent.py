@@ -21,9 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def maak_agent(tmp, onderwerp="Your receipt from Anthropic, PBC",
-               naar="ap@unabo.be", backfill=False):
+               naar="ap@unabo.be", backfill=False, regels=None):
     """Laadt doorstuuragent met de omgeving vooraf gezet, en vervangt de twee
-    plekken die naar buiten reiken door nepversies."""
+    plekken die naar buiten reiken door nepversies. Met regels gelden die
+    (POSTBUS_AGENT_REGELS), anders de losse variabelen."""
     import os
     os.environ["POSTBUS_AGENT_MAILBOX"] = "mch@h-architects.be"
     os.environ["POSTBUS_AGENT_ONDERWERP"] = onderwerp
@@ -32,7 +33,10 @@ def maak_agent(tmp, onderwerp="Your receipt from Anthropic, PBC",
     os.environ["POSTBUS_AGENT_BACKFILL"] = "ja" if backfill else ""
     os.environ["POSTBUS_AGENT_PAUZE"] = "0"   # geen wachttijd in de test
     os.environ["POSTBUS_DOORSTUREN"] = "ja"   # noodrem aan voor de test
-    os.environ.pop("POSTBUS_AGENT_REGELS", None)  # de losse variabelen gelden
+    if regels:
+        os.environ["POSTBUS_AGENT_REGELS"] = json.dumps(regels)
+    else:
+        os.environ.pop("POSTBUS_AGENT_REGELS", None)
     for mod in ("doorstuuragent", "verzenden"):
         sys.modules.pop(mod, None)
     import doorstuuragent as agent
@@ -41,7 +45,9 @@ def maak_agent(tmp, onderwerp="Your receipt from Anthropic, PBC",
 
 class NepInbox:
     """Een paar berichten met onderwerp en message-id. Speelt imapbron.lijst na
-    zodat we de agent kunnen draaien zonder mailserver."""
+    zodat we de agent kunnen draaien zonder mailserver. Filtert bewust niet:
+    de zoekopdracht op de server is ruimer dan de regel, en de agent moet zelf
+    op onderwerp en afzender nakijken."""
 
     def __init__(self, berichten):
         self.berichten = berichten          # lijst dicts, nieuwste eerst
@@ -49,9 +55,7 @@ class NepInbox:
 
     def lijst(self, mailbox, mapnaam, van=None, onderwerp=None, maximaal=100,
               vanaf=0):
-        treffers = [b for b in self.berichten
-                    if onderwerp.lower() in b["onderwerp"].lower()
-                    and (not van or van.lower() in b["van"].lower())]
+        treffers = list(self.berichten)
         venster = treffers[vanaf:vanaf + maximaal]
         return {"berichten": venster,
                 "meer": len(treffers) > vanaf + len(venster),
@@ -114,6 +118,8 @@ def test_oude_status_gaat_naar_de_eerste_regel():
         status = json.load(open(agent.STATUSPAD, encoding="utf-8"))
         gelijk("__oud__" in status["regels"], False,
                "de oude status hangt nu aan de regel")
+        gelijk(list(status["regels"].values())[0]["gestart"],
+               "2026-09-01T00:00:00+00:00", "met het oude starttijdstip")
 
 
 def test_nieuwe_na_de_start_gaat_wel_door():
@@ -152,6 +158,22 @@ def test_ander_onderwerp_blijft_liggen():
         draai(agent, inbox)
         gelijk(inbox.doorgestuurd, [(2, "ap@unabo.be")],
                "Calendly valt buiten de regel en blijft liggen")
+
+
+def test_andere_afzender_blijft_liggen():
+    regel = {"mailbox": "mch@h-architects.be", "onderwerp": "domeinnaam",
+             "van": "one.com", "naar": "ap@unabo.be"}
+    with tempfile.TemporaryDirectory() as tmp:
+        agent = maak_agent(tmp, regels=[regel])
+        inbox = NepInbox([bericht(1, "<a@x>", "domeinnaam #1", van="noreply@one.com")])
+        draai(agent, inbox)                 # a onthouden
+        inbox.berichten.insert(0, bericht(3, "<c@x>", "domeinnaam #3",
+                                          van="iemand@voorbeeld.test"))
+        inbox.berichten.insert(0, bericht(2, "<b@x>", "domeinnaam #2",
+                                          van="noreply@one.com"))
+        draai(agent, inbox)
+        gelijk(inbox.doorgestuurd, [(2, "ap@unabo.be")],
+               "een ander afzenderadres valt buiten de regel en blijft liggen")
 
 
 def test_backfill_stuurt_de_geschiedenis_wel():

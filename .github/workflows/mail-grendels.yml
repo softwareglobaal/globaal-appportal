@@ -14,14 +14,16 @@ on:
             "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", "post/test_imapbron_koppen.py",
-            "post/doorstuuragent.py", "post/test_agent.py", ".github/workflows/mail-grendels.yml"]
+            "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
+            ".github/workflows/mail-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
             "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", "post/test_imapbron_koppen.py",
-            "post/doorstuuragent.py", "post/test_agent.py", ".github/workflows/mail-grendels.yml"]
+            "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
+            ".github/workflows/mail-grendels.yml"]
 
 jobs:
   grendels:
