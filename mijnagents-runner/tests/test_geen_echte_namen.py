@@ -46,6 +46,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_zoom_archief.py",
     "mijnagents-runner/tests/test_zoom_archief_bouwstenen.py",
     "mijnagents-runner/tests/test_zoom_wacht.py",
+    "mijnagents-runner/tests/fixtures/claude_stream_proef.jsonl",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "mijnagents/test_gesprekken_api.py",
 )
