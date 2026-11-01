@@ -21,6 +21,11 @@ KORT = 160
 GESPREK_BRON = {"whatsapp-wacht": "whatsapp", "belwacht": "telefoon", "sms-wacht": "sms", "xelion-wacht": "xelion",
                 "fathom-wacht": "fathom", "plaud-wacht": "plaud", "zoom-wacht": "zoom"}
 MAIL_WACHTEN = ("mail-prive", "mail-mch", "mail-info-harc", "mail-hinv", "mail-melo")
+# T-0120 AG-2: van een signaal of dagplan van deze wachten ook de regels van de inhoud, niet alleen de titel (welke
+# afspraak, welke boeking). Hun inhoud is bij het klaarzetten gemaskeerd zoals op het bord (bord.Agent.maskeer geeft
+# '(privé)'); ik toon ze zoals ze daar staan. Andere wachten niet: nooit de tekst van een bericht.
+REGELS_VAN = ("agenda-wacht", "calendly-wacht")
+MAX_REGELS = 200
 
 
 def grenzen(dag):
@@ -136,8 +141,18 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
-        items.append(_item(tijd, r["soort"] or "item", wat))
+        it = _item(tijd, r["soort"] or "item", wat)
+        if wacht in REGELS_VAN and r["soort"] in ("signaal", "dagplan") and inhoud is None and r["inhoud"]:
+            it["regels"] = inhoud_regels(r["inhoud"])
+        items.append(it)
     return items
+
+
+def inhoud_regels(inhoud):
+    """De regels van een tekstinhoud als lijst, zonder het streepje vooraan; lege regels vallen weg. Boven MAX_REGELS een
+    slotregel met het aantal."""
+    uit = [kort(re.sub(r"^\s*-\s+", "", x), 220) for x in str(inhoud or "").splitlines() if x.strip()]
+    return uit[:MAX_REGELS] + ([f"en nog {len(uit) - MAX_REGELS} regel(s)"] if len(uit) > MAX_REGELS else [])
 
 
 def lees_log(conn, wacht, van, tot):

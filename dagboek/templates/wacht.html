@@ -47,7 +47,7 @@
     <table class="lijst">
       <tr class="kop"><td>Tijd</td><td>Van wie of wat</td><td>Kort</td></tr>
       {% for it in w['items'] %}
-      <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}</td></tr>
+      <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}{% if it['regels'] %}<ul class="regels">{% for x in it['regels'] %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}</td></tr>
       {% endfor %}
     </table>
     {% else %}
@@ -85,6 +85,8 @@
   tr.fout td{color:var(--rood)}
   .foutregel{color:var(--rood);margin:4px 0}
   .nood{color:var(--oranje);margin:4px 0}
+  ul.regels{margin:4px 0 0;padding-left:18px;color:var(--tekst)}
+  ul.regels li{margin:2px 0}
   @media (max-width:600px){table.lijst tr.kop{display:none} table.lijst td{font-size:14px;padding:5px 4px}}
 </style>
 {% endblock %}
