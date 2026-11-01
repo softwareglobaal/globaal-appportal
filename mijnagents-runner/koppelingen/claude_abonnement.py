@@ -336,7 +336,9 @@ def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25
         raise Fout(f"Claude via het abonnement: {reden}", soort)
     uit = lees_stroom(stdout)
     if uit["fout"] or code:
-        reden = uit["fout"] or (stderr or "").strip()[-300:] or f"code {code}"
+        reden = uit["fout"] or f"code {code}"
+        if not uit["tekst"]:       # zonder eindresultaat: wat Claude Code zelf zei, voor het logboek (zonder token)
+            reden += f" (code {code}; {(stderr or '').strip()[-200:] or 'geen foutuitvoer'})"
         raise Fout(f"Claude via het abonnement: {reden.replace(token, '[token]')}",
                    "aanmelden" if _aanmelden(reden) else None)
     return uit

@@ -140,6 +140,7 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     stap = "**Volgende stap:** lees de punten om op te letten; "
     stap += ("de vergelijking per post staat hieronder." if per_post else
              "de vergelijking per post komt pas als de offerte-inhoud naar de AI mag." if not ai_aan else
+             "er is minder dan twee leesbare offertes, dus niets om per post te vergelijken." if len(gelezen) < 2 else
              "een vergelijking per post was niet betrouwbaar (zie de redenen).")
     regels = [kop, "", stap, "", "## Totalen",
               "| Inschrijver | Datum | Excl. btw | Btw | Incl. btw | Geldig tot |", "|---|---|---|---|---|---|"]

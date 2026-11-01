@@ -405,6 +405,14 @@ Regels: neem bedragen letterlijk over, verzin niets; een onderdeel dat een insch
 Opties en stelposten zet je met optie true. Geen advies over wie de opdracht krijgt."""
 
 
+def voor_claude(gelezen, teksten):
+    """{letter: tekst} van de echte, leesbare offertes; alleen bij minstens twee gaat iets naar Claude. Live gemeten
+    01-11-2026: een fiche of een scan met een stukje tekst telde mee, dus kreeg Claude een enkele offerte."""
+    soort = {g["letter"]: (g.get("lees") or {}).get("soort") for g in gelezen or []}
+    uit = {l: t for l, t in (teksten or {}).items() if soort.get(l) == "offerte"}
+    return uit if len(uit) >= 2 else {}
+
+
 def posten_uit_model(teksten, vraag=None, timeout=240):
     """{letter: gegevens} en rijen van Claude op het abonnement, voor geredigeerde teksten {letter: tekst}. Alleen als
     OFFERTE_NAAR_AI True is (X5); anders een fout, zodat niemand het per ongeluk aanroept. vraag is te vervangen in een
