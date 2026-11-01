@@ -3631,6 +3631,32 @@ def test_t0120_wacht1_eenmalige_vlag_herziet_een_oude_opgepakte_dagregel():
     assert ("dag 2026-10-12", "dagregel ouder dan zes dagen eenmalig herzien (--oud-herzien)") in besluiten(w), besluiten(w)
 
 
+@bord_nodig
+def test_t0120_wacht6_onleesbare_chats_per_soort_zonder_naam():
+    """WACHT-6 (meting 01-11-2026): elke ronde zijn 14 tot 23 chatgesprekken niet leesbaar (een 404 van Zoom), en niemand
+    weet wat voor gesprekken dat zijn. Het werkverslag noemt ze nu per soort (1:1 of kanaal), en ook de gesprekken
+    zonder bestemming (geen adres of kanaal), zonder naam of adres; de reden in de dagregel blijft dezelfde."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "group", "channel_id": "kanaal-a", "name": "Proefkanaal Alfa", "weg": True}, []),
+                   ({"type": "1:1", "peer_contact_email": "gamma@elders.test", "name": "Proefpersoon Gamma", "weg": True}, []),
+                   ({"type": "1:1", "peer_contact_email": "delta@elders.test", "name": "Proefpersoon Delta", "weg": True}, []),
+                   ({"type": "1:1", "peer_contact_email": "", "name": "Proefpersoon Epsilon"}, []),
+                   _rz13_chat()]
+    assert w.ronde(NU) is None
+    bron = _bronregel(w)
+    assert "chat ondergrens: 3 chatgesprek(ken) niet leesbaar, 1 chatgesprek(ken) zonder bestemming" in bron, bron
+    assert "(per soort: niet leesbaar 2 1:1 en 1 kanaal; zonder bestemming 1 1:1)" in bron, bron
+    assert not any(n in bron for n in ("Alfa", "Gamma", "Delta", "Epsilon", "elders.test", "kanaal-a")), bron
+    _, inhoud = w.dagregel("2026-10-20")
+    assert inhoud["chat"]["redenen"] == ["3 chatgesprek(ken) niet leesbaar", "1 chatgesprek(ken) zonder bestemming"], inhoud["chat"]
+    # over twee stukken van het venster telt een onleesbaar gesprek een keer, ook per soort
+    w2 = Wereld()
+    w2.zoom.chat = [({"type": "group", "channel_id": "kanaal-b", "name": "Proefkanaal Beta", "weg": True}, [])]
+    assert w2.ronde(datetime(2026, 11, 1, 7, 20, tzinfo=UTC), "--inhaal", "35") is None
+    bron = _bronregel(w2)
+    assert "1 chatgesprek(ken) niet leesbaar" in bron and "(per soort: niet leesbaar 1 kanaal)" in bron, bron
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = over = 0

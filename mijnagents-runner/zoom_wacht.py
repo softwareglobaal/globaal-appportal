@@ -526,7 +526,7 @@ def kanaal_soort(naam):
     return afd, afd in ("onbekend", "prive") or is_prive_naam(naam) or "priv" in (naam or "").casefold()
 
 
-def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
+def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None, soorten=None):
     """Eén rij per chatgesprek per dag: aantallen en tijden, nooit de inhoud. Een 1:1 is werk als de ander bekend is op
     e-mailadres of teamdomein (H2), anders privé, bij twijfel privé; zonder personentabel is elke 1:1 privé (T26). De
     naam van een privé-1:1 gaat naar het masker van het bord.
@@ -539,8 +539,10 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
     een sessie zonder adres of kanaal (RZ10-01: die werd stil overgeslagen). Een fout van de sessielijst, of een andere
     fout dan 404, gaat door: dan las deze ronde de chat niet.
     Het venster gaat in stukken van hoogstens STUK_DAGEN dagen, die op een Brusselse dag aansluiten (WACHT-1): zo komt
-    elke dag uit een stuk, en telt een gesprek dat in twee stukken staat een keer als niet leesbaar of zonder bestemming."""
-    rijen, weg, zonder = [], set(), Counter()
+    elke dag uit een stuk, en telt een gesprek dat in twee stukken staat een keer als niet leesbaar of zonder bestemming.
+    soorten (WACHT-6, een Counter): per (reden, soort) hoeveel gesprekken, met soort 1:1 of kanaal, nooit een naam: zo is
+    te zien wat voor gesprekken Zoom niet geeft, voor iemand een oorzaak zoekt."""
+    rijen, weg, zonder = [], {}, Counter()
     laatste = (date.fromisoformat(tot_dag) - timedelta(days=1)).isoformat()
     for a, b in stukken(van_dag, laatste):
         # Zoom leest from en to van de chat alleen als datum met tijd in UTC: met alleen een datum negeert hij ze en geeft
@@ -548,28 +550,34 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
         tot = (date.fromisoformat(b) + timedelta(days=1)).isoformat()
         venster = {"from": zoom_tijd(dag_grenzen(a)[0]), "to": zoom_tijd(dag_grenzen(tot)[0] - timedelta(seconds=1))}
         rijen += _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder)
+    if soorten is not None:
+        for sleutel, soort in weg.items():
+            soorten[("niet leesbaar", soort)] += 1
+        for (soort, _), n in zonder.items():
+            soorten[("zonder bestemming", soort)] += n
     return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((len(weg), "niet leesbaar"), (sum(zonder.values()), "zonder bestemming")) if n]
 
 
 def _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder):
-    """De chatrijen van een stuk van het venster (chat_rijen). weg: de sleutels van de gesprekken met een 404, over de
-    stukken heen; zonder: per sleutel het hoogste aantal gesprekken zonder bestemming in een stuk."""
+    """De chatrijen van een stuk van het venster (chat_rijen). weg: sleutel -> soort van de gesprekken met een 404, over
+    de stukken heen; zonder: per (soort, sleutel) het hoogste aantal gesprekken zonder bestemming in een stuk."""
     sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
     rijen, zonder_hier = [], Counter()
     for s in sessies:
         p = dict(venster, page_size=50)
         een_op_een = s.get("type") == "1:1"
+        soort = "1:1" if een_op_een else "kanaal"
         if een_op_een:
             p["to_contact"] = s.get("peer_contact_email", "")
         else:
             p["to_channel"] = s.get("channel_id", "")
         if not (p.get("to_contact") or p.get("to_channel")):
-            zonder_hier[chat_sleutel(s)] += 1
+            zonder_hier[(soort, chat_sleutel(s))] += 1
             continue
         berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if berichten is None:
             if chat_sleutel(s) not in weg:
-                weg.add(chat_sleutel(s))
+                weg[chat_sleutel(s)] = soort
                 if ouderdom is not None:
                     ouderdom.append(s.get("last_message_sent_time"))
             continue
@@ -1127,12 +1135,12 @@ def lezen(a, klok, staat, personen, domeinen):
     # de chat: in chat de rijen die deze ronde schrijft, in chat_redenen waarom ze niet alles las; de telling (chat_dag en
     # chat_stand) komt pas na het schrijven uit de gesprekkentabel (chat_tellen, RZ10)
     w.update(vandaag=vandaag, eerste=eerste, chat=[], chat_redenen=[], chat_dag={}, chat_stand=None,
-             chat_ouderdom=Counter())
+             chat_ouderdom=Counter(), chat_soorten=Counter())
     if w["ik"]:
         try:
             tijden = []
             w["chat"], w["chat_redenen"] = chat_rijen(w["ik"], eerste, (date.fromisoformat(vandaag) + timedelta(days=1)).isoformat(),
-                                                      personen, domeinen, tijden)
+                                                      personen, domeinen, tijden, w["chat_soorten"])
             w["chat_ouderdom"] = Counter(ouderdom_groep(t, klok) for t in tijden)   # gemeten vanaf de rondetijd
             w["bronnen"]["chat"] = "ok"
         except Exception as e:  # noqa: BLE001
@@ -1775,7 +1783,19 @@ def chat_verslag(w):
     oud = w.get("chat_ouderdom") or {}
     leeftijd = ", ".join(f"{oud[g]} {g}" for g in OUDERDOM_GROEPEN if oud.get(g))
     return (f"; chat {stand['telling']}" + (f": {', '.join(stand['redenen'])}" if stand["redenen"] else "")
-            + (f" (laatste bericht van de onleesbare: {leeftijd})" if leeftijd else ""))
+            + (f" (laatste bericht van de onleesbare: {leeftijd})" if leeftijd else "") + chat_soorten_tekst(w))
+
+
+def chat_soorten_tekst(w):
+    """WACHT-6: ' (per soort: niet leesbaar 2 1:1 en 1 kanaal; zonder bestemming 1 1:1)', of leeg. Alleen soorten en
+    aantallen, nooit een naam of adres."""
+    tel = w.get("chat_soorten") or {}
+    delen = []
+    for reden in ("niet leesbaar", "zonder bestemming"):
+        per = [f"{tel[(reden, soort)]} {soort}" for soort in ("1:1", "kanaal") if tel.get((reden, soort))]
+        if per:
+            delen.append(f"{reden} {' en '.join(per)}")
+    return f" (per soort: {'; '.join(delen)})" if delen else ""
 
 
 def leesapp_stand():
