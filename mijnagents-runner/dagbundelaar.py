@@ -36,6 +36,7 @@ bundel voor een afdeling.
 """
 import json
 import os
+import re
 import sys
 import hashlib
 import shutil
@@ -83,7 +84,8 @@ INHAAL = 60
 INHAAL_PER_NACHT = 7
 INHAALSTAAT = os.path.join(DATA, "dagvaststelling-inhaal.json")  # per ingehaalde dag het tijdstip
 KANAAL_UREN = 26                                              # een wacht die langer zweeg, levert niet meer
-KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht"}
+# 31-10-2026: sms en iMessage (De Sms-wacht op de laptop) en Xelion (De Belwacht Xelion op de VM) erbij.
+KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht", "sms": "sms-wacht", "xelion": "xelion-wacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
 ZOOM_TERUGBLIK = 6                                            # zoom_wacht.TERUGBLIK: zolang kan een dagregel nog herzien worden
 
@@ -482,6 +484,75 @@ def kanaal_van_dag(stand, kanaal, dag, gedekt):
     if stand != "aangesloten":
         return stand
     return "aangesloten" if (kanaal, dag) in gedekt else "onbekend voor deze dag"
+
+
+WISPR_GEBRUIKER = os.environ.get("WISPR_GEBRUIKER", "Mehdi")
+
+
+def _inhoud(x):
+    try:
+        i = json.loads(x.get("inhoud") or "{}") if isinstance(x.get("inhoud"), str) else (x.get("inhoud") or {})
+    except ValueError:
+        return {}
+    return i if isinstance(i, dict) else {}
+
+
+def per_dag_uit(items, voorvoegsel, eigen_dag):
+    """Uit klaarzet-items van een wacht die elke ronde de laatste dagen meestuurt (per_dag): per dag de telling van de
+    nieuwste ronde die die dag zag. eigen_dag(inhoud) geeft de telling van de dag van het item zelf als per_dag ontbreekt
+    (een Wispr-item van voor 31-10-2026)."""
+    uit = {}
+    for x in sorted(items, key=lambda x: x["uniek"]):
+        i = _inhoud(x)
+        dag = x["uniek"][len(voorvoegsel):]
+        pd = i.get("per_dag")
+        if isinstance(pd, dict):
+            uit.update({d: t for d, t in pd.items() if isinstance(t, dict)})
+        elif eigen_dag(i) is not None:
+            uit[dag] = eigen_dag(i)
+    return uit
+
+
+def gezondheid_regels(samenvatting):
+    """De dagsamenvatting van de Gezondheidswacht (~/bin/gezondheid.py op de Mac) zonder kop; geen metingen is None."""
+    t = str(samenvatting or "")
+    if not t.strip() or "geen metingen" in t.lower():
+        return None
+    regels = [r.strip(" -") for r in t.splitlines()[1:] if r.strip() and not set(r.strip()) <= set("=-")]
+    return regels[:12] or None
+
+
+def lees_eigen(eerste):
+    """Wispr, websites en gezondheid per dag uit het bord (Mehdi, 31-10-2026). Een dag die geen wacht zag, ontbreekt:
+    onbekend, nooit nul."""
+    vw = f"wispr:{WISPR_GEBRUIKER}:"
+    wispr = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE ? AND uniek >= ?",
+                                     (vw + "%", vw + eerste)), vw, lambda i: i.get("vandaag"))
+    web = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'websites:%' AND uniek >= ?",
+                                   ("websites:" + eerste,)), "websites:", lambda i: None)
+    gez = {x["uniek"][11:]: gezondheid_regels(_inhoud(x).get("samenvatting")) for x in bord.db_lees(
+        "SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'gezondheid:%' AND uniek >= ?", ("gezondheid:" + eerste,))}
+    vy = f"youtube:{WISPR_GEBRUIKER}:"
+    yt = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE ? AND uniek >= ?",
+                                  (vy + "%", vy + eerste)), vy, lambda i: None)
+    return lambda dag: {"wispr": wispr.get(dag), "websites": web.get(dag), "youtube": yt.get(dag),
+                        "gezondheid": gez.get(dag)}
+
+
+FOTO_BRON = re.compile(r"^(\d+) foto's/video's op (\d{4}-\d{2}-\d{2}), (\d+) plekken, (\d+) zonder GPS")
+
+
+def lees_fotos(eerste):
+    """Per dag wat De Fotowacht die dag las (31-10-2026, punt P4 van het driehoeksoverleg): uit haar werkverslag, de regel
+    'N foto's/video's op <dag>, M plekken, K zonder GPS'. Zo telt ook een dag zonder foto's als gelezen (0), en een dag
+    zonder ronde ontbreekt: onbekend, nooit nul. Alleen aantallen, nooit een plaats."""
+    uit = {}
+    for x in bord.db_lees("SELECT tekst FROM logboek WHERE naam = 'icloud-wacht' AND stap = 'bron' AND onderwerp >= ? "
+                          "AND onderwerp LIKE 'dag %' ORDER BY id", ("dag " + eerste,)):
+        m = FOTO_BRON.match(str(x["tekst"] or ""))
+        if m:
+            uit[m.group(2)] = {"aantal": int(m.group(1)), "plekken": int(m.group(3)), "zonder_plaats": int(m.group(4))}
+    return uit
 
 
 def lees_agenda(dagen):
@@ -911,8 +982,19 @@ def vastleggen(r, dagen, zoom_gelezen=None):
                                        "AND COALESCE(message_id, '') != ''", (eerste, laatste))
     soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
     statussen = {x["naam"]: x for x in bord.db_lees(
-        "SELECT naam, status, taak, ts FROM status WHERE naam IN ('whatsapp-wacht', 'belwacht')")}
+        "SELECT naam, status, taak, ts FROM status WHERE naam IN (%s)" % ", ".join("?" * len(KANAALWACHTEN)),
+        tuple(KANAALWACHTEN.values()))}
     kanalen = {k: kanaalstand(statussen.get(w), nu) for k, w in KANAALWACHTEN.items()}
+    try:
+        eigen_van = lees_eigen(eerste)
+    except Exception as e:  # noqa: BLE001
+        ag.log("eigen", "fout", f"Wispr, websites en gezondheid niet gelezen ({type(e).__name__})")
+        eigen_van = lambda dag: {"wispr": None, "websites": None, "youtube": None, "gezondheid": None}  # noqa: E731
+    try:
+        fotos_van = lees_fotos(eerste)
+    except Exception as e:  # noqa: BLE001
+        ag.log("fotos", "fout", f"foto's niet gelezen ({type(e).__name__})")
+        fotos_van = {}
     try:
         ontvangen, verzonden, prive_postvakken = lees_mail(dagen)
         mailfout = ""
@@ -952,7 +1034,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         kanalen_dag = {k: kanaal_van_dag(s, k, dag, gedekt) for k, s in kanalen.items()}
         zoomdag, chatdag = zoom.get(dag, ("onbekend", "onbekend"))
         v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoomdag, mail, kanalen_dag,
-                          prive_afspraak, locatiestand, chatstand=chatdag)
+                          prive_afspraak, locatiestand, chatstand=chatdag, eigen=eigen_van(dag),
+                          fotos=fotos_van.get(dag))
         oud = _lees(dagpad(dag))
         # Het masker van het bord al voor het schrijven: bord, bestand en Dropbox dragen dezelfde tekst (E6)
         concept = ag.maskeer(V.tekst(v, prive_postvakken))
@@ -975,7 +1058,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
                     "locatie: " + (locatiestand if bezoeken is not None else f"niet gelezen ({lf})"),
                     # het fouttype staat in het logboek (Codex-controle mailnood 2)
                     "mail: " + ("alleen de mappen die de mailwachten lezen" if mail is not None else "niet gelezen"),
-                    f"WhatsApp: {kanalen_dag['whatsapp']}", f"telefoon: {kanalen_dag['telefoon']}"]
+                    f"WhatsApp: {kanalen_dag['whatsapp']}", f"telefoon: {kanalen_dag['telefoon']}",
+                    f"sms: {kanalen_dag['sms']}", f"Xelion: {kanalen_dag['xelion']}"]
             if oud is not None:
                 over.append("herzien: " + (", ".join(V.wijzigingen(oud, concept)) or "opmaak"))
             tekst = ag.maskeer(V.tekst(v, prive_postvakken, over))

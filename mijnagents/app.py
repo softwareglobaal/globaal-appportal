@@ -72,6 +72,58 @@ def _sluit(_exc):
         d.close()
 
 
+# De groep Dagbundelaar op het bord: wie data levert voor het dagboek, De Dagbundelaar zelf en wie het dagboek
+# gebruikt om Mehdi werk uit handen te nemen. Een nieuwe agent voor het dagboek komt hier bij, nergens anders.
+# Hier staat ook zijn naam op het bord (Mehdi, 31-10-2026: "zorg dat al mijn wachten goede benamingen hebben"):
+# De <kanaal>wacht, zoals Mehdi het kanaal noemt. Een agent die nog niet gebouwd is, staat op het organogram als
+# lege plek ("nog te bouwen"), zonder rij in de databank, zodat de Agentnorm hem niet als gezakt telt.
+# Mehdi, 31-10-2026: drie lagen. Bovenaan Ai Angel (de Mehdi-agent), daaronder De Dagbundelaar, daaronder de wachten.
+DAGBUNDELAAR_BOVEN = ("mehdi-agent", "dagbundelaar")
+DAGBUNDELAAR_AGENTS = {
+    "dagbundelaar": "De Dagbundelaar",
+    "mehdi-agent": "Ai Angel",
+    "agenda-wacht": "De Agendawacht",
+    "calendly-wacht": "De Calendlywacht",
+    "locatie-wacht": "De Locatiewacht",
+    "icloud-wacht": "De Fotowacht",
+    "gezondheid-wacht": "De Gezondheidswacht",
+    "belwacht": "De Belwacht iPhone",
+    "xelion-wacht": "De Belwacht Xelion",
+    "sms-wacht": "De Sms-wacht",
+    "whatsapp-wacht": "De WhatsApp-wacht",
+    "communicatie-bundelaar": "De Communicatiebundelaar",
+    "fathom-wacht": "De Fathomwacht",
+    "plaud-wacht": "De Plaudwacht",
+    "zoom-wacht": "De Zoomwacht",
+    "zoom-archief": "De Zoomarchivaris",
+    "wispr-wacht": "De Wispr-wacht",
+    "browser-wacht": "De Websitewacht",
+    "youtube-wacht": "De YouTube-wacht",
+    "mail-prive": "De Mailwacht mehdichegini@hotmail.com",
+    "mail-mch": "De Mailwacht mch@h-architects.be",
+    "mail-info-harc": "De Mailwacht info@h-architects.be",
+    "mail-hinv": "De Mailwacht info@h-invest.be",
+    "mail-melo": "De Mailwacht melodiebvba@gmail.com",
+}
+# Mehdi, 31-10-2026: de wachten in vakken per soort, zoals hij ze denkt. Elke wacht staat in precies één vak.
+DAGBUNDELAAR_VAKKEN = (
+    ("Mail", ("mail-prive", "mail-mch", "mail-info-harc", "mail-hinv", "mail-melo")),
+    ("Communicatie", ("belwacht", "xelion-wacht", "sms-wacht", "whatsapp-wacht", "zoom-wacht", "zoom-archief",
+                      "fathom-wacht", "plaud-wacht", "communicatie-bundelaar")),
+    ("Agenda", ("agenda-wacht", "calendly-wacht")),
+    ("Locatie en foto's", ("locatie-wacht", "icloud-wacht")),
+    ("Computer en online", ("browser-wacht", "youtube-wacht", "wispr-wacht")),
+    ("Gezondheid", ("gezondheid-wacht",)),
+)
+# Mehdi, 31-10-2026, op het voorstel: De Levenscoach staat naast Ai Angel, met het vak Gezondheid eronder; De
+# Mailregisseur staat boven de mailwachten. Alleen de plek op het organogram verandert, niet de groep van de agent.
+ORGANOGRAM_NAAST_ANGEL = "levenscoach"
+ORGANOGRAM_VAK_ONDER_NAAST = "Gezondheid"
+ORGANOGRAM_VAK_HOOFD = {"Mail": "mail-regisseur"}
+# Niet dagelijks (Mehdi): deze afdelingen staan onderaan apart, klein. Er wordt niets gewist.
+ORGANOGRAM_NIET_DAGELIJKS = ("organisatie", "unabo", "aankoop")
+
+
 def init_db():
     conn = sqlite3.connect(DB_PAD)
     conn.executescript(
@@ -229,6 +281,7 @@ def init_db():
         ("regie", "Regie", "Het overzicht, het gesprek met Mehdi en de voorstellen.", 10),
         ("h-architects", "H-Architects", "Het kantoor: contracten, dossiers, klanten.", 20),
         ("prive", "Privé", "Mehdi zelf: agenda, gegevens van de Mac, persoonlijke dossiers.", 30),
+        ("dagbundelaar", "Dagbundelaar", "Alles wat het dagboek van Mehdi voedt, De Dagbundelaar zelf en De Mehdi-agent.", 15),
     ):
         conn.execute("INSERT OR IGNORE INTO afdeling(naam, label, omschrijving, volgorde) VALUES(?,?,?,?)",
                      (naam, label, oms, volg))
@@ -239,6 +292,10 @@ def init_db():
                              ("prive", "INTEGER DEFAULT 0")):  # 1 = alleen zichtbaar voor beheer (Mehdi)
         if kolom not in bestaand:
             conn.execute(f"ALTER TABLE agent ADD COLUMN {kolom} {definitie}")
+    # Mehdi, 31-10-2026: alle agents van de Dagbundelaar op één plek, niets dubbel. Ze verhuizen naar de groep
+    # Dagbundelaar; geen kopie in hun oude groep. Deze lijst is de enige plek waar dat staat.
+    conn.executemany("UPDATE agent SET type='dagbundelaar', label=? WHERE naam=?",
+                     [(label, naam) for naam, label in DAGBUNDELAAR_AGENTS.items()])
     conn.commit()
     _gesprek_log_kolommen(conn)
     conn.close()
@@ -274,6 +331,19 @@ def md(tekst):
     except Exception:  # noqa: BLE001
         from html import escape
         return "<pre style='white-space:pre-wrap'>" + escape(tekst or "") + "</pre>"
+
+
+def md_klaargezet(tekst):
+    """Markdown die een agent klaarzette naar HTML, voor de pagina van die agent. Niet vertrouwd zoals md(): de tekst komt
+    uit bronnen (mail, berichten) via een model. Dus eerst ontsnapt (ruwe HTML wordt tekst), haken als entiteit (geen
+    links of afbeeldingen, dus geen javascript:-link), en elke regel blijft een regel (nl2br)."""
+    from html import escape
+    veilig = escape(tekst or "", quote=False).replace("[", "&#91;").replace("]", "&#93;")
+    try:
+        import markdown
+        return markdown.markdown(veilig, extensions=["nl2br", "sane_lists"])
+    except Exception:  # noqa: BLE001
+        return "<pre style='white-space:pre-wrap'>" + veilig + "</pre>"
 
 
 # ------------------------------------------------------------------ helpers ---
@@ -537,7 +607,9 @@ def bord():
     # Afdelingen in vaste volgorde, ook als ze (nog) geen agent hebben; onbekende types achteraan.
     volgorde = sorted(set(list(afd) + list(groepering)),
                       key=lambda n: (afd.get(n, {}).get("volgorde", 999), n))
-    groepering = {n: groepering.get(n, []) for n in volgorde}
+    # De oude subgroep Communicatie is sinds 31-10-2026 leeg (alles zit in Dagbundelaar): leeg niet meer tonen.
+    groepering = {n: groepering.get(n, []) for n in volgorde if n != "prive-communicatie" or groepering.get(n)}
+    volgorde = list(groepering)
     afdelingen = {n: afd.get(n, {"naam": n, "label": n, "omschrijving": ""}) for n in volgorde}
     open_voorstellen = db().execute(
         "SELECT v.*, a.label FROM voorstel v LEFT JOIN agent a ON a.naam=v.naam "
@@ -727,8 +799,8 @@ def api_gesprekken_zetten():
 # Een gesprek is een rij van een gespreksbron die geen chat is (D7 en E1, ontwerp dagvaststelling; Codex P3 en Q8 bij
 # fase 2): een mail, een Zoom-chat of een WhatsApp-gesprek per dag (whatsapp:<sha1 jid>:<dag>) telt niet; een
 # WhatsApp-oproep (whatsapp-oproep:) en een telefoonoproep wel. Zoals koppelingen/dagvaststelling.soort.
-GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
-CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
+GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon", "sms", "xelion")
+CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:", "sms:")
 
 
 def telt_als_gesprek(rij):
@@ -1918,6 +1990,8 @@ BRON_WACHTEN = (
     ("mail-info-harc", "Mail info H-Architects", "VM"), ("mail-hinv", "Mail H-Invest", "VM"),
     ("mail-melo", "Mail Melodie", "VM"), ("mail-prive", "Mail hotmail", "VM"),
     ("whatsapp-wacht", "WhatsApp", "laptop"), ("belwacht", "Telefoon iPhone", "laptop"),
+    ("sms-wacht", "Sms en iMessage", "laptop"), ("xelion-wacht", "Telefoon Xelion", "VM"),
+    ("youtube-wacht", "YouTube", "laptop"),
     ("icloud-wacht", "Foto's (alleen tijd en plaats)", "laptop"), ("dagbundelaar", "De Dagbundelaar zelf", "VM"),
 )
 BRON_DAGEN = 14
@@ -1942,8 +2016,11 @@ def _bron_dag_cellen(e):
         mailstand = "niet gelezen"
     wa = e.get("whatsapp") if isinstance(e.get("whatsapp"), dict) else {}
     tel = e.get("telefoon") if isinstance(e.get("telefoon"), dict) else {}
+    sms = e.get("sms") if isinstance(e.get("sms"), dict) else {}
+    xel = e.get("xelion") if isinstance(e.get("xelion"), dict) else {}
     standen = {"agenda": st.get("agenda"), "locatie": st.get("locatie"), "zoom": st.get("zoom"), "mail": mailstand,
-               "whatsapp": wa.get("stand"), "telefoon": tel.get("stand")}
+               "whatsapp": wa.get("stand"), "telefoon": tel.get("stand"), "sms": sms.get("stand"),
+               "xelion": xel.get("stand")}
     return {k: {"stand": str(v or "onbekend"), "kleur": bron_kleur(v)} for k, v in standen.items()}
 
 
@@ -1955,7 +2032,7 @@ def _bron_uit_tekst(tekst):
         return None
     over = {}
     for regel in deel[1].splitlines():
-        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon): (.+)$", regel.strip())
+        m = re.match(r"- (agenda|Zoom|locatie|mail|WhatsApp|telefoon|sms|Xelion): (.+)$", regel.strip())
         if m:
             over[m.group(1).lower()] = m.group(2).strip()
     if not over:
@@ -1968,7 +2045,8 @@ def _bron_uit_tekst(tekst):
         over["locatie"] = "niet gelezen"
     e = {"standen": {k: over.get(k) for k in ("agenda", "zoom", "locatie")},
          "mail": None if over.get("mail") in (None, "niet gelezen") else {"onvolledig": over["mail"] == "onvolledig"},
-         "whatsapp": {"stand": over.get("whatsapp")}, "telefoon": {"stand": over.get("telefoon")}}
+         "whatsapp": {"stand": over.get("whatsapp")}, "telefoon": {"stand": over.get("telefoon")},
+         "sms": {"stand": over.get("sms")}, "xelion": {"stand": over.get("xelion")}}
     return _bron_dag_cellen(e)
 
 
@@ -2020,7 +2098,20 @@ def bronnen_pagina():
              for x in dagen]
     rood = [w for w in wachten if w["kleur"] == "rood"]
     return render_template("bronnen.html", app_naam=APP_NAAM, wachten=wachten, rijen=rijen, rood=rood,
-                           kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon"))
+                           kolommen=("agenda", "locatie", "zoom", "mail", "whatsapp", "telefoon", "sms", "xelion"))
+
+
+def _laatste_ronde(ts):
+    """Wanneer de agent laatst iets meldde, in Brusselse tijd: '14:05' vandaag, anders '30-10 14:05'."""
+    try:
+        t = datetime.fromisoformat(ts)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        t = t.astimezone(ZoneInfo("Europe/Brussels"))
+        vandaag = datetime.now(ZoneInfo("Europe/Brussels")).date()
+        return t.strftime("%H:%M") if t.date() == vandaag else t.strftime("%d-%m %H:%M")
+    except Exception:
+        return ""
 
 
 # --- organogram: getekend uit de gegevens zelf (afdelingen, agents, levert_aan)
@@ -2034,11 +2125,36 @@ def organogram():
         a["levert_aan"] = _lijst(a["levert_aan"])
         s = st.get(a["naam"])
         a["toestand"] = "onbekend"
+        a["laatste"] = _laatste_ronde(s["ts"]) if s else "nog nooit"
         if s:
             leeftijd = leeftijd_min(s["ts"])
             a["toestand"] = toestand_met_cadans(a["naam"], a["cadans"], s["status"], leeftijd)
     klaar = conn.execute("SELECT voor, COUNT(*) n FROM klaarzet WHERE status='klaar' GROUP BY voor").fetchall()
-    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents,
+    # De groep Dagbundelaar in de vaste volgorde van DAGBUNDELAAR_AGENTS, met een lege plek voor wat nog niet bestaat.
+    per_naam = {a["naam"]: a for a in agents}
+    dagb = [per_naam.get(n) or {"naam": n, "label": label, "toestand": "onbekend", "laatste": "nog te bouwen", "leeg": True}
+            for n, label in DAGBUNDELAAR_AGENTS.items() if n in per_naam or mag_beslissen()]
+    dagb += [a for a in agents if a["type"] == "dagbundelaar" and a["naam"] not in DAGBUNDELAAR_AGENTS]
+    dagb_boven = [a for n in DAGBUNDELAAR_BOVEN for a in dagb if a["naam"] == n]
+    per = {a["naam"]: a for a in dagb}
+    in_vak = {n for _, namen in DAGBUNDELAAR_VAKKEN for n in namen}
+    vakken = [(vak, [per[n] for n in namen if n in per]) for vak, namen in DAGBUNDELAAR_VAKKEN]
+    rest = [a for a in dagb if a["naam"] not in in_vak and a["naam"] not in DAGBUNDELAAR_BOVEN]
+    if rest:
+        vakken.append(("Overig", rest))
+    dagb = [(vak, leden) for vak, leden in vakken if leden]
+    alle = {a["naam"]: a for a in agents}
+    naast = alle.get(ORGANOGRAM_NAAST_ANGEL)
+    vak_naast = next(((v, l) for v, l in dagb if v == ORGANOGRAM_VAK_ONDER_NAAST), None)
+    dagb = [(v, l) for v, l in dagb if v != ORGANOGRAM_VAK_ONDER_NAAST]
+    hoofd = {v: alle[n] for v, n in ORGANOGRAM_VAK_HOOFD.items() if n in alle}
+    verplaatst = {a["naam"] for a in [naast, *hoofd.values()] if a}
+    agents = [a for a in agents if a["naam"] not in verplaatst]
+    leeg_na_verplaatsen = {a["type"] for a in alle.values() if a["naam"] in verplaatst} - {a["type"] for a in agents}
+    niet_dagelijks = [x for x in afd if x["naam"] in ORGANOGRAM_NIET_DAGELIJKS]
+    afd = [x for x in afd if x["naam"] not in ORGANOGRAM_NIET_DAGELIJKS and x["naam"] not in leeg_na_verplaatsen]
+    return render_template("organogram.html", app_naam=APP_NAAM, afdelingen=afd, agents=agents, dagb=dagb, dagb_boven=dagb_boven,
+                           naast=naast, vak_naast=vak_naast, hoofd=hoofd, niet_dagelijks=niet_dagelijks,
                            klaar={r["voor"]: r["n"] for r in klaar}, mag_beslissen=mag_beslissen())
 
 
@@ -2069,7 +2185,16 @@ def detail(naam):
     # geen werkstatus. Daarom alleen voor beheer (admin/manager); de groep
     # agents ziet de kaart en de status, niet het verslag.
     verslag, onderwerpen = [], []
+    # Wat de agent als laatste klaarzette (De Mehdi-agent, 31-10-2026): zijn takenlijst en zijn laatste verslag, zodat
+    # zijn pagina toont wat hij voor Mehdi deed. Inhoud, dus net als het werkverslag alleen voor beheer.
+    klaar_taken = klaar_verslag = None
     if mag_beslissen():
+        klaar_taken = db().execute(
+            "SELECT titel, inhoud, ts FROM klaarzet WHERE van=? AND soort='taken' ORDER BY id DESC LIMIT 1", (naam,)
+        ).fetchone()
+        klaar_verslag = db().execute(
+            "SELECT titel, inhoud, ts FROM klaarzet WHERE van=? AND soort='verslag' ORDER BY id DESC LIMIT 1", (naam,)
+        ).fetchone()
         verslag = db().execute(
             "SELECT * FROM logboek WHERE naam=? ORDER BY id DESC LIMIT 300", (naam,)
         ).fetchall()
@@ -2089,6 +2214,7 @@ def detail(naam):
         werkwijze_html=md(a["werkwijze"]), kennis_html=md(a["kennis"]), versies=versies,
         bewerken=request.args.get("bewerken") == "1",
         gesprekken=gesprekken_for_detail(naam) if mag_beslissen() else [], mdf=md,
+        klaar_taken=klaar_taken, klaar_verslag=klaar_verslag, mdk=md_klaargezet,
     )
 
 
@@ -2518,7 +2644,8 @@ def api_agent():
         "rol=excluded.rol, mandaat=excluded.mandaat, mag=excluded.mag, "
         "grenzen=excluded.grenzen, cadans=excluded.cadans, tools=excluded.tools, "
         "eigenaar=excluded.eigenaar, actief=1, levert_aan=excluded.levert_aan, draait_op=excluded.draait_op",
-        (naam, p["label"], p.get("type", ""), p.get("rol", ""), p.get("mandaat", ""),
+        (naam, DAGBUNDELAAR_AGENTS.get(naam, p["label"]), "dagbundelaar" if naam in DAGBUNDELAAR_AGENTS else p.get("type", ""),
+         p.get("rol", ""), p.get("mandaat", ""),
          json.dumps(p.get("mag", [])), json.dumps(p.get("grenzen", [])),
          p.get("cadans", ""), json.dumps(p.get("tools", [])),
          p.get("eigenaar", "mehdi"), nu(), json.dumps(p.get("levert_aan", [])), p.get("draait_op", "VM")),

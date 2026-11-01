@@ -24,7 +24,9 @@ import boekhouding  # noqa: E402
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
 UIT = os.path.expanduser("~/appportal/mijnagents-data/export/Wispr-wacht")
 STAAT = os.path.expanduser("~/appportal/mijnagents-data/wispr-team.json")
-ag = bord.Agent("wispr-wacht")
+# 31-10-2026: eigen naam. Onder "wispr-wacht" overschreef deze serverronde (21:45) elke avond de stand van de
+# Wispr-wacht op de laptop (21:30), die het Dagboek voedt; zonder portaalsleutels stond die dan op fout.
+ag = bord.Agent("wispr-team-wacht")
 TOON = "--toon" in sys.argv
 
 

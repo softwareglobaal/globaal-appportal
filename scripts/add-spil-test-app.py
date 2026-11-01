@@ -18,7 +18,8 @@ Twee dingen voor wie SPIL bouwt:
   (authentik/common/oauth/constants.py: AMR_WEBAUTHN = "user"). Wachtwoord plus
   tweede factor geeft ["pwd", "mfa"].
 
-Geen tegel in de launcher (blank://blank) zolang de testserver niet draait.
+Tegel staat aan op verzoek van Shaniel (30-10-2026), ook al draait SPIL nog
+niet: tot dan komt het adres via de wildcard op de VM uit bij authentik.
 """
 from authentik.core.models import Application, Group, User
 from authentik.crypto.models import CertificateKeyPair
@@ -75,7 +76,7 @@ app, app_nieuw = Application.objects.get_or_create(
     slug=SLUG, defaults=dict(name=NAAM, provider=oidc))
 app.name = NAAM
 app.provider = oidc
-app.meta_launch_url = "blank://blank"
+app.meta_launch_url = BASIS
 app.save()
 print(f"app {SLUG}: {'aangemaakt' if app_nieuw else 'bijgewerkt'}")
 

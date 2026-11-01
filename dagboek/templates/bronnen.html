@@ -1,0 +1,30 @@
+{% extends "basis.html" %}
+{% block titel %}Bronnen · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>Bronnen</h1>
+  <a href="{{ url_for('overzicht') }}">alle dagen</a>
+  <span class="zacht klein">Waar alles vandaan komt, en wat het dagbestand van {{ d['naam'] }} zag.</span>
+</header>
+<main>
+  <div class="kaart">
+    <table class="lijst bronnen">
+      <tr class="kop"><td>Bron</td><td>Waar vandaan</td><td>Hoe vaak</td><td>Wat erin komt</td><td>{{ d['kort'] }}</td></tr>
+      {% for r in rijen %}
+      <tr><td><b>{{ r['naam'] }}</b></td><td class="zacht">{{ r['waar'] }}</td><td class="zacht">{{ r['vaak'] }}</td>
+        <td class="zacht">{{ r['wat'] }}</td>
+        <td>{% if r['dag'] %}<span class="stip {{ 'groen' if r['dag']['goed'] else 'rood' }}"></span>
+          {{ r['dag']['tekst'] }} <span class="zacht klein">({{ r['dag']['stand'] }})</span>
+          {% else %}<span class="leeg">nog niet vastgesteld</span>{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <p class="zacht klein">Groen: gelezen. Rood: niet gelezen, onbekend of nog niet aangesloten. Nooit de tekst van een bericht of mail.</p>
+</main>
+<style>
+  table.lijst{border-collapse:collapse;width:100%}
+  table.lijst td{padding:8px 6px;border-top:1px solid var(--rand);vertical-align:top}
+  tr.kop td{border-top:0;color:var(--zacht);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  @media (max-width:820px){table.bronnen td:nth-child(2),table.bronnen td:nth-child(3){display:none}}
+</style>
+{% endblock %}

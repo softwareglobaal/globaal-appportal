@@ -37,6 +37,7 @@ sys.path.insert(0, str(HIER))
 sys.path.insert(0, str(HIER / "koppelingen"))
 import agenda_wacht as W                      # noqa: E402
 import dagcontrole as DC                      # noqa: E402
+import sleutelbron                            # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 
 MODEL = os.environ.get("WEEKCONSOLIDATIE_MODEL", "claude-opus-5-5")
 MAX_TOKENS = 64000
@@ -133,20 +134,9 @@ def al_gedaan(week, map_=None):
 
 
 def sleutel_laden():
-    """ANTHROPIC_API_KEY uit ~/appportal/.env of ~/agents/.env. De waarde komt nooit in een log of bestand."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return True
-    for pad in (Path.home() / "appportal/.env", Path.home() / "agents/.env"):
-        try:
-            regels = pad.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            continue
-        for regel in regels:
-            k, _, v = regel.partition("=")
-            if k.strip().removeprefix("export ").strip() == "ANTHROPIC_API_KEY" and v.strip():
-                os.environ["ANTHROPIC_API_KEY"] = v.strip().strip('"').strip("'")
-                return True
-    return False
+    """ANTHROPIC_API_KEY alleen uit ~/appportal/.env (koppelingen/sleutelbron.py, T-0064). De waarde komt nooit in een
+    log of bestand."""
+    return sleutelbron.zet_anthropic()
 
 
 def _datum(s):
@@ -396,7 +386,7 @@ def main():
     if "--zonder-model" in sys.argv:
         return 0
     if not sleutel_laden():
-        print("geen ANTHROPIC_API_KEY in ~/appportal/.env of ~/agents/.env", file=sys.stderr)
+        print("geen ANTHROPIC_API_KEY in ~/appportal/.env", file=sys.stderr)
         if not droog:
             stand_schrijven(week, False, "geen ANTHROPIC_API_KEY", ronde)
         return 1

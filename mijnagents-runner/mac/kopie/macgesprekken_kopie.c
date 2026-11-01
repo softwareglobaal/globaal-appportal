@@ -6,6 +6,7 @@
 
        MacGesprekkenKopie whatsapp    berichten, oproepen en de betrokken contacten van WhatsApp
        MacGesprekkenKopie telefoon    oproepen van de iPhone en de contacten bij die nummers
+       MacGesprekkenKopie sms         sms en iMessages uit Messages: per bericht gesprek, tijd, richting en dienst
 
    Venster: de laatste VENSTER_DAGEN dagen (de runner leest er hoogstens zestig van). De vragen lopen in een
    leestransactie over de bron, dus met de WAL erbij (Codex P2). Het resultaat staat eerst in het geheugen en gaat
@@ -54,6 +55,10 @@ static const Bron TELEFOON[] = {
     {"oproepen", "Library/Application Support/CallHistoryDB/CallHistory.storedata"},
     {"contacten", WA "ContactsV2.sqlite"},
 };
+static const Bron SMS[] = {
+    {"berichten", "Library/Messages/chat.db"},
+    {"contacten", WA "ContactsV2.sqlite"},
+};
 
 /* Alleen deze kolommen verlaten de bron. ZSTANZAID alleen van de melding van een oproep (soort 59): die wijst het
    gesprek van de oproep aan. Contacten alleen als ze bij een gesprek, oproep of nummer van het venster horen.
@@ -98,9 +103,32 @@ static const char TELEFOON_VRAGEN[] =
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD "
     "  WHERE ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime')) AS waarde;";
 
+/* Sms en iMessage (31-10-2026): nooit de kolommen text of attributedBody, geen bijlagen. Alleen gewone berichten
+   (item_type 0) zonder reactie (associated_message_type 0). Messages bewaart de tijd in nanoseconden sinds 2001
+   (vroeger in seconden); de kopie zet ze om naar seconden, zoals Core Data. Contacten alleen bij de nummers van het
+   venster, zoals bij de telefoon. */
+#define SMS_TIJD "(CASE WHEN m.date > 1000000000000 THEN m.date / 1000000000.0 ELSE m.date END)"
+static const char SMS_VRAGEN[] =
+    "CREATE TABLE BERICHT AS SELECT j.chat_id AS gesprek, " SMS_TIJD " AS datum, m.is_from_me AS van_mij, "
+    "  m.service AS dienst FROM berichten.message m JOIN berichten.chat_message_join j ON j.message_id = m.ROWID "
+    "  WHERE COALESCE(m.item_type, 0) = 0 AND COALESCE(m.associated_message_type, 0) = 0 "
+    "  AND (m.date >= %.0f * 1000000000.0 OR (m.date < 1000000000000 AND m.date >= %.0f));"
+    "CREATE TABLE GESPREK AS SELECT ROWID AS pk, chat_identifier AS ident, style AS soort, display_name AS naam "
+    "  FROM berichten.chat WHERE ROWID IN (SELECT gesprek FROM main.BERICHT);"
+    "CREATE TABLE DEELNEMER AS SELECT j.chat_id AS gesprek, h.id AS adres FROM berichten.chat_handle_join j "
+    "  JOIN berichten.handle h ON h.ROWID = j.handle_id WHERE j.chat_id IN (SELECT pk FROM main.GESPREK);"
+    "CREATE TEMP TABLE nummers AS SELECT DISTINCT " NORM("adres") " AS n FROM main.DEELNEMER "
+    "  WHERE length(adres) >= 6 AND instr(adres, '@') = 0;"
+    "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
+    "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
+    "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
+    "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(" SMS_TIJD ") FROM berichten.message m "
+    "  WHERE COALESCE(m.item_type, 0) = 0) AS waarde;";
+
 static const Set SETS[] = {
     {"whatsapp", WHATSAPP, sizeof WHATSAPP / sizeof *WHATSAPP, WHATSAPP_VRAGEN},
     {"telefoon", TELEFOON, sizeof TELEFOON / sizeof *TELEFOON, TELEFOON_VRAGEN},
+    {"sms", SMS, sizeof SMS / sizeof *SMS, SMS_VRAGEN},
 };
 
 /* Een map onder dirfd openen zonder symlink te volgen; maak ze aan (0700) als dat mag. eigen: de map moet van
@@ -276,7 +304,7 @@ int main(int argc, char *argv[]) {
     for (size_t i = 0; argc == 2 && i < sizeof SETS / sizeof *SETS; i++)
         if (strcmp(argv[1], SETS[i].naam) == 0) set = &SETS[i];
     if (set == NULL) {
-        fprintf(stderr, "Gebruik: MacGesprekkenKopie whatsapp|telefoon\n");
+        fprintf(stderr, "Gebruik: MacGesprekkenKopie whatsapp|telefoon|sms\n");
         return EX_USAGE;
     }
     umask(0077);
@@ -349,7 +377,7 @@ int main(int argc, char *argv[]) {
     unsigned char *buf = NULL;
     sqlite3_int64 n = 0;
     if (strcmp(geheel, "ok") == 0) {
-        char vragen[sizeof WHATSAPP_VRAGEN + sizeof TELEFOON_VRAGEN + 64];
+        char vragen[sizeof WHATSAPP_VRAGEN + sizeof TELEFOON_VRAGEN + sizeof SMS_VRAGEN + 64];
         double begin = (double)time(NULL) - APPLE_EPOCH - VENSTER_DAGEN * 86400.0;
         snprintf(vragen, sizeof vragen, set->vragen, begin, begin);
         /* Een leestransactie over alle bronnen: een samenhangend beeld, met de WAL erbij. Een vraag die faalt, wijst

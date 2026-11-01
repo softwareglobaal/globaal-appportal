@@ -42,6 +42,8 @@ SELECTIE_RUST_MIN = 45
 # Hetzelfde vangnet als verslag_basis.ZONDER_TAKEN_UUR; de geïsoleerde Mac-starter kan de VM-module niet importeren.
 ZONDER_TAKEN_UUR = 6
 SELECTIE_STAAT = os.path.expanduser("~/.config/mijnagents/icloud_selecties")
+# Redenen waarbij de wacht zelf faalde (export of omzetting); al de rest is een taak die op gegevens wacht.
+WACHTFOUTEN = frozenset({"exportresultaat_ongeldig", "omzetting_mislukt", "fotolevering_gedeeltelijk"})
 DAG = None
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
@@ -726,11 +728,24 @@ def taken():
             continue
         if not tkn:
             jpeg_kopieen(doel)
+            # Afvinken pas als elke geleverde HEIC een JPG heeft: de voorbereider maakt een hersteltaak maar één keer aan
+            # (overleg W4 P3, 30-10-2026, Codex X4), dus een mislukte omzetting moet de taak open houden.
+            if any(not os.path.isfile(jpg) or os.path.getsize(jpg) == 0 for jpg in (
+                    os.path.join(doel, os.path.splitext(f["export"])[0] + ".jpg") for f in binnen
+                    if str(f.get("export") or "").lower().endswith(".heic"))):
+                blokkeer(it, "omzetting_mislukt")
+                continue
         taak_opgepakt(it["id"])
         gedaan += 1
     if regels:
         bord("/api/logboek", {"regels": regels})
-    hartslag("fout" if open_ else "klaar", taak="fototaken wachten op aanvulling" if open_ else "fototaken volledig geleverd",
+    # 31-10-2026: alleen een fout van de wacht zelf (export of omzetting) zet hem op fout. Een taak zonder venster, zonder
+    # foto's op die plek of die nog rust nodig heeft, wacht op gegevens van de voorbereider: de taak blijft open en staat
+    # in het detail, maar de Fotowacht leverde wel (anders stond hij weken rood door oude werfverslagtaken).
+    eigen = sorted(r for r in redenen if r in WACHTFOUTEN)
+    taak = ("fotoaanvoer mislukt: " + ", ".join(eigen) if eigen
+            else f"{open_} fototaak/taken wachten op gegevens van de voorbereider" if open_ else "fototaken volledig geleverd")
+    hartslag("fout" if eigen else "klaar", taak=taak,
              detail=json.dumps({"gedaan": gedaan, "open": open_, "redenen": redenen}, sort_keys=True))
     return {"gedaan": gedaan, "open": open_, "redenen": redenen}
 

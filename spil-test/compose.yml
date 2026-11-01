@@ -1,0 +1,56 @@
+# SPIL (test) op de AppPortal-VM: alleen testgegevens, geen echte mail of dossiers.
+#
+# Dit bestand staat bewust in de stack-repo en niet in de SPIL-repo. Wie het
+# compose-bestand bepaalt, kan de Docker-socket of de schijf van de VM aankoppelen;
+# de SPIL-repo levert dus alleen de code en de Dockerfile. Zie README.md hiernaast.
+name: spil-test
+
+services:
+  app:
+    build:
+      context: /home/ubuntu/spil-test/code
+    restart: unless-stopped
+    env_file: /home/ubuntu/spil-test/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "172.17.0.1:8470:8000"
+    volumes:
+      - /home/ubuntu/spil-test/secrets:/run/secrets:ro
+    networks: [binnen, uit]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 1.0
+    pids_limit: 512
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: /home/ubuntu/spil-test/.env
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks: [binnen]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spil -d spil"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    mem_limit: 1g
+    cpus: 0.5
+    logging: *logging
+
+networks:
+  # Geen uitgang naar buiten: alleen de app kan bij de database.
+  binnen:
+    internal: true
+  uit: {}
+
+volumes:
+  db: {}

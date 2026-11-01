@@ -180,6 +180,7 @@ cutover niet geraakt:
 | `agents.globaal.be` | Agents-besturingscentrum, stack-app `app-agents:3020`; `/seo-team` toont het statische SEO-teambord. Kaart-checklist en hartslag-contract: `agents/README.md` | forward auth (groepen `admin`, `manager`, `agents`); `POST /agent-status` passeert met eigen token. Let op (gemeten 26-10-2026): ook `POST /ingestie/aanleveren` en `POST /website-aanvraag` passeren zonder login (`52-agents.conf.template`); de eerste is een open punt bij Mehdi |
 | `chunker.globaal.be` | De chunker van Mehdi (repo `softwareglobaal/chunker-van-mehdi`, opvolger van de Chunker op agents.globaal.be), host-dienst `chunker-van-mehdi` op `http://172.17.0.1:8460`; eigen database `kennis_mehdi` op de host-Postgres. Uitrol en grenzen: `ONTWERP.md` in die repo | forward auth (groepen `admin`, `manager`), zonder uitzonderingen; ook de upload loopt door de login |
 | `locatie.globaal.be` | Locatielogboek, stack-app `app-locatie:3031` en ontvanger `app-locatie-tracker` (buiten poort 5000). Sinds 03-10-2026 meet alleen de tracker in de auto; de telefoon (OwnTracks) is uit gebruik. `/api/beweging` geeft direct een kort geldig oordeel per bron aan De Agendawacht, zonder coördinaten; de toekomstige GL320MG blijft uit tot een fysieke proef. Bronbeleid en beheer: `locatie/README.md` (handleiding v2.4) | forward auth (groep `locatie`, bewust niet `admin`/`manager`); alleen `POST /pub`, `/gebeurtenis` en `/gezondheid` passeren, met eigen wachtwoord (`LOCATIE_WACHTWOORD`) |
+| `dagboek.globaal.be` | Dagboek, stack-app `app-dagboek:3150` (30-10-2026): wat Mehdi elke dag deed, alleen uit de dagbestanden van De Dagbundelaar (`mijnagents-data/dagboek`, read-only gemount). Zie `dagboek/README.md` | forward auth (groep `locatie`, alleen Mehdi), app toetst `DAGBOEK_GROUPS` zelf |
 | `factorydocs/inventory/finance/maintenance.globaal.be` | `app-*:300x` (stubs) | forward auth |
 | `n8n.globaal.be` | `n8n-n8n-1:5678` | gewone doorsturing (n8n's eigen login) |
 | `data.globaal.be` | *(geen server-blok)* | n.v.t. - vervangen door `omv.globaal.be` |
@@ -3240,3 +3241,32 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
   globaal-regie uit: een push naar main daar is productie, zoals bij prive. Het haalt alleen `main` binnen, alleen met
   `--ff-only` en alleen uit een schone checkout, bouwt alleen als HEAD veranderde, doet een starttoets en `/healthz`,
   en valt bij falen terug op `appportal-regie:vorige`.
+
+### 14.18 Ai Angel (de Mehdi-agent): taken uit de dagbundel *(live sinds 31-10-2026)*
+
+- **Naam**: Ai Angel op het bord en in zijn teksten (keuze van Mehdi, 31-10-2026). De technische naam blijft
+  `mehdi-agent`: adres `/agent/mehdi-agent`, runner `mehdi_agent.py`, klaarzet-sleutels, planning. Het label komt uit
+  `DAGBUNDELAAR_AGENTS` in `mijnagents/app.py`. Via WhatsApp: "Ai Angel, ..." (De Bode herkent naam en label).
+
+- **Wat**: hostrunner `mijnagents-runner/mehdi_agent.py` (werkwijze `werkwijze/mehdi-agent.md`, ontwerp
+  `mijnagents-runner/docs/ontwerp-mehdi-agent.md`). Leest alleen de dagbundel (de dagbestanden van De Dagbundelaar in
+  `mijnagents-data/dagboek`, vandaag en twee dagen terug), plus wat Mehdi tegen de agent zei (tabel `gesprek`, alleen
+  lezend), de collega's uit kern en de agents op het bord. Claude (`claude-opus-5-5`, strikt JSON-schema) maakt de taken;
+  de runner controleert ze zonder model (bron letterlijk in de bundel, ontvanger bestaat, privé blijft bij Mehdi).
+- **Uitvoer**: klaarzet voor Mehdi, `soort: taken` (lijst van de dag, uniek `mehdi-agent:taken:JJJJ-MM-DD`) en
+  `soort: verslag` ('s ochtends `Te doen vandaag`, 's avonds `Avondoverzicht` met een tip). Staat in
+  `mijnagents-data/mehdi-agent/staat.json`. Verstuurt nooit zelf iets; concepten stuurt Mehdi zelf.
+- **Waar Mehdi het ziet**: op de pagina van de agent, https://mijnagents.globaal.be/agent/mehdi-agent, blok "Laatst
+  klaargezet" (de nieuwste takenlijst en het nieuwste verslag van die agent, alleen beheer). Dat blok staat op elke
+  agentpagina met een klaargezet item van soort `taken` of `verslag`; `md_klaargezet` in `mijnagents/app.py` ontsnapt
+  ruwe HTML en markdown-links, want de tekst komt uit bronnen via een model. Grendel:
+  `mijnagents/test_klaargezet_pagina.py` (in de Docker-build). De Bode noemt het verslag in zijn ochtend- en
+  avondbericht ("verslag van De Mehdi-agent ... alles op het bord").
+- **Ritme**: `planning/mehdi-agent.cron`, elk uur op :20; de agent draait alleen op de Brusselse uren van
+  `MEHDI_AGENT_UREN` (standaard 7, 10, 13, 16, 19, 22) en roept Claude tussendoor alleen aan als de bundel of een bericht
+  van Mehdi veranderde. Zetten met `planning/mehdi_agent_cron_zetten.py --zet`, pas na Mehdi's ja en een gecontroleerde
+  eerste ronde (stappen in het ontwerp). Grendels: `mijnagents-runner/tests/test_mehdi_agent.py`.
+- **Stand 31-10-2026**: droog geprobeerd op de VM met de echte dagbestanden (8 taken, geen zonder bron, 19.064
+  tokens), daarna live gezet op Mehdi's ja (workflow vm, run 41240626256): kaart met de generator, eerste ronde met
+  alle 14 normen ok, planning gezet en nagelezen. Het driehoeksoverleg
+  (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`) kijkt achteraf na.

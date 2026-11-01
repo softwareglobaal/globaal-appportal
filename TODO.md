@@ -3,6 +3,29 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Ai Angel, de Mehdi-agent (31-10-2026)
+
+- [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
+      avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
+- [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
+      agent), geen enkele zonder bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0.
+- [ ] Driehoeksoverleg Ai Angel, achteraf (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
+      Claude 1 op de laptop samen met dat van het Dagboek (`docs/driehoeksoverleg-starten-voor-claude-1.md`).
+- [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
+      eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).
+      De lijst staat op mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
+- [ ] Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
+      mij doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
+      Werfverslagvoorbereider al doet; eerst een dag meten welke agents taken krijgen, dan de ontvangers een voor een.
+      Meting 01-11-2026 (ochtendronde): 9 open, 7 voor Mehdi, 0 voor een collega, 2 voor een agent, beide voor De
+      Werfverslagvoorbereider, die elk werfbezoek uit de agenda al vanzelf volgt. Dus eerst niets dubbel: de werkwijze
+      zegt sinds 01-11 dat Ai Angel geen taak zet voor werk dat een agent vanzelf doet. Echt doorgeven alleen voor werk
+      dat geen agent vanzelf oppakt (punt M10 van het driehoeksoverleg).
+- [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
+      antwoord wacht, afspraken van morgen, zes keer per dag.
+- [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.
+- [ ] Later, na Mehdi's ja: runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
+
 ## Pipedrive-backup (19-10-2026)
 
 - [x] Nachtelijke backup van alle vijf administraties: VM + S3 (gegevens) en
@@ -1286,3 +1309,12 @@ subdiscipline-statistieken.
 - [ ] Kennis unab.md aanvullen met de antwoorden die Office dagelijks geeft
 - [ ] Office-collega's in Authentik-groep `whatsapp`
 - [ ] Sjablonen voor berichten buiten het 24-uursvenster
+
+## Wachten van De Dagbundelaar nagekeken (2026-10-31)
+
+- [x] Fotowacht niet meer rood door werfverslagtaken die op gegevens wachten (icloud_wacht.py)
+- [x] Wispr-wacht: de serverwacht heet nu wispr-team-wacht, overschrijft de laptopwacht niet meer
+- [x] Sms-wacht, Belwacht Xelion en YouTube-wacht gebouwd; Dagbundelaar, weekoverzicht, Dagboek en /bronnen tonen ze
+- [x] VM live 01-11-2026 08:07: pull, apps herbouwd, drie wachten op het bord, cron xelion_wacht.py elk uur
+- [ ] Laptop: docs/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
+- [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling

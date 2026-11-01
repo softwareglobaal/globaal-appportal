@@ -42,6 +42,9 @@ dat niet. Is de laptop niet zichtbaar voor een cloud-sessie, stuur dan geen
 toestemmingskaart (die toont dan alleen Deny), maar schrijf een stappendocument in
 de repo dat Mehdi aan Claude 1 op de laptop geeft. Voorbeeld:
 `mijnagents-runner/docs/laptop-inrichten-voor-de-dagbundelaar.md`.
+Alle toestellen van Mehdi (iPhone, laptop) staan in het Engels: schrijf menunamen in
+stappendocumenten in het Engels, precies zoals op het scherm (Settings, System Settings,
+Privacy & Security, Full Disk Access).
 
 ## Git-workflow: hoe Claude pullt en pusht
 

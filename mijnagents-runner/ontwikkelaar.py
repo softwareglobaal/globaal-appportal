@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 
 NAAM = "ontwikkelaar"
 ag = bord.Agent(NAAM)
@@ -46,6 +47,7 @@ def laad_env(pad):
 
 
 laad_env("~/agents/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def code_bundel():

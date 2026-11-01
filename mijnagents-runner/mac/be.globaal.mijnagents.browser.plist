@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>be.globaal.mijnagents.browser</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/mehdichegini/.claude/tools/mijnagents/browser_wacht.py</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Minute</key><integer>40</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
+  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
+</dict>
+</plist>
