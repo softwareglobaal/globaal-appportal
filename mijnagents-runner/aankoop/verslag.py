@@ -87,7 +87,7 @@ def tegengehouden(soorten):
 
 def maak(vraag, gegevens, resultaat, koersdatum, gezien_op, niet_nagekeken=(), verbruik=None):
     """Het verslag als markdown. niet_nagekeken: de rijen van onderzoek.alleen_gezien, nooit aanbevolen.
-    verbruik: {"tokens": ..., "kosten": ...} voor de controleregel onderaan (overleg 9, X3)."""
+    verbruik: {"tokens": ...} voor de controleregel onderaan (overleg 9, X3; sinds overleg 14 via het abonnement)."""
     g = gegevens or {}
     r = resultaat
     regels = []
@@ -132,6 +132,6 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op, niet_nagekeken=(), v
     regels += ["", f"Controle: {len(r.get('goed', [])) + len(r.get('niet_compatibel', []))} aanbiedingen doorstonden de "
                f"controle, {len(afgewezen)} afgewezen (zonder link, prijs of gelezen pagina; details in het werkverslag). "
                f"Prijzen gezien op {gezien_op}; omgerekend met de ECB-koersen van {koersdatum or 'onbekend'}. "
-               + (f"Verbruik: {verbruik['tokens']} tokens, ongeveer {verbruik['kosten']} dollar. " if verbruik else "")
+               + (f"Verbruik: {verbruik['tokens']} tokens via het Claude-abonnement, geen API-kost. " if verbruik else "")
                + "Ik kocht, bood en contacteerde niets."]
     return "\n".join(regels)

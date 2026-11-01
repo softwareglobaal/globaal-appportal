@@ -98,8 +98,11 @@ runners = sorted(p for p in RUNNER.rglob("*.py") if "tests" not in p.relative_to
                  and p != KOPPELINGEN / "sleutelbron.py"
                  and ANTHROPIC.search(t := p.read_text(encoding="utf-8")) and ENV_LADER.search(t))
 namen = {str(p.relative_to(RUNNER)) for p in runners}
+# prijsonderzoeker.py staat er sinds overleg 14 (01-11-2026) niet meer bij: die werkt met het Claude-abonnement en
+# mag de API-sleutel juist niet laden (tests/test_aankoop_prijs.py houdt dat vast).
 verwacht = {"archivaris.py", "contracten_agent.py", "fathom_wacht.py", "levenscoach.py", "ontwikkelaar.py",
-            "prijsonderzoeker.py", "regisseur.py", "weekconsolidatie.py", "werfverslag_proef.py"}
+            "regisseur.py", "weekconsolidatie.py", "werfverslag_proef.py"}
+check("De Prijsonderzoeker gebruikt geen API-sleutel meer", "prijsonderzoeker.py" not in namen)
 check("de proef vindt de runners (anders meet ze niets)", verwacht <= namen, str(sorted(verwacht - namen)))
 for p in runners:
     naam, bron = str(p.relative_to(RUNNER)), p.read_text(encoding="utf-8")

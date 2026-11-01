@@ -1,38 +1,47 @@
-"""Het zoekwerk van De Prijsonderzoeker: een vraag naar het taalmodel met webzoeken en webpagina's lezen,
-en het antwoord terug als gegevens die aanbod.verwerk() kan keuren.
+"""Het zoekwerk van De Prijsonderzoeker: een vraag naar Claude met webzoeken en webpagina's lezen, en het antwoord
+terug als gegevens die aanbod.verwerk() kan keuren.
 
-Een grendel die niet van het model afhangt: een aanbod telt alleen als het model die pagina in deze ronde
-echt geopend heeft (een web_fetch-resultaat met die url). Een link uit een zoekresultaat alleen, of een link
-die het model zelf samenstelt, gaat niet in het verslag. Daarom de basisversies van de servertools: hun
-resultaatblokken dragen de url van de gelezen pagina, zodat de code dat kan nagaan.
+Sinds overleg 14 (01-11-2026) via Mehdi's Claude-abonnement, nooit via de API: `claude -p` op de VM met het token uit
+`claude setup-token` (TOKEN_BESTAND). De omgeving van het subproces is een witte lijst zonder API-sleutel; meldt Claude
+Code toch een andere bron dan het abonnement, of start het extra betaald verbruik, dan stopt de ronde meteen.
+
+Een grendel die niet van het model afhangt: een aanbod telt alleen als het model die pagina in deze ronde echt las met
+de eigen leestool (aankoop/leesserver.py). Die geeft het model precies de tekst die ze ook in het leeslog zet, en dat
+leeslog is `gelezen` voor aanbod.py. Een link uit een zoekresultaat alleen gaat nooit in het verslag.
 """
 import json
 import os
+import queue
 import re
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
 import time
 from urllib.parse import urlsplit, urlunsplit
 
-MODEL = os.environ.get("PRIJS_MODEL", "claude-opus-5-5")
-ZOEK_TOOL = os.environ.get("PRIJS_ZOEK_TOOL", "web_search_20250305")
-LEES_TOOL = os.environ.get("PRIJS_LEES_TOOL", "web_fetch_20250910")
-# Plafond per vraag, over alle beurten samen (Codex X7): zoekopdrachten, gelezen pagina's, tokens (vraag K4 aan
-# Mehdi, 30-10-2026) en hervattingen van een gepauzeerde beurt. De tijd komt als deadline van de ronde (Codex X6).
-# Gemeten 30-10-2026: de eerste echte vraag gebruikte 4,27 miljoen tokens met 12/15 en zonder paginagrens. Winkelpagina's
-# zijn groot en binnen een beurt leest het model bij elke zoekstap alles opnieuw. Daarom een grens per gelezen pagina
-# en minder zoek- en leesbeurten; het tokenplafond geldt tussen de beurten.
-# Gemeten 01-11-2026: 404.791 tokens in een beurt, en bij 6.000 tokens viel de prijs van Vanden Borre van de pagina.
-# Overleg 9 (G2, X5): 10.000 tokens per pagina, zes zoek- en zes leesbeurten (vijf aanbodpagina's en een
-# specificatiebron), en een takenbudget dat het model zelf ziet (X3): binnen een aanvraag is max_uses de harde grens.
+HIER = os.path.dirname(os.path.abspath(__file__))
+CLAUDE = os.path.expanduser(os.environ.get("PRIJS_CLAUDE", "~/.local/bin/claude"))
+MODEL = os.environ.get("PRIJS_MODEL", "opus")      # een alias, geen modelcode die kan verdwijnen (overleg 14, X1)
+TOKEN_BESTAND = os.path.expanduser(os.environ.get("PRIJS_TOKEN_BESTAND", "~/.config/prijsonderzoeker/claude-token"))
 MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
-MAX_TOKENS = int(os.environ.get("PRIJS_MAX_TOKENS", "300000"))
-TAAK_BUDGET = int(os.environ.get("PRIJS_TAAK_BUDGET", "250000"))     # 0: zonder takenbudget
-BETA_BUDGET = "task-budgets-2026-03-13"
-# Dollar per miljoen tokens (input, output), voor de kost in het werkverslag (overleg 9, X3); prompt caching staat niet
-# aan (G3 afgewezen), dus de cachetellers horen nul te zijn.
-PRIJZEN = {"claude-opus-5-5": (4.0, 20.0), "claude-opus-5": (5.0, 25.0)}
-ZOEK_DOLLAR = 0.01             # webzoeken kost 10 dollar per duizend zoekopdrachten (Codex controle 10)
+MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "30"))   # assistentberichten; --max-turns bestaat niet (K4)
+ZOEK = "WebSearch"
+LEES = "mcp__lees__lees_pagina"
+# Alleen dit gaat mee naar het subproces; ANTHROPIC_API_KEY en elke andere sleutel dus nooit (overleg 14, K1).
+OMGEVING = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TMPDIR")
+
+
+class GeenAbonnement(Exception):
+    """De vraag stopt zonder Claude: geen geldig abonnementstoken, of Claude Code gebruikt iets anders dan het
+    abonnement (een API-sleutel, extra betaald verbruik). Er is nooit een terugval naar de API."""
+
+
 # Een prijs in "gezien, niet nagekeken" moet haar munt in het citaat tonen (Codex controle 10).
 MUNTTEKENS = {"EUR": ("€", "eur", "euro"), "USD": ("$", "usd"), "GBP": ("£", "gbp"), "CHF": ("chf",),
               "PLN": ("zł", "pln"), "SEK": ("sek", "kr"), "DKK": ("dkk", "kr")}
@@ -50,8 +59,7 @@ def _munt_bij_bedrag(prijs, munt, citaat):
             if bedrag_op_pagina(prijs, m.group(1) or m.group(2)):
                 return True
     return False
-MAX_HERVATTEN = 6
-RESERVE_MODEL = "claude-opus-5"     # het model dat De Ontwikkelaar op de VM gebruikt (overleg K5)
+
 
 VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, met deze velden:
 {
@@ -59,7 +67,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
   "aannames": ["wat je aannam omdat het niet in de vraag stond"],
   "eisen": ["elke andere eis waar een aanbod aan moet voldoen, kort"],
   "aanbiedingen": [
-    {"titel": "exacte productnaam en variant", "url": "de pagina die je met web_fetch las",
+    {"titel": "exacte productnaam en variant", "url": "de pagina die je met lees_pagina las",
      "modelcode": "de volledige modelcode of het typenummer zoals het op de aanbodpagina staat, of null",
      "winkel": "naam", "land": "ISO-landcode van de verkoper, bv. BE, DE, US",
      "soort": "nieuw | refurbished | tweedehands | veiling",
@@ -76,7 +84,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
      "waarom": "een korte zin: waarom dit aanbod, of wat eraan schort"}
   ],
   "niet_nagekeken": [{"titel": "product", "url": "de link uit een zoekresultaat", "prijs": null, "munt": "EUR",
-                      "citaat": "letterlijk stuk uit dat zoekresultaat met de prijs, of null",
+                      "citaat": "de titel van dat zoekresultaat als de prijs daarin staat, anders null",
                       "reden": "waarom niet nagekeken: pagina niet leesbaar, afgekapt, of geen leesbeurt meer"}],
   "niet_gevonden": ["wat je zocht en niet vond, met waar je zocht"],
   "vervolgvraag": "een gebundelde vraag als iets beslissends ontbreekt (bestemming, firma of privé), anders null"
@@ -85,8 +93,8 @@ Regels voor de JSON: prijs exact zoals op de pagina, als getal in de munt van de
 pagina een prijs zonder btw toont, null als je het niet weet; verzending null als de pagina het niet zegt; bij een
 veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 als de voorwaarden geen vaste kosten
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
-btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met web_fetch las en de prijs daar zag.
-Elk citaat in bewijs en compatibiliteit kopieer je letterlijk van een pagina die je met web_fetch las; zonder citaat
+btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met lees_pagina las en de prijs daar zag.
+Elk citaat in bewijs en compatibiliteit kopieer je letterlijk van een pagina die je met lees_pagina las; zonder citaat
 telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel. Een
 eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en
 citeer je de tekst waaruit dat blijkt. Netspanning en netfrequentie staan zelden op een winkelpagina: zoek en lees dan
@@ -96,12 +104,6 @@ komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina n
 aanbevolen."""
 # Namen gaan nooit naar buiten, ook niet uit de werkwijze (Codex X4, ronde 2).
 NAMEN = re.compile(r"\b(?:Mehdi(?:\s+Chegini)?|Chegini)\b")
-
-
-def _veld(obj, naam, standaard=None):
-    if isinstance(obj, dict):
-        return obj.get(naam, standaard)
-    return getattr(obj, naam, standaard)
 
 
 def schoon_url(url):
@@ -116,27 +118,6 @@ def schoon_url(url):
     host = host[4:] if host.startswith("www.") else host
     schema = "https" if d.scheme.lower() in ("http", "https") else d.scheme.lower()   # http en https zijn dezelfde pagina
     return urlunsplit((schema, host, d.path.rstrip("/"), d.query, ""))
-
-
-def _paginatekst(inhoud):
-    """De tekst van een gelezen pagina (document met een tekstbron); leeg voor een PDF of een onbekende vorm."""
-    document = _veld(inhoud, "content")
-    bron = _veld(document, "source")
-    data = _veld(bron, "data")
-    return data if _veld(bron, "type") == "text" and isinstance(data, str) else ""
-
-
-def gelezen_paginas(blokken):
-    """{url: tekst} van de pagina's die het model in deze beurten echt las (geslaagde web_fetch-resultaten)."""
-    uit = {}
-    for b in blokken or []:
-        if _veld(b, "type") != "web_fetch_tool_result":
-            continue
-        inhoud = _veld(b, "content")
-        url = schoon_url(_veld(inhoud, "url")) if _veld(inhoud, "type") == "web_fetch_result" else ""
-        if url:
-            uit[url] = uit.get(url, "") + _paginatekst(inhoud)
-    return uit
 
 
 def alleen_gelezen(aanbiedingen, gelezen):
@@ -157,31 +138,6 @@ def alleen_gelezen(aanbiedingen, gelezen):
             a["foto"] = None
         goed.append(a)
     return goed, weg
-
-
-def zoekresultaten(blokken):
-    """{url: tekst} van de zoekresultaten van deze ronde: de titel en wat het model er letterlijk uit citeerde. De
-    samenvatting van een zoekresultaat zelf is versleuteld; een prijs telt dus alleen als ze in de titel of in een
-    citaat bij die url staat (overleg 9, X4)."""
-    uit = {}
-    for b in blokken or []:
-        if _veld(b, "type") == "web_search_tool_result" and isinstance(_veld(b, "content"), list):
-            for r in _veld(b, "content"):
-                url = schoon_url(_veld(r, "url"))
-                if url and _veld(r, "type") == "web_search_result":
-                    uit[url] = uit.get(url, "") + " " + str(_veld(r, "title") or "")
-        for c in (_veld(b, "citations") or []) if _veld(b, "type") == "text" else []:
-            url = schoon_url(_veld(c, "url"))
-            if _veld(c, "type") == "web_search_result_location" and url in uit:
-                uit[url] += " " + str(_veld(c, "cited_text") or "")
-    return uit
-
-
-def leesbeurten(blokken):
-    """(geslaagd, mislukt): de web_fetch-resultaten van deze ronde, voor het werkverslag (overleg 9, X3)."""
-    soorten = [_veld(_veld(b, "content"), "type") for b in blokken or [] if _veld(b, "type") == "web_fetch_tool_result"]
-    geslaagd = soorten.count("web_fetch_result")
-    return geslaagd, len(soorten) - geslaagd
 
 
 def alleen_gezien(items, zoek, opgenomen=()):
@@ -239,92 +195,271 @@ def opdracht(werkwijze, vraag, vandaag, vaste_eisen=()):
     eisen = ("\n\nVASTE EISEN (beoordeel elk aanbod hierop, met precies deze tekst als sleutel): " + "; ".join(vaste_eisen)
              if vaste_eisen else "")
     gebruiker = (f"Vandaag is {vandaag}. Zoek op het web (minstens drie verschillende bronsoorten waar dat kan) en "
-                 f"lees elke aanbodpagina met web_fetch voor je ze opneemt.{eisen}\n\nPRIJSVRAAG:\n{vraag}")
+                 f"lees elke aanbodpagina met lees_pagina voor je ze opneemt.{eisen}\n\nPRIJSVRAAG:\n{vraag}")
     return systeem, gebruiker
 
 
-def _gebruikt(blokken, naam):
-    return sum(1 for b in blokken if _veld(b, "type") == "server_tool_use" and _veld(b, "name") == naam)
+def zoekresultaten_uit(resultaat):
+    """{url: titel} uit het resultaat van een WebSearch van Claude Code (gemeten vorm in
+    tests/fixtures/claude_stream_proef.jsonl: {"query", "results": [{"content": [{"title", "url"}]}]}). Er zijn geen
+    letterlijke citaten meer; een prijs in "gezien, niet nagekeken" telt dus alleen als ze in de titel staat."""
+    uit = {}
+    for r in (resultaat or {}).get("results") or [] if isinstance(resultaat, dict) else []:
+        for c in (r.get("content") or []) if isinstance(r, dict) else []:
+            url = schoon_url(c.get("url")) if isinstance(c, dict) else ""
+            if url:
+                uit[url] = (uit.get(url, "") + " " + str(c.get("title") or "")).strip()
+    return uit
 
 
-def _tellers(gebruik):
-    """De tellers van een aanvraag uit usage (overleg 9, X3): input, output, cache en het aantal servertoolbeurten."""
-    server = _veld(gebruik, "server_tool_use")
-    return {"input": _veld(gebruik, "input_tokens", 0) or 0, "output": _veld(gebruik, "output_tokens", 0) or 0,
-            "cache_schrijven": _veld(gebruik, "cache_creation_input_tokens", 0) or 0,
-            "cache_lezen": _veld(gebruik, "cache_read_input_tokens", 0) or 0,
-            "zoek": _veld(server, "web_search_requests", 0) or 0, "lees": _veld(server, "web_fetch_requests", 0) or 0}
-
-
-def kosten(tellers, model):
-    """Geschatte kost in dollar van alle aanvragen samen: input, output en de zoekopdrachten (caching staat niet aan)."""
-    prijs_in, prijs_uit = PRIJZEN.get(model, max(PRIJZEN.values()))
-    return round(sum((t["input"] * prijs_in + t["output"] * prijs_uit) / 1e6 + t.get("zoek", 0) * ZOEK_DOLLAR
-                     for t in tellers), 2)
-
-
-def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, client=None):
-    """Een prijsvraag uitvoeren. Geeft {gegevens, gelezen, zoekresultaten, tekst, tokens, tellers, kosten,
-    leesbeurten, zoekopdrachten, stop, model, beurten}. gegevens is None als het model geen leesbaar JSON-object gaf;
-    gelezen is {url: paginatekst}; tellers is per aanvraag de usage (overleg 9, X3).
-    deadline: time.monotonic() waarop de vraag klaar moet zijn (een deadline voor de hele ronde, Codex X6)."""
-    deadline = deadline or time.monotonic() + 420
-    if client is None:
-        from anthropic import Anthropic
-        client = Anthropic(max_retries=1)
-    systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
-    assistent, teksten, tokens, stop, model, beurten, tellers = [], [], 0, None, MODEL, [], []
-    afronden = False
-    for _ in range(MAX_HERVATTEN + 1):
-        rest_zoeken = MAX_ZOEKEN - _gebruikt(assistent, "web_search")
-        rest_lezen = MAX_LEZEN - _gebruikt(assistent, "web_fetch")
-        rest_tijd = deadline - time.monotonic()
-        if assistent and not afronden and (tokens >= MAX_TOKENS or rest_tijd < 60 or rest_zoeken < 1 or rest_lezen < 1):
-            # Een plafond is bereikt: nog een beurt zonder gereedschap (tool_choice none), zodat er geen zoekopdracht
-            # of pagina meer bij kan (Codex X7, ronde 2) en het model afrondt met wat het las.
-            afronden = True
-            if rest_tijd < 20:
-                stop = "plafond"
-                break
-        tools = [{"type": ZOEK_TOOL, "name": "web_search", "max_uses": max(1, rest_zoeken)},
-                 {"type": LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen),
-                  "max_content_tokens": MAX_PAGINA_TOKENS}]
-        # Een gepauzeerde beurt gaat verder met de hele beurt tot nu toe, niet alleen het laatste stuk (Codex X8).
-        berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
-        # Afronden hervat de open beurt zoals Anthropic het vraagt, zonder extra bericht, maar zonder gereedschap
-        # (Codex X13, ronde 3); de systeemtekst vraagt het JSON-object als het zoekwerk voorbij is.
-        extra = {"tool_choice": {"type": "none"}} if afronden else {}
-        # Het takenbudget ziet het model zelf en telt wat het in deze beurt leest en schrijft; het is een advies, de
-        # harde grens binnen een aanvraag blijft max_uses (overleg 9, X3). remaining laat de server zelf bijhouden.
-        uitvoer = {"effort": "medium"}
-        api = client.messages
-        if TAAK_BUDGET:
-            uitvoer["task_budget"] = {"type": "tokens", "total": TAAK_BUDGET}
-            extra["betas"] = [BETA_BUDGET]
-            api = client.beta.messages
+def gelezen_uit(leeslog):
+    """({url: tekst} van de geslaagde lezingen, (geslaagd, mislukt)) uit het leeslog van de leestool. De tekst is
+    precies wat het model las (overleg 14, X2)."""
+    uit, geslaagd, mislukt = {}, 0, 0
+    try:
+        with open(leeslog, encoding="utf-8") as f:
+            regels = f.read().splitlines()
+    except OSError:
+        regels = []
+    for r in regels:
         try:
-            resp = api.create(model=model, max_tokens=16000, system=systeem, messages=berichten, tools=tools,
-                              output_config=uitvoer, timeout=max(15.0, rest_tijd), **extra)
-        except Exception as e:  # noqa: BLE001  een onbekende modelnaam: een keer het model van De Ontwikkelaar (K5)
-            if type(e).__name__ != "NotFoundError" or model == RESERVE_MODEL:
-                raise
-            model = RESERVE_MODEL
+            d = json.loads(r)
+        except ValueError:
             continue
-        tellers.append(_tellers(_veld(resp, "usage")))
-        beurt = tellers[-1]["input"] + tellers[-1]["output"]
-        tokens += beurt
-        beurten.append(beurt)
-        blokken = list(_veld(resp, "content", []) or [])
-        teksten = [_veld(b, "text", "") for b in blokken if _veld(b, "type") == "text"] or teksten
-        stop = _veld(resp, "stop_reason")
-        assistent += blokken          # ook de afrondbeurt: wat erin gelezen werd, blijft gelezen (Codex X13)
-        if afronden:
-            stop = "plafond"
-            break
-        if stop != "pause_turn":
-            break
-    tekst = "".join(teksten).strip()
-    return {"gegevens": json_uit(tekst), "gelezen": gelezen_paginas(assistent), "zoekresultaten": zoekresultaten(assistent),
-            "tekst": tekst, "tokens": tokens, "tellers": tellers, "kosten": kosten(tellers, model),
-            "leesbeurten": leesbeurten(assistent), "zoekopdrachten": _gebruikt(assistent, "web_search"), "stop": stop,
-            "model": model, "beurten": beurten}
+        if not isinstance(d, dict) or not d.get("ok"):
+            mislukt += 1
+            continue
+        geslaagd += 1
+        for url in {schoon_url(d.get("url")), schoon_url(d.get("eind_url"))} - {""}:
+            uit[url] = uit.get(url, "") + str(d.get("tekst") or "")
+    return uit, (geslaagd, mislukt)
+
+
+def lees_token(pad=None):
+    """Het abonnementstoken uit het eigen bestand van De Prijsonderzoeker (rechten 600; overleg 14, X8 en K8)."""
+    pad = pad or TOKEN_BESTAND
+    try:
+        rechten = os.stat(pad).st_mode
+        with open(pad, encoding="utf-8") as f:
+            inhoud = f.read()
+    except OSError as e:
+        raise GeenAbonnement(f"geen abonnementstoken in {pad}") from e
+    if rechten & 0o077:
+        raise GeenAbonnement(f"{pad} is leesbaar voor anderen; rechten 600 nodig")
+    m = re.search(r"sk-ant-oat[\w-]+", inhoud)
+    if not m:
+        raise GeenAbonnement(f"{pad} bevat geen token uit claude setup-token")
+    return m.group(0)
+
+
+def omgeving(token, bron=None):
+    """De omgeving van claude -p: alleen de witte lijst en het abonnementstoken, nooit een API-sleutel (K1)."""
+    bron = os.environ if bron is None else bron
+    env = {k: bron[k] for k in OMGEVING if bron.get(k)}
+    env.update({"CLAUDE_CODE_OAUTH_TOKEN": token, "DISABLE_AUTOUPDATER": "1"})
+    return env
+
+
+def opdrachtregel(werkmap, systeem, model=None):
+    """claude -p met alleen WebSearch en de eigen leestool (--restricted zet Bash, WebFetch en de rest uit), een hook
+    die de zoekopdrachten telt, en geen instellingen of MCP-servers van de VM (overleg 14, X1, X3, K2)."""
+    teller = os.path.join(werkmap, "zoekteller")
+    mcp = {"mcpServers": {"lees": {"type": "stdio", "command": sys.executable,
+                                   "args": [os.path.join(HIER, "leesserver.py")],
+                                   "env": {"LEES_LOG": os.path.join(werkmap, "gelezen.jsonl"),
+                                           "PRIJS_MAX_LEZEN": str(MAX_LEZEN),
+                                           "PRIJS_MAX_PAGINA_TOKENS": str(MAX_PAGINA_TOKENS)}}}}
+    hook = " ".join(shlex.quote(x) for x in (sys.executable, os.path.join(HIER, "zoekgrens.py"), teller, str(MAX_ZOEKEN)))
+    instellingen = {"hooks": {"PreToolUse": [{"matcher": ZOEK, "hooks": [{"type": "command", "command": hook}]}]}}
+    return [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--model", model or MODEL, "--effort", "medium",
+            "--system-prompt", systeem, "--restricted", "--tools", ZOEK, "--allowedTools", f"{ZOEK},{LEES}",
+            "--strict-mcp-config", "--mcp-config", json.dumps(mcp), "--settings", json.dumps(instellingen),
+            "--no-session-persistence"]
+
+
+class _Stand:
+    def __init__(self):
+        self.bron = self.model = self.einde = None
+        self.zoek, self.teksten = {}, []
+        self.zoekvragen = self.gezocht = self.beurten = 0
+        self.limiet = False
+
+
+def verwerk_regel(st, d):
+    """Een regel van de stream-json bijhouden. Geeft de reden om claude meteen te stoppen, of None."""
+    soort = d.get("type")
+    if soort == "system" and d.get("subtype") == "init":
+        st.bron, st.model = d.get("apiKeySource"), d.get("model")
+        if st.bron != "none":
+            return "bron"                 # een API-sleutel of iets anders dan het abonnement (K1)
+    elif soort == "rate_limit_event":
+        info = d.get("rate_limit_info") or {}
+        if info.get("isUsingOverage"):
+            return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
+        st.limiet = st.limiet or info.get("status") == "rejected"
+    elif soort == "assistant":
+        st.beurten += 1
+        for b in (d.get("message") or {}).get("content") or []:
+            if b.get("type") == "tool_use" and b.get("name") == ZOEK:
+                st.zoekvragen += 1
+            elif b.get("type") == "text" and b.get("text"):
+                st.teksten.append(b["text"])
+        if st.beurten > MAX_BEURTEN:
+            return "beurten"
+    elif soort == "user" and isinstance(d.get("tool_use_result"), dict) and "results" in d["tool_use_result"]:
+        st.gezocht += 1
+        for url, titel in zoekresultaten_uit(d["tool_use_result"]).items():
+            st.zoek[url] = (st.zoek.get(url, "") + " " + titel).strip()
+        if st.gezocht > MAX_ZOEKEN:
+            return "zoeken"               # de hook weigerde niet: de runner houdt de grens zelf (overleg 14, K3)
+    elif soort == "result":
+        st.einde = d
+    return None
+
+
+def _stop_groep(proc):
+    """claude en zijn leestool samen stoppen: ze draaien in een eigen procesgroep (overleg 14, X4)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _draai(cmd, env, werkmap, invoer, deadline, st):
+    """claude -p draaien tot het einde, de deadline of een reden om te stoppen. Geeft die reden of None."""
+    with open(os.path.join(werkmap, "fouten.txt"), "w", encoding="utf-8") as fouten:
+        proc = subprocess.Popen(cmd, cwd=werkmap, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=fouten, text=True, start_new_session=True)
+        regels = queue.Queue()
+
+        def lezer():
+            for r in proc.stdout:
+                regels.put(r)
+            regels.put(None)
+
+        threading.Thread(target=lezer, daemon=True).start()
+        try:
+            proc.stdin.write(invoer)
+            proc.stdin.close()
+        except OSError:
+            pass
+        reden = None
+        while reden is None:
+            rest = deadline - time.monotonic()
+            if rest <= 0:
+                reden = "tijd"
+                break
+            try:
+                r = regels.get(timeout=min(rest, 5))
+            except queue.Empty:
+                continue
+            if r is None:
+                break
+            try:
+                d = json.loads(r)
+            except ValueError:
+                continue
+            if isinstance(d, dict):
+                reden = verwerk_regel(st, d)
+        if reden is None:
+            try:
+                proc.wait(timeout=max(1.0, min(30.0, deadline - time.monotonic())))
+            except subprocess.TimeoutExpired:
+                pass
+        _stop_groep(proc)                 # ook na een gewoon einde: geen leestool blijft achter
+    return reden
+
+
+def _fouttekst(werkmap, einde):
+    try:
+        with open(os.path.join(werkmap, "fouten.txt"), encoding="utf-8") as f:
+            fout = f.read()[-500:]
+    except OSError:
+        fout = ""
+    tekst = f"{(einde or {}).get('result') or ''} {fout}"
+    return re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst).strip()[:500]
+
+
+def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token=None, werkmap=None):
+    """Een prijsvraag uitvoeren via het abonnement. Geeft {gegevens, gelezen, zoekresultaten, tekst, tokens, tellers,
+    leesbeurten, zoekopdrachten, stop, model, beurten, bron}. gegevens is None als het model geen leesbaar JSON-object
+    gaf; gelezen is {url: paginatekst}. stop: klaar, plafond (tijd, beurten of zoekgrens), limiet (abonnement) of fout.
+    GeenAbonnement als er geen geldig token is of als Claude Code iets anders dan het abonnement gebruikt.
+    deadline: time.monotonic() waarop de vraag klaar moet zijn (de deadline van de ronde, Codex X6 en overleg 14, X4)."""
+    deadline = deadline or time.monotonic() + 420
+    token = token or lees_token()
+    systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
+    eigen_map = werkmap is None
+    werkmap = werkmap or tempfile.mkdtemp(prefix="prijsvraag-")
+    st = _Stand()
+    try:
+        reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token), werkmap, gebruiker, deadline, st)
+        gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
+        fout = _fouttekst(werkmap, st.einde)
+    finally:
+        if eigen_map:
+            shutil.rmtree(werkmap, ignore_errors=True)
+    if reden == "bron":
+        raise GeenAbonnement(f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement; meteen gestopt")
+    if reden == "betaald":
+        raise GeenAbonnement("Claude Code startte extra betaald verbruik bovenop het abonnement; meteen gestopt")
+    einde = st.einde or {}
+    if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
+        raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
+    if reden:
+        stop = "plafond"
+    elif st.limiet or (einde.get("is_error") and re.search(r"limit|usage|quota", fout, re.I)):
+        stop = "limiet"
+    elif not st.einde or einde.get("is_error"):
+        stop = "fout"
+    else:
+        stop = "klaar"
+    tekst = str(einde.get("result") or "".join(st.teksten[-1:])).strip()
+    gebruik = einde.get("usage") or {}
+    tellers = {"input": gebruik.get("input_tokens", 0) or 0, "output": gebruik.get("output_tokens", 0) or 0,
+               "cache_schrijven": gebruik.get("cache_creation_input_tokens", 0) or 0,
+               "cache_lezen": gebruik.get("cache_read_input_tokens", 0) or 0,
+               "zoek": st.gezocht, "lees": sum(leesbeurten)}
+    return {"gegevens": json_uit(tekst), "gelezen": gelezen, "zoekresultaten": st.zoek, "tekst": tekst,
+            "tokens": tellers["input"] + tellers["output"] + tellers["cache_schrijven"] + tellers["cache_lezen"],
+            "tellers": [tellers], "leesbeurten": leesbeurten, "zoekopdrachten": st.gezocht, "stop": stop,
+            "model": st.model or MODEL, "beurten": st.beurten, "bron": st.bron, "reden": reden,
+            "fout": fout if stop in ("fout", "limiet") else ""}
+
+
+def proef_abonnement(token=None, wacht=120):
+    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Voor scripts/claude-abonnement-naar-vm.sh
+    en na een uitrol (overleg 14, X7): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
+    try:
+        token = token or lees_token()
+    except GeenAbonnement as e:
+        return False, str(e)
+    with tempfile.TemporaryDirectory(prefix="abonnement-") as werkmap:
+        cmd = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--restricted",
+               "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
+        try:
+            r = subprocess.run(cmd, input="Antwoord alleen met het woord: ok", capture_output=True, text=True,
+                               timeout=wacht, cwd=werkmap, env=omgeving(token))
+        except (subprocess.TimeoutExpired, OSError) as e:
+            return False, f"claude -p antwoordde niet ({type(e).__name__})"
+    st = _Stand()
+    for regel in r.stdout.splitlines():
+        try:
+            d = json.loads(regel)
+        except ValueError:
+            continue
+        reden = verwerk_regel(st, d) if isinstance(d, dict) else None
+        if reden == "bron":
+            return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
+        if reden == "betaald":
+            return False, "Claude Code startte extra betaald verbruik"
+    einde = st.einde or {}
+    if not einde or einde.get("is_error"):
+        tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
+        return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
+    return True, f"werkt via het abonnement (model {st.model}, bron {st.bron})"
+
