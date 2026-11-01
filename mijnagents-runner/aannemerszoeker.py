@@ -16,6 +16,7 @@ Overleg 30-10-2026 (docs/bouw/rapport-1-ontwerp.md, verwerking in verwerkt-1-ont
 """
 import argparse
 import os
+import re
 import sys
 import time
 from datetime import date
@@ -118,6 +119,11 @@ def een_vraag(r, tekst, vandaag, deadline):
         return 0
     # Alles wat naar buiten gaat, wordt getoetst: werk, omvang en gemeente (Codex X5, controle 2)
     soorten = Q.naar_buiten_fouten(v)
+    if soorten == [Q.GEMEENTE_FOUT] and not re.search(r"\d", gemeente):
+        # Proefbank 02-11-2026: "gemeente: Atlantis" heette persoonsgegevens; het is een gemeente zonder postcode
+        zet_klaar(tekst, "Aannemersvraag niet gestart: gemeente zonder postcode",
+                  V.onvolledig(NAAM, firma, ["een gemeente als postcode en naam"]), vandaag, firma)
+        return 0
     if soorten:
         ag.log("aannemersvraag", "beslissing", f"vraag {va} niet verstuurd: persoonsgegevens", ", ".join(soorten))
         zet_klaar(tekst, "Aannemersvraag niet gestart: persoonsgegevens", V.tegengehouden(soorten), vandaag, firma)

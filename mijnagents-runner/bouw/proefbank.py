@@ -7,6 +7,8 @@ collega's) gaat naar het bord. Testagents werken nooit op echte data (les 24-09-
     python3 -m bouw.proefbank draai aannemerszoeker docs/bouw/proeven/aannemerszoeker.json ~/proeven-bouw/2026-11-02
     python3 -m bouw.proefbank verken HA 2145          lotmappen van een project en hun PDF's (alleen lezen)
 
+Draai met ~/agents/.venv/bin/python (zoals De Regisseur): met een andere Python ontbreekt pypdf. Referentiebedragen uit de
+PDF's staan buiten de repo in ~/proeven-bouw/referentie.json (PROEF_REFERENTIE), {proef-id: [bedrag, ...]}.
 Per proef: <id>.json (wat de agent zou schrijven, de Claude-vragen en de keuring) en <id>.md (het verslag), plus
 uitslag.md met de keuring van alle proeven. De proefmap ligt buiten de repo: het verslag kan echte gegevens bevatten.
 """
@@ -28,6 +30,7 @@ from . import vraag as Q  # noqa: E402
 
 # Wat ook buiten de grendel van de code nooit in een verslag voor de ene firma mag staan: een tweede, eenvoudige toets
 # naast scheiding.kruis, zodat een fout in de grendel zelf ook opvalt.
+MAX_CLAUDE = 14
 ANDERE_WOORDEN = {S.HA: ("harmonie", "harmoniebouw"), S.HB: ("h-architects", "h architects", "harchitects")}
 
 
@@ -56,11 +59,25 @@ class Teller:
         self.vragen = []
         self.verboden = []          # wat in een proef nooit naar Claude mag (bv. de straat van een project)
         self.verboden_gezien = []
+        self.vast = None            # een vast modelantwoord voor deze proef, of None: dan echt Claude
+        self.totaal = 0
 
     def vraag(self, *args, **kw):
         begin = time.monotonic()
+        self.totaal += 1
+        if self.totaal > MAX_CLAUDE:
+            # Claude K4 (overleg 28): een proefreeks vraagt Claude hoogstens zoveel keer
+            raise claude_abonnement.Fout(f"proefbank: meer dan {MAX_CLAUDE} vragen aan Claude in een reeks", "limiet")
         tekst = " ".join(str(a) for a in args) + " " + " ".join(str(x) for x in kw.values())
         self.verboden_gezien += [w for w in self.verboden if w.lower() in tekst.lower()]
+        if self.vast is not None:
+            # Codex X2 (overleg 28): een vast antwoord van het model, zodat de keuring van de code zelf getoetst wordt
+            # met kandidaten die er nooit door mogen (de andere firma, een gestopte firma, een site zonder nummer)
+            urls = [u for f in self.vast.get("firmas") or [] for u in [f.get("url")] + list(f.get("paginas") or []) if u]
+            self.vragen.append({"tools": list(kw.get("tools") or ()), "vast": True, "tokens": 0, "beurten": 0, "duur": 0})
+            return {"tekst": "```json\n" + json.dumps(self.vast, ensure_ascii=False) + "\n```", "tokens": 0,
+                    "gereedschap": [("WebFetch", {"url": u}) for u in urls], "stop": "vast antwoord (proef)",
+                    "model": "vast antwoord (proef)", "beurten": 0}
         try:
             uit = self.echt(*args, **kw)
         except claude_abonnement.Fout as e:
@@ -160,6 +177,11 @@ def keur(proef, uitslag):
     for stuk in v.get("titel_bevat") or []:
         titel = verslagen[0].get("titel", "") if verslagen else ""
         uit.append((f"titel noemt '{stuk}'", stuk.lower() in titel.lower(), titel[:120]))
+    for stuk in (proef.get("referentie") or []):
+        uit.append((f"verslag noemt referentie '{stuk}'", stuk.lower() in laag, "uit de PDF nagerekend, buiten de repo"))
+    if "letters" in v:
+        n = sum(1 for regel in tekst.splitlines() if regel.startswith("- Inschrijver "))
+        uit.append((f"precies {v['letters']} bestanden met een letter", n == v["letters"], f"{n} met een letter"))
     for stuk in v.get("bevat") or []:
         uit.append((f"verslag noemt '{stuk}'", stuk.lower() in laag, ""))
     for stuk in v.get("niet") or []:
@@ -197,6 +219,7 @@ def draai_proef(mod, proef, opname, teller):
     teller.verboden_gezien.clear()
     proef = dict(proef, vraag=vul_in(proef["vraag"]))
     teller.verboden = project_straat(proef["vraag"]) if (proef.get("verwacht") or {}).get("adres_niet_naar_claude") else []
+    teller.vast = proef.get("model")
     begin = time.monotonic()
     scherm, fout = io.StringIO(), ""
     with contextlib.redirect_stdout(scherm):
@@ -221,7 +244,29 @@ def draai_proef(mod, proef, opname, teller):
     return uitslag
 
 
-def draai(agent, proeven_pad, uitmap, alleen=None):
+def afschermen():
+    """Codex X4 (overleg 28): ook een rechtstreekse aanroep naar het bord (niet via bord.call) mag alleen lezen."""
+    import urllib.parse
+    import urllib.request
+    echt = urllib.request.urlopen
+    bordhost = urllib.parse.urlsplit(bord.PLATFORM).netloc
+
+    def urlopen(req, *args, **kw):
+        if isinstance(req, urllib.request.Request) and urllib.parse.urlsplit(req.full_url).netloc == bordhost \
+                and req.get_method() != "GET":
+            raise PermissionError(f"proefbank: {req.get_method()} naar het bord geweigerd")
+        return echt(req, *args, **kw)
+    urllib.request.urlopen = urlopen
+
+
+def draai(agent, proeven_pad, uitmap, alleen=None, referentie=None):
+    import importlib.util
+    if importlib.util.find_spec("pypdf") is None:
+        raise SystemExit("pypdf ontbreekt: draai de proefbank met ~/agents/.venv/bin/python, zoals De Regisseur")
+    repo = os.path.dirname(HIER)
+    if os.path.abspath(uitmap).startswith(repo + os.sep):
+        raise SystemExit("de proefmap ligt in de repo: het verslag kan echte gegevens bevatten; kies een map erbuiten")
+    afschermen()
     mod = laad_agent(agent)
     opname = Opname(bord.call)
     bord.call = opname.call                      # vanaf hier bereikt geen schrijfopdracht het bord
@@ -229,6 +274,12 @@ def draai(agent, proeven_pad, uitmap, alleen=None):
     claude_abonnement.vraag = teller.vraag
     with open(proeven_pad, encoding="utf-8") as f:
         proeven = json.load(f)["proeven"]
+    # Referentiebedragen uit de PDF's staan buiten de (openbare) repo: {proef-id: ["2.069,35", ...]}
+    ref = {}
+    if referentie and os.path.isfile(referentie):
+        with open(referentie, encoding="utf-8") as f:
+            ref = json.load(f)
+    proeven = [dict(p, referentie=ref.get(p["id"]) or []) for p in proeven]
     os.makedirs(uitmap, exist_ok=True)
     alle = []
     for proef in proeven:
@@ -297,7 +348,8 @@ def naloop(firma, project, lot):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 5 and sys.argv[1] == "draai":
-        draai(sys.argv[2], sys.argv[3], os.path.expanduser(sys.argv[4]), set(sys.argv[5:]) or None)
+        draai(sys.argv[2], sys.argv[3], os.path.expanduser(sys.argv[4]), set(sys.argv[5:]) or None,
+              os.path.expanduser(os.environ.get("PROEF_REFERENTIE", "~/proeven-bouw/referentie.json")))
     elif len(sys.argv) == 5 and sys.argv[1] == "naloop":
         naloop(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 4 and sys.argv[1] == "verken":

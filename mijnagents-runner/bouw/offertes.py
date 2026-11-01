@@ -174,13 +174,44 @@ def _datum(tekst):
 
 
 def paginas(data):
-    """[tekst per pagina] van een PDF, of None als de PDF niet te openen is."""
+    """[tekst per pagina] van een PDF, of None als de PDF niet te openen is. Ontbreekt pypdf, dan een fout en nooit
+    "niet te openen": zo zag de proefbank op 02-11-2026 elke PDF als kapot met de verkeerde Python."""
+    from pypdf import PdfReader
     try:
-        from pypdf import PdfReader
         lezer = PdfReader(io.BytesIO(data))
         return [(p.extract_text() or "") for p in lezer.pages[:MAX_BLZ]]
     except Exception:  # noqa: BLE001  een kapotte of beveiligde PDF: niet leesbaar, nooit half
         return None
+
+
+# Een totaal staat in dezelfde zin als het woord totaal (of te betalen, eindbedrag). Proefbank 02-11-2026: in "... kosten
+# te betalen. Deze kosten betreffen 50 euro" werd 50 euro het totaal inclusief btw; "totale bedragen" is geen totaal.
+TOTAALWOORD = re.compile(r"\btota(?:al\w*|l|len)\b|te\s+betalen|eindbedrag", re.I)
+ZINSEINDE = re.compile(r"(?<=[a-zà-ÿ)])[.!?]\s+(?=[A-ZÀ-Ý])")
+BTW_TARIEVEN = (21, 6, 12)
+
+
+def _woorden(regel):
+    return len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", regel))
+
+
+def _losse_bedragen(regel):
+    """De geldbedragen van een regel zonder excl of incl erbij, groter dan nul; een datum is nooit een bedrag."""
+    regel = re.sub(r"\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b", lambda m: " " * len(m.group(0)), regel)
+    uit = [bedrag(m.group(0)) for m in BEDRAG.finditer(regel) if is_geld(regel, m)]
+    return [b for b in uit if b]
+
+
+def btw_paar(kale, incl=()):
+    """(excl, incl, tarief) als een totaal zonder label en een ander totaal precies een btw-tarief verschillen
+    (2.069,35 en 2.503,92 is 21 procent); de rekensom is dan het bewijs. Anders None."""
+    paren = []
+    for x in kale:
+        for y in list(kale) + list(incl):
+            for t in BTW_TARIEVEN:
+                if y > x and abs(y - x * (1 + t / 100)) <= max(0.02, x * 0.0002):
+                    paren.append((x, y, t))
+    return max(paren) if paren else None
 
 
 def lees(tekst_paginas):
@@ -195,15 +226,29 @@ def lees(tekst_paginas):
     uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": verlegd(tekst),
            "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": is_raming(tekst),
            "redenen": []}
-    excl, incl = [], []
-    for regel in tekst.splitlines():
+    excl, incl, kale = [], [], []
+    regels = tekst.splitlines()
+    for i, regel in enumerate(regels):
         laag = regel.lower()
-        sub = SUBTOTAAL.search(laag) and not re.search(r"\bna\b.{0,20}korting", laag)
-        if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not sub:
-            voorrang = 1 if EINDTOTAAL.search(laag) else 0
-            for soort, b in bedragen_met_label(regel):
-                if b > 0:
-                    (excl if soort == "excl" else incl).append((voorrang, b))
+        # "Incl B.T.W. 5 786,21": een korte regel met incl en btw is ook een totaalregel (proefbank 02-11-2026)
+        btw_regel = INCL.search(laag) and re.search(r"b\.?\s?t\.?\s?w|\btva\b|\bvat\b", laag) and _woorden(regel) <= 4
+        zinnen = [z for z in ZINSEINDE.split(regel) if TOTAALWOORD.search(z)] or ([regel] if btw_regel else [])
+        for zin in zinnen:
+            zlaag = zin.lower()
+            if SUBTOTAAL.search(zlaag) and not re.search(r"\bna\b.{0,20}korting", zlaag):
+                continue
+            voorrang = 1 if EINDTOTAAL.search(zlaag) else 0
+            gelabeld = [(soort, b) for soort, b in bedragen_met_label(zin) if b > 0]
+            for soort, b in gelabeld:
+                (excl if soort == "excl" else incl).append((voorrang, b))
+            los = _losse_bedragen(zin) if not gelabeld else []
+            if len(los) == 1:
+                # "Totaal  2.069,35€" met het bedrag inclusief btw alleen op de volgende regel
+                kale.append(los[0])
+                volgende = next((r for r in regels[i + 1:i + 3] if r.strip()), "")
+                nog = _losse_bedragen(volgende)
+                if len(nog) == 1 and _woorden(volgende) <= 2:
+                    kale.append(nog[0])
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -214,6 +259,14 @@ def lees(tekst_paginas):
         if m and not uit["geldig_dagen"]:
             uit["geldig_dagen"] = int(m.group(1))
     uit["excl"], uit["incl"] = _eindtotaal(excl), _eindtotaal(incl)
+    if uit["excl"] is None and kale:
+        paar = btw_paar(kale, [b for _, b in incl])
+        if paar:
+            uit["excl"], uit["incl"] = paar[0], uit["incl"] if uit["incl"] is not None else paar[1]
+            uit["btw_tarief"] = uit["btw_tarief"] if uit["btw_tarief"] is not None else paar[2]
+            uit["redenen"].append(f"totaal zonder 'excl' of 'incl' erbij; bevestigd door de btw-som ({paar[2]} procent)")
+        elif uit["incl"] is None:
+            uit["redenen"].append(f"een totaal zonder 'excl' of 'incl' erbij ({_euro(kale[-1])}): niet gebruikt, kijk het na")
     if uit["excl"] is None and uit["incl"] is None and (FICHE.search(tekst) or not OFFERTEWOORD.search(tekst)):
         return {"soort": "geen offerte", "redenen": ["geen offerte (technische fiche of ander document zonder totaal): "
                                                      "telt niet mee"]}
@@ -320,7 +373,11 @@ def ocr(data, timeout=OCR_TIMEOUT):
             return f.read()
 
 
-def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None):
+def _euro(b):
+    return f"{b:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + " euro"
+
+
+def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None, maximum=None):
     """([{letter, lees}], {letter: tekst}) voor de bestanden van een lot. Na de deadline wordt niets meer gedownload: die
     offertes staan erbij als niet gelezen (Codex X11). download(pad) -> bytes; een fout maakt de offerte onleesbaar. Met
     OCR_AAN gaat een scan door OCR (ocr_fn, standaard ocr()) als er nog tijd is; de bedragen zijn dan na te kijken."""
@@ -328,7 +385,12 @@ def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None):
     klok = klok or time.monotonic
     ocr_fn = ocr_fn or ocr
     gelezen, teksten = [], {}
-    for letter, b, _ in letters:
+    for i, (letter, b, _) in enumerate(letters):
+        if maximum is not None and i >= maximum:
+            # Codex X7 (overleg 28): nooit stil weglaten; het bestand staat erbij als niet gelezen
+            gelezen.append({"letter": letter, "lees": {"soort": "onleesbaar", "redenen": [
+                f"niet gelezen: meer dan {maximum} PDF's in de map; vraag dit bestand apart met map:"]}})
+            continue
         if deadline and klok() > deadline:
             gelezen.append({"letter": letter, "lees": {"soort": "onleesbaar",
                                                        "redenen": ["niet gelezen: de tijd van de ronde was op"]}})
@@ -408,8 +470,10 @@ Opties en stelposten zet je met optie true. Geen advies over wie de opdracht kri
 def voor_claude(gelezen, teksten):
     """{letter: tekst} van de echte, leesbare offertes; alleen bij minstens twee gaat iets naar Claude. Live gemeten
     01-11-2026: een fiche of een scan met een stukje tekst telde mee, dus kreeg Claude een enkele offerte."""
-    soort = {g["letter"]: (g.get("lees") or {}).get("soort") for g in gelezen or []}
-    uit = {l: t for l, t in (teksten or {}).items() if soort.get(l) == "offerte"}
+    lees_ = {g["letter"]: (g.get("lees") or {}) for g in gelezen or []}
+    # Proefbank 02-11-2026: zonder totaal exclusief btw verwerpt keur_posten de posten toch; Claude vragen is dan verspild
+    uit = {l: t for l, t in (teksten or {}).items()
+           if lees_.get(l, {}).get("soort") == "offerte" and lees_.get(l, {}).get("excl") is not None}
     return uit if len(uit) >= 2 else {}
 
 

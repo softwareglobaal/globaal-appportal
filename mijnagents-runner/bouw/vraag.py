@@ -75,6 +75,7 @@ GEMEENTE = re.compile(r"^\s*[1-9]\d{3}\s+[A-Za-zÀ-ÿ'’.\- ]{2,40}\s*$")
 NAAM_NA = re.compile(r"\b(?i:bij|voor|van|familie|fam\.?|woning|huis|klant|bouwheer)\s+(?:(?i:de|van|der|den)\s+)*"
                      r"[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)+")
 MAX_VELD = 160
+GEMEENTE_FOUT = "gemeente zonder postcode, of met een adres (alleen postcode en gemeente)"
 # Een straat als los woord met een huisnummer (Grote Markt 12, Rue Neuve 3), naast de patronen van De Prijsonderzoeker
 LOS_ADRES = re.compile(r"\b(?:grote\s+|kleine\s+|oude\s+)?(?:markt|plein|steenweg|lei|dreef|kaai|vest|square|avenue|rue|"
                        r"chaussée|place|boulevard|weg|laan|straat)\s+\d{1,4}[a-z]?\b", re.I)
@@ -106,7 +107,7 @@ def naar_buiten_fouten(v):
         fouten += persoonsgegevens(v.get(k))
     fouten += [s for s in P.gevonden(str(v.get("gemeente") or "")) if s != "naam"]
     if v.get("gemeente") and not GEMEENTE.match(v["gemeente"]):
-        fouten.append("gemeente zonder postcode, of met een adres (alleen postcode en gemeente)")
+        fouten.append(GEMEENTE_FOUT)
     if any(len(str(v.get(k) or "")) > MAX_VELD for k in ("werk", "omvang", "gemeente")):
         fouten.append("een te lang veld")
     if any(S.noemt_een_firma(str(v.get(k) or "")) for k in ("werk", "omvang", "gemeente")):

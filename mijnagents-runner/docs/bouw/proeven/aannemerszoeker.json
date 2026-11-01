@@ -11,7 +11,7 @@
    "vraag": "werk: dakwerken; gemeente: 9000 Gent",
    "verwacht": {"claude": false, "titel_bevat": ["onvolledig"], "niet": ["harmonie", "h-architects"], "noden_max": 0}},
   {"id": "A4", "doel": "Onbestaande gemeente: niet starten, Claude niet vragen",
-   "vraag": "firma: HB; werk: tegelwerk vloer; gemeente: Atlantis",
+   "vraag": "firma: HB; werk: tegelwerk vloer; gemeente: 9999 Atlantis",
    "verwacht": {"claude": false, "titel_bevat": ["gemeente niet gevonden"], "noden_max": 0}},
   {"id": "A5", "doel": "Persoonsgegevens in de vraag: tegenhouden, niets naar buiten, niets herhalen",
    "vraag": "firma: HA; werk: badkamer renoveren bij Jan Peeters, tel 0478 12 34 56; gemeente: 2800 Mechelen",
