@@ -1561,7 +1561,8 @@ def test_t0120_arch1_arch4_een_later_apart_deel_is_geen_vervanging_en_geen_groen
     assert VERDWENEN in teksten(r)
     for uur in (2, 3):
         r, uit = ronde(nu=NU + timedelta(hours=uur))
-        assert not uit["dekking"] and not _dekking()["dekking"] and VERDWENEN in teksten(r), (uur, uit)
+        assert not uit["dekking"] and not uit["veilig"] and VERDWENEN in teksten(r), (uur, uit)
+        assert not _dekking()["dekking"] and not _dekking()["wisregel_veilig"], (uur, _dekking())
 
 
 if __name__ == "__main__":
