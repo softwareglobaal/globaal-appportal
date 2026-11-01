@@ -182,9 +182,9 @@ check("D14 tegel: stand van nu als reden", "stand van nu: fout: Geen browsergesc
 html = C.get("/wachten/sms-wacht?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
 check("D14 gelijke fouten gegroepeerd, ook niet opeenvolgend", "12:00 a <span class=\"zacht\">(2 keer)</span>" in html
       and "11:00 b" in html and html.count("10:00 a") == 0, html[-2500:])
-html = C.get("/wachten/locatie-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
 check("D14 hartslag telt niet voor een vorige dag, kleur van het bord blijft", "stand van nu" not in html
-      and '<span class="stip rood"></span> za 31 okt 2026: fout' in html, html[:2500])
+      and '<span class="stip rood"></span> vr 30 okt 2026: fout' in html, html[:2500])
 LEES = json.loads(json.dumps(WACHTEN))
 LEES["vakken"][0]["wachten"][2].update(leesfout="niet gelezen (OperationalError)", kleur="rood", oordeel="fout")
 A.haal_wachten = lambda dag: json.loads(json.dumps(LEES))
