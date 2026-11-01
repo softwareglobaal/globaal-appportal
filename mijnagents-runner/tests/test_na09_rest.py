@@ -64,6 +64,7 @@ class Draad:
         self.open_noden = None if open_noden is None else list(open_noden)
         self.agents = agents
         self.gestuurd = []
+        self.fouten = {}            # pad -> lijst van uitzonderingen die de volgende oproepen op dat pad opwerpen
 
     def urlopen(self, req, timeout=None, **_):
         url = req.full_url if isinstance(req, urllib.request.Request) else str(req)
@@ -71,10 +72,13 @@ class Draad:
         pad = deel.path + (f"?{deel.query}" if deel.query else "")
         data = req.data if isinstance(req, urllib.request.Request) else None
         payload = json.loads(data.decode()) if data else None
-        self.gestuurd.append((deel.path, payload))
-        return _Antwoord(json.dumps(self.antwoord(deel.path, pad, payload)).encode())
+        antwoord = self.antwoord(deel.path, pad, payload)
+        self.gestuurd.append((deel.path, payload))       # alleen wat het bord aannam
+        return _Antwoord(json.dumps(antwoord).encode())
 
     def antwoord(self, pad, volledig, payload):
+        if self.fouten.get(pad):
+            raise self.fouten[pad].pop(0)
         m = re.match(r"^/api/agent/([^/]+)/werkwijze$", pad)
         if m and payload is None:
             w = self.werkwijzen.get(m.group(1), self.werkwijze)
@@ -201,6 +205,46 @@ def test_na53_werkfout_en_stopsignaal_bij_het_afsluiten_blijven_allebei_zichtbaa
     assert laatste["status"] == "fout" and "ValueError: werk kapot" in laatste["detail"] \
         and "SystemExit" in laatste["detail"], laatste
     assert any(r["tekst"] == "halverwege stuk" for r in draad.logregels()), "het werkverslag ging niet weg"
+
+
+def test_na56_werkverslag_blijft_tot_het_bord_het_aannam():
+    """Codex NA56 (ronde 14): een verzendfout wiste het werkverslag uit het geheugen, zodat ook een volgende poging het
+    niet meer stuurde. Nu blijft het tot het bord het aannam."""
+    draad = Draad()
+    draad.fouten["/api/logboek"] = [urllib.error.URLError("bord weg (proef)")]
+    ag = bord.Agent("proef")
+    with op_het_bord(draad):
+        ag.log("proef", "bron", "regel een")
+        ag.log_verstuur()
+        assert not draad.logregels() and len(ag._log) == 1, "na een verzendfout hoort de regel bewaard te blijven"
+        ag.log("proef", "bron", "regel twee")
+        ag.log_verstuur()
+    assert [r["tekst"] for r in draad.logregels()] == ["regel een", "regel twee"] and not ag._log, draad.logregels()
+
+
+def test_na57_elk_signaal_bij_het_afsluiten_staat_in_de_fouthartslag():
+    """Codex NA57 (ronde 14): kwam bij de kennis een SIGTERM en bij het werkverslag een Ctrl-C, dan verdween het tweede.
+    Nu noemt de fouthartslag beide, en gaat het eerste signaal door. Ook een signaal alleen bij het werkverslag geeft
+    een fouthartslag (de toetsen van NA49 en NA53 legden het signaal alleen bij de kennis)."""
+    for kennis_fout, verslag_fout, eerst in ((SystemExit(143), KeyboardInterrupt(), SystemExit),
+                                             (None, SystemExit(143), SystemExit)):
+        draad = Draad(open_noden=[])
+        if verslag_fout is not None:
+            draad.fouten["/api/logboek"] = [verslag_fout]
+        ag = bord.Agent("proef")
+        if kennis_fout is not None:
+            ag.kennis = lambda *a, _f=kennis_fout, **k: (_ for _ in ()).throw(_f)
+        with op_het_bord(draad):
+            try:
+                with ag.ronde("proef"):
+                    ag.log("proef", "bron", "een regel")
+                doorgegaan = None
+            except BaseException as e:  # noqa: BLE001
+                doorgegaan = e
+        assert isinstance(doorgegaan, eerst), repr(doorgegaan)
+        laatste = draad.statussen("proef")[-1]
+        verwacht = [type(x).__name__ for x in (kennis_fout, verslag_fout) if x is not None]
+        assert laatste["status"] == "fout" and all(n in laatste["detail"] for n in verwacht), (verwacht, laatste)
 
 
 # ------------------------------------------------------------------------------------------- De Contractmaker ---

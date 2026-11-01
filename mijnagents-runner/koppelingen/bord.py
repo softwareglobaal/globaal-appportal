@@ -223,12 +223,15 @@ class Agent:
         print(self.maskeer(f"  [{stap}] {tekst}"))
 
     def log_verstuur(self):
+        """Het werkverslag naar het bord. De regels blijven bewaard tot het bord ze aannam (Codex NA56, 01-11-2026): tot
+        dan wiste een verzendfout ze, nu gaan ze met de volgende poging mee."""
         if not self._log:
             return
         try:
             call("/api/logboek", {"regels": self.maskeer(self._log)})
         except Exception as e:  # noqa: BLE001
             print("logboek mislukt:", e, file=sys.stderr)
+            return
         self._log = []
 
     def werkwijze_lezen(self):
@@ -438,7 +441,7 @@ class Ronde:
             self._bronnen.setdefault("collega's op het bord", collega_tekst(self.collegas))
 
     def __exit__(self, soort, fout, spoor):
-        onderbreking = None
+        onderbrekingen = []
         for wat, stap in (("kennis", lambda: self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")),
                           ("werkverslag", self.agent.log_verstuur)):
             try:
@@ -446,19 +449,19 @@ class Ronde:
             except Exception as e:  # noqa: BLE001  Codex NA45: de laatste hartslag gaat altijd uit (N11)
                 print(f"{wat} niet verstuurd: {type(e).__name__}: {e}", file=sys.stderr)
             except BaseException as e:
-                # Codex NA49 en NA53 (01-11-2026): een SIGTERM (als SystemExit) of Ctrl-C tijdens het afsluiten sloeg
-                # de eindhartslag over, en dan bleef de agent op actief staan. Nu gaat ook het werkverslag nog weg, en
-                # de fouthartslag noemt de fout van het werk en het signaal; daarna gaat het signaal door.
-                onderbreking = onderbreking or e
-        if fout is not None or onderbreking is not None:
+                # Codex NA49, NA53 en NA57 (01-11-2026): een SIGTERM (als SystemExit) of Ctrl-C tijdens het afsluiten
+                # sloeg de eindhartslag over, en dan bleef de agent op actief staan. Nu gaat ook de andere stap nog, en
+                # de fouthartslag noemt de fout van het werk en elk signaal; daarna gaat het eerste signaal door.
+                onderbrekingen.append(e)
+        if fout is not None or onderbrekingen:
             # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
             # die ze niet meer kon nakijken.
             self.agent.hartslag("fout", taak=self.taak,
                                 detail="; daarna ".join(f"{type(x).__name__}: {str(x)[:180]}"
-                                                        for x in (fout, onderbreking) if x is not None),
+                                                        for x in [fout] + onderbrekingen if x is not None),
                                 nood=self.agent.noden_bij_breuk(self._noden))
-            if onderbreking is not None:
-                raise onderbreking
+            if onderbrekingen:
+                raise onderbrekingen[0]
             return False
         self.agent.hartslag("klaar" if not self._noden else "waakt",
                             taak=self.taak, detail=self.detail, nood=self._noden, sluiten=not self.noden_onbekend)

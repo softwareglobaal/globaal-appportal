@@ -506,8 +506,6 @@ begin = next(i for i, n in enumerate(ronde.body) if isinstance(n, ast.Assign)
                      for t in n.targets))
 staart = ast.fix_missing_locations(ast.Module(body=ronde.body[begin:], type_ignores=[]))
 volgorde = []
-hartslagen = []
-bord_open = set()        # de open noden van agenda-wacht op een nagebootst bord (zoals mijnagents/app.py, O27)
 
 
 class Rondeverslag:
@@ -522,13 +520,6 @@ class Rondeverslag:
 
     def hartslag(self, status, *args, **kwargs):
         volgorde.append(("hartslag", status))
-        hartslagen.append(dict(kwargs, status=status))
-        if kwargs.get("nood") is not None:
-            # het bord sluit wat niet in de lijst staat, tenzij nood_sluiten false (sluiten=False); nieuw komt erbij
-            teksten = {n["tekst"] for n in kwargs["nood"]}
-            if kwargs.get("sluiten", True):
-                bord_open.intersection_update(teksten)
-            bord_open.update(teksten)
 
     def werkwijze(self, taak="", noden=()):
         return "# Proef\n\nRegel."
@@ -540,9 +531,10 @@ class Rondeverslag:
         return None
 
 
-def in_de_ronde(code):
-    """Voer code uit zoals main() het doet: binnen de gedeelde ronde, met de ronde als rd (NA09-rest, 01-11-2026)."""
-    oud_call, W.bord.call = W.bord.call, (lambda *a, **k: [])        # geen collega's van een echt bord
+def in_de_ronde(code, call=None):
+    """Voer code uit zoals main() het doet: binnen de gedeelde ronde, met de ronde als rd (NA09-rest, 01-11-2026).
+    call: het nagebootste bord; standaard een bord zonder collega's."""
+    oud_call, W.bord.call = W.bord.call, (call or (lambda *a, **k: []))
     try:
         with W.bord.Ronde(dummy["ag"], "agenda in het oog", {}) as rd:
             dummy["rd"] = rd
@@ -590,23 +582,49 @@ check("foutpad verstuurt de foutlog", isinstance(resultaat, RuntimeError)
       and [x[0] for x in volgorde][-3:] == ["log", "verstuur", "hartslag"] and volgorde[-1] == ("hartslag", "fout"),
       f"{resultaat} {volgorde}")
 
-# F8 op de echte staart (Codex NA52 en NA54, ronde 12 en 13): op het bord staat al een nood open die deze ronde niet
-# ziet. Een dagronde stuurt haar nieuwe nood zonder te sluiten (sluiten=False, op het bord nood_sluiten false): de oude
-# blijft open. Een volledige ronde stuurt de gezaghebbende lijst: de oude sluit, de nieuwe staat open.
-_oud = "Buitenafspraken zonder reistijd, reden: rit zonder afspraak"
-_nieuw = {"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}
-for _dag, _sluiten, _verwacht in ((None, True, {_nieuw["tekst"]}), ("2026-10-27", False, {_oud, _nieuw["tekst"]})):
-    volgorde.clear()
-    hartslagen.clear()
-    bord_open.clear()
-    bord_open.add(_oud)
-    dummy.update({"DAG_ARG": _dag, "noden": [dict(_nieuw)]})
-    resultaat = veilig(lambda: in_de_ronde(staart))
-    _h = hartslagen[-1] if hartslagen else {}
-    check(f"F8: {'een dagronde sluit de open nood niet' if _dag else 'de volledige ronde sluit wat ze niet meer ziet'} "
-          f"(echte staart)", resultaat is None and _h.get("status") == "waakt" and _h.get("sluiten") is _sluiten
-          and bord_open == _verwacht, f"{resultaat} {_h} {bord_open}")
-dummy.update({"DAG_ARG": None, "noden": []})
+# F8 op de echte staart (Codex NA52, NA54 en NA58, ronde 12 tot 14): de echte bord.Agent stuurt de eindhartslag, en het
+# nagebootste bord verwerkt het verzoek zoals mijnagents/app.py (r.2589-2601): een nieuwe nood komt erbij, met haar
+# eigenaar; wat niet in de lijst staat sluit, tenzij nood_sluiten false. Op het bord staat al een nood open die deze
+# ronde niet ziet: een dagronde laat ze open, een volledige ronde sluit ze.
+class F8Bord:
+    def __init__(self, open_):
+        self.open = dict(open_)                 # tekst -> wie
+        self.verzoeken = []
+
+    def call(self, pad, payload=None, method=None):
+        if pad == "/agent-status":
+            self.verzoeken.append(payload)
+            if isinstance(payload.get("nood"), list):
+                nieuw = [(str(n["tekst"]).strip(), n.get("wie") or "mehdi") for n in payload["nood"]]
+                for t, w in nieuw:
+                    self.open.setdefault(t, w)
+                if payload.get("nood_sluiten") is not False:
+                    self.open = {t: w for t, w in self.open.items() if t in {x for x, _ in nieuw}}
+            return {"ok": True}
+        if pad.endswith("/werkwijze") and payload is None:
+            return {"werkwijze": "# Proef\n\nRegel."}
+        if pad == "/api/nood":
+            return {"nood": [{"naam": "agenda-wacht", "tekst": t, "wie": w} for t, w in self.open.items()]}
+        return [] if pad == "/api/agents" else {}
+
+
+_oud = ("Buitenafspraken zonder reistijd, reden: rit zonder afspraak", "mehdi")
+_nieuw = {"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "claude-code"}
+_proefagent = dummy["ag"]
+dummy["ag"] = W.bord.Agent("agenda-wacht")
+try:
+    for _dag, _verwacht in ((None, {_nieuw["tekst"]: "claude-code"}),
+                            ("2026-10-27", {_oud[0]: "mehdi", _nieuw["tekst"]: "claude-code"})):
+        _bord = F8Bord([_oud])
+        dummy.update({"DAG_ARG": _dag, "noden": [dict(_nieuw)]})
+        resultaat = veilig(lambda: in_de_ronde(staart, _bord.call))
+        _h = _bord.verzoeken[-1] if _bord.verzoeken else {}
+        check(f"F8: {'een dagronde sluit de open nood niet' if _dag else 'de volledige ronde sluit wat ze niet meer ziet'} "
+              f"(echte staart, echt verzoek)", resultaat is None and _h.get("status") == "waakt"
+              and (_h.get("nood_sluiten") is False) == bool(_dag) and _bord.open == _verwacht, f"{resultaat} {_h} {_bord.open}")
+finally:
+    dummy["ag"] = _proefagent
+    dummy.update({"DAG_ARG": None, "noden": []})
 
 print(f"H1-1: {ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
