@@ -252,7 +252,7 @@ class ZorgPlaats(unittest.TestCase):
         self.assertEqual(a["locatie"], "Onvindbare Plek")
 
     def test_kaartfout_gaat_in_dezelfde_ronde_naar_vraag_en_nood(self):
-        bron = inspect.getsource(W.main)
+        bron = inspect.getsource(W._ronde)      # de romp van de ronde, sinds NA09-rest (01-11-2026) apart van main()
         rit = "reistijd_zetten(rit_items, dag_grens, niet_op_kaart=niet_op_kaart)"
         vraag = "vragen_in_agenda(rit_items, niet_op_kaart=niet_op_kaart)"
         nood = "adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart)"
