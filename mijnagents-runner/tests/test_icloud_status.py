@@ -47,8 +47,8 @@ class ICloudStatus(unittest.TestCase):
         self.module.exporteer_jpg_naar = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.exporteer = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.bord = lambda *a: self.fail("deze fout mag geen inhoud publiceren")
-        # Geen netwerk in de proef: het werkverslag op het bord is leeg (dan haalt de avondronde vanaf 01-10 in, FOTO-2).
-        self.module.bord_lees = lambda pad: {"regels": []}
+        # Geen netwerk in de proef: geen foto-metadata op het bord (dan haalt de avondronde vanaf 01-10 in, FOTO-2).
+        self.module.bord_lees = lambda pad: {"items": []}
 
     def test_fototaak_met_authorization_denied_blijft_open_en_gaat_op_fout(self):
         m = self.module
@@ -455,9 +455,9 @@ class ICloudStatus(unittest.TestCase):
         """Een avondronde tegen een nep-bord: klaarzet op uniek zoals mijnagents/app.py, het werkverslag met GET op onderwerp."""
         m = self.module
         m.DAG, m.DAG_GEGEVEN = vandaag, False
-        self.bak = getattr(self, "bak", {})
-        self.verslag = getattr(self, "verslag", [{"naam": "icloud-wacht", "onderwerp": f"dag {d}", "stap": "bron",
-                                                  "tekst": f"1 foto's/video's op {d}, 1 plekken, 0 zonder GPS"} for d in gelezen])
+        self.bak = getattr(self, "bak", {f"fotodag:{d}:1": {"van": "icloud-wacht", "voor": "fotoindeling", "soort": "fotometadata",
+                                                           "sleutel": d, "uniek": f"fotodag:{d}:1"} for d in gelezen})
+        self.verslag = getattr(self, "verslag", [])
         self.uitvoer = []
 
         def bord(pad, data):
@@ -472,8 +472,10 @@ class ICloudStatus(unittest.TestCase):
             return {"ok": True}
 
         def bord_lees(pad):
-            q = parse_qs(urlsplit(pad).query)
-            return {"regels": [r for r in self.verslag if q["onderwerp"][0] in r["onderwerp"]][-int(q["n"][0]):]}
+            self.assertTrue(pad.startswith("/api/klaarzet?"), "alleen /api/klaarzet mag met het token door de forward-auth")
+            q = {k: v[0] for k, v in parse_qs(urlsplit(pad).query).items()}
+            return {"items": [it for it in reversed(list(self.bak.values())) if it["soort"] == q["soort"]
+                              and it["voor"] == q["voor"]][:int(q["n"])]}
         m.bord, m.bord_lees = bord, bord_lees
         m.fotos_van = lambda dag: [dict(f) for f in fotos_per_dag.get(dag, [])]
         m.werkafspraken = lambda dag: []
@@ -491,16 +493,16 @@ class ICloudStatus(unittest.TestCase):
         bib = {"2026-10-01": [f("a1"), f("a2")], "2026-10-02": [f("b1"), f("b2-laat")], "2026-10-03": [f("c1")]}
         self.assertEqual(self.nep_avond("2026-10-03", bib, gelezen=["2026-10-02"]), 0)
         bron = [r["onderwerp"] for r in self.verslag if r["stap"] == "bron"]
-        self.assertEqual(bron, ["dag 2026-10-02", "dag 2026-10-01", "dag 2026-10-02", "dag 2026-10-03"])
+        self.assertEqual(bron, ["dag 2026-10-01", "dag 2026-10-02", "dag 2026-10-03"])
         self.assertEqual(self.uitvoer, ["2026-10-02", "2026-10-03"])  # de ingehaalde dag: geen export
-        self.assertIn("2 foto's/video's op 2026-10-02", [r["tekst"] for r in self.verslag if r["stap"] == "bron"][2])
+        self.assertIn("2 foto's/video's op 2026-10-02", [r["tekst"] for r in self.verslag if r["stap"] == "bron"][1])
         self.assertEqual(sorted(self.bak), ["fotodag:2026-10-01:1", "fotodag:2026-10-02:1", "fotodag:2026-10-03:1"])
         self.assertTrue(all(it["inhoud"]["prive"] and it["voor"] == "fotoindeling" for it in self.bak.values()))
         self.assertNotIn("bestand", json.dumps(self.bak))
         # tweede ronde dezelfde avond: geen dubbel item, en de ingehaalde dag niet opnieuw
         self.nep_avond("2026-10-03", bib)
         self.assertEqual(len(self.bak), 3)
-        self.assertEqual([r["onderwerp"] for r in self.verslag if r["stap"] == "bron"][4:], ["dag 2026-10-02", "dag 2026-10-03"])
+        self.assertEqual([r["onderwerp"] for r in self.verslag if r["stap"] == "bron"][3:], ["dag 2026-10-02", "dag 2026-10-03"])
         self.assertFalse([r for r in self.verslag if "50.0" in str(r.get("detail", "")) + r["tekst"]])
 
     def test_foto2_onleesbaar_werkverslag_slaat_alleen_het_inhalen_over(self):

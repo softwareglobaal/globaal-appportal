@@ -915,8 +915,8 @@ def _werk():
 def dagen_te_lezen(vandaag):
     """T-0120 FOTO-2: welke dagen de avondronde leest, als (dag, volledig). Altijd gisteren en vandaag volledig: wat na 21:15
     genomen werd of laat in de bibliotheek kwam, komt zo de volgende avond binnen (oktober: 53 foto's). Daarvoor elke dag
-    sinds INHAAL_VANAF, hoogstens INHAAL_DAGEN terug, zonder bronregel in het werkverslag: alleen metadata, geen export van
-    originelen en niets in Dropbox. Met --dag alleen die dag. Een onleesbaar werkverslag slaat het inhalen over (melding)."""
+    sinds INHAAL_VANAF, hoogstens INHAAL_DAGEN terug, zonder foto-metadata op het bord: alleen metadata, geen export van
+    originelen en niets in Dropbox. Met --dag alleen die dag. Een onleesbaar bord slaat het inhalen over (melding)."""
     if DAG_GEGEVEN:
         return [(DAG, True)], ""
     gisteren = vandaag - timedelta(days=1)
@@ -926,7 +926,7 @@ def dagen_te_lezen(vandaag):
         try:
             gelezen = gelezen_dagen(eerste, gisteren - timedelta(days=1))
         except Exception as e:  # noqa: BLE001
-            gelezen, melding = None, f"inhalen overgeslagen: werkverslag niet gelezen ({type(e).__name__})"
+            gelezen, melding = None, f"inhalen overgeslagen: bord niet gelezen ({type(e).__name__})"
         dag = eerste
         while gelezen is not None and dag < gisteren:
             if dag.isoformat() not in gelezen:
@@ -936,17 +936,13 @@ def dagen_te_lezen(vandaag):
 
 
 def gelezen_dagen(eerste, laatste):
-    """De dagen in [eerste, laatste] met een bronregel van deze wacht, zoals De Dagbundelaar ze leest (dagbundelaar.lees_fotos):
-    'N foto's/video's op <dag>, M plekken, K zonder GPS'. Eén vraag per maand; een fout gaat naar de beller."""
-    maanden = sorted({(eerste + timedelta(days=i)).strftime("%Y-%m") for i in range((laatste - eerste).days + 1)})
-    uit = set()
-    for maand in maanden:
-        d = bord_lees(f"/api/logboek/{NAAM}?" + urllib.parse.urlencode({"onderwerp": f"dag {maand}", "n": 300}))
-        for r in d.get("regels") or []:
-            m = BRON_REGEL.match(str(r.get("tekst") or ""))
-            if r.get("stap") == "bron" and m:
-                uit.add(m.group(2))
-    return uit
+    """De dagen in [eerste, laatste] waarvoor deze wacht al foto-metadata op het bord zette (metadata_items). Via
+    /api/klaarzet, de route die met het token door de forward-auth mag (nginx 63-mijnagents); het werkverslag
+    (/api/logboek/<naam>) is van hieruit niet leesbaar. Een dag die de oude versie las (alleen een bronregel, zonder
+    vlaggen), wordt zo één keer opnieuw gelezen: alleen metadata. Een fout gaat naar de beller."""
+    d = bord_lees("/api/klaarzet?" + urllib.parse.urlencode({"voor": "fotoindeling", "soort": "fotometadata", "status": "alle", "n": 500}))
+    return {str(it.get("sleutel")) for it in d.get("items") or []
+            if it.get("van") == NAAM and eerste.isoformat() <= str(it.get("sleutel")) <= laatste.isoformat()}
 
 
 def lees_dag(dag, volledig):
