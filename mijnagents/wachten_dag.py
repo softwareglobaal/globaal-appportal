@@ -104,11 +104,26 @@ def lees_gesprekken(conn, bron, dag):
     return items, gedekt
 
 
+# MAIL-6 (T-0120): per mail of ze opgevolgd is en waar ze heen ging. Het besluit van Mehdi op /mail gaat voor de wacht.
+OPVOLGING = {"open": "op te volgen", "onzeker": "nakijken", "wacht": "wacht een werkdag", "verlopen": "verlopen",
+             "beantwoord": "beantwoord", "doorgezet": "doorgezet", "verdwenen": "niet meer in het postvak"}
+
+
+def _map_kort(m):
+    return re.sub(r"^INBOX[./]", "", str(m or ""))
+
+
 def lees_mail(conn, wacht, dag):
-    rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map FROM mailbericht WHERE wacht=? AND dag=? "
-                         "ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
-    return [_item(uur(r["datum"]), r["van_naam"] or r["van"] or "onbekend",
-                  " · ".join(x for x in (r["onderwerp"] or "(geen onderwerp)", r["soort"] or "") if x)) for r in rijen]
+    rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map, opvolging, besluit, naar, opgeruimd "
+                         "FROM mailbericht WHERE wacht=? AND dag=? ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
+    items = []
+    for r in rijen:
+        opv = r["besluit"] or OPVOLGING.get(r["opvolging"] or "", "")
+        waar = ("naar Opgeruimd" if r["opgeruimd"] else f"naar {_map_kort(r['naar'])}" if r["naar"]
+                else f"in {_map_kort(r['map'])}" if r["map"] and r["map"] != "INBOX" else "")
+        items.append(_item(uur(r["datum"]), r["van_naam"] or r["van"] or "onbekend",
+                           " · ".join(x for x in (r["onderwerp"] or "(geen onderwerp)", r["soort"] or "", opv, waar) if x)))
+    return items
 
 
 def lees_klaarzet(conn, wacht, dag, van, tot):
@@ -174,6 +189,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         oordeel, kleur = "fout", "rood"
     elif items:
         oordeel, kleur = "binnen", "groen"
+    elif log and wacht in MAIL_WACHTEN and any(x["stap"] == "ronde" for x in log) and not any(x["stap"] == "bron" for x in log):
+        # MAIL-6: een mailwacht die zijn rondes deed zonder leesprobleem, las het postvak (een leesprobleem staat als bron)
+        oordeel, kleur = "postvak gelezen, 0 nieuwe mails", "oranje"
     elif log:
         oordeel, kleur = "draaide, niets binnen", "oranje"
     else:
