@@ -156,6 +156,22 @@ def test_sms_per_gesprek_per_dag_zonder_tekst():
     assert V.soort({"uniek": jan["uniek"], "bron": "sms"}) == "chat" and V.is_prive({"bron": "sms"})
 
 
+def test_tel3_afzender_in_letters_blijft_zijn_naam():
+    """TEL-3: een afzender zonder cijfers (een firmanaam als afzender van een sms) bleef 'onbekend', want van het adres
+    bleven alleen de cijfers over. Een adres met letters en zonder @ blijft nu als tekst; een kort nummer blijft een
+    nummer, een mailadres een mailadres."""
+    gesprekken = [(1, "ProefBank", 45, ""), (2, "8850", 45, ""), (3, "Pakje-Proef", 45, "")]
+    deelnemers = [(1, "ProefBank"), (2, "8850"), (3, "Pakje-Proef")]
+    berichten = [(pk, a(bxl(2026, 10, 22, 9 + pk, 0)), 0, "SMS") for pk in (1, 2, 3)]
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_sms(os.path.join(map_, "sms.sqlite"), berichten, gesprekken, deelnemers, (),
+                       nieuwste=a(bxl(2026, 10, 23, 8, 0)))
+        rijen, _ = M.sms_rijen(pad, DAGEN)
+        zonder, _ = M.sms_rijen(pad, DAGEN, onbekend_als_nummer=False)
+    assert sorted(r["personen"] for r in rijen) == ["8850", "Pakje-Proef", "ProefBank"], [r["personen"] for r in rijen]
+    assert {r["personen"] for r in zonder} == {"onbekend"}
+
+
 def whatsapp_wereld(map_):
     """Een dag met twee gesprekken, een groep, een uitzendlijst, meldingen en vier oproepen."""
     sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0), (2, "123-456@g.us", GROEP, 1),

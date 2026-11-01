@@ -399,7 +399,9 @@ def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
             return naam
         if not onbekend_als_nummer:
             return "onbekend"
-        return schoon(re.sub(r"[^\d+*#]", "", adres) if "@" not in adres else adres) or "onbekend"
+        # TEL-3: een afzender in letters (een firmanaam) blijft als tekst; van een nummer alleen de cijfers
+        tekst = "@" in adres or any(c.isalpha() for c in adres)
+        return schoon(adres if tekst else re.sub(r"[^\d+*#]", "", adres)) or "onbekend"
 
     def gespreksnaam(pk):
         ident, soort, naam = gesprekken.get(pk, ("", None, ""))
