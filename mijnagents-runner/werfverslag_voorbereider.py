@@ -84,18 +84,15 @@ def dossiers_schrijven(d):
     json.dump(d, open(DOSSIERS_PAD, "w"), ensure_ascii=False, indent=1)
 
 
-def bevindingenmappen(bord_rijen):
-    """Bezoekmappen waarvoor Mehdi op het bord 'verslag van bevindingen' koos (2309, 21-10-2026): geen werfbezoek."""
-    return {(r.get("bezoekmap") or "").casefold() for r in bord_rijen
-            if isinstance(r.get("keuzes"), dict) and r["keuzes"].get("verslagtype") == "verslag_bevindingen" and r.get("bezoekmap")}
+bevindingenmappen = werfregistratie.bevindingen_uit_rijen
 
 
-def nummer_bezoeken(bezoeken, werfstart, bevindingen=()):
+def nummer_bezoeken(bezoeken, werfstart, bevindingen=(), projectmap=""):
     """Zet volgnr (uniek, oplopend), nr_label (VB1.., PB1.. of 1..) en soort_bezoek. Een verslag van bevindingen telt
-    niet mee in de werfverslagnummers."""
+    niet mee in de werfverslagnummers; herkend op pad, pad binnen de projectmap of vast bezoek-ID."""
     pb, wb, vb = 0, 0, 0
     for b in sorted(bezoeken, key=lambda m: (m["datum"], m["map"])):
-        if b["map"].casefold() in bevindingen:
+        if werfregistratie.is_bevindingen(b, projectmap, bevindingen):
             vb += 1
             b["soort_bezoek"], b["nr_label"], b["werfnr"] = "bevindingen", f"VB{vb}", 0
         elif werfstart and b["datum"] < werfstart:
@@ -1156,8 +1153,12 @@ def verwerk(nummer, droog=False):
     werfstart = (dossiers_lezen().get(str(nummer)) or {}).get("werfstart", "")
     try:
         alle_rijen = bord.call(f"/api/werfbezoek?dossier={nummer}").get("rijen", [])
-    except Exception:  # noqa: BLE001
-        alle_rijen = []
+    except Exception as ex:  # noqa: BLE001
+        # Zonder bordrijen kent de voorbereider Mehdi's keuzes niet: een verslag van bevindingen zou stil weer werfbezoek 1
+        # worden en een werfapp-bezoek krijgen. Dus dit dossier overslaan tot het bord weer leest (driehoeksoverleg 22-10, C5).
+        ag.log(str(nummer), "fout", f"bord niet leesbaar ({type(ex).__name__}); nummering en registratie overgeslagen")
+        return [], [{"tekst": f"Dossier {nummer}: bord niet leesbaar ({type(ex).__name__}); nummering en registratie wachten op de volgende ronde",
+                     "wie": "collega"}], []
     bevindingen = bevindingenmappen(alle_rijen)
     bereik_nood = None
     if not droog and bezoeken:
@@ -1170,7 +1171,7 @@ def verwerk(nummer, droog=False):
             for b in bezoeken:
                 if not b.get("registratie"):
                     b["registratie_blokkade"] = True
-    bezoeken = nummer_bezoeken(bezoeken, werfstart, bevindingen)
+    bezoeken = nummer_bezoeken(bezoeken, werfstart, bevindingen, projectmap)
     ag.log(str(nummer), "bevinding", f"{len(bezoeken)} bezoek(en) in de mappen: " + ", ".join(f"{b['nr_label']} {b['datum']}" for b in bezoeken)
            + (f"; werfstart {werfstart}" if werfstart else "; geen werfstart bekend"))
     bord_rijen = {r.get("bezoekmap"): r for r in alle_rijen}

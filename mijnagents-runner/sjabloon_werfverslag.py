@@ -401,6 +401,26 @@ def _voettekst(doc, tekst):
             p.add_run(tekst)
 
 
+def beeld_rechtop(data):
+    """Een rechtopstaande iPhone-foto is liggend opgeslagen met een EXIF-oriëntatie; Word negeert die en toont de foto
+    gedraaid (gezien in de PDF van 2309, 23-10-2026). Hier worden de pixels rechtgezet. Zonder oriëntatie, zonder
+    Pillow of bij een fout blijft het origineel ongewijzigd."""
+    try:
+        from PIL import Image, ImageOps
+        beeld = Image.open(io.BytesIO(data))
+        if beeld.getexif().get(0x0112, 1) == 1:
+            return data
+        beeld = ImageOps.exif_transpose(beeld)
+        buf = io.BytesIO()
+        if beeld.mode in ("RGB", "L"):
+            beeld.save(buf, format="JPEG", quality=88)
+        else:
+            beeld.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001 - een onleesbare foto beslist de plaatsing hieronder
+        return data
+
+
 def naar_docx(v, fotos=None, master=MASTER):
     """Word in de huisstijl van de contractmasters. fotos: dict bijschrift -> bytes (jpg/png)."""
     from docx import Document
@@ -551,7 +571,7 @@ def naar_docx(v, fotos=None, master=MASTER):
             p.paragraph_format.keep_with_next = True
             p.paragraph_format.space_after = Pt(0)
             try:
-                p.add_run().add_picture(io.BytesIO(fotos[b]), height=Cm(10.6))
+                p.add_run().add_picture(io.BytesIO(beeld_rechtop(fotos[b])), height=Cm(10.6))
             except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {b} niet leesbaar)")
                 v.setdefault("fotos_niet_geplaatst", []).append({"naam": b, "reden": f"plaatsing in Word: {type(ex).__name__}"})

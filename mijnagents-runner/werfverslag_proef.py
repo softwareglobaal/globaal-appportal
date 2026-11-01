@@ -750,8 +750,8 @@ def proef(ag, dossier, volgnr):
                [{"naam": f["naam"], "pad": f["pad"], "soort": "foto", "grootte": f["grootte"]} for f in fotos] + \
                [{"naam": o, "soort": "opname"} for o in opnames]
     verslagtype = keuzes.get("verslagtype") or gegevens.get("verslagtype_voorstel") or "werfverslag"
-    if (rij.get("bronnen") or {}).get("soort_bezoek") == "bevindingen":
-        verslagtype = vb.SOORT   # het bezoek is als verslag van bevindingen genummerd (VB1): nooit een werfverslag
+    if is_bevindingen(rij):
+        verslagtype = vb.SOORT   # het bezoek is als verslag van bevindingen gekozen of genummerd (VB1): nooit een werfverslag
     if verslagtype in pv.SOORTEN:
         # proces-verbaal van oplevering: het sjabloon met de gekende gegevens ingevuld, zonder Claude; Mehdi vult de rondgang in
         v = pv.leeg(verslagtype, dossier, rij.get("adres", ""))
@@ -862,8 +862,12 @@ def proef(ag, dossier, volgnr):
             "naslagmeldingen": naslagmeldingen, "tokens": {"voorbereiding": {"in": voorbereide_tokens.get("tokens_in", 0), "uit": voorbereide_tokens.get("tokens_uit", 0)}, "proef_pogingen": pogingen},
             "_verwerking": getattr(usage, "verwerking", {})}
     if bevindingen:
-        # geen werfverslag: geen concept in de werfapp en dus geen werfverslagnummer; de gegevens blijven voor --herlayout
-        info.update(bevindingen=bevindingen, werfapp={"overgeslagen": "verslag van bevindingen: geen werfverslag, geen werfverslagnummer"})
+        # geen werfverslag: geen concept in de werfapp en dus geen werfverslagnummer. De gegevens komen als JSON naast het
+        # Word-bestand: daar verbetert Mehdi (of Claude) ze, en --herlayout maakt de opmaak uit die laatste versie (C7).
+        pad_json = bronnen.upload(f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (gegevens).json",
+                                  json.dumps(bevindingen, ensure_ascii=False, indent=1).encode("utf8"))
+        info.update(bevindingen=bevindingen, gegevens_pad=pad_json,
+                    werfapp=naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx))
         _bewaar(rij, dossier, volgnr, gegevens=gegevens, bijlagen=bijlagen,
                 verslag_md=md, proef_pad=pad_docx, proef_ts=vandaag, proef_info=info)
         return pad_docx, md
@@ -889,10 +893,21 @@ def _vast_bezoek(rij, dossier, volgnr):
         return {}
 
 
+def is_bevindingen(rij):
+    """Een verslag van bevindingen volgens de actuele keuze, de nummering of de laatste proef: nooit naar de werfapp
+    (driehoeksoverleg 22-10, C6: de grendel kijkt ook naar de actuele keuze, niet alleen naar de oude proef)."""
+    return ((rij.get("keuzes") or {}).get("verslagtype") == vb.SOORT
+            or (rij.get("bronnen") or {}).get("soort_bezoek") == "bevindingen"
+            or (rij.get("proef_info") or {}).get("verslagtype") == vb.SOORT)
+
+
 def naar_werfapp(ag, dossier, volgnr, rij, verslag, fotos, pad_docx, bronnen=()):
     """De proef als conceptverslag in de werfapp, waar Mehdi naleest en verstuurt. Een fout hier laat de Word-proef
     staan: de reden komt op de bordrij en in het logboek, er wordt niets opnieuw betaald."""
     oud = (rij.get("proef_info") or {}).get("werfapp") or {}
+    if is_bevindingen(rij) or verslag.get("verslagtype") == vb.SOORT:
+        ag.log(f"{dossier}-{volgnr}", "besluit", "verslag van bevindingen: geen concept in de werfapp")
+        return {"overgeslagen": "verslag van bevindingen: geen werfverslag, geen werfverslagnummer", **({"oud": oud} if oud else {})}
     # alleen ter weergave: een eerder bevestigd concept blijft zichtbaar naast de fout (CX5-3); beslissen doet de werfapp
     bewaard = {k: oud[k] for k in ("id", "nummer", "verstuurd") if isinstance(oud.get("id"), int) and oud["id"] > 0 and oud.get(k)}
     try:
@@ -924,7 +939,7 @@ def werfapp_uit_proef(ag, dossier, volgnr):
     md = rij.get("verslag_md") or ""
     if not md.strip() or not rij.get("proef_pad"):
         raise RuntimeError("geen bewaarde proef (verslag_md) om door te zetten; eerst Maak concept")
-    if (rij.get("proef_info") or {}).get("verslagtype") == vb.SOORT or (rij.get("bronnen") or {}).get("soort_bezoek") == "bevindingen":
+    if is_bevindingen(rij):
         raise RuntimeError("verslag van bevindingen: geen werfverslag, gaat niet naar de werfapp en krijgt geen werfverslagnummer")
     v = sjab.van_markdown(md)
     if str(v.get("dossier") or "") != str(dossier):
@@ -944,25 +959,39 @@ def werfapp_uit_proef(ag, dossier, volgnr):
     return werf
 
 
+def bevindingen_gegevens(rij, dossier):
+    """De laatste gegevens van een verslag van bevindingen: eerst het JSON-bestand in de bezoekmap (daar komen de
+    verbeteringen), anders wat de proef op de bordrij bewaarde. Geeft (gegevens, herkomst)."""
+    pad = f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (gegevens).json"
+    try:
+        return json.loads(bronnen.download(pad).decode("utf8")), os.path.basename(pad)
+    except Exception:  # noqa: BLE001 - geen of onleesbaar bestand: terugvallen op de bordrij
+        bewaard = (rij.get("proef_info") or {}).get("bevindingen")
+        if not bewaard:
+            raise RuntimeError("verslag van bevindingen zonder gegevens (geen JSON in de bezoekmap, niets op de bordrij); opnieuw Maak concept")
+        return bewaard, "de bordrij"
+
+
 def herlayout(ag, dossier, volgnr):
     """Nieuwe Word-opmaak uit de bewaarde markdown, zonder Claude (geen tokens): na een wijziging van het sjabloon."""
     rij = _rij(dossier, volgnr)
     md = rij.get("verslag_md") or ""
-    if not md.strip():
-        raise RuntimeError("geen bewaarde proef (verslag_md) om opnieuw op te maken")
     info = rij.get("proef_info") or {}
-    if info.get("verslagtype") == vb.SOORT:
-        if not info.get("bevindingen"):
-            raise RuntimeError("verslag van bevindingen zonder bewaarde gegevens; opnieuw Maak concept")
+    if is_bevindingen(rij):
+        # ook zonder proef op het bord: een met de hand gemaakt verslag van bevindingen heeft alleen het JSON-bestand
+        bv, herkomst = bevindingen_gegevens(rij, dossier)
         teksten, fotos, _ = lees_bezoekmap(rij["bezoekmap"], alleen_eigen=(bronkeuze(rij) == "eigen"))
-        bv = info["bevindingen"]
         beelden = _fotos_verzamelen(teksten, fotos, vb.als_werfverslag(bv))
         docx = vb.naar_docx(bv, beelden)
+        # nooit overschrijven: Dropbox nummert, zodat een met de hand verbeterd Word-bestand blijft staan
         pad_docx = bronnen.upload(f"{rij['bezoekmap']}/{dossier} {vb.TITEL} (concept).docx", docx)
-        info.update({"fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
-        ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen: {os.path.basename(pad_docx)} ({len(docx)//1024} kB), zonder Claude")
+        info.update({"verslagtype": vb.SOORT, "fotos": len(beelden), "docx_kb": len(docx) // 1024, "layout": "HA-master"})
+        ag.log(f"{dossier}-{volgnr}", "schrijf", f"nieuwe opmaak verslag van bevindingen uit {herkomst}: {os.path.basename(pad_docx)} "
+               f"({len(docx)//1024} kB), zonder Claude")
         _bewaar(rij, dossier, volgnr, proef_pad=pad_docx, proef_ts=date.today().isoformat(), proef_info=info)
         return pad_docx
+    if not md.strip():
+        raise RuntimeError("geen bewaarde proef (verslag_md) om opnieuw op te maken")
     v = sjab.van_markdown(md)
     v.setdefault("datum", rij["datum"]); v.setdefault("adres", rij.get("adres", "")); v.setdefault("opgemaakt", date.today().isoformat())
     keuzes = rij.get("keuzes") or {}

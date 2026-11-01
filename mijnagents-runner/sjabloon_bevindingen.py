@@ -41,7 +41,7 @@ VOORBEHOUD = (
     "Dit verslag steunt op een visueel onderzoek tijdens het plaatsbezoek, zonder destructief onderzoek en zonder toegang tot "
     "het dak. Verborgen delen (onderdak, isolatie, houtstructuur, aansluitingen achter afwerkingen) werden niet onderzocht.\n"
     "Bij elke bevinding staat de herkomst. Verklaringen van de bouwheer en de inhoud van de stukken werden niet op hun "
-    "juistheid gecontroleerd.\n"
+    "juistheid gecontroleerd. Wie bij het bezoek niet aanwezig was, werd niet gehoord.\n"
     "Het verslag doet geen uitspraak over aansprakelijkheid, contractuele verplichtingen of de juridische kwalificatie van de "
     "gebreken. Dat is de taak van de raadsman van de bouwheer en, desgevallend, van een gerechtsdeskundige.\n"
     "De raming is een indicatieve orde van grootte, exclusief btw, en vervangt geen offerte van een herstelaannemer.\n"
@@ -51,7 +51,7 @@ VOORBEHOUD = (
 def leeg(nr="<nr>", adres="<adres van het goed>"):
     """Een leeg verslag met plaatshouders, als sjabloon voor Mehdi."""
     return {
-        "dossier": nr, "adres": adres, "referentie": f"{nr}-VB1", "datum": "<JJJJ-MM-DD>", "opgemaakt": date.today().isoformat(),
+        "dossier": nr, "adres": adres, "referentie": f"{nr}-VB<n>", "datum": "<JJJJ-MM-DD>", "opgemaakt": date.today().isoformat(),
         "opdrachtgever": "<naam bouwheer(s)>", "aanvrager": "<bouwheer / raadsman van de bouwheer>",
         "opdracht": ["<wie vroeg het verslag, wanneer en waarvoor>"],
         "rol": ["<eerdere betrokkenheid van H-Architects bij het goed, met bron (overeenkomst, vergunning, mails)>"],
@@ -81,15 +81,33 @@ def euro(x):
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _bedrag(r):
+    return isinstance(r.get("van"), (int, float)) and isinstance(r.get("tot"), (int, float))
+
+
 def raming_totaal(v):
-    """Som van de ramingen; een variant (in plaats van een andere post) telt niet mee."""
-    rijen = [r for r in v.get("raming", []) if not r.get("variant")
-             and isinstance(r.get("van"), (int, float)) and isinstance(r.get("tot"), (int, float))]
+    """Som van de ramingen; een variant (in plaats van een andere post) en een p.m.-post tellen niet mee."""
+    rijen = [r for r in v.get("raming", []) if not r.get("variant") and _bedrag(r)]
     return sum(r["van"] for r in rijen), sum(r["tot"] for r in rijen)
 
 
+def raming_totalen(v):
+    """Het totaal en, per variant die een post vervangt ('vervangt': 'R3a'), het totaal van dat scenario
+    (driehoeksoverleg 22-10, K7: het scenario met nieuwe ramen mag niet verborgen blijven)."""
+    van, tot = raming_totaal(v)
+    uit = [("Totaal", van, tot)] if tot else []
+    per_nr = {r.get("nr"): r for r in v.get("raming", [])}
+    for r in v.get("raming", []):
+        weg = per_nr.get(r.get("vervangt"))
+        if r.get("variant") and _bedrag(r) and weg and _bedrag(weg):
+            uit.append((f"Totaal met {r['nr']} in plaats van {weg['nr']}", van - weg["van"] + r["van"], tot - weg["tot"] + r["tot"]))
+    return uit
+
+
 def _ramingpost(x):
-    return x.get("post", "") + (" (variant, niet in het totaal)" if x.get("variant") else "")
+    if x.get("variant"):
+        return x.get("post", "") + (f" (variant in plaats van {x['vervangt']})" if x.get("vervangt") else " (variant, niet in het totaal)")
+    return x.get("post", "")
 
 
 def _herkomst(code):
@@ -113,7 +131,8 @@ def uit_werfproef(verslag):
     bezoek = str(verslag.get("bezoek") or "")
     v = leeg(nr, verslag.get("adres", ""))
     open_ = "(in te vullen)"
-    v.update({"referentie": f"{nr}-{bezoek}" if bezoek.startswith("VB") else f"{nr}-VB1", "datum": verslag["datum"],
+    # het VB-nummer komt van de voorbereider (bordrijen per dossier); zonder VB-nummer niet gokken
+    v.update({"referentie": f"{nr}-{bezoek}" if bezoek.startswith("VB") else f"{nr}-VB (nummer na te kijken)", "datum": verslag["datum"],
               "opgemaakt": verslag.get("opgemaakt") or date.today().isoformat(), "opdrachtgever": open_,
               "aanvrager": open_, "opdracht": [open_ + " wie vroeg het verslag, wanneer en waarvoor"],
               "rol": [open_ + " eerdere betrokkenheid van H-Architects bij dit goed, met bron"],
@@ -216,9 +235,8 @@ def naar_markdown(v):
     r.extend(["| Nr | Herstelling | Bij | Raming excl. btw |", "|---|---|---|---|"])
     for x in v.get("raming", []):
         r.append(f"| {x.get('nr', '')} | {_ramingpost(x)} | {x.get('bij', '')} | {_ramingbedrag(x)} |")
-    van, tot = raming_totaal(v)
-    if tot:
-        r.append(f"| | Totaal | | {euro(van)} tot {euro(tot)} euro |")
+    for label, van, tot in raming_totalen(v):
+        r.append(f"| | {label} | | {euro(van)} tot {euro(tot)} euro |")
     r.append("")
     for alinea in v.get("raming_toelichting", []):
         r.extend([alinea, ""])
@@ -353,9 +371,8 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
         alinea("- " + g["punt"] + (f" ({g['bron']})" if g.get("bron") else ""), na=2)
     hoofdstuk("Herstelling en raming")
     rijen = [[x.get("nr", ""), _ramingpost(x), x.get("bij", ""), _ramingbedrag(x)] for x in v.get("raming", [])]
-    van, tot = raming_totaal(v)
-    if tot:
-        rijen.append(["", "Totaal", "", f"{euro(van)} tot {euro(tot)}"])
+    for label, van, tot in raming_totalen(v):
+        rijen.append(["", label, "", f"{euro(van)} tot {euro(tot)}"])
     tabel(["Nr", "Herstelling", "Bij", "Euro excl. btw"], rijen, [1.2, 9.8, 1.6, 3.8])
     for t in v.get("raming_toelichting", []):
         alinea(t, na=4)
@@ -375,7 +392,7 @@ def naar_docx(v, fotos=None, master=sj.MASTER):
         for i, (f, bij) in enumerate(fotolijst, 1):
             p = doc.add_paragraph(); p.paragraph_format.keep_with_next = True; p.paragraph_format.space_after = Pt(0)
             try:
-                p.add_run().add_picture(io.BytesIO(fotos[f]), height=Cm(10.6))
+                p.add_run().add_picture(io.BytesIO(sj.beeld_rechtop(fotos[f])), height=Cm(10.6))
             except Exception as ex:  # noqa: BLE001
                 p.add_run(f"(foto {f} niet leesbaar: {type(ex).__name__})")
             q = alinea(na=10)
