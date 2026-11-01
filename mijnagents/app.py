@@ -2081,7 +2081,9 @@ def api_wachten_dag():
         datetime.strptime(dag, "%Y-%m-%d")
     except ValueError:
         abort(400)
-    return jsonify(WD.dag(db(), dag, DAGBUNDELAAR_AGENTS, DAGBUNDELAAR_VAKKEN, DAGBUNDELAAR_BOVEN))
+    # T-0120 AG-9: ?wacht=<naam>&blad=<n> geeft dat blad van het werkverslag van die wacht
+    return jsonify(WD.dag(db(), dag, DAGBUNDELAAR_AGENTS, DAGBUNDELAAR_VAKKEN, DAGBUNDELAAR_BOVEN,
+                          wacht=request.args.get("wacht") or None, blad=request.args.get("blad", type=int)))
 
 
 @app.route("/bronnen")

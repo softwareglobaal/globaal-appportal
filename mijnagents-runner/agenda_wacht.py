@@ -127,7 +127,8 @@ def prive_teksten(items):
 
 # De logregels korten een titel in ([:40], [:44], [:50] ...); het masker vervangt alleen wat het letterlijk kent.
 # Daarom kent het ook die stukken (Codex-controle ronde 1, A05: een ingekorte privétitel glipte erlangs).
-KORT_LENGTES = (30, 40, 44, 45, 50, 55, 60, 70, 80)
+# 58: de titelsignalen (T-0120 AG-2, Codex-toets 1: met 55 bleven drie tekens van een privétitel staan).
+KORT_LENGTES = (30, 40, 44, 45, 50, 55, 58, 60, 70, 80)
 
 
 def met_ingekort(teksten):
@@ -6203,10 +6204,37 @@ def reistijd_zetten(items, alleen_dag=None, nu=None, niet_op_kaart=None):
     return gemaakt, al, geen_adres, fout, regels
 
 
+def adres_bekend(a, info, projecten):
+    """Of een buitenafspraak een bestemming heeft, uit dezelfde bronnen als de reistijd en de adresvraag: het adresveld
+    (ook thuis), de projectmap, een plek uit locatie.globaal.be en een vaste plek. Een bron die niet antwoordt, telt als
+    niet gevonden. T-0120 AG-4: tot 01-11-2026 kende 'zonder adres' alleen het adresveld en de projectmap, en meldde het
+    afspraken waar de reistijd wel een adres voor vond."""
+    if is_thuis_adres(a.get("locatie") or "") or _bruikbare_locatie(a.get("locatie")):
+        return True
+    if info["nummer"] and info["nummer"] in projecten and _bruikbare_locatie(projecten[info["nummer"]].get("adres")):
+        return True
+    try:
+        plek, _ = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
+        _woord, vast = vaste_plek(a.get("titel") or "") if not plek else (None, None)
+    except Exception:  # noqa: BLE001
+        plek = vast = None
+    return bool(plek or vast and _bruikbare_locatie(vast.get("adres")))
+
+
 def onvolledige_afspraken(items, vandaag):
+    """De regels van het signaal 'zonder projectnummer of adres', een per afspraak (onvolledig_per_afspraak)."""
+    return [onvolledig_regel(a, wat) for a, wat in onvolledig_per_afspraak(items, vandaag)]
+
+
+def onvolledig_regel(a, wat):
+    return f"{a['start'][:16]} {a['titel'][:60]} ({KALENDERS.get(a['kalender'], '')[:12]}): " + ", ".join(wat)
+
+
+def onvolledig_per_afspraak(items, vandaag):
     """Regel van Mehdi (11-09-2026): elke klantafspraak draagt een projectnummer; online volstaat
-    het nummer, buiten moet er ook een adres zijn (uit de agenda of uit de projectmap).
-    Prospecten (PO/PB) hebben nog geen nummer: daar vraag ik alleen een adres bij buiten."""
+    het nummer, buiten moet er ook een adres zijn (uit dezelfde bronnen als de reistijd, adres_bekend).
+    Prospecten (PO/PB) hebben nog geen nummer: daar vraag ik alleen een adres bij buiten.
+    Geeft (afspraak, wat ontbreekt) per afspraak, zodat adres_noden ze aan een afspraak kan koppelen (T-0120 AG-4)."""
     projecten = projectadressen.index()
     uit = []
     for a in items:
@@ -6215,16 +6243,14 @@ def onvolledige_afspraken(items, vandaag):
         info = lees_titel(a["titel"])
         if info["reistijd"] or info["soort"] == "IN" or not (info["firma"] or info["buiten"]):
             continue
-        adres = a.get("locatie") or ""
-        fysiek = bool(adres) and not adres.lower().startswith("http")
         wat = []
         if info["soort"] in ("KB", "KO") and not info["nummer"]:
             wat.append("geen projectnummer")
         if info["soort"] in ("KB", "PB") or info["buiten"]:
-            if not fysiek and not (info["nummer"] in projecten):
-                wat.append("geen adres (niet in agenda, geen projectmap met dit nummer)")
+            if not adres_bekend(a, info, projecten):
+                wat.append("geen adres (niet in de agenda, de projectmap, locatie.globaal.be of de vaste plekken)")
         if wat:
-            uit.append(f"{a['start'][:16]} {a['titel'][:60]} ({KALENDERS.get(a['kalender'], '')[:12]}): " + ", ".join(wat))
+            uit.append((a, wat))
     return uit
 
 
@@ -6857,18 +6883,8 @@ def _adresvragen(items, nu=None, uren=24 * RIT_VOORUIT_ALLES, projecten=None, ni
         if info["reistijd"] or not (info["buiten"] or info["soort"] in BUITEN_SOORTEN):
             continue
         niet_gevonden = (a.get("kalender"), a.get("id"), a.get("start")) in (niet_op_kaart or ())
-        if not niet_gevonden:
-            if is_thuis_adres(a.get("locatie") or "") or _bruikbare_locatie(a.get("locatie")):
-                continue
-            if info["nummer"] and info["nummer"] in projecten and _bruikbare_locatie(projecten[info["nummer"]].get("adres")):
-                continue
-            try:
-                plek, _ = plek_zoeken((a.get("titel") or "") + " " + (a.get("omschrijving") or ""))
-                woord, vast = vaste_plek(a.get("titel") or "") if not plek else (None, None)
-            except Exception:  # noqa: BLE001
-                plek = vast = None
-            if plek or vast and _bruikbare_locatie(vast.get("adres")):
-                continue
+        if not niet_gevonden and adres_bekend(a, info, projecten):   # dezelfde bronnen als 'zonder adres' (AG-4)
+            continue
         id_ = a.get("id") or hashlib.sha256(f"{a.get('kalender')}|{a.get('start')}|{a.get('titel')}".encode()).hexdigest()[:16]
         zin = (f"Mehdi, het adres van de buitenafspraak van {start:%d-%m %H:%M} vind ik niet op de kaart; "
                "schrijf het zoals op de kaart (straat nummer, postcode gemeente)." if niet_gevonden else
@@ -6964,6 +6980,48 @@ def zonder_rit_indelen(rregels):
         elif "rijtijd niet berekend" in regel:
             zonder_rit["rijtijd niet berekend"].append(regel[:110])
     return zonder_rit
+
+
+def titel_regel(a):
+    """Een regel van een titelsignaal: start en titel, een privéafspraak als '(privé)' (_toon). Tot 01-11-2026 de ruwe
+    titel[:58]: met spaties vooraan schoof die inkorting en bleef een teken van een privétitel na het masker staan
+    (Codex-toets 2, T-0120 AG-2)."""
+    return f"{a['start'][:16]} {_toon(a, 58)}"
+
+
+def titel_uniek(reden, dag):
+    """De sleutel van het titelsignaal voor een reden op een dag. Het begin van de reden blijft leesbaar; een korte hash
+    van de hele reden houdt twee redenen met hetzelfde begin uit elkaar (T-0120 AG-3). Tot 01-11-2026 gaven
+    'geen firmacode, wellicht [A]' en '[B]' dezelfde sleutel, en overschreef het tweede signaal het eerste op het bord."""
+    return f"agenda-titel-{reden[:20]}-{hashlib.sha256(reden.encode()).hexdigest()[:8]}:{dag}"
+
+
+# T-0120 AG-5: het signaal 'Link doorsturen of titel nakijken' had een sleutel per rondedag (de dag van een dagronde):
+# 516 signalen in oktober, 57 op 29-10 alleen. Nu een signaal per dag; de regels van alle rondes van die dag staan hier.
+LINKSIGNAAL = os.path.expanduser("~/appportal/mijnagents-data/agenda-linksignaal.json")
+LINKSIGNAAL_MAX = 200                   # regels in het signaal; daarboven een slotregel met het aantal
+
+
+def linksignaal_regels(vandaag, nieuw):
+    """De regels van alle rondes van vandaag samen, elke regel een keer, in de volgorde van de eerste keer. Een nieuwe
+    dag begint leeg. Een onleesbaar of onschrijfbaar staatbestand is geen fout: dan staan alleen de regels van nu erin.
+    Geen sleutel op de inhoud: die gaf bij wisselende tekst weer een signaal per ronde (Codex, meting T-0120)."""
+    try:
+        with open(LINKSIGNAAL, encoding="utf-8") as f:
+            d = json.load(f)
+        oud = d.get("regels") if isinstance(d, dict) and d.get("dag") == vandaag else []
+    except (OSError, ValueError):
+        oud = []
+    regels = list(dict.fromkeys([r for r in (oud if isinstance(oud, list) else []) if isinstance(r, str)] + list(nieuw)))
+    try:
+        os.makedirs(os.path.dirname(LINKSIGNAAL), exist_ok=True)
+        tmp = f"{LINKSIGNAAL}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"dag": vandaag, "regels": regels}, f, ensure_ascii=False, indent=0)
+        os.replace(tmp, LINKSIGNAAL)
+    except OSError:
+        pass
+    return regels
 
 
 WEEKCONSOLIDATIE_MAP = os.path.expanduser("~/appportal/mijnagents-data/export/Agendawacht/weekconsolidatie")
@@ -7201,8 +7259,9 @@ def vragen_in_agenda(items, nu=None, niet_op_kaart=None):
     return gezet, weg
 
 
-def adres_vraag_noden(items, nu=None, niet_op_kaart=None):
-    """Een stabiele nood voor een adresvraag die niet zichtbaar in de afspraak kon worden gezet."""
+def adres_vraag_noden(items, nu=None, niet_op_kaart=None, gevraagd=None):
+    """Een stabiele nood voor een adresvraag die niet zichtbaar in de afspraak kon worden gezet. gevraagd: een lijst die
+    elke afspraak met zo'n nood krijgt, voor adres_noden (T-0120 AG-4)."""
     vragen = _adresvragen(items, nu, niet_op_kaart=niet_op_kaart)
     per_id = {a.get("id"): a for a in items}
     uit = []
@@ -7213,7 +7272,69 @@ def adres_vraag_noden(items, nu=None, niet_op_kaart=None):
                       and any(s in (a.get("omschrijving") or "").split("\n", 1)[0]
                               for s in ("zet het adres erin", "vind ik niet op de kaart"))):
             uit.append({"tekst": f"{zin} VR niet mogelijk ({sleutel})", "wie": "mehdi"})
+            if gevraagd is not None and a:
+                gevraagd.append(a)
     return uit
+
+
+def _sleutel(a):
+    return (a.get("kalender"), a.get("id"), a.get("start"))
+
+
+def regel_afspraak(regel, afspraken):
+    """De sleutel (agenda, id, start) van de afspraak waar een regel van reistijd_zetten over gaat, of None. Zo'n regel is
+    'start[:16] _toon(a, 50)', of begint daarmee gevolgd door ': '. Passen er meer, dan wint de langste titel ('Proef bij
+    klant' boven 'Proef'); twee met dezelfde titel op dezelfde minuut is onzeker: None, dan meld ik liever twee keer dan
+    geen keer (Codex-toetsen 1 en 2, T-0120 AG-4)."""
+    passend = {}
+    for a in afspraken:
+        # ook de titel zonder de 'VR ' die vragen_in_agenda er later in dezelfde ronde voor zet (Codex-toets 3)
+        for titel in {_toon(a, 50), _toon(dict(a, titel=re.sub(r"^VR\s+", "", a.get("titel") or "")), 50)}:
+            kop = f"{(a.get('start') or '')[:16]} {titel}"
+            if regel == kop or regel.startswith(kop + ": "):
+                passend.setdefault(len(kop), set()).add(_sleutel(a))
+    beste = passend[max(passend)] if passend else set()
+    return next(iter(beste)) if len(beste) == 1 else None
+
+
+def rit_koppeling(zonder_rit, afspraken):
+    """regel -> sleutel van de afspraak, gemaakt meteen na reistijd_zetten, voor de titels nog veranderen (een VR-vraag
+    later in de ronde). adres_noden gebruikt deze koppeling (Codex-toets 3, T-0120 AG-4)."""
+    return {r: regel_afspraak(r, afspraken) for rij in (zonder_rit or {}).values() for r in rij}
+
+
+def adres_noden(zonder_rit, onvolledig, gevraagd=(), afspraken=(), koppeling=None):
+    """De noden over projectnummer, adres en reistijd, zo dat een afspraak in hoogstens een staat (T-0120 AG-4; tot
+    01-11-2026 stond een afspraak zonder adres in drie noden). Een voorrangsregel per afspraak, herkend aan agenda, id en
+    start: de adresvraag van adres_vraag_noden (gevraagd: die afspraken), dan de reden waarom de reistijd ontbreekt
+    (zonder_rit_indelen; regel_afspraak koppelt elke regel aan een van afspraken), dan 'zonder adres', dan 'zonder
+    projectnummer' (onvolledig: (afspraak, wat) uit onvolledig_per_afspraak). Online volstaat het nummer, dus daar nooit
+    een adresmelding. koppeling: uit rit_koppeling, gemaakt voor de titels in de ronde veranderden; wat daar niet in
+    staat, koppel ik hier."""
+    koppeling = koppeling or {}
+    onvolledig = list(onvolledig or ())
+    kandidaten = list(afspraken) + [a for a, _ in onvolledig]
+    gedekt = {_sleutel(a) for a in gevraagd}
+    gevraagd = set(gedekt)
+    noden = []
+    for reden, rij in (zonder_rit or {}).items():
+        sleutels = [koppeling[r] if r in koppeling else regel_afspraak(r, kandidaten) for r in rij]
+        if any(s is None or s not in gevraagd for s in sleutels):
+            noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
+        gedekt.update(s for s in sleutels if s)
+    adres = nummer = False
+    for a, wat in onvolledig:
+        if _sleutel(a) in gedekt:
+            continue
+        if any(w.startswith("geen adres") for w in wat):
+            adres = True
+        elif "geen projectnummer" in wat:
+            nummer = True
+    if nummer:
+        noden.append({"tekst": "Klantafspraken zonder projectnummer in de titel: zet het nummer erin", "wie": "mehdi"})
+    if adres:
+        noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen", "wie": "mehdi"})
+    return noden
 
 
 def belvenster_uren(nu):
@@ -7855,7 +7976,8 @@ def _ronde(rd):
         if niet_conform:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(niet_conform)} afspraken zonder code ([HA-KB] enz.)",
                           "uniek": f"agenda-conventie:{vandaag}", "inhoud": "\n".join("- " + x for x in niet_conform[:40])})
-        onvolledig = onvolledige_afspraken(items, vandaag)
+        onvolledig_a = onvolledig_per_afspraak(items, vandaag)          # per afspraak, voor adres_noden (AG-4)
+        onvolledig = [onvolledig_regel(a, wat) for a, wat in onvolledig_a]
         if onvolledig:
             klaar.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"{len(onvolledig)} afspraken zonder projectnummer of adres",
                           "uniek": f"agenda-onvolledig:{vandaag}", "inhoud": "\n".join("- " + x for x in onvolledig[:40])})
@@ -7979,10 +8101,15 @@ def _ronde(rd):
                "\n".join(nregels + zregels))
         voorstellen = [r for r in nregels + pregels if "VOORSTEL" in r]
         if zregels or voorstellen:
+            # T-0120 AG-5: een signaal per dag met de regels van alle rondes van die dag (linksignaal_regels). revisie:
+            # ook een al opgepakt signaal krijgt de nieuwe regels en staat weer klaar (de oude versie blijft bewaard).
+            lregels = linksignaal_regels(vandaag, zregels + voorstellen)
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                          "titel": "Link doorsturen of titel nakijken",
-                          "uniek": f"agenda-zoom-titel:{vandaag}:{dag_grens or 'alle'}",
-                          "inhoud": "\n".join("- " + r for r in (zregels + voorstellen)[:30])}])
+                          "titel": "Link doorsturen of titel nakijken", "revisie": True,
+                          "uniek": f"agenda-zoom-titel:{vandaag}",
+                          "inhoud": "\n".join(["- " + r for r in lregels[:LINKSIGNAAL_MAX]]
+                                              + ([f"- en nog {len(lregels) - LINKSIGNAAL_MAX} regel(s)"]
+                                                 if len(lregels) > LINKSIGNAAL_MAX else []))}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
         niet_op_kaart = set()
@@ -8015,6 +8142,7 @@ def _ronde(rd):
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
         zonder_rit = zonder_rit_indelen(rregels)
+        rit_sleutels = rit_koppeling(zonder_rit, rit_items)   # AG-4: nu, voor een VR-vraag de titel verandert
         te_krap = [r[:140] for r in rregels if "TE KRAP" in r]
 
         rooster = rooster_maken(items, archief, vandaag, mail_noden)
@@ -8080,7 +8208,6 @@ def _ronde(rd):
                                  "titel": f"Buitenafspraak zonder reistijd: {reden}",
                                  "uniek": f"agenda-reistijd-{reden[:18]}:{vandaag}",
                                  "inhoud": "\n".join("- " + x for x in rij[:30])})
-            noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
         if te_krap:
             rit_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
                                  "titel": "Te krap: je komt te laat", "uniek": f"agenda-te-krap:{vandaag}:{dag_grens or 'alle'}",
@@ -8094,21 +8221,18 @@ def _ronde(rd):
                 continue
             inf = lees_titel(a.get("titel", ""))
             for reden in titelfouten(a, inf):
-                titel_fouten.setdefault(reden, []).append(f"{a['start'][:16]} {a.get('titel','')[:58]}")
+                titel_fouten.setdefault(reden, []).append(titel_regel(a))
         # Zelf versturen: 'klaar' is hierboven al klaargezet, wat er daarna bij kwam ging nooit weg (audit A13, FR-93)
         titel_signalen = []
         for reden, rij in sorted(titel_fouten.items()):
             titel_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                                   "titel": f"Titels: {reden}", "uniek": f"agenda-titel-{reden[:20]}:{vandaag}",
+                                   "titel": f"Titels: {reden}", "uniek": titel_uniek(reden, vandaag),
                                    "inhoud": "\n".join("- " + x for x in rij[:40])})
             noden.append({"tekst": f"Afspraken met een titel die niet klopt: {reden}", "wie": "mehdi"})
         if titel_signalen:
             ag.klaarzet(titel_signalen)
         if niet_conform and "geen firmacode" not in titel_fouten:
             noden.append({"tekst": "Afspraken zonder firmacode in de titel: rechtzetten, anders krijgen ze geen kleur",
-                          "wie": "mehdi"})
-        if onvolledig:
-            noden.append({"tekst": "Buitenafspraken zonder adres: zonder adres kan ik geen reistijd berekenen",
                           "wie": "mehdi"})
         # De plaatsen van Lara horen in locatie.globaal.be, niet in een lijst van mij.
         try:
@@ -8125,7 +8249,10 @@ def _ronde(rd):
         if in_archief:
             noden.append({"tekst": "Er wordt nog geboekt in een archiefagenda: het Calendly-kanaal omzetten naar werk", "wie": "mehdi"})
         vg, vw = vragen_in_agenda(rit_items, niet_op_kaart=niet_op_kaart)
-        noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart))
+        gevraagd = []
+        noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, gevraagd=gevraagd))
+        # T-0120 AG-4: nummer, adres en reistijd na de adresvragen, zo dat een afspraak in hoogstens een nood staat
+        noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items, rit_sleutels))
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG and geplande_start():

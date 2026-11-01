@@ -43,6 +43,9 @@ RUN python3 test_felix.py
 RUN python3 test_klaargezet_pagina.py
 # Grendel op de groep Dagbundelaar: elke agent van het dagboek op één plek, niets dubbel. Zie test_dagbundelaar_groep.py.
 RUN python3 test_dagbundelaar_groep.py
+# T-0120 AG-2, AG-9 en CL-4: het vak Agenda op /api/wachten/dag (regels van een signaal, werkverslag per blad, het
+# weekend van een werkdagwacht). Zie test_wachten_agenda.py.
+RUN python3 test_wachten_agenda.py
 # Grendel op /api/wachten/dag: per wacht van de groep Dagbundelaar wat er op een dag binnenkwam, met de juiste kleur.
 # Zie test_wachten_dag.py.
 RUN python3 test_wachten_dag.py

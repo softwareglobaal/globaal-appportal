@@ -36,7 +36,7 @@
     </div>
   {% endfor %}
   {% endif %}
-  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Nooit de tekst van een bericht.</p>
+  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Nooit de tekst van een bericht.</p>
 </main>
 <style>
   .dagkeuze{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
@@ -55,7 +55,7 @@
   .tegel .regel{color:var(--zacht);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
   .tegel .fouttekst{color:var(--rood)}
   .tegel .open{font-size:12px;font-weight:600;color:var(--oranje);margin-left:6px;vertical-align:middle}
-  .tegel.kleur-grijs .groot{color:var(--grijs)}
+  .tegel.kleur-grijs .groot,.tegel.kleur-rust .groot{color:var(--grijs)}
   @media (max-width:900px){.wachttegels{grid-template-columns:repeat(3,1fr)}}
   @media (max-width:600px){.wachttegels{grid-template-columns:repeat(2,1fr)}}
 </style>

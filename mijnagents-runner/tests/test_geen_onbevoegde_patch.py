@@ -492,7 +492,9 @@ for naam, resultaat, patches in (("uitroep_vooraan", uitroep, uitroep_patches),
     omgeving_main = {"ag": SimpleNamespace(klaarzet=lambda x: signalen.extend(x)),
                     "nregels": regels if naam != "projectnummers_zetten" else [],
                     "pregels": regels if naam == "projectnummers_zetten" else [],
-                    "zregels": [], "vandaag": "2026-10-17", "dag_grens": None}
+                    "zregels": [], "vandaag": "2026-10-17", "dag_grens": None,
+                    # T-0120 AG-5: de regels van de dag samen; hier zonder staatbestand (nooit de echte datamap)
+                    "linksignaal_regels": lambda _dag, regels: list(regels), "LINKSIGNAAL_MAX": W.LINKSIGNAAL_MAX}
     doorgifte = veilig(lambda: exec(signaal_code, omgeving_main))
     check(f"A9: {naam} geeft VOORSTEL met reden in Mehdi's main-signaal",
           isinstance(resultaat, tuple) and len(regels) == 1 and not patches
@@ -562,7 +564,8 @@ dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen"
          "vandaag": "2026-10-17", "DAG_ARG": None,
          "geplande_start": lambda: True, "HANDKLEUREN": [], "open_na": [], "ROUTES_GESTOPT": False,
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
-         "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": []}
+         "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": [], "onvolledig_a": [],
+         "zonder_rit": {}, "rit_sleutels": {}, "adres_noden": W.adres_noden}   # T-0120 AG-4: de adresnoden staan nu in de staart
 # fase 1 (overleg 27-10-2026): de weeknood en de noodlijst van een dagronde staan nu ook aan het einde van de ronde
 dummy.update({"weekconsolidatie_noden": lambda: [], "weekconsolidatie_fout": lambda: ""})
 resultaat = veilig(lambda: in_de_ronde(staart))

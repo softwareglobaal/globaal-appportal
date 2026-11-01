@@ -17,7 +17,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 # Mehdi leest de wacht per dag in het Dagboek: niets wegkappen wat hij daar wil zien (Codex 01-11). Een dag heeft hoogstens
 # enkele honderden rondes (de Fotowacht 435 op 30-10).
 MAX_ITEMS = 2000
-MAX_LOG = 1000
+MAX_LOG = 1000                          # regels per blad van het werkverslag (T-0120 AG-9: 23-10 had er 4.445)
 KORT = 160
 # Welke wacht schrijft welke bron in de gesprekkentabel (gesprek_log.bron).
 GESPREK_BRON = {"whatsapp-wacht": "whatsapp", "belwacht": "telefoon", "sms-wacht": "sms", "xelion-wacht": "xelion",
@@ -26,6 +26,11 @@ MAIL_WACHTEN = ("mail-prive", "mail-mch", "mail-info-harc", "mail-hinv", "mail-m
 # De bronnen in de dagregel van De Zoomwacht (zoom_wacht.dag_inhoud: ZOOM_BRONNEN, de twee van Fathom en de chat)
 ZOOM_DAG_BRONNEN = ("rapport", "vaste vergaderruimte", "gepland", "opnames", "laatste sessie", "fathom-archief",
                     "fathom-api", "chat")
+# T-0120 AG-2: van een signaal of dagplan van deze wachten ook de regels van de inhoud, niet alleen de titel (welke
+# afspraak, welke boeking). Hun inhoud is bij het klaarzetten gemaskeerd zoals op het bord (bord.Agent.maskeer geeft
+# '(privé)'); ik toon ze zoals ze daar staan. Andere wachten niet: nooit de tekst van een bericht.
+REGELS_VAN = ("agenda-wacht", "calendly-wacht")
+MAX_REGELS = 200
 
 
 def grenzen(dag):
@@ -175,8 +180,18 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
-        items.append(_item(tijd, r["soort"] or "item", wat))
+        it = _item(tijd, r["soort"] or "item", wat)
+        if wacht in REGELS_VAN and r["soort"] in ("signaal", "dagplan") and inhoud is None and r["inhoud"]:
+            it["regels"] = inhoud_regels(r["inhoud"])
+        items.append(it)
     return items
+
+
+def inhoud_regels(inhoud):
+    """De regels van een tekstinhoud als lijst, zonder het streepje vooraan; lege regels vallen weg. Boven MAX_REGELS een
+    slotregel met het aantal."""
+    uit = [kort(re.sub(r"^\s*-\s+", "", x), 220) for x in str(inhoud or "").splitlines() if x.strip()]
+    return uit[:MAX_REGELS] + ([f"en nog {len(uit) - MAX_REGELS} regel(s)"] if len(uit) > MAX_REGELS else [])
 
 
 def lees_log(conn, wacht, van, tot):
@@ -196,7 +211,23 @@ def _utc(ts):
     return (x if x.tzinfo else x.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat()
 
 
-def per_wacht(conn, wacht, label, dag, status=None, noden=()):
+# CL-4: de schrijfwijzen van 'alleen op werkdagen' in de vrije cadans van de tabel agent, en wat dat tegenspreekt (het
+# weekend, of rondes door de dag: De Agendawacht draait op werkdagen, maar haar signaalwacht elke dag om de 12 minuten).
+WERKDAGEN_RE = re.compile(r"werkdag|\bma\s*(?:-|tot)\s*vr\b|\bmaandag\s*(?:-|tot)\s*vrijdag\b|\b1-5\b")
+NIET_ALLEEN_WERKDAGEN_RE = re.compile(r"weekend|zaterdag|zondag|\bza\b|\bzo\b|elke dag|dagelijks|minuut|minuten|kwartier"
+                                      r"|\buur\b|\*/")
+
+
+def alleen_werkdagen(cadans):
+    """Of de cadans uit de tabel agent zegt dat de wacht alleen op werkdagen draait ('Elke werkdag 07:15', 'ma-vr 08:15').
+    Vrije tekst, dus streng: twijfel is geen werkdagwacht, en die blijft in het weekend grijs (T-0120 CL-4)."""
+    c = str(cadans or "").casefold()
+    return bool(WERKDAGEN_RE.search(c)) and not NIET_ALLEEN_WERKDAGEN_RE.search(c)
+
+
+def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=""):
+    """blad: welk blad van het werkverslag (1 is het begin); zonder blad het laatste, zoals voordien de laatste MAX_LOG
+    regels. Een blad buiten het bereik wordt het dichtstbijzijnde (T-0120 AG-9)."""
     van, tot = grenzen(dag)
     items, gedekt, leesfout, logfout = [], None, "", ""
     # Items en werkverslag apart gelezen en apart gemeld (Codex 01-11): faalt het een, dan blijft het ander staan.
@@ -230,28 +261,41 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         oordeel, kleur = "postvak gelezen, 0 nieuwe mails", "oranje"
     elif log:
         oordeel, kleur = "draaide, niets binnen", "oranje"
+    elif alleen_werkdagen(cadans) and date.fromisoformat(dag).weekday() >= 5:
+        # T-0120 CL-4: in het weekend heeft een werkdagwacht geen ronde gepland; dat is het schema, geen grijs gat en
+        # ook geen groen (dat telt als 'kwam binnen', Codex-toets 1): een eigen kleur 'rust'
+        oordeel, kleur = "geen ronde gepland", "rust"
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
+    bladen = max(1, -(-len(log) // MAX_LOG))
+    blad = bladen if blad is None else min(max(1, int(blad)), bladen)
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
-            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten, "log": log[-MAX_LOG:],
+            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten,
+            "log": log[(blad - 1) * MAX_LOG:blad * MAX_LOG], "log_blad": blad, "log_bladen": bladen,
             "gedekt": gedekt, "leesfout": leesfout, "logfout": logfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
 
 
-def dag(conn, dag_, agents, vakken, boven):
-    """Alle wachten van de groep Dagbundelaar voor één dag, in hun vakken. agents: naam -> label."""
+def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
+    """Alle wachten van de groep Dagbundelaar voor één dag, in hun vakken. agents: naam -> label. wacht en blad: dat blad
+    van het werkverslag voor die ene wacht (T-0120 AG-9); de andere wachten krijgen hun laatste blad."""
     date.fromisoformat(dag_)
     st = {r["naam"]: r for r in conn.execute("SELECT * FROM status").fetchall()}
     nood = {}
     for r in conn.execute("SELECT naam, tekst FROM nood WHERE open=1 ORDER BY id").fetchall():
         nood.setdefault(r["naam"], []).append(kort(r["tekst"], 200))
+    try:                                        # CL-4: de cadans uit de tabel agent; zonder tabel blijft grijs grijs
+        cadans = {r["naam"]: r["cadans"] or "" for r in conn.execute("SELECT naam, cadans FROM agent").fetchall()}
+    except Exception:  # noqa: BLE001
+        cadans = {}
     groepen = [("De Dagbundelaar en Ai Angel", tuple(boven))] + [(v, tuple(w)) for v, w in vakken]
     uit = []
     for vak, namen in groepen:
-        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()))
+        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()),
+                                                      blad=blad if n == wacht else None, cadans=cadans.get(n, ""))
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]
     return {"dag": dag_, "vakken": uit,
-            "telling": {k: sum(1 for w in alle if w["kleur"] == k) for k in ("groen", "oranje", "rood", "grijs")},
+            "telling": {k: sum(1 for w in alle if w["kleur"] == k) for k in ("groen", "oranje", "rood", "grijs", "rust")},
             "items": sum(w["aantal"] for w in alle)}
