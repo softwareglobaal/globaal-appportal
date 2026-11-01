@@ -207,10 +207,11 @@ def firma_aliassen():
         return {}
 
 
-def agenda_starts(van_dagen, tot_dagen):
-    """De starttijden (Brussel, tot op de minuut) van de afspraken in precies de agenda's van De Agendawacht, met haar
-    archiefagenda's, en de agenda's die niet gelezen werden (T-0120 CL-2; tot 01-11-2026 las ik er maar drie). Alleen
-    lezen. Een privé-agenda heet hier 'een privé-agenda', zonder haar naam."""
+def agenda_bewijs(van_dagen, tot_dagen):
+    """Per starttijd (Brussel, tot op de minuut) de afspraken in precies de agenda's van De Agendawacht, met haar
+    archiefagenda's, als {'id', 'calendly'}; en de agenda's die niet gelezen werden (T-0120 CL-2; tot 01-11-2026 las ik er
+    maar drie). calendly: de afspraak draagt een kenmerk van Calendly (agenda_wacht.is_calendly: een boekingsaccount of
+    de links van calendly.com in de omschrijving). Alleen lezen. Een privé-agenda heet hier 'een privé-agenda'."""
     import agenda_wacht as W  # noqa: PLC0415  pas hier: het laden van De Agendawacht leest organisatie.globaal.be
     ruw = W.afspraken(van_dagen, tot_dagen, alleen_lezen=True)
     archief = W.archief_afspraken(van_dagen, tot_dagen, alleen_lezen=True)
@@ -218,12 +219,18 @@ def agenda_starts(van_dagen, tot_dagen):
                  for x in ruw if x.get("fout")}
     if W.ARCHIEF_FOUT:
         ongelezen.add("archief")
-    return {(x.get("start") or "")[:16] for x in ruw + archief if not x.get("fout")}, sorted(ongelezen)
+    bewijs = collections.defaultdict(list)
+    for x in ruw + archief:
+        if not x.get("fout"):
+            bewijs[(x.get("start") or "")[:16]].append({"id": x.get("id") or "", "calendly": bool(W.is_calendly(x))})
+    return dict(bewijs), sorted(ongelezen)
 
 
-def zonder_afspraak(boekingen, starts, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DAGEN):
-    """De actieve boekingen van terug dagen geleden tot vooruit dagen verder die op hun geboekte uur geen afspraak hebben,
-    als 'JJJJ-MM-DD UU:MM type'. starts: de starttijden uit agenda_starts."""
+def zonder_afspraak(boekingen, bewijs, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DAGEN):
+    """De actieve boekingen van terug dagen geleden tot vooruit dagen verder zonder hun eigen afspraak, als
+    'JJJJ-MM-DD UU:MM type'. Een eigen afspraak staat op het geboekte uur en is de afspraak die Calendly in Google zette
+    (calendar_event.external_id) of draagt een kenmerk van Calendly. Een andere afspraak op hetzelfde uur is geen bewijs
+    (Codex-toets 2): dan zegt de regel dat erbij. bewijs: uit agenda_bewijs."""
     uit = []
     for b in boekingen:
         if b.get("status") != "active" or not b.get("start_time"):
@@ -231,8 +238,11 @@ def zonder_afspraak(boekingen, starts, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DA
         lok = datetime.datetime.fromisoformat(b["start_time"].replace("Z", "+00:00")).astimezone(BRUSSEL)
         if lok < nu - datetime.timedelta(days=terug) or lok > nu + datetime.timedelta(days=vooruit):
             continue
-        if lok.strftime("%Y-%m-%dT%H:%M") not in starts:
-            uit.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}")
+        eigen = (b.get("calendar_event") or {}).get("external_id") or ""
+        op_uur = bewijs.get(lok.strftime("%Y-%m-%dT%H:%M"), [])
+        if not any(x["calendly"] or (eigen and x["id"] == eigen) for x in op_uur):
+            uit.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}"
+                       + (" (op dat uur een andere afspraak, zonder kenmerk van Calendly)" if op_uur else ""))
     return sorted(uit)
 
 
@@ -307,7 +317,7 @@ def main():
     # lezing aan Claude.
     zonder = []
     try:
-        starts, ongelezen = agenda_starts(-TERUG_DAGEN - 1, VOORUIT_DAGEN + 1)
+        bewijs, ongelezen = agenda_bewijs(-TERUG_DAGEN - 1, VOORUIT_DAGEN + 1)
     except Exception as e:  # noqa: BLE001
         noden.append({"tekst": f"agendacontrole mislukt ({type(e).__name__}): boekingen zonder afspraak niet nagekeken",
                       "wie": "claude-code"})
@@ -316,7 +326,7 @@ def main():
             noden.append({"tekst": "agendacontrole onvolledig, niet gelezen: " + ", ".join(ongelezen)
                                    + "; boekingen zonder afspraak niet nagekeken", "wie": "claude-code"})
         else:
-            zonder = zonder_afspraak(boekingen, starts, nu_b)
+            zonder = zonder_afspraak(boekingen, bewijs, nu_b)
     if zonder:
         signalen.append(f"{len(zonder)} boeking(en) zonder afspraak in de agenda's van De Agendawacht: " + "; ".join(zonder[:8]))
         noden.append({"tekst": ZONDER_NOOD, "wie": "mehdi"})

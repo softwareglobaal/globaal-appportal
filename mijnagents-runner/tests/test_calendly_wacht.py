@@ -5,8 +5,9 @@ zonder bord: de bronnen en het bord zijn nagebootst; de wacht schrijft nooit in 
   ook niet; een actieve dubbel op twee accounts wel. Een type uit de vaste lijst in werkwijze/agenda-taken.json geeft geen
   signaal 'niet in het agenda-document'; een type daarbuiten wel. Een onleesbare lijst geeft een nood, geen vloed;
 - CL-2: een boeking zonder afspraak in de agenda's van De Agendawacht geeft de vaste nood (wie mehdi) en de details in het
-  signaal; met afspraak niet; een boeking van gisteren wordt ook gezien; een mislukte of onvolledige agendalezing geeft
-  geen vals alarm.
+  signaal; met haar eigen afspraak niet (de afspraak die Calendly zette, of een met een kenmerk van Calendly); een andere
+  afspraak op hetzelfde uur is geen bewijs; een boeking van gisteren wordt ook gezien; een mislukte of onvolledige
+  agendalezing geeft geen vals alarm.
 
 Verzonnen voorbeelden, geen echte namen. Draaien: python3 mijnagents-runner/tests/test_calendly_wacht.py
 """
@@ -94,25 +95,26 @@ class NepAgent:
 NU = datetime.datetime.now(CW.BRUSSEL).replace(second=0, microsecond=0)
 
 
-def boeking(dagen, uur=13, naam="Proef: Klant", status="active"):
+def boeking(dagen, uur=13, naam="Proef: Klant", status="active", google_id="g-proef"):
     lok = (NU + datetime.timedelta(days=dagen)).replace(hour=uur, minute=0)
     return {"name": naam, "status": status, "start_time": lok.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z"),
-            "event_memberships": [{"user": "u:a"}], "_lok": lok.strftime("%Y-%m-%dT%H:%M")}
+            "event_memberships": [{"user": "u:a"}], "calendar_event": {"kind": "google", "external_id": google_id},
+            "_lok": lok.strftime("%Y-%m-%dT%H:%M")}
 
 
 def ronde(accounts, boekingen, agenda):
-    """agenda: (starts, ongelezen), of een uitzondering die de lezing gooit."""
-    oud = (CW.verzamel, CW.bord.Agent, CW.agenda_starts)
+    """agenda: (bewijs, ongelezen), of een uitzondering die de lezing gooit."""
+    oud = (CW.verzamel, CW.bord.Agent, CW.agenda_bewijs)
 
     def lees(van, tot):
         if isinstance(agenda, Exception):
             raise agenda
         return agenda
-    CW.verzamel, CW.bord.Agent, CW.agenda_starts = (lambda noden: (accounts, boekingen)), NepAgent, lees
+    CW.verzamel, CW.bord.Agent, CW.agenda_bewijs = (lambda noden: (accounts, boekingen)), NepAgent, lees
     try:
         CW.main()
     finally:
-        CW.verzamel, CW.bord.Agent, CW.agenda_starts = oud
+        CW.verzamel, CW.bord.Agent, CW.agenda_bewijs = oud
     ag = NepAgent.laatste
     signaal = "\n".join(x["inhoud"] for x in ag.items)
     return ag.hartslagen[-1]["nood"], signaal
@@ -120,26 +122,36 @@ def ronde(accounts, boekingen, agenda):
 
 EEN = [{"naam": "Proefaccount A", "uri": "u:a", "email": "", "types": [typ("HA: Klant")]}]
 b_morgen, b_gisteren, b_ver = boeking(1), boeking(-1, 10), boeking(-20, 9)
-noden, signaal = ronde(EEN, [b_morgen], (set(), []))
+noden, signaal = ronde(EEN, [b_morgen], ({}, []))
 check("CL-2 een boeking zonder afspraak geeft de vaste nood voor Mehdi",
       {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden, noden)
 check("CL-2 de details staan in het signaal, niet in de nood", "zonder afspraak" in signaal
       and f"{b_morgen['_lok'][:10]} {b_morgen['_lok'][11:]} Proef: Klant" in signaal
       and not any("Proef: Klant" in n["tekst"] for n in noden), signaal)
-noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]}, []))
-check("CL-2 met een afspraak op het geboekte uur geen nood en geen signaal",
+noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-proef", "calendly": False}]}, []))
+check("CL-2 met de afspraak die Calendly zette (zelfde Google-id) geen nood en geen signaal",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden) and "zonder afspraak" not in signaal, (noden, signaal))
-noden, signaal = ronde(EEN, [b_gisteren], (set(), []))
+noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-hernoemd", "calendly": True}]}, []))
+check("CL-2 met een afspraak met een kenmerk van Calendly op het uur geen nood",
+      not any(n["tekst"] == CW.ZONDER_NOOD for n in noden), noden)
+noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-iets-anders", "calendly": False}]}, []))
+check("CL-2 een andere afspraak op hetzelfde uur is geen bewijs: de nood blijft, het signaal zegt waarom (Codex-toets 2)",
+      {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and "een andere afspraak, zonder kenmerk van Calendly" in signaal,
+      (noden, signaal))
+noden, signaal = ronde(EEN, [dict(b_morgen, calendar_event=None)], ({b_morgen["_lok"]: [{"id": "", "calendly": False}]}, []))
+check("CL-2 een boeking zonder Google-id en een afspraak zonder id of kenmerk: de nood blijft",
+      {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden, noden)
+noden, signaal = ronde(EEN, [b_gisteren], ({}, []))
 check("CL-2 een boeking van gisteren zonder afspraak wordt ook gezien",
       {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and b_gisteren["_lok"][:10] in signaal, (noden, signaal))
-noden, signaal = ronde(EEN, [b_ver, boeking(1, 9, status="canceled")], (set(), []))
+noden, signaal = ronde(EEN, [b_ver, boeking(1, 9, status="canceled")], ({}, []))
 check("CL-2 een boeking van drie weken terug of een geannuleerde geeft geen nood",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden), noden)
 noden, signaal = ronde(EEN, [b_morgen], RuntimeError("Google antwoordt niet"))
 check("CL-2 een mislukte agendalezing geeft geen vals alarm, wel een nood voor Claude",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden) and "zonder afspraak" not in signaal
       and any(n["wie"] == "claude-code" and "agendacontrole mislukt" in n["tekst"] for n in noden), noden)
-noden, signaal = ronde(EEN, [b_morgen], (set(), ["archief"]))
+noden, signaal = ronde(EEN, [b_morgen], ({}, ["archief"]))
 check("CL-2 een onvolledige agendalezing (archief niet gelezen) geeft geen vals alarm",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden) and "zonder afspraak" not in signaal
       and any(n["wie"] == "claude-code" and "archief" in n["tekst"] for n in noden), noden)
@@ -151,7 +163,7 @@ ACC3 = [{"naam": "Proefaccount A", "uri": "u:a", "email": "", "types": [typ("TKN
                                                                        typ("New Meeting", False), typ("Proef: Nieuw")]},
         {"naam": "Proefaccount B", "uri": "u:b", "email": "", "types": [typ("HA: Klant")]},
         {"naam": "Proefaccount C", "uri": "u:c", "email": "", "types": [typ("HA: Klant")]}]
-noden, signaal = ronde(ACC3, [], (set(), []))
+noden, signaal = ronde(ACC3, [], ({}, []))
 check("CL-3 in de ronde: een type uit de lijst geeft geen signaal", "TKN: Prospect" not in signaal, signaal)
 check("CL-3 in de ronde: twee inactieve 'New Meeting' in een account geven geen signaal", "New Meeting" not in signaal, signaal)
 check("CL-3 in de ronde: een onbekend type en een actieve dubbel op twee accounts blijven gemeld",
@@ -160,34 +172,37 @@ check("CL-3 in de ronde: een onbekend type en een actieve dubbel op twee account
 _pad = CW.AGENDA_TAKEN
 try:
     CW.AGENDA_TAKEN = os.path.join(PROEF_HOME.name, "bestaat-niet.json")
-    noden, signaal = ronde(ACC3, [], (set(), []))
+    noden, signaal = ronde(ACC3, [], ({}, []))
 finally:
     CW.AGENDA_TAKEN = _pad
 check("CL-3 in de ronde: zonder lijst geen vloed 'niet in het agenda-document', wel een nood voor Claude",
       "niet in het agenda-document" not in signaal and any(n["wie"] == "claude-code" and "agenda-taken.json" in n["tekst"]
                                                            for n in noden), (noden, signaal))
 
-# agenda_starts leest precies de agenda's van De Agendawacht met haar archief (nagebootste De Agendawacht)
+# agenda_bewijs leest precies de agenda's van De Agendawacht met haar archief (nagebootste De Agendawacht)
 import types  # noqa: E402
 _nep = types.ModuleType("agenda_wacht")
 _nep.KALENDERS = {"werk@proef.test": "werk", "prive@proef.test": "privé", "kind@proef.test": "Proefkind"}
 _nep.PRIVE_KALENDERS = {"prive@proef.test", "kind@proef.test"}
 _nep.ARCHIEF_FOUT = ""
 _gelezen = []
+_nep.is_calendly = lambda a: "calendly.com" in (a.get("omschrijving") or "")
 _nep.afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("afspraken", van, tot, alleen_lezen)) or [
-    {"kalender": "werk@proef.test", "start": "2026-11-06T13:00:00+01:00"}, {"kalender": "kind@proef.test", "fout": "403"}])
+    {"kalender": "werk@proef.test", "id": "g1", "start": "2026-11-06T13:00:00+01:00", "omschrijving": "https://calendly.com/x"},
+    {"kalender": "kind@proef.test", "fout": "403"}])
 _nep.archief_afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("archief", van, tot, alleen_lezen)) or [
-    {"kalender": "archief@proef.test", "start": "2026-11-07T09:00:00+01:00", "_archief": "ZZ ARCHIEF proef"}])
+    {"kalender": "archief@proef.test", "id": "g2", "start": "2026-11-07T09:00:00+01:00", "_archief": "ZZ ARCHIEF proef"}])
 _echt = sys.modules.get("agenda_wacht")
 sys.modules["agenda_wacht"] = _nep
 try:
-    st, ong = CW.agenda_starts(-15, 15)
-    check("CL-2 agenda_starts leest de agenda's en het archief van De Agendawacht, alleen lezend, ook terug",
+    st, ong = CW.agenda_bewijs(-15, 15)
+    check("CL-2 agenda_bewijs leest de agenda's en het archief van De Agendawacht, alleen lezend, ook terug, met kenmerk",
           _gelezen == [("afspraken", -15, 15, True), ("archief", -15, 15, True)]
-          and st == {"2026-11-06T13:00", "2026-11-07T09:00"}, (_gelezen, st))
+          and st == {"2026-11-06T13:00": [{"id": "g1", "calendly": True}], "2026-11-07T09:00": [{"id": "g2", "calendly": False}]},
+          (_gelezen, st))
     check("CL-2 een niet gelezen privé-agenda heet 'een privé-agenda', zonder haar naam", ong == ["een privé-agenda"], ong)
     _nep.ARCHIEF_FOUT = "archiefagenda niet gelezen: proef"
-    check("CL-2 een archief dat niet gelezen werd, staat bij de ongelezen agenda's", "archief" in CW.agenda_starts(-15, 15)[1])
+    check("CL-2 een archief dat niet gelezen werd, staat bij de ongelezen agenda's", "archief" in CW.agenda_bewijs(-15, 15)[1])
 finally:
     if _echt is None:
         sys.modules.pop("agenda_wacht", None)
@@ -218,11 +233,12 @@ _oud_echt = (ECHT.agenda.afspraken, ECHT.agenda.kalendernamen)
 ECHT.agenda.afspraken = _nep_lezer
 ECHT.agenda.kalendernamen = lambda: {"archief@proef.test": "ZZ ARCHIEF proef", ECHT.WERKAGENDA: "werk"}
 try:
-    st, ong = CW.agenda_starts(-15, 15)
+    st, ong = CW.agenda_bewijs(-15, 15)
 finally:
     ECHT.agenda.afspraken, ECHT.agenda.kalendernamen = _oud_echt
 check("CL-2 met de echte De Agendawacht: haar agenda's en haar archief, alleen lezend (geen leesstand)",
-      st == {"2026-11-06T13:00", "2026-11-07T09:00"} and ong == [] and len(_gelezen_echt) == 2
+      set(st) == {"2026-11-06T13:00", "2026-11-07T09:00"} and st["2026-11-06T13:00"][0]["id"] == "w1" and ong == []
+      and len(_gelezen_echt) == 2
       and all(x[3] is False for x in _gelezen_echt) and "archief@proef.test" in _gelezen_echt[1][0]
       and ECHT.WERKAGENDA in _gelezen_echt[0][0], (st, ong, _gelezen_echt))
 
