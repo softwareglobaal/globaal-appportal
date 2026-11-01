@@ -287,7 +287,9 @@ def vandaag():
 # mee controleren of iets niet klopt"). Vast: waar het vandaan komt en hoe vaak. Per dag: wat het dagbestand zag.
 BRONNEN = (
     ("Agenda", "je Google-agenda's (server)", "werkdagen 06:30, daarna elke 2 uur", "afspraken en of ze doorgingen"),
-    ("Zoom", "Zoom-account (server)", "2 keer per dag", "gesprekken met wie en hoe lang, aantal chats"),
+    # De gesprekkenketen draait 07:00, 13:00 en 23:30 UTC (mijnagents-runner/planning/gesprekken.cron), T-0120 WACHT-7
+    ("Zoom", "Zoom-account (server)", "3 keer per dag (08:00, 14:00 en 00:30 Brussel, in de zomer een uur later)",
+     "gesprekken met wie en hoe lang, aantal chats"),
     ("Fathom", "Fathom-account (server)", "elk uur", "gesprekken met wie en hoe lang"),
     ("Plaud", "Plaud-account (server)", "elk uur", "opnames met wie en hoe lang"),
     ("Mail", "5 postvakken: mch, info H-Architects, H-Invest, Melodie, hotmail (server)", "elk uur 07-21",
