@@ -80,6 +80,27 @@ def vingerafdruk(vraag, vandaag):
     return hashlib.sha256(f"{vandaag}:{vraag}".encode()).hexdigest()[:12]
 
 
+def per_eis(rij, eisen):
+    """Per eis wat het model zei en wat de code ervan hield, voor het werkverslag. Een eis van het model heet "eis N"
+    zoals in de lijst Eisen van het verslag: nooit de eis in haar woorden (Codex X3). Het citaat komt van een
+    winkelpagina."""
+    compat = rij.get("compatibiliteit") if isinstance(rij.get("compatibiliteit"), dict) else {}
+    uit = []
+    for i, (eis, code) in enumerate(zip(eisen, rij.get("per_eis") or []), 1):
+        o = compat.get(eis)
+        o = o if isinstance(o, dict) else {"oordeel": o}
+        uit.append({"eis": eis if A._EIS_BEWIJS.match(eis) else f"eis {i}", "model": o.get("oordeel"),
+                    "citaat": o.get("citaat"), "bewijs_url": o.get("bewijs_url"), "code": code})
+    return uit
+
+
+def andere_sleutels(rij, eisen):
+    """Hoeveel sleutels in compatibiliteit geen eis zijn, zonder hun tekst: zo wordt een sleutelverschil zichtbaar
+    (overleg 35, D)."""
+    compat = rij.get("compatibiliteit") if isinstance(rij.get("compatibiliteit"), dict) else {}
+    return len(set(compat) - set(eisen))
+
+
 def zet_klaar(vraag, titel, tekst, vandaag):
     ag.klaarzet([{"voor": "mehdi", "soort": SOORT, "sleutel": vandaag.isoformat(), "titel": titel,
                   "uniek": f"prijsonderzoek:{vingerafdruk(vraag, vandaag)}", "inhoud": tekst}])
@@ -139,9 +160,7 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     ag.log("prijsvraag", "bron", f"vraag {va}: bewijs per aanbod in het verslag",
            [{"url": x.get("url"), "ontbreekt": x.get("ontbreekt"), "compatibel": x.get("compatibel"),
              "btw": [x.get("btw_inbegrepen"), x.get("verzending_btw_inbegrepen")], "verzending": x.get("verzending"),
-             "bewijs": x.get("bewijs"),
-             "netwaarden": {e: o for e, o in (x["compatibiliteit"].items() if isinstance(x.get("compatibiliteit"), dict)
-                                             else []) if A._EIS_BEWIJS.match(str(e))}}
+             "bewijs": x.get("bewijs"), "eisen": per_eis(x, eisen), "andere_sleutels": andere_sleutels(x, eisen)}
             for x in res["goed"] + res["niet_compatibel"]])
     # Het verslag zelf noemt de vraag; het staat in het klaargezette item, niet in het logboek (Codex X3, ronde 2).
     ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi (soort {SOORT})")
