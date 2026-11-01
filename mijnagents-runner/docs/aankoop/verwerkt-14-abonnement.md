@@ -49,3 +49,18 @@ Echte proef op de laptop (01-11, haiku, 2 zoek en 2 lees, eigen aanmelding in pl
    meer als argument.
 
 Tests: 225 prijstests groen op de laptop en de VM, sleutelbron 46. Echte korte proef op de laptop opnieuw: 33 s, klaar.
+
+## Verwerking Codex-controle 16 (niet klaar; uitrol zonder token wel goed)
+
+1. **Centrale instellingen (hoog).** `voor_de_start()` draait nu eerst `claude auth status --json` (geen modelaanvraag)
+   met dezelfde omgeving en lege configuratiemap: aangemeld, aanbieder `firstParty`, en het abonnement moet persoonlijk
+   zijn (`pro`, `max`, `ultra`); een Team- of Enterprise-account of een onbekend type start niet. Staat er daarna een
+   niet-lege `remote-settings.json` in de configuratiemap, dan start de vraag ook niet. Gemeten op de laptop: `claude
+   auth status` geeft `subscriptionType: "max"`.
+2. **Usage credits (latere aanvragen).** Meldt de stream `overageStatus: "allowed"`, dan stopt de vraag meteen
+   (`GeenAbonnement`, nood met de reden): met Usage credits aan kan een volgende aanvraag geld kosten. De eerste
+   aanvraag valt dan nog binnen het abonnement, want boven 90 procent stopt de vraag al. Gevolg: de agent werkt pas als
+   Usage credits uit staan (claude.ai, Settings > Usage). Op het laptopaccount staat `overageStatus` op `allowed`.
+3. De abonnementsproef doet dezelfde controles en zegt wat Mehdi moet doen.
+
+Tests: 233 prijstests groen.

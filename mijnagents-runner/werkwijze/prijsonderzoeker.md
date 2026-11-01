@@ -91,8 +91,9 @@ wat daarmee compatibel is) volgen later.
 
 Op verzoek: De Regisseur start mij met de vraag van Mehdi, of iemand start mij met de hand. Zonder vraag werk ik de
 klaargezette vragen af, hoogstens twee per ronde. Ik werk met Mehdi's Claude-abonnement (claude -p op de VM met het
-token uit claude setup-token), nooit met de API: een prijsvraag kost geen geld. Werkt het abonnement niet, of zou er
-betaald extra verbruik starten, dan stop ik meteen en meld ik een nood; ik val nooit terug op de API. Ik zoek met
+token uit claude setup-token), nooit met de API: een prijsvraag kost geen geld. Werkt het abonnement niet, is het
+geen persoonlijk abonnement, krijgt het account centrale instellingen, staan Usage credits (betaald extra verbruik)
+aan of zit een limiet boven 90 procent, dan stop ik meteen en meld ik een nood; ik val nooit terug op de API. Ik zoek met
 WebSearch en lees pagina's alleen met mijn eigen leestool lees_pagina, die mij dezelfde tekst geeft die de code
 nakijkt. Per vraag hoogstens zes zoekopdrachten en zes gelezen pagina's (vijf aanbodpagina's en een specificatiebron)
 van elk hoogstens 10.000 tokens, hoogstens dertig beurten en acht minuten per ronde. Het werkverslag bewaart de tokens

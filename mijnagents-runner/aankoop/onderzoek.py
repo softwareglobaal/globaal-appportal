@@ -36,6 +36,9 @@ MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "30"))   # assistentberich
 GRENS_GEBRUIK = float(os.environ.get("PRIJS_GRENS_GEBRUIK", "0.9"))
 # Beheerde instellingen gaan voor alles, ook voor --restricted, en kunnen een betaalde route of sleutel toevoegen.
 BEHEERD = ("/etc/claude-code", "/Library/Application Support/ClaudeCode")
+# Alleen een persoonlijk abonnement: een Team- of Enterprise-account kan centrale instellingen met een betaalde route
+# opleggen (Codex controle 16, punt 1).
+PERSOONLIJK = ("pro", "max", "ultra")
 ZOEK = "WebSearch"
 LEES = "mcp__lees__lees_pagina"
 # Alleen dit gaat mee naar het subproces; ANTHROPIC_API_KEY en elke andere sleutel dus nooit (overleg 14, K1).
@@ -276,11 +279,32 @@ def omgeving(token, werkmap, bron=None):
     return env
 
 
-def voor_de_start():
-    """Weigert de start als beheerde instellingen bestaan (Codex controle 15, punt 1)."""
+def voor_de_start(token, werkmap):
+    """Voor er een aanvraag naar het model gaat: geen beheerde instellingen op deze machine (Codex controle 15), en
+    `claude auth status` (geen modelaanvraag) toont een persoonlijk abonnement zonder centrale instellingen (Codex
+    controle 16). Geeft het accounttype; GeenAbonnement als iets niet klopt."""
     gevonden = beheerde_instellingen()
     if gevonden:
         raise GeenAbonnement(f"beheerde instellingen van Claude Code gevonden ({', '.join(gevonden)}); niet gestart")
+    try:
+        r = subprocess.run([CLAUDE, "auth", "status", "--json"], capture_output=True, text=True, timeout=60,
+                           cwd=werkmap, env=omgeving(token, werkmap), stdin=subprocess.DEVNULL)
+        status = json.loads(r.stdout)
+    except (subprocess.TimeoutExpired, OSError, ValueError) as e:
+        raise GeenAbonnement(f"claude auth status niet leesbaar ({type(e).__name__})") from e
+    soort = str(status.get("subscriptionType") or "").lower()
+    if not status.get("loggedIn") or status.get("apiProvider") != "firstParty":
+        raise GeenAbonnement("het abonnementstoken wordt niet aanvaard (claude auth status)")
+    if soort not in PERSOONLIJK:
+        raise GeenAbonnement(f"geen persoonlijk abonnement (soort {soort or 'onbekend'}); niet gestart")
+    try:
+        with open(os.path.join(werkmap, "claude-config", "remote-settings.json"), encoding="utf-8") as f:
+            centraal = json.load(f)
+    except (OSError, ValueError):
+        centraal = {}
+    if centraal:
+        raise GeenAbonnement("het account krijgt centrale instellingen; niet gestart")
+    return soort
 
 
 def opdrachtregel(werkmap, systeem, model=None):
@@ -310,6 +334,7 @@ class _Stand:
         self.zoekvragen = self.gezocht = self.beurten = 0
         self.limiet = False
         self.extra_verbruik = None          # overageStatus uit de stream, voor het werkverslag
+        self.soort = None                   # het abonnement volgens claude auth status
 
 
 def verwerk_regel(st, d):
@@ -324,6 +349,8 @@ def verwerk_regel(st, d):
         st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
         if info.get("isUsingOverage"):
             return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
+        if st.extra_verbruik == "allowed":
+            return "extra_aan"            # Usage credits staan aan: dan kan een volgende aanvraag geld kosten (Codex 16)
         st.limiet = st.limiet or info.get("status") == "rejected"
         vensters = [info] + [v for v in (info.get("unifiedWindows") or {}).values() if isinstance(v, dict)]
         if any(isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK for v in vensters):
@@ -432,12 +459,12 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     deadline: time.monotonic() waarop de vraag klaar moet zijn (de deadline van de ronde, Codex X6 en overleg 14, X4)."""
     deadline = deadline or time.monotonic() + 420
     token = token or lees_token()
-    voor_de_start()
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
     eigen_map = werkmap is None
     werkmap = werkmap or tempfile.mkdtemp(prefix="prijsvraag-")
     st = _Stand()
     try:
+        st.soort = voor_de_start(token, werkmap)
         reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token, werkmap), werkmap, gebruiker, deadline, st)
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)
@@ -448,6 +475,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         raise GeenAbonnement(f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement; meteen gestopt")
     if reden == "betaald":
         raise GeenAbonnement("Claude Code startte extra betaald verbruik bovenop het abonnement; meteen gestopt")
+    if reden == "extra_aan":
+        raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
         raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
@@ -471,7 +500,7 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
             "tokens": tellers["input"] + tellers["output"] + tellers["cache_schrijven"] + tellers["cache_lezen"],
             "tellers": [tellers], "leesbeurten": leesbeurten, "zoekopdrachten": st.gezocht, "stop": stop,
             "model": st.model or MODEL, "beurten": st.beurten, "bron": st.bron, "reden": reden,
-            "extra_verbruik": st.extra_verbruik,
+            "extra_verbruik": st.extra_verbruik, "abonnement": st.soort,
             "fout": fout if stop in ("fout", "limiet") else ""}
 
 
@@ -480,10 +509,13 @@ def proef_abonnement(token=None, wacht=120):
     en na een uitrol (overleg 14, X7): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
     try:
         token = token or lees_token()
-        voor_de_start()
     except GeenAbonnement as e:
         return False, str(e)
     with tempfile.TemporaryDirectory(prefix="abonnement-") as werkmap:
+        try:
+            soort = voor_de_start(token, werkmap)
+        except GeenAbonnement as e:
+            return False, str(e)
         cmd = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--restricted",
                "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
         try:
@@ -504,9 +536,12 @@ def proef_abonnement(token=None, wacht=120):
             return False, "Claude Code startte extra betaald verbruik"
         if reden == "vol":
             return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
+        if reden == "extra_aan":
+            return False, "Usage credits staan aan op dit account: zet ze uit in claude.ai, Settings > Usage"
     einde = st.einde or {}
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
-    return True, f"werkt via het abonnement (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
+    return True, (f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, "
+                  f"extra verbruik: {st.extra_verbruik or 'niet gemeld'})")
 
