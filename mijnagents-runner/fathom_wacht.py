@@ -17,7 +17,7 @@ import os
 import re
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 BE = ZoneInfo("Europe/Brussels")
 
@@ -49,6 +49,8 @@ AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevai
 # dezelfde lijst als De Zoomwacht en De Regisseur (EIGEN-3, tegenproef 22-10-2026). Tot dan zocht ik op deelstukken
 # ('h-architects', 'mch@'), en dan dempte een opname van een collega de nood hieronder.
 SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
+# FATHOM-4: een dekkingsrij telt nooit als gesprek, zoals mac_gesprekken.DEKKING van de Mac-wachten.
+DEKKING = "buiten:dekking"
 AANVUL_NOOD = "Fathom gaf deze ronde geen samenvatting en actiepunten: de aparte vraag faalde (werkverslag)"
 # FATHOM-7: een archiefmap zonder herkenning (null) telt als privé, zoals een gesprek waarop het model niet antwoordde.
 ONBEKENDE_HERKENNING = {"prive": True, "zekerheid": "laag", "waarom": "geen herkenning in het archief"}
@@ -367,6 +369,31 @@ def eerste_volle_dag(begin):
     return dag.isoformat()
 
 
+def bekende_dekking(eerste, laatste):
+    """FATHOM-4: de dagen van eerste tot laatste waarvoor al een rij dekking:fathom:<dag> in de gesprekkentabel staat, of
+    None als de databank van het bord dat niet zegt (onbekend is niet leeg: dan schrijf ik geen dekking)."""
+    try:
+        return {r["datum"] for r in bord.db_lees("SELECT datum FROM gesprek_log WHERE uniek LIKE 'dekking:fathom:%' "
+                                                 "AND datum BETWEEN ? AND ?", (eerste, laatste))}
+    except bord.BordOnbekend:
+        return None
+
+
+def dekkingsrijen(begin, nu, bekend):
+    """FATHOM-4 (meting T-0120: elke dag stond 'nog niet helemaal gelezen'): een rij dekking:fathom:<dag> voor elke volle
+    Belgische dag die deze ronde las, van eerste_volle_dag(begin) tot gisteren, ook een dag zonder opname (Fathom gaf
+    het volledige antwoord). Alleen de dagen die nog niet in bekend staan: elke gewijzigde dekkingsrij laat De
+    Dagbundelaar inhalen (VOL-13, dagbundelaar.inhaaldagen), dus een herhaalde ronde verandert niets. Zoals de Mac-wachten
+    (mac_gesprekken.dekking): privé, 0 minuten, dubbel_van buiten:dekking, bron dekking."""
+    uit, dag, gisteren = [], date.fromisoformat(eerste_volle_dag(begin)), nu.astimezone(BE).date() - timedelta(days=1)
+    while dag <= gisteren:
+        if dag.isoformat() not in bekend:
+            uit.append({"uniek": f"dekking:fathom:{dag.isoformat()}", "datum": dag.isoformat(), "start": "", "minuten": 0,
+                        "personen": "", "thema": "gelezen", "prive": True, "bron": "dekking", "dubbel_van": DEKKING})
+        dag += timedelta(days=1)
+    return uit
+
+
 def sleutel_nood(gesprekken):
     """De nood over Mehdi's eigen Fathom-sleutel als lijst, of None als deze ronde de vorige stand niet kent (BAS-04).
 
@@ -423,7 +450,8 @@ def _ronde(r):
     try:
         werkwijze = r.werkwijze
         personen = personen_uit_werkwijze(werkwijze)
-        begin = nu_utc() - timedelta(days=DAGEN)
+        nu = nu_utc()
+        begin = nu - timedelta(days=DAGEN)
         sinds = begin.strftime("%Y-%m-%dT%H:%M:%SZ")
         gesprekken = fathom.gesprekken(sinds, met_transcript=True)
         deals = deals_index()
@@ -550,6 +578,21 @@ def _ronde(r):
         if aan is None:
             nood.append({"tekst": AANVUL_NOOD, "wie": "claude-code"})
         r.detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
+        # FATHOM-4: de dekking pas als de gesprekken en de klaarzet-items van deze ronde staan, en alleen met het bewijs
+        # dat Mehdi's eigen sleutel meelas (een eigen opname in het venster); anders blijft de dag onbekend
+        if sleutel == []:
+            gisteren = (nu.astimezone(BE).date() - timedelta(days=1)).isoformat()
+            bekend = bekende_dekking(volle, gisteren) if volle <= gisteren else set()
+            if bekend is None:
+                r.detail += "; dekking onbekend: het bord gaf de dekkingsrijen niet"
+            else:
+                dek = dekkingsrijen(begin, nu, bekend)
+                try:
+                    if dek:
+                        bord.call("/api/gesprekken", {"rijen": dek})
+                        ag.log("Fathom", "schrijf", f"dekking voor {len(dek)} dag(en): {dek[0]['datum']} tot {dek[-1]['datum']}")
+                except Exception as e:  # noqa: BLE001  geen dekking is de veilige kant: de dag blijft onbekend
+                    ag.log("Fathom", "bevinding", f"dekking niet geschreven: {type(e).__name__}")
         if sleutel is None:
             # BAS-04: de vorige stand van de sleutelnood is onbekend. Dan sluit het bord niets (nood_sluiten false): wat
             # deze ronde vond komt erbij, wat open stond blijft open, ook de sleutelnood (overleg 12, X6). Tot 01-11-2026

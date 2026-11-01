@@ -9,6 +9,10 @@
 - FATHOM-3 (datadeel): de rij in de gesprekkentabel draagt de deellink van Fathom (share_url, anders url); een
   privégesprek nooit de deellink, die opent zonder aanmelden. Het klaarzet-item houdt de gewone link. Het ontdubbelen
   op de wachtenpagina toetst mijnagents/test_wachten_dag.py (W12).
+- FATHOM-4: na een geslaagde ronde een dekkingsrij dekking:fathom:<dag> voor elke volle Belgische dag in het venster
+  (vanaf eerste_volle_dag tot gisteren), ook een dag zonder opname, maar alleen een die er nog niet staat: een rij die
+  verandert, laat De Dagbundelaar inhalen (VOL-13). Niets bij een kort venster, zonder bewijs van Mehdi's eigen
+  sleutel, als het bord de bestaande rijen niet geeft, of als Fathom faalde. De wachtenpagina leest ze (W13).
 
 Geen netwerk en geen taalmodel: Fathom en het bord zijn nagebootst (fathom_ronde uit test_bord_lees.py), elk gesprek
 staat al in het archief, dus herkent de ronde niets opnieuw. Alle namen en adressen zijn verzonnen.
@@ -20,6 +24,7 @@ import os
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import date, datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
@@ -216,6 +221,99 @@ def test_fathom3_rij_draagt_de_deellink_nooit_bij_prive():
     items = {i["uniek"]: i for i in gezet["/api/klaarzet"][0]["items"]}
     assert "deel77" not in json.dumps(items), "de deellink gaat niet mee in een klaarzet-item"
     assert items["fathom:7701"]["inhoud"]["link"] == "https://fathom.video/calls/7701", items["fathom:7701"]["inhoud"]
+
+
+# ------------------------------------------------------------------------------------------------ FATHOM-4 ---
+ZATERDAG = datetime(2026, 10, 24, 8, 0, tzinfo=timezone.utc)        # zaterdag 10:00 in Brussel
+ANDER = {"name": "Collega Proef", "email": "ander@collega.test"}
+
+
+def _dekking(gezet):
+    return [r for p in gezet.get("/api/gesprekken", []) for r in p["rijen"] if r.get("bron") == "dekking"]
+
+
+def test_fathom4_dekking_voor_elke_volle_dag_alleen_wat_ontbreekt():
+    """Venster van 14 dagen op zaterdag 24-10 10:00: begin 10-10 10:00, dus volle dagen 11-10 tot 23-10. 12-10 staat al;
+    de rest komt erbij, ook een dag zonder opname. Een tweede ronde met alles bekend schrijft niets."""
+    eigen = gesprek(8401, "2026-10-20T07:00:00Z", "2026-10-20T07:30:00Z", door=MEHDI)
+    gevraagd = []
+
+    def bekend(eerste, laatste):
+        gevraagd.append((eerste, laatste))
+        return {"2026-10-12"}
+
+    nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+    gezet, scherm, _ = fathom_ronde(nb, [(eigen, herkenning(["Jan Proef"], "Proefdak"))], nu=ZATERDAG, dagen=14,
+                                    dekking=bekend)
+    rijen = _dekking(gezet)
+    dagen = [(date(2026, 10, 11) + timedelta(days=i)).isoformat() for i in range(13)]
+    assert gevraagd == [("2026-10-11", "2026-10-23")], gevraagd
+    assert [r["datum"] for r in rijen] == [d for d in dagen if d != "2026-10-12"], [r["datum"] for r in rijen]
+    assert all(r["uniek"] == f"dekking:fathom:{r['datum']}" and r["dubbel_van"] == "buiten:dekking" and r["prive"]
+               and r["minuten"] == 0 and r["personen"] == "" for r in rijen), rijen[0]
+    assert not any(r.get("bron") == "dekking" for r in gezet["/api/gesprekken"][0]["rijen"]), \
+        "de dekking gaat apart, na de gesprekken en de klaarzet-items"
+    assert "dekking voor 12 dag(en)" in scherm and nb.statussen()[-1]["status"] == "waakt", scherm
+    gezet, _, _ = fathom_ronde(BordNabootsing(werkwijze=WW_FATHOM, open_noden=[]), [(eigen, herkenning(["Jan Proef"], "Proefdak"))],
+                               nu=ZATERDAG, dagen=14, dekking=lambda e, l: set(dagen))
+    assert _dekking(gezet) == [] and len(gezet["/api/gesprekken"]) == 1, "een herhaalde ronde verandert geen dekkingsrij"
+
+
+def test_fathom4_geen_dekking_zonder_bewijs():
+    """Kort venster (De Regisseur, J1): geen volle dag. Geen eigen opname in het volle venster: misschien ontbreekt
+    Mehdi's sleutel, dus niets. Het bord geeft de bestaande rijen niet: onbekend, dus niets en het staat in het detail.
+    Fathom faalt: niets."""
+    eigen = gesprek(8501, "2026-10-23T07:00:00Z", "2026-10-23T07:30:00Z", door=MEHDI)
+    ander = gesprek(8502, "2026-10-20T07:00:00Z", "2026-10-20T07:30:00Z", door=ANDER)
+    for gesprekken, dagen, dekking in (([(eigen, herkenning(["Jan Proef"], "Proefdak"))], 1, lambda e, l: set()),
+                                       ([(ander, herkenning(["Jan Proef"], "Proefdak"))], 14, lambda e, l: set()),
+                                       ([(eigen, herkenning(["Jan Proef"], "Proefdak"))], 14, None)):
+        nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+        gezet, _, _ = fathom_ronde(nb, gesprekken, nu=ZATERDAG, dagen=dagen, dekking=dekking)
+        assert _dekking(gezet) == [], (dagen, _dekking(gezet))
+        if dekking is None:
+            assert "dekking onbekend" in nb.statussen()[-1]["detail"], nb.statussen()[-1]
+    fw = _fathom_wacht()
+
+    def kapot(*a, **k):
+        raise ValueError("Fathom kapot (proef)")
+
+    nb, gezet = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[]), []
+    echt = (fw.bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.bekende_dekking)
+    fw.bord.call = lambda pad, payload=None, method=None: gezet.append(pad) or nb.call(pad, payload, method)
+    fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.bekende_dekking = (lambda: True), kapot, (lambda e, l: set())
+    try:
+        with redirect_stdout(io.StringIO()):
+            try:
+                fw.main()
+            except ValueError:
+                pass                    # de ronde meldt haar fout en geeft ze door, zoals in test_bord_lees (F3)
+    finally:
+        fw.bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.bekende_dekking = echt
+    assert "/api/gesprekken" not in gezet and nb.statussen()[-1]["status"] == "fout", (gezet, nb.statussen()[-1])
+
+
+def test_fathom4_bekende_dekking_leest_het_bord_of_zegt_onbekend():
+    """bekende_dekking leest alleen de eigen dekkingsrijen in het venster uit de databank van het bord; zonder databank
+    None, nooit een lege set (onbekend is niet leeg)."""
+    import sqlite3  # noqa: PLC0415
+    from test_bord_lees import bord_db  # noqa: PLC0415
+    fw = _fathom_wacht()
+    pad = bord_db("fathom4-dekking")
+    con = sqlite3.connect(pad)
+    for uniek, datum in (("dekking:fathom:2026-10-12", "2026-10-12"), ("dekking:whatsapp:2026-10-13", "2026-10-13"),
+                         ("dekking:fathom:2026-09-01", "2026-09-01"), ("fathom:84991", "2026-10-14")):
+        con.execute("INSERT INTO gesprek_log(uniek, datum, bron, ts) VALUES(?, ?, 'dekking', 'x')", (uniek, datum))
+    con.commit()
+    con.close()
+    oud = fw.bord.BORD_DB
+    try:
+        fw.bord.BORD_DB = pad
+        assert fw.bekende_dekking("2026-10-11", "2026-10-23") == {"2026-10-12"}
+        fw.bord.BORD_DB = pad + ".weg"
+        assert fw.bekende_dekking("2026-10-11", "2026-10-23") is None
+    finally:
+        fw.bord.BORD_DB = oud
 
 
 def test_fathom1_eenmalige_aanvulronde_droog_en_echt():
