@@ -616,8 +616,10 @@ def main():
             ag.log(f"dag {dag}", "schrijf", f"dagboek {hoe}: {pad} ({d['status']}, versie {d['versie']}); klaargezet "
                    f"({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)")
             if d["zonder_adres"]:
-                r.nood("Buitenafspraken zonder adres of bekend projectnummer: de vergelijking met de locatie is daar blind",
-                       wie="collega")
+                # LOC-5: een nood per dag, met het aantal (niet vooraan, N10); zonder dag stond ze altijd open. Ze sluit in
+                # de eerste ronde die die dag niet meer maakt; het adres in de agenda zetten is werk van De Agendawacht.
+                r.nood(f"Buitenafspraken zonder adres of bekend projectnummer op {dag}: {len(d['zonder_adres'])} "
+                       "afspraken; de vergelijking met de locatie is daar blind", wie="collega")
         ag.log("stand", "schrijf", f"afgesloten tot {stand_bijwerken(afgesloten if not DAG else [], versies)}")
         sp = dropbox_prive.spiegel_map(MAP, "/Locatie")
         if sp["verstuurd"] or sp["fout"]:
