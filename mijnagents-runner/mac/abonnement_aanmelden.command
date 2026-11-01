@@ -2,8 +2,8 @@
 # Claude op de server (VM globaal) aanmelden met het abonnement van Mehdi, voor de agents die Claude gebruiken zonder
 # API-sleutel (koppelingen/claude_abonnement.py). Eenmalig, een jaar geldig. Dubbelklikken in Finder: je browser opent,
 # je meldt je aan met je Claude-account en klikt op Authorize. Je kopieert of plakt niets.
-# Het token gaat via ssh-stdin naar ~/appportal/.env op de VM (naam CLAUDE_CODE_OAUTH_TOKEN, alleen leesbaar voor de
-# eigenaar), nooit in een log of de proceslijst. De opname van setup-token staat kort in een tijdelijk bestand (0600)
+# Het token gaat via ssh-stdin naar ~/.config/prijsonderzoeker/claude-token op de VM (map 700, bestand 600), de plek
+# die alle agents op het abonnement lezen (ook De Prijsonderzoeker), nooit in een log of de proceslijst. De opname van setup-token staat kort in een tijdelijk bestand (0600)
 # en wordt overschreven en gewist.
 set -u
 CLAUDE="$HOME/.local/bin/claude"
@@ -30,11 +30,10 @@ if [ -z "$TOKEN" ]; then
   echo; echo "Er kwam geen sleutel terug. Niets bewaard. Zeg het tegen Claude."; sluiten; exit 1
 fi
 
-# Vervangt de regel CLAUDE_CODE_OAUTH_TOKEN in ~/appportal/.env (of voegt ze toe), daarna een korte proef op de VM.
-if printf '%s\n' "$TOKEN" | ssh globaal 'set -e; read -r T; f=~/appportal/.env; umask 077
-    grep -v "^CLAUDE_CODE_OAUTH_TOKEN=" "$f" > "$f.nieuw" || true
-    printf "CLAUDE_CODE_OAUTH_TOKEN=%s\n" "$T" >> "$f.nieuw"; chmod --reference="$f" "$f.nieuw" 2>/dev/null || true
-    chmod go-rwx "$f.nieuw"; mv "$f.nieuw" "$f"
+# Schrijft het tokenbestand op de VM (vervangt een oud token), daarna een korte proef op de VM.
+if printf '%s\n' "$TOKEN" | ssh globaal 'set -e; read -r T; umask 077; d="$HOME/.config/prijsonderzoeker"
+    mkdir -p "$d"; chmod 700 "$d"; printf "%s\n" "$T" > "$d/claude-token.nieuw"; chmod 600 "$d/claude-token.nieuw"
+    mv "$d/claude-token.nieuw" "$d/claude-token"
     export CLAUDE_CODE_OAUTH_TOKEN="$T"; unset T ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
     t="$(mktemp -d)"; p="$HOME/.local/bin:/usr/bin:/bin"; c="$HOME/.local/bin/claude"; cd "$t"
     HOME="$t" PATH="$p" "$c" -p --safe-mode --restricted --strict-mcp-config \

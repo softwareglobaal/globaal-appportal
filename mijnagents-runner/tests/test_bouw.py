@@ -785,7 +785,15 @@ with tempfile.TemporaryDirectory() as _d:
     CA.controleer_bron = lambda env, cwd: None
     leeg, vol = os.path.join(_d, "leeg.env"), os.path.join(_d, "vol.env")
     open(leeg, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\n")
-    open(vol, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-nep\n")
+    open(vol, "w").write("sk-ant-oat01-nep\n")
+    os.chmod(vol, 0o600)
+    _open = os.path.join(_d, "open")
+    open(_open, "w").write("sk-ant-oat01-nep\n")
+    os.chmod(_open, 0o644)
+    check("het gedeelde tokenbestand: alleen met rechten 600", CA.lees_token(vol) == "sk-ant-oat01-nep"
+          and CA.lees_token(_open) == "" and CA.lees_token(leeg) == "" and CA.lees_token(os.path.join(_d, "weg")) == "")
+    check("een plek voor alle agents op het abonnement (zoals De Prijsonderzoeker)",
+          CA.TOKEN_BESTAND.endswith("/.config/prijsonderzoeker/claude-token"))
     nep, rec, uitf = os.path.join(_d, "nep.py"), os.path.join(_d, "rec.json"), os.path.join(_d, "uit.txt")
     open(nep, "w").write(_NEP)
 
@@ -897,6 +905,13 @@ def _status(uit, fout=None):
 
 
 _statusrun = []
+_oud_beheerd = CA.BEHEERD
+with tempfile.TemporaryDirectory() as _bd:
+    CA.BEHEERD = (_bd,)
+    open(os.path.join(_bd, "managed-settings.json"), "w").write("{}")
+    check("beheerde instellingen op de machine: niet starten", str(CA.controleer_bron({}, "/y", run=_status(
+        {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"}))).startswith("bron"))
+CA.BEHEERD = ("/geen/beheerde/map",)
 check("auth status met het abonnementstoken: goed", CA.controleer_bron({"HOME": "/x"}, "/y", run=_status(
     {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"})) is None
       and _statusrun[0][0][1:] == ["auth", "status"] and _statusrun[0][1]["env"] == {"HOME": "/x"})
@@ -906,6 +921,7 @@ check("auth status met een API-sleutel: niet starten", str(CA.controleer_bron({}
 check("auth status zonder login of onleesbaar: aanmelden", str(CA.controleer_bron({}, "/y", run=_status(
     {"loggedIn": False}))).startswith("aanmelden") and str(CA.controleer_bron({}, "/y", run=_status(
         {}, OSError("weg")))).startswith("aanmelden"))
+CA.BEHEERD = _oud_beheerd
 _zv = []
 try:
     Z.zoek("w", "dak", "3000 Leuven", 25, "uitvoering", deadline=time.monotonic() + Z.LEESTIJD + 10,

@@ -2,8 +2,9 @@
 token en API kosten ... moet mijn claude account gebruiken").
 
 De agent start Claude Code zonder scherm (`claude -p`) met het langlevende token van `claude setup-token` (een jaar
-geldig), uit ~/appportal/.env onder de naam CLAUDE_CODE_OAUTH_TOKEN. Zonder token start niets: nooit terugvallen op de
-API. Grendels tegen aparte kosten (Codex, controle 17 en 18):
+geldig). Het token staat op een plek voor alle agents: ~/.config/prijsonderzoeker/claude-token (map 700, bestand 600),
+dezelfde als De Prijsonderzoeker (aankoop/onderzoek.py, TOKEN_BESTAND), zodat Mehdi een keer aanmeldt. Zonder token
+start niets: nooit terugvallen op de API. Grendels tegen aparte kosten (Codex, controle 17 en 18):
   - het kindproces krijgt alleen een korte lijst gewone variabelen en het token, nooit ANTHROPIC_API_KEY of een ander
     geheim, en een eigen lege HOME en configuratiemap: geen instellingen, apiKeyHelper of opgeslagen login van de
     server telt mee;
@@ -18,7 +19,7 @@ API. Grendels tegen aparte kosten (Codex, controle 17 en 18):
 
 Claude Code draait in een lege tijdelijke map, zonder CLAUDE.md, skills, hooks of MCP-servers (--safe-mode,
 --restricted, --strict-mcp-config) en met alleen het gereedschap dat de oproep noemt. Het token staat alleen in de
-omgeving van dat ene kindproces (leesbaar voor dezelfde gebruiker, zoals ~/appportal/.env zelf), nooit in een log of een
+omgeving van dat ene kindproces (leesbaar voor dezelfde gebruiker, zoals het tokenbestand zelf), nooit in een log of een
 foutmelding.
 """
 import json
@@ -30,9 +31,11 @@ import tempfile
 import threading
 import time
 
-from sleutelbron import BRON, waarde
+import re
 
 TOKEN = "CLAUDE_CODE_OAUTH_TOKEN"
+TOKEN_BESTAND = os.path.expanduser(os.environ.get("PRIJS_TOKEN_BESTAND", "~/.config/prijsonderzoeker/claude-token"))
+BEHEERD = ("/etc/claude-code", "/Library/Application Support/ClaudeCode")
 DOORLATEN = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "USER", "LOGNAME", "SHELL")
 MODEL = os.environ.get("ABONNEMENT_MODEL", "opus")
 AANMELDEN_NOOD = ("Claude op de VM is niet aangemeld met je abonnement: dubbelklik op de Mac "
@@ -57,6 +60,26 @@ class Fout(RuntimeError):
     aanmelden = property(lambda self: self.soort == "aanmelden")
     limiet = property(lambda self: self.soort == "limiet")
     wacht = property(lambda self: self.soort is not None)
+
+
+def lees_token(bestand=None):
+    """Het abonnementstoken uit het gedeelde bestand, of "" als het er niet is. Een bestand dat anderen kunnen lezen,
+    telt niet (rechten 600, zoals bij De Prijsonderzoeker)."""
+    bestand = bestand or TOKEN_BESTAND
+    try:
+        if os.stat(bestand).st_mode & 0o077:
+            return ""
+        with open(bestand, encoding="utf-8") as f:
+            m = re.search(r"sk-ant-oat[\w-]+", f.read())
+    except OSError:
+        return ""
+    return m.group(0) if m else ""
+
+
+def beheerde_instellingen(mappen=None):
+    """Beheerde instellingen van Claude Code op deze machine; die gaan voor alles en kunnen een sleutel opleggen."""
+    return [os.path.join(m, n) for m in (BEHEERD if mappen is None else mappen) for n in ("managed-settings.json", "managed-settings.d", "managed-mcp.json")
+            if os.path.exists(os.path.join(m, n))]
 
 
 def claude_pad():
@@ -178,7 +201,10 @@ def bekende_limiet(bestand=None, nu=None):
 
 def controleer_bron(env, cwd, run=subprocess.run):
     """None als `claude auth status` in precies deze omgeving het abonnementstoken van Anthropic zelf meldt; anders de
-    reden. Dit roept geen model aan en kost niets."""
+    reden. Dit roept geen model aan en kost niets. Beheerde instellingen op de machine tellen als een andere bron."""
+    gevonden = beheerde_instellingen()
+    if gevonden:
+        return f"bron: beheerde instellingen van Claude Code gevonden ({', '.join(gevonden)})"
     try:
         p = run([claude_pad(), "auth", "status"], capture_output=True, text=True, timeout=30, cwd=cwd, env=env)
         d = json.loads(p.stdout or "{}")
@@ -273,14 +299,15 @@ def _aanmelden(tekst):
     return any(w in laag for w in AANMELDEN)
 
 
-def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25, bestanden=None, bron=BRON,
+def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25, bestanden=None, bron=None,
           max_gereedschap=None):
     """Een vraag aan Claude op het abonnement. tools: namen uit Claude Code (WebSearch, WebFetch, Read). bestanden:
     {naam: bytes} die in de lege werkmap komen (voor Read). max_gereedschap: harde grens op het aantal oproepen van
-    gereedschap. Geeft lees_stroom(); een Fout als er geen antwoord is of als een grendel het proces stopte."""
-    token = waarde(bron, TOKEN)
+    gereedschap. bron: het tokenbestand (standaard TOKEN_BESTAND). Geeft lees_stroom(); een Fout als er geen antwoord
+    is of als een grendel het proces stopte."""
+    token = lees_token(bron)
     if not token:
-        raise Fout(f"geen {TOKEN} in {bron}", "aanmelden")
+        raise Fout(f"geen abonnementstoken in {bron or TOKEN_BESTAND} (rechten 600)", "aanmelden")
     if not limiet_schrijfbaar():
         raise Fout(f"Claude via het abonnement: de limiet is niet te onthouden in {LIMIET_BESTAND}", "bron")
     gekend = bekende_limiet()
