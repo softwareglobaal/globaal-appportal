@@ -132,7 +132,8 @@ noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-proef", "
 check("CL-2 met de afspraak die Calendly zette (zelfde Google-id) geen nood en geen signaal",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden) and "zonder afspraak" not in signaal, (noden, signaal))
 noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-hernoemd", "calendly": True}]}, []))
-check("CL-2 met een afspraak met een kenmerk van Calendly op het uur geen nood",
+check("CL-2 met een afspraak met een kenmerk van Calendly op het uur geen nood (ook een die Mehdi zelf zette en waarin hij "
+      "de link van de boeking plakte)",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden), noden)
 noden, signaal = ronde(EEN, [b_morgen], ({b_morgen["_lok"]: [{"id": "g-iets-anders", "calendly": False}]}, []))
 check("CL-2 een andere afspraak op hetzelfde uur is geen bewijs: de nood blijft, het signaal zegt waarom (Codex-toets 2)",
@@ -141,6 +142,20 @@ check("CL-2 een andere afspraak op hetzelfde uur is geen bewijs: de nood blijft,
 noden, signaal = ronde(EEN, [dict(b_morgen, calendar_event=None)], ({b_morgen["_lok"]: [{"id": "", "calendly": False}]}, []))
 check("CL-2 een boeking zonder Google-id en een afspraak zonder id of kenmerk: de nood blijft",
       {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden, noden)
+# Codex-toets 3: twee boekingen op hetzelfde uur, maar een afspraak
+b_een, b_twee = dict(boeking(2, 11), uri="b:1", google_id="g-een"), dict(boeking(2, 11), uri="b:2")
+b_een["calendar_event"], b_twee["calendar_event"] = {"external_id": "g-een"}, {"external_id": "g-twee"}
+_uur = b_een["_lok"]
+noden, signaal = ronde(EEN, [b_een, b_twee], ({_uur: [{"id": "g-een", "calendly": True}]}, []))
+check("CL-2 twee boekingen op een uur en alleen de Google-afspraak van de eerste: de tweede blijft gemeld",
+      {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and signaal.count(f"{_uur[:10]} {_uur[11:]}") == 1, (noden, signaal))
+b_drie, b_vier = dict(b_een, uri="b:3", calendar_event=None), dict(b_twee, uri="b:4", calendar_event=None)
+noden, signaal = ronde(EEN, [b_drie, b_vier], ({_uur: [{"id": "g-los", "calendly": True}]}, []))
+check("CL-2 twee boekingen zonder Google-id en een afspraak met kenmerk: die bewijst er hoogstens een",
+      {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and signaal.count(f"{_uur[:10]} {_uur[11:]}") == 1, (noden, signaal))
+noden, signaal = ronde(EEN, [b_een, dict(b_vier, uri="b:5")], ({_uur: [{"id": "g-een", "calendly": True}]}, []))
+check("CL-2 de eigen afspraak van een boeking bewijst geen andere boeking op hetzelfde uur",
+      {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden, (noden, signaal))
 noden, signaal = ronde(EEN, [b_gisteren], ({}, []))
 check("CL-2 een boeking van gisteren zonder afspraak wordt ook gezien",
       {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and b_gisteren["_lok"][:10] in signaal, (noden, signaal))
@@ -186,12 +201,12 @@ _nep.KALENDERS = {"werk@proef.test": "werk", "prive@proef.test": "privé", "kind
 _nep.PRIVE_KALENDERS = {"prive@proef.test", "kind@proef.test"}
 _nep.ARCHIEF_FOUT = ""
 _gelezen = []
-_nep.is_calendly = lambda a: "calendly.com" in (a.get("omschrijving") or "")
 _nep.afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("afspraken", van, tot, alleen_lezen)) or [
     {"kalender": "werk@proef.test", "id": "g1", "start": "2026-11-06T13:00:00+01:00", "omschrijving": "https://calendly.com/x"},
     {"kalender": "kind@proef.test", "fout": "403"}])
 _nep.archief_afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("archief", van, tot, alleen_lezen)) or [
     {"kalender": "archief@proef.test", "id": "g2", "start": "2026-11-07T09:00:00+01:00", "_archief": "ZZ ARCHIEF proef"}])
+_nep.is_calendly = lambda a: True       # de agenda alleen (een boekingsaccount) is geen kenmerk meer (Codex-toets 3)
 _echt = sys.modules.get("agenda_wacht")
 sys.modules["agenda_wacht"] = _nep
 try:

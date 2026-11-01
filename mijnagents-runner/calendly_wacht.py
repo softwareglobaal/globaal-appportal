@@ -210,8 +210,10 @@ def firma_aliassen():
 def agenda_bewijs(van_dagen, tot_dagen):
     """Per starttijd (Brussel, tot op de minuut) de afspraken in precies de agenda's van De Agendawacht, met haar
     archiefagenda's, als {'id', 'calendly'}; en de agenda's die niet gelezen werden (T-0120 CL-2; tot 01-11-2026 las ik er
-    maar drie). calendly: de afspraak draagt een kenmerk van Calendly (agenda_wacht.is_calendly: een boekingsaccount of
-    de links van calendly.com in de omschrijving). Alleen lezen. Een privé-agenda heet hier 'een privé-agenda'."""
+    maar drie). calendly: de omschrijving draagt de links van calendly.com, zoals Calendly ze zet; een afspraak die Mehdi
+    zelf zet, krijgt dat kenmerk als hij de link van de boeking in de omschrijving plakt. Niet de agenda alleen: een
+    willekeurige afspraak op een boekingsagenda is geen bewijs (Codex-toets 3). Alleen lezen. Een privé-agenda heet hier
+    'een privé-agenda'."""
     import agenda_wacht as W  # noqa: PLC0415  pas hier: het laden van De Agendawacht leest organisatie.globaal.be
     ruw = W.afspraken(van_dagen, tot_dagen, alleen_lezen=True)
     archief = W.archief_afspraken(van_dagen, tot_dagen, alleen_lezen=True)
@@ -222,27 +224,40 @@ def agenda_bewijs(van_dagen, tot_dagen):
     bewijs = collections.defaultdict(list)
     for x in ruw + archief:
         if not x.get("fout"):
-            bewijs[(x.get("start") or "")[:16]].append({"id": x.get("id") or "", "calendly": bool(W.is_calendly(x))})
+            bewijs[(x.get("start") or "")[:16]].append({"id": x.get("id") or "",
+                                                        "calendly": "calendly.com" in (x.get("omschrijving") or "").lower()})
     return dict(bewijs), sorted(ongelezen)
 
 
 def zonder_afspraak(boekingen, bewijs, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DAGEN):
     """De actieve boekingen van terug dagen geleden tot vooruit dagen verder zonder hun eigen afspraak, als
-    'JJJJ-MM-DD UU:MM type'. Een eigen afspraak staat op het geboekte uur en is de afspraak die Calendly in Google zette
-    (calendar_event.external_id) of draagt een kenmerk van Calendly. Een andere afspraak op hetzelfde uur is geen bewijs
-    (Codex-toets 2): dan zegt de regel dat erbij. bewijs: uit agenda_bewijs."""
-    uit = []
-    for b in boekingen:
-        if b.get("status") != "active" or not b.get("start_time"):
-            continue
+    'JJJJ-MM-DD UU:MM type'. bewijs: uit agenda_bewijs. Eerst exact: de afspraak die Calendly in Google zette
+    (calendar_event.external_id) op het geboekte uur. Daarna een afspraak met het kenmerk van Calendly op dat uur die nog
+    van geen andere boeking is; elke afspraak bewijst hoogstens een boeking (Codex-toets 3: twee boekingen op een uur met
+    een afspraak). Een andere afspraak op het uur is geen bewijs: dan zegt de regel dat erbij (Codex-toets 2)."""
+    open_, gebruikt = [], set()
+    actief = [b for b in boekingen if b.get("status") == "active" and b.get("start_time")]
+    eigen_ids = {(b.get("calendar_event") or {}).get("external_id") for b in actief} - {None, ""}
+    for b in sorted(actief, key=lambda x: (x["start_time"], x.get("uri") or "", x.get("name") or "")):
         lok = datetime.datetime.fromisoformat(b["start_time"].replace("Z", "+00:00")).astimezone(BRUSSEL)
         if lok < nu - datetime.timedelta(days=terug) or lok > nu + datetime.timedelta(days=vooruit):
             continue
-        eigen = (b.get("calendar_event") or {}).get("external_id") or ""
-        op_uur = bewijs.get(lok.strftime("%Y-%m-%dT%H:%M"), [])
-        if not any(x["calendly"] or (eigen and x["id"] == eigen) for x in op_uur):
-            uit.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}"
-                       + (" (op dat uur een andere afspraak, zonder kenmerk van Calendly)" if op_uur else ""))
+        minuut, eigen = lok.strftime("%Y-%m-%dT%H:%M"), (b.get("calendar_event") or {}).get("external_id") or ""
+        i = next((i for i, x in enumerate(bewijs.get(minuut, [])) if eigen and x["id"] == eigen), None)
+        if i is None:
+            open_.append((lok, minuut, b))
+        else:
+            gebruikt.add((minuut, i))
+    uit = []
+    for lok, minuut, b in open_:
+        op_uur = bewijs.get(minuut, [])
+        i = next((i for i, x in enumerate(op_uur) if x["calendly"] and (minuut, i) not in gebruikt
+                  and x["id"] not in eigen_ids), None)
+        if i is not None:
+            gebruikt.add((minuut, i))
+            continue
+        uit.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}"
+                   + (" (op dat uur een andere afspraak, zonder kenmerk van Calendly)" if op_uur else ""))
     return sorted(uit)
 
 

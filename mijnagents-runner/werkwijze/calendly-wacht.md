@@ -48,13 +48,20 @@ Wat hieruit al bleek en wat ik blijf bewaken:
    boekingen zijn er de laatste 90 dagen en de komende 30 dagen.
 2. **Dode types**: elk actief type zonder boeking in 90 dagen. Dat is een voorstel om uit te
    zetten, geen handeling.
-3. **Dubbele types**: dezelfde naam op meer dan één account. Altijd melden, want dat stuurt
-   klanten naar de verkeerde agenda.
-4. **Onbekende types**: elk type dat niet in het agenda-document staat. Ik meld het met naam,
-   duur en account, zodat Mehdi beslist of het document meegroeit of het type weg mag.
-5. **Boeking zonder agenda-item**: voor elke boeking in de komende veertien dagen kijk ik of er
-   een afspraak in de agenda's staat op dat uur. Vind ik er geen, dan is de koppeling met Google
-   stuk en is dat een alarm, geen melding.
+3. **Dubbele types**: dezelfde naam actief op twee of meer verschillende accounts. Altijd melden,
+   want dat stuurt klanten naar de verkeerde agenda. Een inactief type of dezelfde naam twee keer
+   in hetzelfde account telt niet (T-0120 CL-3).
+4. **Onbekende types**: elk actief type dat niet in de lijst bekende types staat
+   (`werkwijze/agenda-taken.json`, `calendly_types.bekend`). Ik meld het met naam, duur en
+   account, zodat Mehdi beslist of de lijst meegroeit of het type weg mag.
+5. **Boeking zonder agenda-item** (T-0120 CL-2, 01-11-2026): voor elke boeking van veertien
+   dagen terug tot veertien dagen vooruit zoek ik haar eigen afspraak in dezelfde agenda's als
+   De Agendawacht, met haar archief: de afspraak die Calendly in Google zette, of een afspraak op
+   dat uur met de link van calendly.com in de omschrijving. Een andere afspraak op dat uur is geen
+   bewijs. Vind ik ze niet, dan is dat de vaste nood "Calendly-boeking zonder afspraak in de
+   agenda" voor Mehdi, met de details in het signaal. Zet Mehdi de afspraak zelf in de agenda,
+   dan plakt hij de link van de boeking in de omschrijving. Kon ik niet alle agenda's lezen, dan
+   vergelijk ik niet en meld ik dat aan Claude: onbekend is niet leeg.
 6. **Geannuleerde boekingen** van de laatste dagen meld ik, zodat een afspraak die in de agenda
    blijft staan opvalt.
 7. Werkverslag op het bord, wat ik mis als nood, en wat Mehdi moet beslissen als voorstel.
