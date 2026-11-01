@@ -452,6 +452,11 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
         r.nood("Plaud-aanmelding ontbreekt of is geweigerd: Mehdi meldt één keer aan met plaud_login.py op de Mac", wie="mehdi")
     elif status.get("uitkomst") == "bronfout":
         r.nood("De Plaud-API was bij de laatste ophaling niet bereikbaar", wie="claude-code")
+    # PLAUD-5 (T-0120): van 28-10 tot 01-11 stond de Mac elk uur op 'deels' (foutcode 4) met vijf mappen zonder audio, en
+    # hier kwam geen melding. Het aantal staat in het detail van de ronde, niet in de nood (N10).
+    if status.get("uitkomst") == "deels" or int((m["meta"].get("toestanden") or {}).get("onvolledig") or 0) > 0:
+        r.nood("De Plaud-ophaling op de Mac liep deels mis of het archief heeft onvolledige opnames (audio of transcript "
+               "ontbreekt); zie 00 status.json en 00 manifest.json op de Mac", wie="claude-code")
     alle = st_obj.alle().values()
     if m["meta"].get("conflicten"):
         r.nood("Id-conflict in het Plaud-archief: een opname staat in meer dan één map; Mehdi kiest welke geldt "
@@ -555,7 +560,9 @@ def ronde(r):
         ag.log("Plaud", "bevinding", "herkenningsbudget van deze ronde op; de rest volgt in de volgende rondes")
     ag.log("Plaud", "bron", "ronde: " + ", ".join(f"{k} {v}" for k, v in tellers.items()))
     r.detail = (f"{tellers['gedaan']} verwerkt, {tellers['wacht_op_transcript']} wachten op transcript, "
-                f"{tellers.get('open_zoektaken', 0)} open zoektaken, invoer van {tellers.get('invoer_van', 'nooit')}")
+                f"{tellers.get('open_zoektaken', 0)} open zoektaken, invoer van {tellers.get('invoer_van', 'nooit')}"
+                + (f", {tellers['onvolledig_archief']} onvolledig in het archief" if tellers.get("onvolledig_archief") else "")
+                + (", Mac: deels" if tellers.get("aanmelding_mac") == "deels" else ""))
     return code, tellers
 
 

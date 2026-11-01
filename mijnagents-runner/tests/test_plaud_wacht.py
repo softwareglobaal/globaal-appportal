@@ -778,6 +778,56 @@ def test_verouderde_invoer_en_aanmeldfout_worden_gemeld():
     assert not any("stil" in n.lower() for n in noden)
 
 
+def onvolledige_opname(w, pid, start_at):
+    """Een map met transcript maar zonder audio, zoals de ruwe Opus van Plaud op 15-10 tot 22-10 (geen OggS-kop)."""
+    def haler(url, max_bytes, timeout):
+        return gzip.compress(json.dumps(OPENING).encode()) if "transcript" in url else b"\xb8" * 80 * 50
+    r = bouw_map.bouw({"id": pid, "name": "proef zonder audio", "start_at": start_at, "duration": 20 * 60000,
+                       "presigned_url": "https://proef/audio", "transcript_link": "https://proef/transcript"},
+                      w.archief, haler=haler)
+    assert r["status"] == "onvolledig", r
+
+
+def ronde_met_detail(w):
+    r = types.SimpleNamespace(noden=[], detail="", bronnen=[])
+    r.nood = lambda tekst, wie="mehdi": r.noden.append((tekst, wie))
+    r.bron = lambda naam, inhoud: r.bronnen.append(naam)
+    code, tellers = P.ronde(r)
+    return code, tellers, r
+
+
+def test_plaud5_deels_en_onvolledige_mappen_geven_een_nood_met_het_aantal_in_het_detail():
+    """PLAUD-5 (T-0120): van 28-10 tot 01-11 stond de Mac elk uur op 'deels' (foutcode 4) met 5 onvolledige mappen, en
+    De Plaudwacht meldde niets: toezicht keek alleen naar authfout en bronfout. Nu één nood voor claude-code, zonder
+    teller in de tekst (N10); het aantal staat in het detail van de ronde."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    for i in range(5):
+        onvolledige_opname(w, "of_" + str(i + 4) * 32, f"2026-10-1{i + 5}T10:00:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "deels", "tellers": {"mislukt": 5}}))
+    w.push()
+    _, tel, r = ronde_met_detail(w)
+    mac = [(t, wie) for t, wie in r.noden if "deels" in t]
+    assert len(mac) == 1 and mac[0][1] == "claude-code", r.noden
+    assert not mac[0][0][:1].isdigit() and "5" not in mac[0][0], "N10: het aantal hoort in het detail, niet in de nood"
+    assert tel["onvolledig_archief"] == 5 and "5 onvolledig in het archief" in r.detail, (tel, r.detail)
+    # alleen onvolledige mappen, ook als de laatste ronde van de Mac 'ok' zegt: ook een nood
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "ok"}))
+    w.push()
+    _, _, r = ronde_met_detail(w)
+    assert len([t for t, _ in r.noden if "deels" in t]) == 1, r.noden
+
+
+def test_plaud5_status_ok_zonder_onvolledige_mappen_geeft_geen_nood():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "ok"}))
+    w.push()
+    code, tel, r = ronde_met_detail(w)
+    assert code == P.OK and not r.noden and tel["onvolledig_archief"] == 0, (code, r.noden)
+    assert "onvolledig" not in r.detail, r.detail
+
+
 def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     sys.path.insert(0, os.path.join(HIER, "planning"))
     import plaud_cron_zetten as Z
