@@ -70,7 +70,7 @@ def hartslag(status, taak="", detail="", nood=None):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
-def niet_gelezen(onleesbaar):
+def niet_gelezen(onleesbaar, deels=False):
     """Waarom geen enkele browser gelezen is, zoals in youtube_wacht.py (YT-2): PermissionError (of de uitkomst
     "geweigerd" van de helper van YT-1) is een weigering van macOS; een andere fout een onleesbaar bestand."""
     geweigerd = [b for b, f in onleesbaar.items() if f in ("PermissionError", "geweigerd")]
@@ -79,7 +79,9 @@ def niet_gelezen(onleesbaar):
         ["onleesbaar: " + ", ".join(anders)] if anders else [])
     if not delen:
         return "Geen browsergeschiedenis gevonden op deze Mac"
-    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+    # deels: andere browsers zijn wel gelezen, maar de telling is onvolledig en wordt niet klaargezet (Codex 01-11)
+    return ("Browsergeschiedenis niet volledig gelezen op deze Mac (" if deels
+            else "Browsergeschiedenis niet te lezen op deze Mac (") + "; ".join(delen) + ")"
 
 
 def fout_in_werkverslag(tekst):
@@ -139,8 +141,7 @@ def main(vragen=None):
     if not gelezen or onleesbaar:
         # Codex 01-11 (onbekend is nooit 0) en WEB-2: zonder alle browsers geen telling klaarzetten; de vorige blijft
         # staan. YT-2: de reden noemt geweigerd of onleesbaar, en de mislukte ronde staat in het werkverslag.
-        tekst = niet_gelezen(onleesbaar) if not gelezen else (
-            "browsergeschiedenis niet volledig gelezen: " + ", ".join(f"{b} ({u})" for b, u in onleesbaar.items()))
+        tekst = niet_gelezen(onleesbaar, deels=bool(gelezen))
         if not gelezen:
             nood.append({"tekst": tekst, "wie": "claude-code"})
         fout_in_werkverslag(tekst)

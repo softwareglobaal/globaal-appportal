@@ -717,7 +717,8 @@ def browser_kopie(sinds, vragen=None):
     """YT-1 en WEB-1: de browsergeschiedenis sinds (Unix-seconden) uit een verse kopie van MacGesprekkenKopie (set
     browser), zodat geen Python Full Disk Access nodig heeft (keuze VOL-11, weg a). Geeft (bezoeken, gelezen,
     onleesbaar): bezoeken [(browser, tijd, site, video, titel, seconden)], gelezen {browser: aantal gelezen databanken},
-    onleesbaar {browser: uitkomst}. De kopie is weg voor de functie terugkeert."""
+    onleesbaar {browser: uitkomst}. De kopie is weg voor de functie terugkeert. Een kopie die niet te lezen is, is een
+    MacFout: de wachten melden dat en zetten niets klaar (T-0120 samen, Codex-toets 1)."""
     pad, _ = (vragen or kopie_vragen)("browser")
     try:
         bezoeken = [tuple(r) for r in lees(pad, SQL_BEZOEKEN, (float(sinds),))]
@@ -727,6 +728,9 @@ def browser_kopie(sinds, vragen=None):
                 gelezen[browser] += 1
             else:
                 onleesbaar.setdefault(browser, uitkomst)
+    except sqlite3.Error as e:
+        raise MacFout(f"kopie van de browsers niet te lezen ({type(e).__name__})",
+                      "De kopie van MacGesprekkenKopie (set browser) is niet te lezen: niets klaargezet") from e
     finally:
         wis(pad)
     return bezoeken, dict(gelezen), onleesbaar

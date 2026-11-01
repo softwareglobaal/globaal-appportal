@@ -1725,6 +1725,24 @@ def test_web3_safari_alleen_de_bezoeken_van_deze_mac():
         con.close()
         assert rijen == [("Safari", "proef-werk.test", None), ("Safari", "youtube.com", "werkvideo1")], rijen
         assert bronnen == [("Safari", "ok")], bronnen
+        # Codex samen1 toets 1: de vraag zonder oorsprong alleen als de kolom ontbreekt, nooit bij een ander
+        # schemaprobleem. Een kolom origin met een collatie die de helper niet kent: Safari onverwacht, geen gsm-bezoek.
+        (safari / "History.db").unlink()
+        con = sqlite3.connect(safari / "History.db")
+        con.create_collation("proefcollatie", lambda a, b: (a > b) - (a < b))
+        con.executescript("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url);"
+                          "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item, visit_time, title, "
+                          "origin COLLATE proefcollatie);")
+        con.execute("INSERT INTO history_items VALUES(1, 'https://proef-gsm.test/b')")
+        con.execute("INSERT INTO history_visits VALUES(1, 1, ?, 'Proef', 1)", (nu - 2000 - 978307200,))
+        con.commit()
+        con.close()
+        status, uit, _ = _vraag(helper, str(thuis), "browser", "e" * 32)
+        assert status["extra"]["Safari"] == "onverwacht", status
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT browser, site FROM BEZOEK").fetchall()
+        con.close()
+        assert rijen == [], rijen
 
 
 def test_vol11_tijdgrens_ook_tijdens_het_kopieren():

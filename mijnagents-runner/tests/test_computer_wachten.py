@@ -114,6 +114,29 @@ for naam in ("youtube_wacht", "browser_wacht"):
           rc == 1 and not nep.naar("/api/klaarzet") and [r["stap"] for r in log] == ["fout"]
           and "staat niet in launchd" in log[0]["tekst"], nep.oproepen)
 
+# Codex samen1 toets 1: een kopie die niet te lezen is, en een browser die geweigerd is naast een gelezen browser. Beide
+# zijn een mislukte ronde: niets klaargezet, een foutregel, de reden in de vorm van YT-2.
+def kapotte_kopie(_kanaal):
+    pad = os.path.join(tempfile.mkdtemp(), "kopie.sqlite")
+    with open(pad, "wb") as f:
+        f.write(b"geen databank " * 100)
+    return pad, datetime.now()
+
+
+for naam in ("youtube_wacht", "browser_wacht"):
+    rc, nep = ronde(laad(naam), kapotte_kopie)
+    log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+    st = nep.naar("/agent-status")[-1]
+    check(f"C01 {naam}: een kapotte kopie is een mislukte ronde met een foutregel",
+          rc == 1 and st["status"] == "fout" and not nep.naar("/api/klaarzet") and [r["stap"] for r in log] == ["fout"]
+          and "niet te lezen" in log[0]["tekst"], nep.oproepen)
+    rc, nep = ronde(laad(naam), kopie([("Chrome", "ok"), ("Safari", "geweigerd")],
+                                      [("Chrome", datetime(2026, 10, 30, 12, 0).timestamp(), "proef.test", None, None, None)]))
+    log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+    check(f"C01 {naam}: een geweigerde browser naast een gelezen: 'geweigerd: Safari', niets klaargezet",
+          rc == 1 and not nep.naar("/api/klaarzet") and [r["tekst"] for r in log]
+          == ["Browsergeschiedenis niet volledig gelezen op deze Mac (geweigerd: Safari)"], nep.oproepen)
+
 # C02 (WEB-2): zonder gelezen browser zette de Websitewacht 14 dagen met 0 bezoeken klaar; De Dagbundelaar nam die over.
 for naam, bronnen in (("lege map", []), ("geweigerd", [("Chrome", "geweigerd")])):
     B = laad("browser_wacht")

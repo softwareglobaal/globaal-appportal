@@ -641,6 +641,18 @@ static void kopie_weg(int dirfd) {
     for (size_t i = 0; i < sizeof namen / sizeof *namen; i++) unlinkat(dirfd, namen[i], 0);
 }
 
+/* WEB-3: heeft de Safari-geschiedenis (als extra gekoppeld) de kolom history_visits.origin? 1 ja, 0 nee (een oudere
+   Safari), -1 niet na te gaan. */
+static int oorsprong_kolom(sqlite3 *db) {
+    sqlite3_stmt *stmt = NULL;
+    int uit = -1;
+    if (sqlite3_prepare_v2(db, "SELECT count(*) FROM pragma_table_info('history_visits', 'extra') WHERE name = 'origin'",
+                           -1, &stmt, NULL) == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
+        uit = sqlite3_column_int(stmt, 0) > 0;
+    sqlite3_finalize(stmt);
+    return uit;
+}
+
 /* Een databank van een extra bron lezen: openen langs het pad zonder symlink, bij x->kopie eerst een eigen kopie (met
    haar -wal) in de privemap van de set (privemap: het volle pad van dirfd), dan de vraag van de bron met :begin, :pk en
    :browser. De kopie is weg voor de functie terugkeert. Geeft de uitkomst: ok, ontbreekt, geweigerd, onverwacht of fout. */
@@ -696,13 +708,11 @@ static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const cha
             } else {
                 /* Een vraag die faalt, wijst op een ander schema: onverwacht, en van deze bron komt dan niets mee. */
                 stmt = NULL;
-                rc = sqlite3_prepare_v2(db, x->vraag, -1, &stmt, NULL);
-                if (rc != SQLITE_OK && x->zonder_oorsprong != NULL) {
-                    /* WEB-3: de vraag verschilt alleen in de kolom oorsprong; ontbreekt die, dan de vraag zonder */
-                    sqlite3_finalize(stmt);
-                    stmt = NULL;
-                    rc = sqlite3_prepare_v2(db, x->zonder_oorsprong, -1, &stmt, NULL);
-                }
+                /* WEB-3: de vraag zonder oorsprong alleen als de kolom aantoonbaar ontbreekt (Codex samen1 toets 1:
+                   nooit bij een ander schemaprobleem; is het niet na te gaan, dan de gewone vraag, en die faalt dan) */
+                const char *vraag = x->zonder_oorsprong != NULL && oorsprong_kolom(db) == 0 ? x->zonder_oorsprong
+                                                                                           : x->vraag;
+                rc = sqlite3_prepare_v2(db, vraag, -1, &stmt, NULL);
                 if (rc == SQLITE_OK) {
                     int i;
                     if ((i = sqlite3_bind_parameter_index(stmt, ":begin")) > 0)

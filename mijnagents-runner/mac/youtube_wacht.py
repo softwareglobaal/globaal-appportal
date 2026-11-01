@@ -73,7 +73,7 @@ def hartslag(status, taak="", detail="", nood=None):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
-def niet_gelezen(onleesbaar):
+def niet_gelezen(onleesbaar, deels=False):
     """Waarom geen enkele browser gelezen is (YT-2, 01-11-2026: onder launchd weigerde macOS Chrome en Firefox, en de
     melding zei "niet gevonden"). PermissionError (of de uitkomst "geweigerd" van de helper van YT-1) is een weigering van
     macOS; een andere fout een onleesbaar bestand."""
@@ -83,7 +83,9 @@ def niet_gelezen(onleesbaar):
         ["onleesbaar: " + ", ".join(anders)] if anders else [])
     if not delen:
         return "Geen browsergeschiedenis gevonden op deze Mac"
-    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+    # deels: andere browsers zijn wel gelezen, maar de telling is onvolledig en wordt niet klaargezet (Codex 01-11)
+    return ("Browsergeschiedenis niet volledig gelezen op deze Mac (" if deels
+            else "Browsergeschiedenis niet te lezen op deze Mac (") + "; ".join(delen) + ")"
 
 
 def fout_in_werkverslag(tekst):
@@ -168,7 +170,7 @@ def main(vragen=None):
         return 1
     if onleesbaar:
         # Codex 01-11 (onbekend is nooit 0): een onleesbare browser maakt de telling onvolledig: niets klaarzetten
-        tekst = "browsergeschiedenis niet volledig gelezen: " + ", ".join(f"{b} ({u})" for b, u in onleesbaar.items())
+        tekst = niet_gelezen(onleesbaar, deels=True)
         fout_in_werkverslag(tekst)
         hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", detail=tekst,
                  nood=M.browser_nood(onleesbaar))
