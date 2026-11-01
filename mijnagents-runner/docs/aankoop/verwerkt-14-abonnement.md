@@ -28,3 +28,24 @@ Twee grendels die uit de metingen kwamen, niet uit het overleg:
 
 Echte proef op de laptop (01-11, haiku, 2 zoek en 2 lees, eigen aanmelding in plaats van het token): 35 seconden, stop
 `klaar`, bron `none`, 2 zoekopdrachten, 2 pagina's gelezen, leesbaar JSON-antwoord.
+
+## Verwerking Codex-controle 15 (niet klaar)
+
+1. **Hoog, kosten.** (a) Een eigen lege configuratiemap per vraag (`CLAUDE_CONFIG_DIR` in de werkmap): niets uit
+   `~/.claude` van de VM telt. (b) `voor_de_start()` weigert als er beheerde instellingen staan
+   (`/etc/claude-code/managed-settings.json`, `managed-settings.d`, `managed-mcp.json`, en de macOS-map); gemeten op de VM:
+   er zijn er geen. (c) Nieuw: boven 90 procent van een limietvenster (`utilization` in `rate_limit_info`) stopt de vraag
+   (`GRENS_GEBRUIK`, stop `limiet`), zodat ze nooit tot betaald extra verbruik komt; `isUsingOverage` blijft de tweede
+   grendel. (d) Gemeten op de laptop: `overageStatus: "allowed"` op dat account. De enige zekerheid op accountniveau is
+   Usage credits uit in claude.ai (Settings > Usage); dat is Mehdi's instelling, en het advies staat bij de tokenstap.
+2. **Hoog, DNS-rebinding.** De leestool verbindt nu met het IP-adres dat `openbaar_adres()` zelf nakeek
+   (`_VasteHTTP`, `_VasteHTTPS` met `_create_connection`), bij elke doorverwijzing opnieuw; de naam blijft voor de
+   Host-kop en TLS. Daarbovenop controleert `verbonden_openbaar()` het echt verbonden adres voor het lezen.
+3. **Hoog, X2.** `gelezen_uit` plakt niets meer aan elkaar: een url krijgt de tekst van zijn laatste lezing, en alleen
+   onder de eind-url die het model bovenaan de tekst zag. De tool en de JSON-vorm zeggen dat die url de url van het
+   aanbod is.
+4. **Procesgrens.** De vraag gaat in een eigen draad naar stdin; de eindregel van de stream stopt het lezen; claude en
+   de leestool worden in een `finally` gestopt. De systeemtekst gaat via `--system-prompt-file` (gemeten: werkt), niet
+   meer als argument.
+
+Tests: 225 prijstests groen op de laptop en de VM, sleutelbron 46. Echte korte proef op de laptop opnieuw: 33 s, klaar.

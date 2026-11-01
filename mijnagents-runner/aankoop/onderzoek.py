@@ -31,6 +31,11 @@ MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
 MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "30"))   # assistentberichten; --max-turns bestaat niet (K4)
+# Boven dit deel van een limietvenster van het abonnement stopt de vraag, zodat ze nooit in betaald extra verbruik
+# loopt en Mehdi zijn eigen gebruik houdt (Codex controle 15, punt 1).
+GRENS_GEBRUIK = float(os.environ.get("PRIJS_GRENS_GEBRUIK", "0.9"))
+# Beheerde instellingen gaan voor alles, ook voor --restricted, en kunnen een betaalde route of sleutel toevoegen.
+BEHEERD = ("/etc/claude-code", "/Library/Application Support/ClaudeCode")
 ZOEK = "WebSearch"
 LEES = "mcp__lees__lees_pagina"
 # Alleen dit gaat mee naar het subproces; ANTHROPIC_API_KEY en elke andere sleutel dus nooit (overleg 14, K1).
@@ -67,7 +72,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
   "aannames": ["wat je aannam omdat het niet in de vraag stond"],
   "eisen": ["elke andere eis waar een aanbod aan moet voldoen, kort"],
   "aanbiedingen": [
-    {"titel": "exacte productnaam en variant", "url": "de pagina die je met lees_pagina las",
+    {"titel": "exacte productnaam en variant", "url": "de URL bovenaan de tekst die lees_pagina gaf",
      "modelcode": "de volledige modelcode of het typenummer zoals het op de aanbodpagina staat, of null",
      "winkel": "naam", "land": "ISO-landcode van de verkoper, bv. BE, DE, US",
      "soort": "nieuw | refurbished | tweedehands | veiling",
@@ -214,7 +219,8 @@ def zoekresultaten_uit(resultaat):
 
 def gelezen_uit(leeslog):
     """({url: tekst} van de geslaagde lezingen, (geslaagd, mislukt)) uit het leeslog van de leestool. De tekst is
-    precies wat het model las (overleg 14, X2)."""
+    precies wat het model las (overleg 14, X2), onder de eind-url die het model bovenaan zag. Twee lezingen worden nooit
+    aan elkaar geplakt: de laatste lezing van een url telt (Codex controle 15, punt 3)."""
     uit, geslaagd, mislukt = {}, 0, 0
     try:
         with open(leeslog, encoding="utf-8") as f:
@@ -230,9 +236,16 @@ def gelezen_uit(leeslog):
             mislukt += 1
             continue
         geslaagd += 1
-        for url in {schoon_url(d.get("url")), schoon_url(d.get("eind_url"))} - {""}:
-            uit[url] = uit.get(url, "") + str(d.get("tekst") or "")
+        url = schoon_url(d.get("eind_url") or d.get("url"))
+        if url:
+            uit[url] = str(d.get("tekst") or "")
     return uit, (geslaagd, mislukt)
+
+
+def beheerde_instellingen(mappen=None):
+    """De beheerde instellingen van Claude Code op deze machine; die zouden voor het abonnement kunnen gaan."""
+    return [os.path.join(m, n) for m in (BEHEERD if mappen is None else mappen)
+            for n in ("managed-settings.json", "managed-settings.d", "managed-mcp.json") if os.path.exists(os.path.join(m, n))]
 
 
 def lees_token(pad=None):
@@ -252,18 +265,31 @@ def lees_token(pad=None):
     return m.group(0)
 
 
-def omgeving(token, bron=None):
-    """De omgeving van claude -p: alleen de witte lijst en het abonnementstoken, nooit een API-sleutel (K1)."""
+def omgeving(token, werkmap, bron=None):
+    """De omgeving van claude -p: alleen de witte lijst en het abonnementstoken, nooit een API-sleutel (K1), en een
+    eigen lege configuratiemap in de werkmap: niets uit ~/.claude van de VM (instellingen, sleutels, plugins) telt."""
     bron = os.environ if bron is None else bron
     env = {k: bron[k] for k in OMGEVING if bron.get(k)}
-    env.update({"CLAUDE_CODE_OAUTH_TOKEN": token, "DISABLE_AUTOUPDATER": "1"})
+    config = os.path.join(werkmap, "claude-config")
+    os.makedirs(config, mode=0o700, exist_ok=True)
+    env.update({"CLAUDE_CODE_OAUTH_TOKEN": token, "DISABLE_AUTOUPDATER": "1", "CLAUDE_CONFIG_DIR": config})
     return env
+
+
+def voor_de_start():
+    """Weigert de start als beheerde instellingen bestaan (Codex controle 15, punt 1)."""
+    gevonden = beheerde_instellingen()
+    if gevonden:
+        raise GeenAbonnement(f"beheerde instellingen van Claude Code gevonden ({', '.join(gevonden)}); niet gestart")
 
 
 def opdrachtregel(werkmap, systeem, model=None):
     """claude -p met alleen WebSearch en de eigen leestool (--restricted zet Bash, WebFetch en de rest uit), een hook
     die de zoekopdrachten telt, en geen instellingen of MCP-servers van de VM (overleg 14, X1, X3, K2)."""
     teller = os.path.join(werkmap, "zoekteller")
+    # De systeemtekst via een bestand: geen grens op de lengte van een argument en niet zichtbaar in de proceslijst.
+    with open(os.path.join(werkmap, "systeem.txt"), "w", encoding="utf-8") as f:
+        f.write(systeem)
     mcp = {"mcpServers": {"lees": {"type": "stdio", "command": sys.executable,
                                    "args": [os.path.join(HIER, "leesserver.py")],
                                    "env": {"LEES_LOG": os.path.join(werkmap, "gelezen.jsonl"),
@@ -272,7 +298,7 @@ def opdrachtregel(werkmap, systeem, model=None):
     hook = " ".join(shlex.quote(x) for x in (sys.executable, os.path.join(HIER, "zoekgrens.py"), teller, str(MAX_ZOEKEN)))
     instellingen = {"hooks": {"PreToolUse": [{"matcher": ZOEK, "hooks": [{"type": "command", "command": hook}]}]}}
     return [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--model", model or MODEL, "--effort", "medium",
-            "--system-prompt", systeem, "--restricted", "--tools", ZOEK, "--allowedTools", f"{ZOEK},{LEES}",
+            "--system-prompt-file", os.path.join(werkmap, "systeem.txt"), "--restricted", "--tools", ZOEK, "--allowedTools", f"{ZOEK},{LEES}",
             "--strict-mcp-config", "--mcp-config", json.dumps(mcp), "--settings", json.dumps(instellingen),
             "--no-session-persistence"]
 
@@ -283,6 +309,7 @@ class _Stand:
         self.zoek, self.teksten = {}, []
         self.zoekvragen = self.gezocht = self.beurten = 0
         self.limiet = False
+        self.extra_verbruik = None          # overageStatus uit de stream, voor het werkverslag
 
 
 def verwerk_regel(st, d):
@@ -294,9 +321,14 @@ def verwerk_regel(st, d):
             return "bron"                 # een API-sleutel of iets anders dan het abonnement (K1)
     elif soort == "rate_limit_event":
         info = d.get("rate_limit_info") or {}
+        st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
         if info.get("isUsingOverage"):
             return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
         st.limiet = st.limiet or info.get("status") == "rejected"
+        vensters = [info] + [v for v in (info.get("unifiedWindows") or {}).values() if isinstance(v, dict)]
+        if any(isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK for v in vensters):
+            st.limiet = True
+            return "vol"                  # voor de limiet stoppen, nooit erover (Codex controle 15, punt 1)
     elif soort == "assistant":
         st.beurten += 1
         for b in (d.get("message") or {}).get("content") or []:
@@ -314,6 +346,7 @@ def verwerk_regel(st, d):
             return "zoeken"               # de hook weigerde niet: de runner houdt de grens zelf (overleg 14, K3)
     elif soort == "result":
         st.einde = d
+        return "einde"                    # de laatste regel: niet wachten op een stdout die open blijft (punt 4)
     return None
 
 
@@ -330,48 +363,55 @@ def _stop_groep(proc):
 
 
 def _draai(cmd, env, werkmap, invoer, deadline, st):
-    """claude -p draaien tot het einde, de deadline of een reden om te stoppen. Geeft die reden of None."""
+    """claude -p draaien tot het einde, de deadline of een reden om te stoppen. Geeft die reden of None. De vraag
+    gaat in een eigen draad naar stdin, zodat een kind dat niet leest de deadline niet tegenhoudt, en claude met zijn
+    leestool wordt altijd gestopt, ook na een fout (Codex controle 15, punt 4)."""
+    reden = None
     with open(os.path.join(werkmap, "fouten.txt"), "w", encoding="utf-8") as fouten:
         proc = subprocess.Popen(cmd, cwd=werkmap, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=fouten, text=True, start_new_session=True)
-        regels = queue.Queue()
-
-        def lezer():
-            for r in proc.stdout:
-                regels.put(r)
-            regels.put(None)
-
-        threading.Thread(target=lezer, daemon=True).start()
         try:
-            proc.stdin.write(invoer)
-            proc.stdin.close()
-        except OSError:
-            pass
-        reden = None
-        while reden is None:
-            rest = deadline - time.monotonic()
-            if rest <= 0:
-                reden = "tijd"
-                break
-            try:
-                r = regels.get(timeout=min(rest, 5))
-            except queue.Empty:
-                continue
-            if r is None:
-                break
-            try:
-                d = json.loads(r)
-            except ValueError:
-                continue
-            if isinstance(d, dict):
-                reden = verwerk_regel(st, d)
-        if reden is None:
-            try:
-                proc.wait(timeout=max(1.0, min(30.0, deadline - time.monotonic())))
-            except subprocess.TimeoutExpired:
-                pass
-        _stop_groep(proc)                 # ook na een gewoon einde: geen leestool blijft achter
-    return reden
+            regels = queue.Queue()
+
+            def lezer():
+                for r in proc.stdout:
+                    regels.put(r)
+                regels.put(None)
+
+            def schrijver():
+                try:
+                    proc.stdin.write(invoer)
+                    proc.stdin.close()
+                except (OSError, ValueError):
+                    pass
+
+            threading.Thread(target=lezer, daemon=True).start()
+            threading.Thread(target=schrijver, daemon=True).start()
+            while reden is None:
+                rest = deadline - time.monotonic()
+                if rest <= 0:
+                    reden = "tijd"
+                    break
+                try:
+                    r = regels.get(timeout=min(rest, 5))
+                except queue.Empty:
+                    continue
+                if r is None:
+                    break
+                try:
+                    d = json.loads(r)
+                except ValueError:
+                    continue
+                if isinstance(d, dict):
+                    reden = verwerk_regel(st, d)
+            if reden in (None, "einde"):
+                try:
+                    proc.wait(timeout=max(0.5, min(5.0, deadline - time.monotonic())))
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            _stop_groep(proc)             # ook na een gewoon einde of een fout: geen leestool blijft achter
+    return None if reden == "einde" else reden
 
 
 def _fouttekst(werkmap, einde):
@@ -392,12 +432,13 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     deadline: time.monotonic() waarop de vraag klaar moet zijn (de deadline van de ronde, Codex X6 en overleg 14, X4)."""
     deadline = deadline or time.monotonic() + 420
     token = token or lees_token()
+    voor_de_start()
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
     eigen_map = werkmap is None
     werkmap = werkmap or tempfile.mkdtemp(prefix="prijsvraag-")
     st = _Stand()
     try:
-        reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token), werkmap, gebruiker, deadline, st)
+        reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token, werkmap), werkmap, gebruiker, deadline, st)
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)
     finally:
@@ -410,7 +451,9 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
         raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
-    if reden:
+    if reden == "vol":
+        stop = "limiet"
+    elif reden:
         stop = "plafond"
     elif st.limiet or (einde.get("is_error") and re.search(r"limit|usage|quota", fout, re.I)):
         stop = "limiet"
@@ -428,6 +471,7 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
             "tokens": tellers["input"] + tellers["output"] + tellers["cache_schrijven"] + tellers["cache_lezen"],
             "tellers": [tellers], "leesbeurten": leesbeurten, "zoekopdrachten": st.gezocht, "stop": stop,
             "model": st.model or MODEL, "beurten": st.beurten, "bron": st.bron, "reden": reden,
+            "extra_verbruik": st.extra_verbruik,
             "fout": fout if stop in ("fout", "limiet") else ""}
 
 
@@ -436,6 +480,7 @@ def proef_abonnement(token=None, wacht=120):
     en na een uitrol (overleg 14, X7): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
     try:
         token = token or lees_token()
+        voor_de_start()
     except GeenAbonnement as e:
         return False, str(e)
     with tempfile.TemporaryDirectory(prefix="abonnement-") as werkmap:
@@ -443,7 +488,7 @@ def proef_abonnement(token=None, wacht=120):
                "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
         try:
             r = subprocess.run(cmd, input="Antwoord alleen met het woord: ok", capture_output=True, text=True,
-                               timeout=wacht, cwd=werkmap, env=omgeving(token))
+                               timeout=wacht, cwd=werkmap, env=omgeving(token, werkmap))
         except (subprocess.TimeoutExpired, OSError) as e:
             return False, f"claude -p antwoordde niet ({type(e).__name__})"
     st = _Stand()
@@ -457,9 +502,11 @@ def proef_abonnement(token=None, wacht=120):
             return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
         if reden == "betaald":
             return False, "Claude Code startte extra betaald verbruik"
+        if reden == "vol":
+            return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
     einde = st.einde or {}
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
-    return True, f"werkt via het abonnement (model {st.model}, bron {st.bron})"
+    return True, f"werkt via het abonnement (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
 

@@ -360,7 +360,8 @@ INIT = next(d for d in FIXTURE if d.get("subtype") == "init")
 EINDE = FIXTURE[-1]
 st = O._Stand()
 redenen = [O.verwerk_regel(st, d) for d in FIXTURE]
-check("de gemeten stream van claude -p wordt gelezen (overleg 14, X3)", redenen == [None] * len(FIXTURE) and st.bron == "none"
+check("de gemeten stream van claude -p wordt gelezen (overleg 14, X3)", redenen == [None] * (len(FIXTURE) - 1) + ["einde"]
+      and st.bron == "none" and st.extra_verbruik == "allowed"
       and st.gezocht == 1 and st.zoekvragen == 2 and st.einde is EINDE
       and len(st.zoek) >= 5, str((st.bron, st.gezocht, st.zoek))[:300])
 check("de zoekresultaten dragen de titel uit de lijst Links", st.zoek.get(
@@ -372,7 +373,7 @@ spec = json.load(open("nep.json" if os.path.exists("nep.json") else os.path.join
 args = sys.argv[1:]
 json.dump(args, open("args.json", "w"))
 json.dump(dict(os.environ), open("env.json", "w"))
-open("invoer.txt", "w").write(sys.stdin.read())
+open("invoer.txt", "w").write("" if spec.get("lees_niet") else sys.stdin.read())
 if "--mcp-config" in args:
     log = json.loads(args[args.index("--mcp-config") + 1])["mcpServers"]["lees"]["env"]["LEES_LOG"]
     with open(log, "a") as f:
@@ -434,14 +435,14 @@ GEWOON = {"regels": [INIT, assistent({"type": "tool_use", "name": O.ZOEK, "input
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-api03-nep-mag-nooit-mee"
 os.environ["SALES_ANTHROPIC_API_KEY"] = "sk-ant-api03-nep-ook-niet"
 os.environ["ANTHROPIC_BASE_URL"] = "https://api.voorbeeld.com"
-uit, args, env, invoer, _ = nep_vraag(GEWOON)
+uit, args, env, invoer, m_gewoon = nep_vraag(GEWOON)
 check("geen enkele API-sleutel in de omgeving van claude -p, ook als de runner er een heeft (K1, K6)",
       env is not None and not any("ANTHROPIC" in k or "API_KEY" in k for k in env)
       and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat01-nep", str(sorted(env or {})))
 check("de omgeving is de witte lijst plus het token", env is not None
       # LC_CTYPE en __CF_* zet de nagebootste python of macOS zelf in het kindproces
-      and set(k for k in env if not k.startswith("__") and k != "LC_CTYPE") <= set(O.OMGEVING) | {"CLAUDE_CODE_OAUTH_TOKEN",
-                                                                                              "DISABLE_AUTOUPDATER"},
+      and set(k for k in env if not k.startswith("__") and k != "LC_CTYPE") <= set(O.OMGEVING) | {
+          "CLAUDE_CODE_OAUTH_TOKEN", "DISABLE_AUTOUPDATER", "CLAUDE_CONFIG_DIR"},
       str(sorted(env or {})))
 check("alleen WebSearch en de eigen leestool, in restricted-modus en nooit --bare (X1, K2)", args is not None
       and "--restricted" in args and args[args.index("--tools") + 1] == "WebSearch"
@@ -452,13 +453,15 @@ check("de zoekgrens zit als hook op WebSearch, met de grens van 6 (A3)", haak["m
       and "zoekgrens.py" in haak["hooks"][0]["command"] and haak["hooks"][0]["command"].endswith(" 6"))
 check("het model is de alias opus en de vraag gaat via stdin, niet als argument", args[args.index("--model") + 1] == "opus"
       and "Vloerwasser X1 voor Suriname" in invoer and not any("Vloerwasser" in a for a in args))
-systeem = args[args.index("--system-prompt") + 1]
+systeem = open(args[args.index("--system-prompt-file") + 1], encoding="utf-8").read()
+check("de systeemtekst staat in een bestand in de werkmap, niet op de opdrachtregel",
+      args[args.index("--system-prompt-file") + 1] == os.path.join(m_gewoon, "systeem.txt") and "--system-prompt" not in args)
 check("de werkwijze gaat mee, maar geen naam, collega's of lessen (Codex X4)", "WERKWIJZE" in systeem
       and "Mehdi" not in systeem and "collega" not in systeem.lower())
 check("de vaste eisen staan in de vraag aan het model", "VASTE EISEN" in invoer and "netfrequentie 60 Hz" in invoer
       and "lees_pagina" in invoer)
 _, args2, _, _, _ = nep_vraag(GEWOON, werkwijze="Wat Mehdi beslist: de aankoop. Mehdi Chegini kiest.")
-s2 = args2[args2.index("--system-prompt") + 1]
+s2 = open(args2[args2.index("--system-prompt-file") + 1], encoding="utf-8").read()
 check("ook een naam in de werkwijze gaat niet naar buiten (Codex X4, ronde 2)", "Mehdi" not in s2 and "Chegini" not in s2
       and "Wat de opdrachtgever beslist" in s2)
 check("gegevens, gelezen pagina's en tellers terug", isinstance(uit, dict) and uit["gegevens"]["vraag_kort"] ==
@@ -466,6 +469,9 @@ check("gegevens, gelezen pagina's en tellers terug", isinstance(uit, dict) and u
       and uit["zoekopdrachten"] == 1 and uit["leesbeurten"] == (1, 1) and uit["stop"] == "klaar" and uit["bron"] == "none",
       str({k: uit[k] for k in ("stop", "leesbeurten", "zoekopdrachten")}) if isinstance(uit, dict) else str(uit))
 check("het leeslog is de gelezen tekst, ook onder de eind-url (X2)", uit["gelezen"]["https://winkel.voorbeeld.com/x1"] == PAGINA_X1)
+_, _, env_c, _, m_c = nep_vraag(GEWOON)
+check("claude krijgt een eigen lege configuratiemap, niets uit ~/.claude (Codex 15, punt 1)",
+      env_c["CLAUDE_CONFIG_DIR"] == os.path.join(m_c, "claude-config") and os.path.isdir(env_c["CLAUDE_CONFIG_DIR"]))
 gebruik = EINDE["usage"]
 check("de tellers komen uit de eindregel, zonder dollar", uit["tokens"] == gebruik["input_tokens"] + gebruik["output_tokens"]
       + gebruik["cache_creation_input_tokens"] + gebruik["cache_read_input_tokens"] and "kosten" not in uit
@@ -531,6 +537,29 @@ except OSError:
     kind_leeft = False
 check("de deadline van de ronde stopt claude en zijn leestool samen (X4)", isinstance(uit, dict) and uit["stop"] == "plafond"
       and uit["reden"] == "tijd" and duur < 15 and not kind_leeft, f"{uit!r:.200} {duur:.1f}s kind {kind_leeft}")
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, result=JSON)], "slaap": 60}, deadline=time.monotonic() + 40)
+check("na de eindregel wacht de runner niet op een stdout die open blijft (Codex 15, punt 4)", isinstance(uit, dict)
+      and uit["stop"] == "klaar" and time.monotonic() - begin < 15, f"{time.monotonic() - begin:.1f}s")
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag({"regels": [], "slaap": 60, "lees_niet": True}, vraag="w" * 2_000_000,
+                            deadline=time.monotonic() + 3)
+check("een kind dat de vraag niet leest, houdt de deadline niet tegen (Codex 15, punt 4)", isinstance(uit, dict)
+      and uit["reden"] == "tijd" and time.monotonic() - begin < 15, f"{uit!r:.120} {time.monotonic() - begin:.1f}s")
+vol = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "allowed",
+       "unifiedWindows": {"five_hour": {"utilization": 0.93, "status": "allowed"}}}}
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, vol]))
+check("boven 90 procent van een limiet stopt de vraag, voor er betaald extra verbruik kan komen (Codex 15, punt 1)",
+      isinstance(uit, dict) and uit["stop"] == "limiet" and uit["reden"] == "vol" and uit["extra_verbruik"] == "allowed"
+      and time.monotonic() - begin < 10)
+beheer = tempfile.mkdtemp(prefix="beheer-")
+open(os.path.join(beheer, "managed-settings.json"), "w").write("{}")
+oud_beheerd, O.BEHEERD = O.BEHEERD, (beheer,)
+uit, args, _, _, _ = nep_vraag(GEWOON)
+O.BEHEERD = oud_beheerd
+check("met beheerde instellingen op de machine start claude niet (Codex 15, punt 1)", isinstance(uit, O.GeenAbonnement)
+      and "beheerde instellingen" in str(uit) and args is None)
 zeven = [zoekuit((f"r{i}", f"https://z.voorbeeld.com/{i}")) for i in range(O.MAX_ZOEKEN + 1)]
 uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + zeven))
 check("weigert de hook niet, dan stopt de runner bij de zevende zoekopdracht (K3)", isinstance(uit, dict)
@@ -604,6 +633,30 @@ try:
 except L.Geweigerd:
     omweg = False
 check("ook een doorverwijzing naar de VM zelf wordt geweigerd (X2)", not omweg)
+
+
+class NepAntwoordSock:
+    def __init__(self, adres):
+        self.fp = type("fp", (), {"raw": type("raw", (), {"_sock": type("s", (), {"getpeername": lambda s: (adres, 443)})()})()})()
+
+
+def verbonden(adres):
+    try:
+        L.verbonden_openbaar(NepAntwoordSock(adres))
+        return True
+    except L.Geweigerd:
+        return False
+
+
+check("na het verbinden telt het echte adres: 127.0.0.1 of de Docker-bridge nooit, ook na DNS-rebinding",
+      not verbonden("127.0.0.1") and not verbonden("172.17.0.1") and not verbonden("::ffff:127.0.0.1")
+      and verbonden("172.66.147.243"))
+try:
+    L.verbonden_openbaar(object())
+    onbekend_door = True
+except L.Geweigerd:
+    onbekend_door = False
+check("een onbekend verbonden adres telt niet", not onbekend_door)
 HTML = ("<html><head><title>X1</title><script>var geheim=1;</script>"
         "<meta property='og:image' content='/img/x1.jpg'><meta name='description' content='X1 vloerwasser'></head><body>"
         "<script type='application/ld+json'>{\"offers\": {\"price\": 499, \"priceCurrency\": \"EUR\"}}</script>"
@@ -619,7 +672,30 @@ check("de leestool maakt tekst van de pagina, met productgegevens en foto's, zon
 regel = json.loads(open(leeslog).read().splitlines()[0])
 check("het model krijgt precies de tekst die in het leeslog staat (X2)", tekst == f"URL: {regel['eind_url']}\n\n{regel['tekst']}")
 gl, lb = O.gelezen_uit(leeslog)
-check("het leeslog geeft gelezen onder de gevraagde en de eind-url", set(gl) == {"https://winkel.voorbeeld.com/x1"} and lb == (1, 0))
+check("het leeslog geeft gelezen onder de eind-url", set(gl) == {"https://winkel.voorbeeld.com/x1"} and lb == (1, 0))
+log3 = os.path.join(NEPMAP, "omweg.jsonl")
+with open(log3, "w") as f:
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x1", "eind_url": "https://w.voorbeeld.com/categorie", "ok": True,
+                        "tekst": "Andere X 99 euro"}) + "\n")
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x2", "eind_url": "https://w.voorbeeld.com/x2", "ok": True,
+                        "tekst": "X2 nu 500 euro"}) + "\n")
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x2", "eind_url": "https://w.voorbeeld.com/x2", "ok": True,
+                        "tekst": "X2 uitverkocht, gratis verzending"}) + "\n")
+gl3, _ = O.gelezen_uit(log3)
+check("tekst na een doorverwijzing hoort bij de eindpagina, niet bij de gevraagde (Codex 15, punt 3)",
+      "https://w.voorbeeld.com/x1" not in gl3 and gl3["https://w.voorbeeld.com/categorie"] == "Andere X 99 euro")
+check("twee lezingen van dezelfde pagina worden niet aan elkaar geplakt: de laatste telt (Codex 15, punt 3)",
+      gl3["https://w.voorbeeld.com/x2"] == "X2 uitverkocht, gratis verzending")
+for host in ("localhost", "127.0.0.1"):
+    try:
+        L._vast_verbinden((host, 80), 2)
+        vast_door = True
+    except L.Geweigerd:
+        vast_door = False
+    check(f"de verbinding zelf gaat nooit naar {host}, ook na een DNS-wissel (Codex 15, punt 2)", not vast_door)
+check("de leestool verbindt via de vaste verbinders", isinstance(L._VasteHTTPS("voorbeeld.com"), L.http.client.HTTPSConnection)
+      and L._VasteHTTPS("voorbeeld.com")._create_connection is L._vast_verbinden
+      and L._VasteHTTP("voorbeeld.com")._create_connection is L._vast_verbinden)
 
 
 def kapot(url):

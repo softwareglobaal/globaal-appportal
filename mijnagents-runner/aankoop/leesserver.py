@@ -9,6 +9,7 @@ code nakijkt, zoals vroeger met web_fetch. Na MAX_LEZEN lezingen, geslaagd of ni
 Leest alleen openbare pagina's: geen formulier, geen login, geen cookies, en nooit een adres op de VM of in het
 eigen netwerk (ook niet na een doorverwijzing), want een webpagina mag het model niet naar het bord sturen.
 """
+import http.client
 import io
 import ipaddress
 import json
@@ -29,7 +30,8 @@ WACHT = 25
 AGENT = "Mozilla/5.0 (compatible; Prijsonderzoeker/1.0; +https://globaal.be)"
 TOOL = {"name": "lees_pagina",
         "description": "Lees een openbare webpagina of PDF en krijg haar tekst (afgekapt op ongeveer "
-                       f"{MAX_TEKENS // 4} tokens), met bovenaan de productfoto's. Alleen deze tekst telt als gelezen.",
+                       f"{MAX_TEKENS // 4} tokens), met bovenaan de productfoto's. Alleen deze tekst telt als gelezen; "
+                       "de URL bovenaan is de url van het aanbod (na een doorverwijzing de eindpagina).",
         "inputSchema": {"type": "object", "properties": {"url": {"type": "string", "description": "https-adres"}},
                         "required": ["url"]}}
 
@@ -38,18 +40,55 @@ class Geweigerd(Exception):
     pass
 
 
+def openbaar_adres(host):
+    """Het IP-adres waarmee verbonden wordt; Geweigerd als een van de adressen van de naam niet openbaar is."""
+    try:
+        adressen = [a[4][0] for a in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)]
+    except (socket.gaierror, UnicodeError) as e:
+        raise Geweigerd(f"adres onbekend ({e})") from e
+    if not adressen:
+        raise Geweigerd("adres onbekend")
+    for a in adressen:
+        if not ipaddress.ip_address(a.split("%")[0]).is_global:
+            raise Geweigerd("geen openbaar adres")
+    return adressen[0]
+
+
 def openbaar(url):
     """Weigert alles behalve http(s) naar een openbaar adres op de gewone poort."""
     d = urlsplit(url)
     if d.scheme not in ("http", "https") or not d.hostname or d.port not in (None, 80, 443):
         raise Geweigerd("alleen http of https naar een openbaar adres")
-    try:
-        adressen = {a[4][0] for a in socket.getaddrinfo(d.hostname, None)}
-    except socket.gaierror as e:
-        raise Geweigerd(f"adres onbekend ({e})") from e
-    for a in adressen:
-        if not ipaddress.ip_address(a.split("%")[0]).is_global:
-            raise Geweigerd("geen openbaar adres")
+    openbaar_adres(d.hostname)
+
+
+def _vast_verbinden(adres, timeout=None, bron=None, *rest):
+    """Verbindt met het adres dat openbaar_adres() zelf nakeek, niet met een tweede DNS-antwoord (Codex controle
+    15, punt 2: DNS-rebinding). De naam blijft voor de Host-kop en voor TLS (SNI en certificaat)."""
+    host, poort = adres
+    return socket.create_connection((openbaar_adres(host), poort), timeout, bron)
+
+
+class _VasteHTTP(http.client.HTTPConnection):
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self._create_connection = _vast_verbinden
+
+
+class _VasteHTTPS(http.client.HTTPSConnection):
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self._create_connection = _vast_verbinden
+
+
+class _HTTP(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_VasteHTTP, req)
+
+
+class _HTTPS(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_VasteHTTPS, req, context=self._context)
 
 
 class _Doorverwijzing(urllib.request.HTTPRedirectHandler):
@@ -61,11 +100,23 @@ class _Doorverwijzing(urllib.request.HTTPRedirectHandler):
 def haal(url):
     """(eind_url, soort, bytes) van een openbare pagina."""
     openbaar(url)
-    opener = urllib.request.build_opener(_Doorverwijzing)
+    opener = urllib.request.build_opener(_Doorverwijzing, _HTTP, _HTTPS)
     vraag = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.8",
                                                  "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5"})
     with opener.open(vraag, timeout=WACHT) as r:
+        verbonden_openbaar(r)
         return r.geturl(), r.headers.get("Content-Type", ""), r.read(MAX_BYTES)
+
+
+def verbonden_openbaar(r):
+    """Na het verbinden en voor het lezen: het adres waarmee echt verbonden is, moet openbaar zijn. DNS kan na de
+    controle in openbaar() een ander adres geven (DNS-rebinding); zo leest de tool toch nooit iets van de VM."""
+    try:
+        adres = r.fp.raw._sock.getpeername()[0]
+    except (AttributeError, OSError) as e:
+        raise Geweigerd("het verbonden adres is niet na te gaan") from e
+    if not ipaddress.ip_address(adres.split("%")[0]).is_global:
+        raise Geweigerd("verbonden met een adres dat niet openbaar is")
 
 
 class _Tekst(HTMLParser):
@@ -185,7 +236,7 @@ def lees(url, log, ophalen=haal):
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(regel, ensure_ascii=False) + "\n")
     if regel["ok"]:
-        return f"URL: {regel['eind_url']}\n\n{regel['tekst']}", True
+        return f"URL: {regel['eind_url']}\n\n{regel['tekst']}", True    # deze url geldt voor het aanbod (Codex 15, 3)
     return f"Niet leesbaar: {regel['fout']}", False
 
 
