@@ -832,8 +832,9 @@ def test_t45_droge_stand_gemeten_in_de_code():
         assert set(s["agents"]) == {n for n, r in R.RONDE_TOEGELATEN.items() if r["slot"] == slot}, (slot, s)
     vroeger = {"contracten-agent", "agenda-wacht", "fathom-wacht", "plaud-wacht", "dagbundelaar", "locatie-wacht", "ontwikkelaar",
                "levenscoach", "bode", "benamingen-wacht", "mappen-wacht"}
-    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur", "prijsonderzoeker"}, \
-        "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog) en De Prijsonderzoeker (overleg 30-10-2026)"
+    assert set(R.RONDE_TOEGELATEN) == vroeger | {"zoom-wacht", "mail-regisseur", "prijsonderzoeker", "aannemerszoeker",
+                                                 "offertevergelijker"}, \
+        "K2: de vroegere lijst plus zoom-wacht (en mail-regisseur alleen droog), De Prijsonderzoeker en de afdeling Bouw"
 
 
 def test_t45_dag_en_deal_gemeten_in_de_code():
@@ -851,7 +852,8 @@ def test_t45_dag_en_deal_gemeten_in_de_code():
         kent = bool(re.search(r"""["']--vraag["']""", open(C._runnerpad(naam), encoding="utf-8").read()))
         if recht.get("vraag"):
             assert kent, f"{naam}: vraag in de lijst, maar de code kent geen --vraag"
-    assert {n for n, r in R.RONDE_TOEGELATEN.items() if r.get("vraag")} == {"prijsonderzoeker"}
+    assert {n for n, r in R.RONDE_TOEGELATEN.items() if r.get("vraag")} == {"prijsonderzoeker", "aannemerszoeker",
+                                                                            "offertevergelijker"}
     assert "kent geen --vraag" in R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["ontwikkelaar"], naam="ontwikkelaar"), {"vraag": "x"})
     assert R.onbekende_vlag(dict(R.RONDE_TOEGELATEN["prijsonderzoeker"], naam="prijsonderzoeker"), {"vraag": "x"}) is None
 
@@ -867,6 +869,27 @@ def test_t45_prijsverslag_tot_in_de_chat():
     bode = open(os.path.join(os.path.dirname(C._runnerpad("bode")), "bode.py"), encoding="utf-8").read()
     soorten = re.search(r"^SOORTEN = \((.*)\)$", bode, re.M).group(1)
     assert '"verslag"' in soorten and "prijsverslag" not in soorten, "De Bode stuurt een prijsverslag niet vanzelf door (X2)"
+
+
+def test_t45_bouwverslag_alleen_van_die_vraag():
+    """Afdeling Bouw (Codex X5, controle 3): De Regisseur leest van de bouwagents alleen het verslag met de sleutel van
+    de vraag die hij doorgaf; zonder sleutel geen enkel, nooit een lijst met verslagen van beide firma's."""
+    from datetime import date
+
+    from bouw import vraag as BQ
+    vraag_ha, vraag_hb = "firma: HA; werk: dak; gemeente: 3000 Leuven", "firma: HB; werk: dak; gemeente: 3000 Leuven"
+    vandaag = date(2026, 10, 30)
+    with Wereld("t45-bouw", datetime(2026, 10, 30, 9, 0, tzinfo=UTC)) as w:
+        w.item("aannemerszoeker", "mehdi", "aannemersverslag", "Aannemers dak (A)", "verslag A",
+               sleutel=BQ.sleutel(vraag_ha, vandaag))
+        w.item("aannemerszoeker", "mehdi", "aannemersverslag", "Aannemers dak (B)", "verslag B",
+               sleutel=BQ.sleutel(vraag_hb, vandaag))
+        een = R.klaargezet_lees("aannemerszoeker", "van", sleutel=BQ.sleutel(vraag_ha, vandaag))["items"]
+        assert [i["inhoud"] for i in een] == ["verslag A"], een
+        zonder = R.klaargezet_lees("aannemerszoeker", "van", n=20)["items"]
+        assert zonder == [], "zonder sleutel geen verslag van een bouwagent (Codex X3, controle 6)"
+    assert BQ.sleutel(vraag_ha, vandaag).startswith("HA:") and BQ.sleutel(vraag_hb, vandaag).startswith("HB:")
+    assert BQ.sleutel(" " + vraag_ha + " ", vandaag) == BQ.sleutel(vraag_ha, vandaag), "De Regisseur stript, de runner ook"
 
 
 # ------------------------------------------------------------------------------------------------- T46 ---
