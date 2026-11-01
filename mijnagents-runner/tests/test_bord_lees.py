@@ -601,6 +601,8 @@ def test_z13_fathom_wacht_zet_de_bron_zelf():
            "spiegel": fw.dropbox_prive.spiegel_map, "dnood": fw.dropbox_prive.nood}
     bord.call, fw.ARCHIEF, fw._INDEX = call, archief, None
     fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = (lambda: True), (lambda sinds, met_transcript=False: [g]), (lambda: ["proef"])
+    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (lambda sinds, tot=None: [])   # FATHOM-1: geen netwerk
+    oud["dekking"], fw.bekende_dekking = fw.bekende_dekking, (lambda eerste, laatste: None)        # FATHOM-4: onbekend
     fw.deals_index = lambda: []
     fw.dropbox_prive.spiegel_map = lambda lokaal, extern: {"verstuurd": 0, "fout": "", "rest": 0}
     fw.dropbox_prive.nood = lambda wie="mehdi", wat="": []
@@ -609,6 +611,7 @@ def test_z13_fathom_wacht_zet_de_bron_zelf():
     finally:
         bord.call, fw.ARCHIEF, fw._INDEX = oud["call"], oud["ARCHIEF"], oud["_INDEX"]
         fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = oud["beschikbaar"], oud["gesprekken"], oud["sleutels"]
+        fw.fathom.samenvattingen, fw.bekende_dekking = oud["samenvattingen"], oud["dekking"]
         fw.deals_index, fw.dropbox_prive.spiegel_map, fw.dropbox_prive.nood = oud["deals"], oud["spiegel"], oud["dnood"]
     assert gezet.get("rijen") and all(r.get("bron") == "fathom" for r in gezet["rijen"]), gezet.get("rijen")
     assert gezet["rijen"][0]["uniek"] == "fathom:4242", gezet["rijen"]
@@ -635,11 +638,13 @@ def herkenning(personen, thema, prive=False, afdeling="regie", waarom="proef", h
             "afdeling": afdeling, "thema": thema, "project": "", "prive": prive, "zekerheid": "hoog", "waarom": waarom}
 
 
-def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None):
+def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None, samenvattingen=None, dekking=None, deals=None):
     """Een ronde van De Fathomwacht op deze nabootsing, zonder netwerk en zonder taalmodel: elk gesprek staat al in het
     archief met zijn herkenning, dus herkent de ronde niets opnieuw. gesprekken: [(g, herkenning)]; nu: de klok van de
-    ronde; dagen: FATHOM_WACHT_DAGEN. Geeft (wat naar het bord ging, per pad een lijst; de schermregels; de gevraagde
-    sinds)."""
+    ronde; dagen: FATHOM_WACHT_DAGEN; samenvattingen: de nagebootste aanvulvraag van FATHOM-1 (standaard: niets);
+    dekking: de nagebootste bekende_dekking van FATHOM-4 (standaard: onbekend, dan schrijft de ronde geen dekking);
+    deals: de deals uit Pipedrive (standaard geen). Geeft
+    (wat naar het bord ging, per pad een lijst; de schermregels; de gevraagde sinds)."""
     fw = _fathom_wacht()
     import nummerlezer  # noqa: PLC0415
     nummerlezer._standaard["codes"], nummerlezer._standaard["ts"] = nummerlezer._bouw_codes([]), time.time()   # geen register
@@ -669,7 +674,9 @@ def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None):
     if nu is not None:
         fw.nu_utc = lambda: nu
     fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = (lambda: True), haal, (lambda: ["proef"])
-    fw.deals_index = lambda: []
+    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (samenvattingen or (lambda sinds, tot=None: []))
+    oud["dekking"], fw.bekende_dekking = fw.bekende_dekking, (dekking or (lambda eerste, laatste: None))
+    fw.deals_index = lambda: list(deals or [])
     fw.dropbox_prive.spiegel_map = lambda lokaal, extern: {"verstuurd": 0, "fout": "", "rest": 0}
     fw.dropbox_prive.nood = lambda wie="mehdi", wat="": []
     scherm = io.StringIO()
@@ -683,6 +690,7 @@ def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None):
         else:
             fw.nu_utc = oud["nu_utc"]
         fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = oud["beschikbaar"], oud["gesprekken"], oud["sleutels"]
+        fw.fathom.samenvattingen, fw.bekende_dekking = oud["samenvattingen"], oud["dekking"]
         fw.deals_index, fw.dropbox_prive.spiegel_map, fw.dropbox_prive.nood = oud["deals"], oud["spiegel"], oud["dnood"]
     return gezet, scherm.getvalue(), gevraagd
 

@@ -17,6 +17,10 @@ uit de API is altijd leidend. Opnieuw draaien slaat over wat al compleet is.
 
 Gebruik:  python3 fathom_haal_alles.py            alles
           python3 fathom_haal_alles.py --lijst    alleen tellen
+          python3 fathom_haal_alles.py --aanvullen 2026-10-01 [--droog]
+                    FATHOM-1 (T-0120): eenmalig de samenvatting en de actiepunten van Fathom bijschrijven in de
+                    bestaande mappen sinds die Belgische dag, zonder transcript; alleen wat ontbreekt, nooit
+                    overschrijven, geen nieuwe map en geen regel in '00 opbouw.log'. Met --droog alleen tellen.
 """
 import json
 import os
@@ -24,10 +28,10 @@ import plistlib
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
-sys.path.insert(0, "/home/ubuntu/appportal/mijnagents-runner/koppelingen")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "koppelingen"))
 import fathom  # noqa: E402
 
 BE = ZoneInfo("Europe/Brussels")
@@ -99,6 +103,10 @@ def bewaar(g, map_, oud_pad):
             herk = json.load(open(os.path.join(oud_pad, "gesprek.json"))).get("herkenning")
         except (OSError, ValueError):
             herk = None
+    if not herk or herk.get("prive") or str(herk.get("afdeling") or "").strip().lower() in ("prive", "privé"):
+        # FATHOM-3 en FATHOM-7 (T-0120): zonder herkenning (privé bij twijfel) of bij een privégesprek geen deellink in
+        # het archief, die opent zonder aanmelden; zoals De Fathomwacht alleen de gewone link
+        g = {k: v for k, v in g.items() if k != "share_url"}
     ruw, tekst = transcript_regels(g)
     start, eind = belgisch(g.get("recording_start_time")), belgisch(g.get("recording_end_time"))
     duur = round((eind - start).total_seconds() / 60) if start and eind else 0
@@ -115,11 +123,12 @@ def bewaar(g, map_, oud_pad):
     open(os.path.join(map_, "transcript.json"), "w", encoding="utf-8").write(json.dumps(ruw, ensure_ascii=False, indent=1))
     if not ruw and not tekst:
         open(os.path.join(map_, "geen-transcript.txt"), "w", encoding="utf-8").write("Fathom heeft voor dit gesprek geen transcript.\n")
-    for veld, naam, kopje in (("default_summary", "samenvatting.md", "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n"),
-                              ("action_items", "actiepunten.md", ""), ("highlights", "hoogtepunten.md", "")):
-        if g.get(veld):
-            inhoud = g[veld] if isinstance(g[veld], str) else json.dumps(g[veld], ensure_ascii=False, indent=1)
-            open(os.path.join(map_, naam), "w", encoding="utf-8").write(kopje + inhoud + "\n")
+    # FATHOM-1 en ANGEL-8: samenvatting en actiepunten in de vorm van De Fathomwacht (koppelingen/fathom.py, het contract
+    # met De Dagbundelaar), alleen wat ontbreekt; tot T-0120 schreef ik hier json.dumps van het object
+    fathom.vul_aan(map_, g)
+    if g.get("highlights"):
+        inhoud = g["highlights"] if isinstance(g["highlights"], str) else json.dumps(g["highlights"], ensure_ascii=False, indent=1)
+        open(os.path.join(map_, "hoogtepunten.md"), "w", encoding="utf-8").write(inhoud + "\n")
     meta = {k: v for k, v in g.items() if k != "transcript"}
     meta["start_belgisch"] = start.isoformat() if start else ""
     meta["duur_minuten"] = duur
@@ -144,7 +153,43 @@ def bestaand_id(map_):
         return None
 
 
+def aanvullen(sinds_dag, droog=False):
+    """FATHOM-1 eenmalig (overleg T-0120: eerst --droog, draaien pas na de uitrol): de aparte vraag zonder transcript
+    (fathom.samenvattingen) sinds de Belgische dag sinds_dag, en per recording_id in de bestaande map van DOEL alleen
+    wat ontbreekt (fathom.vul_aan). Geen nieuwe map, geen index, geen log in het archief; op het scherm alleen tellingen,
+    nooit een titel of een samenvatting. Geeft 0; 1 als DOEL ontbreekt, 2 zonder geldige dag."""
+    try:
+        begin = datetime.combine(date.fromisoformat(sinds_dag), datetime.min.time(), tzinfo=BE).astimezone(timezone.utc)
+    except ValueError:
+        print("gebruik: fathom_haal_alles.py --aanvullen JJJJ-MM-DD [--droog]", flush=True)
+        return 2
+    if not os.path.isdir(DOEL):
+        print(f"geen archief op {DOEL}", flush=True)
+        return 1
+    index = {}
+    for p in sorted(os.listdir(DOEL)):
+        rid = bestaand_id(os.path.join(DOEL, p))
+        if rid:
+            index.setdefault(rid, os.path.join(DOEL, p))
+    tel = {"gesprekken": 0, "samenvatting": 0, "actiepunten": 0, "al_compleet": 0, "zonder_map": 0}
+    for g in fathom.samenvattingen(begin.strftime("%Y-%m-%dT%H:%M:%SZ")):
+        tel["gesprekken"] += 1
+        map_ = index.get(g.get("recording_id"))
+        if not map_:
+            tel["zonder_map"] += 1
+            continue
+        nieuw = fathom.vul_aan(map_, g, droog=droog)
+        tel["samenvatting"] += "samenvatting.md" in nieuw
+        tel["actiepunten"] += "actiepunten.json" in nieuw
+        tel["al_compleet"] += 0 if nieuw else 1
+    print(("DROOG, niets geschreven: " if droog else "KLAAR ") + json.dumps(tel), flush=True)
+    return 0
+
+
 def main():
+    if "--aanvullen" in sys.argv:
+        i = sys.argv.index("--aanvullen")
+        return aanvullen(sys.argv[i + 1] if i + 1 < len(sys.argv) else "", droog="--droog" in sys.argv)
     alleen_lijst = "--lijst" in sys.argv
     os.makedirs(DOEL, exist_ok=True)
     log = open(os.path.join(DOEL, "00 opbouw.log"), "a", encoding="utf-8")

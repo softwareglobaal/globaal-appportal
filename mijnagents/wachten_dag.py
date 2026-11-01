@@ -91,7 +91,8 @@ def is_prive_gesprek(r):
     (WhatsApp, telefoon, sms, Xelion) betekent prive=1 alleen "van de Mac van Mehdi, alleen voor Mehdi"; die rijen
     dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar. Tot 01-11-2026 keek
     ik alleen naar de afdeling, en toonde ik van een Zoom-, Fathom- of Plaud-rij met prive=1 en afdeling onbekend naam
-    en onderwerp (DB-8)."""
+    en onderwerp (DB-8). De vlag geldt ook bij een andere afdeling: in oktober 2 Fathom-gesprekken met de vlag en een
+    andere afdeling (FATHOM-3)."""
     return privegrens.is_prive(r, voor_mehdi=True)
 
 
@@ -155,11 +156,17 @@ def lees_mail(conn, wacht, dag):
     return items
 
 
-def lees_klaarzet(conn, wacht, dag, van, tot):
-    """Wat de wacht die dag klaarzette, of wat over die dag gaat (sleutel, uniek of titel met de dag)."""
+def lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=False):
+    """Wat de wacht die dag klaarzette, of wat over die dag gaat (sleutel, uniek of titel met de dag).
+
+    FATHOM-3 (T-0120): bij een gesprekswacht valt een item weg waarvan de uniek als gesprek in de tabel staat; dat
+    gesprek staat al op zijn eigen dag, en het item stond er dubbel bij, ook op de dag waarop het klaargezet werd (oktober:
+    477 extra regels naast 292 Fathom-gesprekken). Op uniek, dus voor de privémaskering."""
     rijen = conn.execute(
         "SELECT ts, soort, titel, inhoud, uniek, sleutel FROM klaarzet WHERE van=? AND status!='vervallen' AND "
-        "((ts>=? AND ts<?) OR sleutel=? OR uniek LIKE ? OR uniek LIKE ? OR titel LIKE ?) ORDER BY ts LIMIT ?",
+        "((ts>=? AND ts<?) OR sleutel=? OR uniek LIKE ? OR uniek LIKE ? OR titel LIKE ?) "
+        + ("AND NOT EXISTS (SELECT 1 FROM gesprek_log g WHERE g.uniek = klaarzet.uniek) " if zonder_gesprekken else "")
+        + "ORDER BY ts LIMIT ?",
         (wacht, van, tot, dag, f"%:{dag}", f"%:{dag}:%", f"{dag} %", MAX_ITEMS)).fetchall()
     items = []
     for r in rijen:
@@ -238,7 +245,7 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
                 gedekt = zoom_gedekt(conn, dag)
         elif wacht in MAIL_WACHTEN:
             items = lees_mail(conn, wacht, dag)
-        items += lees_klaarzet(conn, wacht, dag, van, tot)
+        items += lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=wacht in GESPREK_BRON)
     except Exception as e:  # noqa: BLE001  een kapotte tabel mag de rest van de pagina niet tegenhouden
         leesfout = f"niet gelezen ({type(e).__name__})"
     try:

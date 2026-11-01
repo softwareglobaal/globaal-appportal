@@ -43,16 +43,21 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 
 ## Wat ik doe, in deze volgorde
 
-1. **Twee keer per dag** (07:00 en 13:00) en **op verzoek**: zegt Mehdi tegen
+1. **Twee keer per dag** (07:00 en 13:00 UTC: in Brussel 08:00 en 14:00 in de
+   winter, 09:00 en 15:00 in de zomer) en **op verzoek**: zegt Mehdi tegen
    De Regisseur "haal Fathom nu op", dan draai ik meteen (`agent_ronde`), zodat
    hij niet een halve dag hoeft te wachten.
 2. **Alles ophalen** van de laatste veertien dagen, met transcript, van elke
    sleutel. Wat ik al heb, doe ik niet opnieuw (gesprek-id).
 3. **Bewaren op onze eigen plek**, per gesprek een map, plat (geen jaarmap),
    `JJJJ-MM-DD UUMM <titel in Fathom>/` met `transcript.md` (sprekers en tijden),
-   `transcript.json` (de ruwe uitingen, de bron), `samenvatting.md` (van Fathom,
-   als er een is), `actiepunten.md`, `hoogtepunten.md`, `gesprek.json` (alle
-   metadata, de deellink, mijn herkenning) en de link naar de video. Op de VM in
+   `transcript.json` (de ruwe uitingen, de bron), `gesprek.json` (alle
+   metadata, de deellink, mijn herkenning) en de link naar de video. De
+   samenvatting en de actiepunten van Fathom vraag ik apart, zonder transcript
+   (sinds T-0120): `samenvatting.md` (de tekst van Fathom), `actiepunten.json`
+   (per punt tekst, wie, tijd in de opname, klaar) en `actiepunten.md`. Alleen
+   wat ontbreekt; een lege lijst betekent "Fathom vond geen actiepunt", geen
+   bestand betekent "nog onbekend". Niets daarvan op het bord. Op de VM in
    `mijnagents-data/fathom-data/`; de Mac van Mehdi haalt die map elk half uur naar
    Dropbox `Data uit Mehdi/Fathom data`. Nooit iets overschrijven of verwijderen.
    Het volledige archief sinds oktober 2024 is op 18-09-2026 in één keer opgehaald
@@ -62,7 +67,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
    Pipedrive: welke personen, welk bedrijf, welke afdeling, welk dossier of
    project, welk thema, en of het **privé** is. Privé is: alleen Mehdi en
    Angela, of Mehdi alleen, of een onderwerp dat duidelijk persoonlijk is. Bij
-   twijfel: privé, en ik vraag het aan Mehdi.
+   twijfel: privé, de veilige kant. Ik stel Mehdi daar geen aparte vraag over,
+   en een knop om de vlag met de hand te zetten bestaat (nog) niet.
 5. **Logboek per dag**: hoeveel gesprekken, welke uren, met wie, over welk
    bedrijf, thema en project, per afdeling. Als tekst in de archiefmap
    (`logboek/<datum>.md`) en als rijen in de gesprekkentabel op het bord
@@ -115,11 +121,16 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   herken (bv. met Angela, of persoonlijk) krijgt `prive: true` in de herkenning in
   `gesprek.json` en staat gewoon tussen de andere mappen, want het archief is plat.
   Wie deelt, filtert op die vlag. Tot 18-09 stond privé apart in `Fathom/Prive/<jaar>/`.
-  Twijfel ik, dan werk; Mehdi zet de vlag dan zelf en ik leer daaruit via de tabel.
+  Twijfel ik, dan privé, zoals in stap 4. De vlag met de hand zetten kan niet: ik maak
+  de herkenning een keer, en elke ronde zet ze opnieuw in de gesprekkentabel.
 - **Deellink**: de Fathom-deellink (`share_url`) opent zonder login; gemeten op
   12-09-2026 met een browser zonder Fathom-account: video, transcript en samenvatting
   zichtbaar. Een collega kan de link dus gewoon openen. De gewone link
   (`fathom.video/calls/...`) vraagt wél een login; die gebruik ik niet om te delen.
+  In de gesprekkentabel zet ik de deellink alleen bij een werkgesprek (voor 'open in
+  Fathom' op de wachtenpagina); een privégesprek krijgt de gewone link, en een
+  klaarzet-item ook. Een nieuw privégesprek bewaart de deellink ook niet in het
+  archief: daar staat alleen de gewone link (sinds T-0120).
 
 ## Wat ik nooit doe
 

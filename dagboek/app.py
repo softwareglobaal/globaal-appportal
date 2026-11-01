@@ -291,7 +291,7 @@ BRONNEN = (
     # De gesprekkenketen draait 07:00, 13:00 en 23:30 UTC (mijnagents-runner/planning/gesprekken.cron), T-0120 WACHT-7
     ("Zoom", "Zoom-account (server)", "3 keer per dag (08:00, 14:00 en 00:30 Brussel, in de zomer een uur later)",
      "gesprekken met wie en hoe lang, aantal chats"),
-    ("Fathom", "Fathom-account (server)", "elk uur", "gesprekken met wie en hoe lang"),
+    ("Fathom", "Fathom-account (server)", "2 keer per dag, 08:00 en 14:00 (winteruur)", "gesprekken met wie en hoe lang"),
     ("Plaud", "Plaud-account (server)", "elk uur", "opnames met wie en hoe lang"),
     ("Mail", "5 postvakken: mch, info H-Architects, H-Invest, Melodie, hotmail (server); niet bewaakt: light@ en "
      "standaard@ H-Architects, boekhouding@ H-Invest (alleen hun verzonden post)", "elk uur 07-21",

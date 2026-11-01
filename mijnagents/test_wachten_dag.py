@@ -20,6 +20,12 @@
 - W12 (MAIL-6, T-0120): een mail toont of ze opgevolgd is en waar ze heen ging (Opgeruimd, een sorteermap, de map
   waarin ze gelezen werd); een mailwacht die rondes deed zonder leesprobleem en 0 mails kreeg, zegt 'postvak
   gelezen, 0 nieuwe mails'; met een leesprobleem in het werkverslag blijft het 'draaide, niets binnen'.
+- W12 (FATHOM-3, T-0120): een klaarzet-item van een gesprekswacht met de uniek van een gesprek in de tabel staat er niet
+  nog eens bij, ook niet op de dag waarop het klaargezet werd; ontdubbeld op uniek, voor de privémaskering. Een ander
+  item van dezelfde wacht blijft.
+- W13 (FATHOM-4, T-0120): een rij dekking:fathom:<dag> van De Fathomwacht maakt die dag gedekt, en telt niet als item.
+- W14 (T-0120, Codex bij FATHOM-3): bij Fathom, Plaud en Zoom is prive=1 ook met een andere afdeling een privégesprek:
+  'privégesprek, N min', zonder naam of onderwerp. Bij WhatsApp blijft prive=1 de naam tonen (W11).
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -202,6 +208,44 @@ check("W12 zoom: een ontbrekende bron is niet gelezen", _zoom("2026-10-25")["ged
 check("W12 zoom: een dag zonder dagregel is nog niet helemaal gelezen", _zoom("2026-10-26")["gedekt"] is False)
 check("W12 zoom: vandaag toont niets", _zoom(vandaag)["gedekt"] is None)
 check("W12 whatsapp houdt zijn dekkingsrij", w["whatsapp-wacht"]["gedekt"] is True)
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+            "VALUES('fathom:8','2026-10-30','14:00',25,'Jan Proef','Proefdak','regie',0,'fathom','x')")
+for uniek, titel in (("fathom:8", "2026-10-30T14:00 Fathom: Jan Proef · Proefdak"),
+                     ("fathom:9", "2026-10-31T19:40 Fathom: privégesprek, 10 min · PRIVÉ"),
+                     ("fathom-proef:2026-10-31", "2026-10-31 07:03: Fathom-overzicht")):
+    con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('fathom-wacht','regisseur','transcript',"
+                "?,'{}',?,'2026-10-31T07:02:00+00:00')", (titel, uniek))
+con.commit()
+con.close()
+w31 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-31", headers=K).get_json()["vakken"] for x in v["wachten"]}
+fa31 = w31["fathom-wacht"]
+check("W12 geen dubbele regel voor een gesprek in de tabel", fa31["aantal"] == 2 and "Jan Proef" not in str(fa31["items"])
+      and sum("privégesprek" in str(x) for x in fa31["items"]) == 1, fa31["items"])
+check("W12 een ander item van de wacht blijft", any("Fathom-overzicht" in x["wat"] for x in fa31["items"]), fa31["items"])
+w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
+check("W12 het gesprek staat op zijn eigen dag een keer", w30["fathom-wacht"]["aantal"] == 1
+      and w30["fathom-wacht"]["items"][0]["wie"] == "Jan Proef", w30["fathom-wacht"]["items"])
+check("W13 Fathom zonder dekkingsrij is niet gedekt", w30["fathom-wacht"]["gedekt"] is False)
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:fathom:2026-10-30','2026-10-30','',0,'','gelezen',1,'dekking','buiten:dekking','x')")
+con.commit()
+con.close()
+w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
+check("W13 de dekkingsrij van Fathom maakt de dag gedekt, zonder extra item",
+      w30["fathom-wacht"]["gedekt"] is True and w30["fathom-wacht"]["aantal"] == 1, w30["fathom-wacht"])
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, bron in (("fathom:14", "fathom"), ("plaud:14", "plaud"), ("zoom:meeting:14", "zoom")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+                "VALUES(?,'2026-10-22','11:00',12,'Verborgen Persoon','Verborgen onderwerp','regie',1,?,'x')", (uniek, bron))
+con.commit()
+con.close()
+w22 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-22", headers=K).get_json()["vakken"] for x in v["wachten"]}
+for wacht in ("fathom-wacht", "plaud-wacht", "zoom-wacht"):
+    it = w22[wacht]["items"]
+    check(f"W14 {wacht}: prive=1 met afdeling regie is een privégesprek", len(it) == 1 and it[0]["wie"] == "privégesprek"
+          and it[0]["wat"] == "12 min" and "Verborgen" not in str(it), it)
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
