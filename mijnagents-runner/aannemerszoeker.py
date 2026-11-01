@@ -173,7 +173,11 @@ def een_vraag(r, tekst, vandaag, deadline):
     # De andere firma is nooit een kandidaat: geen mail van de ene firma aan de andere (harde regel van Mehdi).
     firmas = [f for f in firmas if not S.is_andere_firma(f"{f.get('naam')} {f.get('url')} {f.get('email')}", firma)
               and not S.schendingen(str(f.get("naam") or ""), firma)]
-    res = Z.keur(firmas, uit["gelezen"], centrum, v["straal"], lokaliseer)
+    from bouw.kern_adres import haal as kbo_haal
+    # De code leest de KBO zelf: web_fetch van het model opent ze niet (gemeten 01-11-2026)
+    kbo = Z.lees_kbo(firmas, lambda url: kbo_haal(url, timeout=Z.KBO_TIMEOUT), deadline)
+    r.bron("KBO door de code", f"{len(kbo)} ondernemingsnummers gelezen")
+    res = Z.keur(firmas, uit["gelezen"], centrum, v["straal"], lokaliseer, kbo)
     nummers = [f.get("ondernemingsnummer") for f in res["goed"] + res["na_te_kijken"] + res["buiten"]]
     try:
         eerder, boekhouding_bekend = E.eerder_leverancier(firma, nummers)
