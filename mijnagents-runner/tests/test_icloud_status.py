@@ -169,9 +169,12 @@ class ICloudStatus(unittest.TestCase):
 
     def wachtenpagina(self, regels, dag="2026-10-14"):
         """De kleur van De Fotowacht op de wachtenpagina (mijnagents/wachten_dag.py) met deze werkverslagregels."""
-        spec = importlib.util.spec_from_file_location("wachten_dag_proef", Path(__file__).resolve().parents[2] / "mijnagents/wachten_dag.py")
+        pad = Path(__file__).resolve().parents[2] / "mijnagents/wachten_dag.py"
+        spec = importlib.util.spec_from_file_location("wachten_dag_proef", pad)
         wd = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(wd)
+        # wachten_dag.py importeert privegrens uit zijn eigen map, zoals in de image (T-0120 VOL-2)
+        with patch.object(sys, "path", [*sys.path, str(pad.parent)]):
+            spec.loader.exec_module(wd)
         con = sqlite3.connect(":memory:")
         con.row_factory = sqlite3.Row
         con.execute("CREATE TABLE klaarzet (van, voor, soort, sleutel, titel, inhoud, uniek, status, ts)")
