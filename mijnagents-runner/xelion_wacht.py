@@ -14,6 +14,9 @@ spiegel niet zag onbekend.
 
     xelion_wacht.py           een ronde (cron op de VM, elk uur)
     xelion_wacht.py --droog   per dag de aantallen tonen; niets naar het bord
+    xelion_wacht.py --inhaal-vanaf 2026-10-01
+                              eenmalig vanaf die dag lezen (TEL-2, hoogstens 60 dagen terug; de spiegel houdt er 12
+                              maanden); ook --van
 """
 import argparse
 import json
@@ -127,11 +130,12 @@ def terug_lokaal(kanaal, van, tot):
     return bordstand.gesprekken(kanaal, van, tot)
 
 
-def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None):
+def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None, vanaf=None):
+    """Een ronde: de laatste 14 dagen, of met vanaf (TEL-2) eenmalig vanaf die dag."""
     M.grenzen_of_stop(r.werkwijze, bord.grenzen)
     r.bron(f"ronde-id-{ronde_id}", "")
     nu = nu or datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
     try:
         spiegel = lezer(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1])))
         rijen, info = rijen_van(spiegel, dagen)
@@ -156,9 +160,9 @@ def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None):
     return info
 
 
-def droog():
+def droog(vanaf=None):
     nu = datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
     rijen, info = rijen_van(spiegel_lezen(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1]))), dagen)
     for dag in dagen:
         n = [x for x in rijen if x["datum"] == dag and x["bron"] == KANAAL]
@@ -170,13 +174,15 @@ def droog():
 def main(argv=None):
     p = argparse.ArgumentParser(description="De Belwacht Xelion: de Xelion-oproepen van Mehdi lezen.")
     p.add_argument("--droog", action="store_true", help="per dag de aantallen tonen, niets naar het bord")
+    p.add_argument("--inhaal-vanaf", "--van", type=M.inhaal_vanaf, metavar="JJJJ-MM-DD",
+                   help="eenmalig vanaf die dag lezen (hoogstens 60 dagen terug)")
     a = p.parse_args(argv)
     if a.droog:
-        return droog()
+        return droog(a.inhaal_vanaf)
     ronde_id = secrets.token_hex(16)
     try:
         with ag.ronde(TAAK) as r:
-            werk(r, ronde_id)
+            werk(r, ronde_id, vanaf=a.inhaal_vanaf)
     except (M.MacFout, bord.RondeGestopt) as e:
         print(f"ronde mislukt: {e}", file=sys.stderr)
         return 1

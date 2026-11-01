@@ -116,6 +116,52 @@ def test_ronde_zonder_namen():
     assert nooit and beslist and len(werkwijze) >= 500 and "—" not in werkwijze and "–" not in werkwijze
 
 
+def test_tel2_inhaal_vanaf_01_10():
+    """TEL-2: zonder inhaalweg las Xelion nooit voor de laatste 14 dagen, dus de oproep van 13-10 ontbrak. Met
+    --inhaal-vanaf 2026-10-01 (of --van) leest een ronde op 01-11 eenmalig 32 dagen, met de dekking van elke voorbije
+    dag; zonder optie blijven het 14 dagen."""
+    nu = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+    gevraagd, tabel = [], {}
+
+    def lezer(van, tot):
+        gevraagd.append((van, tot))
+        return {"gebruiker": "1", "lijn": "2", "sync": {"laatste_run": "2026-11-01T20:55:00+00:00", "ok": True,
+                                                        "comm_fout": None},
+                "rijen": [{"oid": "21", "datum": "2026-10-13T08:00:00Z", "richting": "inkomend", "duur_sec": 90,
+                           "beantwoord": True, "extern_nummer": "+32470000004", "extern_naam": "Proef Klant"}]}
+
+    def call(pad, payload=None, method=None):
+        for x in (payload or {}).get("rijen") or []:
+            tabel[x["uniek"]] = dict(x)
+        return {"ok": True}
+
+    def terug(kanaal, van, tot):
+        return {u: {"v": bordstand.vingerafdruk(x), "d": x["dubbel_van"]} for u, x in tabel.items()
+                if van <= x["datum"] <= tot and u.startswith(bordstand.KANALEN[kanaal])}
+    werkwijze = (RUNNER / "werkwijze" / "xelion-wacht.md").read_text(encoding="utf-8")
+    echt_call, echt_log = bord.call, X.ag.log
+    bord.call, X.ag.log = call, lambda *x, **k: None
+    try:
+        r = NepRonde(werkwijze)
+        X.werk(r, "d" * 32, lezer=lezer, terug=terug, nu=nu, vanaf="2026-10-01")
+        kort = NepRonde(werkwijze)
+        X.werk(kort, "e" * 32, lezer=lezer, terug=terug, nu=nu)
+    finally:
+        bord.call, X.ag.log = echt_call, echt_log
+    assert gevraagd[0][0] == M.daggrens("2026-10-01") and gevraagd[1][0] == M.daggrens("2026-10-19"), gevraagd
+    assert "32 dagen gelezen (2026-10-01 tot 2026-11-01)" in r.detail, r.detail
+    assert "14 dagen gelezen (2026-10-19 tot 2026-11-01)" in kort.detail, kort.detail
+    assert tabel["xelion:21"]["datum"] == "2026-10-13" and tabel["xelion:21"]["minuten"] == 2
+    assert all(f"dekking:xelion:2026-10-{d:02d}" in tabel for d in range(1, 32)), sorted(tabel)
+    for optie in ("--inhaal-vanaf", "--van"):
+        try:
+            with redirect_stderr(io.StringIO()):
+                X.main([optie, "gisteren"])
+            raise AssertionError(optie)
+        except SystemExit as e:
+            assert e.code == 2
+
+
 def test_zonder_grenzen_geen_lezing():
     gelezen = []
     r = NepRonde("# Werkwijze zonder grenzen\n")
