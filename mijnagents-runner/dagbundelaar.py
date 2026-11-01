@@ -112,14 +112,16 @@ KANAAL_UREN = 26                                              # een wacht die la
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht", "sms": "sms-wacht", "xelion": "xelion-wacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
 ZOOM_TERUGBLIK = 6                                            # zoom_wacht.TERUGBLIK: zolang kan een dagregel nog herzien worden
+BUNDEL_INHAAL = 7                                             # DB-3: zoveel dagen kijkt de ochtend hoogstens terug
 
 
-def bundelen():
-    """De bundels per dossier en het Dagverslag van DAG (de ochtendronde, werkwijze stap 1 tot 8). Geeft detail, noden en
-    het aantal bronnen; de hartslag doet de ronde in main."""
+def bundelen(voor_dag=None):
+    """De bundels per dossier en het Dagverslag van voor_dag, standaard DAG (de ochtendronde, werkwijze stap 1 tot 8). Geeft
+    detail, noden en het aantal bronnen; de hartslag doet de ronde in main."""
     # bundelen staat op zichzelf, zonder hulpfuncties op moduleniveau: tests/test_locatielezers.py voert alleen deze
     # functie uit, met een nagebootst bord.
     from datetime import date, timedelta
+    DAG = voor_dag or globals()["DAG"]   # DB-3 (T-0120): de ochtend bundelt ook de dagen sinds de vorige geslaagde ronde
 
     def is_datum(s):
         try:
@@ -315,10 +317,13 @@ def main():
             else:
                 zoom_gelezen = True
         else:
-            uit = bundelen()
-            for n in uit["nood"]:
-                r.nood(n["tekst"], wie=n["wie"])
-            delen.append(uit["detail"])
+            # DB-3 (T-0120): met --dag die dag; uit de keten gisteren en de dagen ervoor zonder Dagverslag (bundeldagen)
+            bdagen = [DAG] if DAG_GEGEVEN else bundeldagen(nu)
+            for bdag in bdagen:
+                uit = bundelen(bdag)
+                for n in uit["nood"]:
+                    r.nood(n["tekst"], wie=n["wie"])
+                delen.append((f"{bdag}: " if len(bdagen) > 1 else "") + uit["detail"])
             begin = ochtend.tijdstip(nacht.get("start"))
             stappen = nacht.get("stappen") or {}
             if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
@@ -381,6 +386,23 @@ def main():
             # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na.
             behoud(r, alleen_nacht)
         r.detail = "; ".join(d for d in delen if d)
+
+
+def bundeldagen(nu):
+    """DB-3 (T-0120): de dagen die de ochtendronde uit de keten bundelt. Ze draait alleen op werkdagen (keten.py) en
+    bundelde tot 01-11-2026 alleen gisteren: vrijdag en zaterdag kregen nooit een Dagverslag en hun items bleven op klaar.
+    Nu gisteren en elke dag ervoor zonder Dagverslag op het bord, tot de vorige geslaagde ochtendronde (de eerste dag
+    met een Dagverslag), hoogstens BUNDEL_INHAAL dagen. Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
+    g = date.fromisoformat(V.gisteren(nu))
+    uit = [g.isoformat()]
+    for i in range(1, BUNDEL_INHAAL):
+        dag = (g - timedelta(days=i)).isoformat()
+        terug = (bord.call("/api/klaarzet?" + urllib.parse.urlencode(
+            {"uniek": f"dagverslag:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
+        if any(x.get("uniek") == f"dagverslag:{dag}" for x in terug):
+            break
+        uit.append(dag)
+    return sorted(uit)
 
 
 def alleen_nacht(tekst):

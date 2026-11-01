@@ -601,7 +601,7 @@ def test_f9_nachtketen_noden():
     oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     # Een leeg bord: zonder dit las de test op de VM de echte open noden (behoud in main) en faalde hij daar, terwijl hij
     # op de Mac en in CI slaagde omdat het bord er niet bereikbaar is (gezien 27-10-2026, sinds PR 103).
     D.ag.open_noden = lambda: []
@@ -651,7 +651,7 @@ def test_g3_zoom_van_de_ochtendketen():
         D.NACHT, D.DAG_GEGEVEN, D.KETENBESTAND = False, True, kpad
         D.lees_nacht = lambda: {}
         D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
-        D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+        D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
         D.ag.ronde = lambda taak, **k: R()
         try:
             for exit_, ok in ((0, True), (124, False)):
@@ -690,7 +690,7 @@ def test_c1_ochtend_sluit_geen_noden_als_de_vaststelling_faalt():
     D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": NU.isoformat(),
                             "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}
     D.vastleggen = faal
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     D.ag.ronde = lambda taak, **k: R()
     D.ag.log = lambda *a, **k: None
     bundel = "Bron zonder dossier: een opname wacht op een toewijzing"
@@ -758,7 +758,7 @@ def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=(), handmatig=False):
     D.lees_nacht = lambda: ({"start": nu, "stappen": {"zoom-wacht": {"exit": 0}}} if nacht else
                             {"start": nu, "einde": nu, "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}})
     D.vastleggen = vastleggen
-    D.bundelen = lambda: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
@@ -1239,7 +1239,7 @@ def _hand(w, argv, **k):
     namen = ("DAG", "DAG_GEGEVEN", "VENSTER", "WEEK", "NACHT", "ALLEEN_VASTSTELLEN", "HANDMATIG", "bundelen", "lees_nacht")
     oud = {n: getattr(D, n) for n in namen}
     D.DAG, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.NACHT, D.ALLEEN_VASTSTELLEN, D.HANDMATIG = D.opties(argv, nu=NU)
-    D.bundelen = lambda: geroepen.append("bundelen") or {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: geroepen.append("bundelen") or {"detail": "", "nood": [], "bronnen": 0}
     D.lees_nacht = lambda: geroepen.append("nacht.json") or {}
     D.ag.ronde = lambda taak, **kw: rondes.append(HartRonde(taak)) or rondes[-1]
     try:
@@ -1421,12 +1421,13 @@ def test_fase2_weeknood_per_ronde():
         raise RuntimeError("kapot")
 
     oud = (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET)
+           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.bundeldagen, D.WEEK_TIJDSLIMIET)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
+    D.bundeldagen = lambda nu: [D.V.gisteren(nu)]           # DB-3: zonder bord alleen gisteren
     D.weken_voor_de_nacht = lambda nu: ["2026-W43"]
     D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: vastgelegd.append(len(dagen)) or ""
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     D.inhaaldagen = lambda nu, dagen: []
     D.ag.ronde = lambda taak, **k: R()
     D.ag.log = lambda *a, **k: None
@@ -1469,7 +1470,7 @@ def test_fase2_weeknood_per_ronde():
         assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, gemeld
     finally:
         (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET) = oud
+         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.bundeldagen, D.WEEK_TIJDSLIMIET) = oud
         for naam in ("ronde", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
 

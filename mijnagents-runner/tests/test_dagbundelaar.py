@@ -83,13 +83,13 @@ class NepRonde:
         return False
 
 
-def bundelen(dag, nb, nacht=False):
+def bundelen(dag, nb, nacht=False, gepland=False):
     """De ochtendronde van De Dagbundelaar met een nagebootst bord; de dagvaststelling heeft eigen tests
-    (test_dagbundelaar_vaststelling.py) en is hier een lege stap."""
+    (test_dagbundelaar_vaststelling.py) en is hier een lege stap. gepland: de ronde uit de keten (zonder --dag)."""
     oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
     bord.call = nb.call
     bord.opgepakt = lambda kid, door: nb.opgepakt.append(kid)
-    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, True, nacht
+    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, not gepland, nacht
     D.vastleggen = lambda r, dagen, **k: nb.logs.append(("vastleggen", dagen)) or "vastgelegd"
     D.ag.ronde = lambda taak, **k: NepRonde(nb, taak)
     D.ag.klaarzet = lambda items: nb.bundels.extend(items) or {"nieuw": len(items)}
@@ -616,6 +616,43 @@ def test_db7_ochtendronde_bladert_terug():
     nb = bundelen(DAG, GroteBak(vol))
     noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
     assert [t for t in noden if t.startswith("Ochtendronde las de klaarzetbak niet tot de grens")], noden
+
+
+def test_db3_maandag_bundelt_het_weekend():
+    """DB-3 (T-0120): de ochtendronde draait alleen op werkdagen (keten.py) en bundelde alleen gisteren, dus vrijdag en
+    zaterdag kregen nooit een Dagverslag (oktober: 10 van de 31 dagen) en hun items bleven op klaar. Nu bundelt ze gisteren
+    en elke dag ervoor zonder Dagverslag, tot de vorige geslaagde ochtendronde, oplopend. Een dinsdag geeft er een."""
+    donderdag = item(60, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-22", sleutel="2026-10-22",
+                     uniek="dagverslag:2026-10-22", status="klaar")
+    werk = {d: item(61 + i, "fathom-wacht", "h-architects", "transcript", f"{d}T11:00 Fathom: klant 2531 · overleg", sleutel="2531",
+                    inhoud={"datum": d, "start": "11:00"}, uniek=f"fathom:{d}")
+            for i, d in enumerate(("2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"))}
+    oud = (D.V.gisteren, D.DAG_GEGEVEN)
+    try:
+        D.V.gisteren = lambda nu: "2026-10-25"
+        nb = NepBord([donderdag] + list(werk.values()))
+        bundelen("2026-10-25", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-23", "dagverslag:2026-10-24", "dagverslag:2026-10-25"], verslagen
+        assert sorted(nb.opgepakt) == [62, 63, 64], nb.opgepakt
+        assert all(f"bundel:{d}:2531" in {b["uniek"] for b in nb.bundels} for d in ("2026-10-23", "2026-10-24", "2026-10-25"))
+        assert nb.harten[-1]["fout"] is None and "2026-10-24:" in nb.harten[-1]["detail"], nb.harten[-1]
+        # dinsdag: zondag heeft zijn Dagverslag, dus alleen gisteren
+        D.V.gisteren = lambda nu: "2026-10-26"
+        zondag = item(70, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-25", sleutel="2026-10-25",
+                      uniek="dagverslag:2026-10-25", status="klaar")
+        nb = NepBord([zondag, item(71, "fathom-wacht", "h-architects", "transcript", "2026-10-26T11:00 Fathom: klant 2531",
+                                   sleutel="2531", inhoud={"datum": "2026-10-26"}, uniek="fathom:26")])
+        bundelen("2026-10-26", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-26"], verslagen
+        # na een week zonder geslaagde ochtend: hoogstens BUNDEL_INHAAL dagen
+        nb = NepBord([])
+        bundelen("2026-10-26", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert len(verslagen) == D.BUNDEL_INHAAL and verslagen[-1] == "dagverslag:2026-10-26", verslagen
+    finally:
+        D.V.gisteren, D.DAG_GEGEVEN = oud
 
 
 def test_db2_geen_vaste_plaudmelding():
