@@ -215,6 +215,17 @@ check("een handleiding van een andere modelcode telt niet", hand_oordeel(met_han
       WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200US")}) == "onbekend")
 check("een langere modelcode op de handleiding is een andere variant (VX-200EUX)", hand_oordeel(met_hand(), {
       WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200EUX")}) == "onbekend")
+check("een regioaanhangsel na een liggend streepje is een andere variant (VX-200EU_US, Codex controle 10)",
+      hand_oordeel(met_hand(), {WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200EU_US")}) == "onbekend"
+      and not A.modelcode_op("VX-200EU", "typenummer VX-200EU+US") and A.modelcode_op("VX-200EU", "typenummer vx 200eu, wit"))
+check("een robot op 50/60 Hz naast een basisstation op 230 V 50 Hz bewijst niets (Codex controle 10)", hand_oordeel(
+      met_hand(citaat="Robot: 220-240 V, 50/60 Hz"), {WINKEL: WPAG, HANDL: pagina(
+          "Technische gegevens VX-200EU. Robot: 220-240 V, 50/60 Hz. Basisstation: 230 V, 50 Hz.")}) == "onbekend")
+check("ook op de eigen pagina spreekt een losse 50 Hz een 50/60 Hz-citaat tegen", A.compatibel(aanbod(compatibiliteit={
+      "netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Ingang 100-240 V, 50/60 Hz"}}), ["netfrequentie 60 Hz"],
+      BEIDE + " Lader: 50 Hz.", BEIDE + " Lader: 50 Hz.") == "onbekend")
+check("een losse andere netspanning op de pagina spreekt een bereik tegen", A.tegenstrijdig("v", "220", "ingang 220-240 V, stekker 230 V")
+      and not A.tegenstrijdig("v", "220", "ingang 220-240 V, accu 14,4 V, 100-240 V lader"))
 check("zonder modelcode op de aanbodpagina telt de handleiding niet", hand_oordeel(met_hand(), {
       WINKEL: pagina("Vloerwasser X1 Complete. Nu 500,00 euro."), HANDL: HPAG}) == "onbekend")
 check("een te korte modelcode bewijst niets", hand_oordeel(met_hand(code="X1"), {
@@ -424,7 +435,8 @@ check("de paginagrens is 10.000 tokens met 6 zoek- en 6 leesbeurten (G2, G5)",
 check("de tellers per aanvraag komen terug", len(uit["tellers"]) == 3 and uit["tellers"][0]["input"] == 1000
       and set(uit["tellers"][0]) == {"input", "output", "cache_schrijven", "cache_lezen", "zoek", "lees"})
 check("de kost in dollar uit input en output (Opus 5.5: 4 en 20 per miljoen)", uit["kosten"] == round((3000 * 4 + 600 * 20) / 1e6, 2)
-      and O.kosten([{"input": 400000, "output": 5000}], "claude-opus-5-5") == 1.7)
+      and O.kosten([{"input": 400000, "output": 5000}], "claude-opus-5-5") == 1.7
+      and O.kosten([{"input": 400000, "output": 5000, "zoek": 6}], "claude-opus-5-5") == 1.76)
 check("geslaagde en mislukte leesbeurten apart", O.leesbeurten(BLOKKEN) == (1, 1))
 ZOEK = [{"type": "web_search_tool_result", "content": [
             {"type": "web_search_result", "url": "https://markt.voorbeeld.com/a", "title": "X1 tweedehands 380 euro"},
@@ -443,9 +455,16 @@ gz = O.alleen_gezien([
     ["https://winkel.voorbeeld.com/x1"])
 check("alleen urls uit een zoekresultaat van deze ronde, een keer, niet als ze al gelezen in het verslag staan",
       [x["url"] for x in gz] == ["https://markt.voorbeeld.com/a", "https://media.voorbeeld.com/x1"], str(gz))
-check("de prijs blijft alleen met een citaat uit hetzelfde zoekresultaat", [x["prijs"] for x in gz] == [380, 949])
-gz2 = O.alleen_gezien([{"titel": "X1", "url": "https://markt.voorbeeld.com/a", "prijs": 250, "citaat": "X1 tweedehands 380 euro"}], zoek)
-check("een prijs die niet in het citaat staat, verdwijnt; de link blijft", gz2[0]["prijs"] is None)
+check("de prijs komt uit het citaat van hetzelfde zoekresultaat", [x["prijs"] for x in gz] == [380, 949])
+check("een prijs die niet in het citaat staat: de rij valt weg (X4: url en prijs uit hetzelfde zoekresultaat)", O.alleen_gezien(
+      [{"titel": "X1", "url": "https://markt.voorbeeld.com/a", "prijs": 250, "citaat": "X1 tweedehands 380 euro"}], zoek) == [])
+zoek_v = {"https://w.voorbeeld.com/x": "X1 Complete. Shipping 19 euro. Price 949 USD"}
+check("een verzendkost is geen productprijs (Codex controle 10)", O.alleen_gezien(
+      [{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 19, "munt": "EUR", "citaat": "Shipping 19 euro"}], zoek_v) == [])
+check("de munt moet in het citaat staan", O.alleen_gezien(
+      [{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 949, "munt": "EUR", "citaat": "Price 949 USD"}], zoek_v) == []
+      and len(O.alleen_gezien([{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 949, "munt": "USD",
+                                "citaat": "Price 949 USD"}], zoek_v)) == 1)
 r = A.verwerk([], VANDAAG, KOERSEN)
 tekst = V.maak("v", {}, r, "2026-10-30", "2026-10-30", gz, {"tokens": 401000, "kosten": 1.7})
 check("gezien-niet-nagekeken staat apart met klikbare link en is nooit de aanbeveling",

@@ -29,9 +29,13 @@ MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
 MAX_TOKENS = int(os.environ.get("PRIJS_MAX_TOKENS", "300000"))
 TAAK_BUDGET = int(os.environ.get("PRIJS_TAAK_BUDGET", "250000"))     # 0: zonder takenbudget
 BETA_BUDGET = "task-budgets-2026-03-13"
-# Dollar per miljoen tokens (input, output), voor de kost in het werkverslag (overleg 9, X3). Zonder de prijs per
-# zoekopdracht; prompt caching staat niet aan (G3 afgewezen), dus de cachetellers horen nul te zijn.
+# Dollar per miljoen tokens (input, output), voor de kost in het werkverslag (overleg 9, X3); prompt caching staat niet
+# aan (G3 afgewezen), dus de cachetellers horen nul te zijn.
 PRIJZEN = {"claude-opus-5-5": (4.0, 20.0), "claude-opus-5": (5.0, 25.0)}
+ZOEK_DOLLAR = 0.01             # webzoeken kost 10 dollar per duizend zoekopdrachten (Codex controle 10)
+# Een prijs in "gezien, niet nagekeken" moet haar munt in het citaat tonen (Codex controle 10).
+MUNTTEKENS = {"EUR": ("€", "eur"), "USD": ("$", "usd"), "GBP": ("£", "gbp"), "CHF": ("chf",), "PLN": ("zł", "pln"),
+              "SEK": ("sek", "kr"), "DKK": ("dkk", "kr")}
 MAX_HERVATTEN = 6
 RESERVE_MODEL = "claude-opus-5"     # het model dat De Ontwikkelaar op de VM gebruikt (overleg K5)
 
@@ -167,11 +171,12 @@ def leesbeurten(blokken):
 
 
 def alleen_gezien(items, zoek, opgenomen=()):
-    """De lijst "gezien, niet nagekeken" (overleg 9, X4): alleen met een url die in een zoekresultaat van deze ronde
-    stond en die niet al als gelezen aanbod in het verslag staat. De prijs blijft alleen staan als het citaat met dat
-    bedrag in hetzelfde zoekresultaat staat; anders toont het verslag de link zonder prijs. Deze lijst komt nooit in
-    verwerk(), dus nooit als beste of reserve."""
-    from aankoop.aanbod import bedrag_op_pagina, citaat_op_pagina   # hier, zoals schoon_url in aanbod.verwerk
+    """De lijst "gezien, niet nagekeken" (overleg 9, X4): alleen met een url en een prijs die in hetzelfde zoekresultaat
+    van deze ronde stonden, en niet als de url al als gelezen aanbod in het verslag staat. De prijs moet in het citaat
+    staan, met haar munt en zonder kostwoord als verzending of opgeld ervoor of erin (Codex controle 10: "Shipping 19
+    euro" is geen productprijs). Een rij zonder bewezen prijs valt weg. Deze lijst komt nooit in verwerk(), dus nooit
+    als beste of reserve."""
+    from aankoop.aanbod import bedrag_op_pagina, zonder_kostwoord   # hier, zoals schoon_url in aanbod.verwerk
     al = {schoon_url(u) for u in opgenomen}
     uit, gezien = [], set()
     for it in items or []:
@@ -180,13 +185,13 @@ def alleen_gezien(items, zoek, opgenomen=()):
         url = schoon_url(it.get("url"))
         if not url or url not in zoek or url in al or url in gezien:
             continue
+        munt, citaat = str(it.get("munt") or "EUR").upper(), str(it.get("citaat") or "")
+        if (it.get("prijs") is None or not zonder_kostwoord(citaat, zoek[url]) or not bedrag_op_pagina(it["prijs"], citaat)
+                or not any(t in citaat.lower() for t in MUNTTEKENS.get(munt, ()))):
+            continue
         gezien.add(url)
-        rij = {"titel": str(it.get("titel") or "aanbod"), "url": it.get("url"), "reden": str(it.get("reden") or ""),
-               "prijs": None, "munt": str(it.get("munt") or "EUR").upper()}
-        citaat = str(it.get("citaat") or "")
-        if it.get("prijs") is not None and citaat_op_pagina(citaat, zoek[url]) and bedrag_op_pagina(it["prijs"], citaat):
-            rij["prijs"] = it["prijs"]
-        uit.append(rij)
+        uit.append({"titel": str(it.get("titel") or "aanbod"), "url": it.get("url"), "reden": str(it.get("reden") or ""),
+                    "prijs": it["prijs"], "munt": munt})
     return uit[:10]
 
 
@@ -238,9 +243,10 @@ def _tellers(gebruik):
 
 
 def kosten(tellers, model):
-    """Geschatte kost in dollar van alle aanvragen samen, uit input en output (caching staat niet aan)."""
+    """Geschatte kost in dollar van alle aanvragen samen: input, output en de zoekopdrachten (caching staat niet aan)."""
     prijs_in, prijs_uit = PRIJZEN.get(model, max(PRIJZEN.values()))
-    return round(sum(t["input"] * prijs_in + t["output"] * prijs_uit for t in tellers) / 1e6, 2)
+    return round(sum((t["input"] * prijs_in + t["output"] * prijs_uit) / 1e6 + t.get("zoek", 0) * ZOEK_DOLLAR
+                     for t in tellers), 2)
 
 
 def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, client=None):

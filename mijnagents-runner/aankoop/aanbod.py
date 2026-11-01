@@ -381,28 +381,44 @@ def modelcode_op(code, tekst):
     tekens = [c for c in str(code or "").lower() if c.isalnum()]
     if len(tekens) < 5 or not any(c.isdigit() for c in tekens) or not any(c.isalpha() for c in tekens):
         return False
-    patroon = (r"(?<![a-z0-9])(?<![a-z0-9][-/.])" + r"[\s\-/.]?".join(map(re.escape, tekens))
-               + r"(?![a-z0-9])(?![-/.][a-z0-9])")
+    # Ook een aanhangsel na een liggend streepje, punt of plus is een andere variant: VX-200EU_US (Codex controle 10).
+    patroon = (r"(?<![a-z0-9_])(?<![a-z0-9][-/._+])" + r"[\s\-/.]?".join(map(re.escape, tekens))
+               + r"(?![a-z0-9_])(?![-/._+][a-z0-9])")
     return bool(re.search(patroon, _schoon(tekst).lower()))
 
 
+_BEIDE_HZ = re.compile(r"50\s?(?:/|-|en|tot|to|bis|à)\s?60\s?hz|60\s?(?:/|-|en|tot|to|bis|à)\s?50\s?hz")
+
+
+def _netspanning(v):
+    return 100 <= v <= 130 or 200 <= v <= 250
+
+
+def tegenstrijdig(eenheid, waarde, tekst):
+    """Noemt de pagina ergens een netwaarde die de gevraagde tegenspreekt? Bij netfrequentie een losse andere
+    frequentie (50 Hz naast 60 Hz; 50/60 Hz telt als allebei). Bij netspanning een losse andere netspanning of een smal
+    bereik dat de gevraagde niet omvat (230 V of 220-230 V tegen 127 V; een breed bereik als 100-240 V spreekt niets
+    tegen). Dan is niet zeker welk onderdeel of welke variant het citaat beschrijft, en blijft het onbekend (Codex X2
+    ronde 3; controle 10: "Robot: 220-240 V, 50/60 Hz. Basisstation: 230 V, 50 Hz" bewijst niets voor 60 Hz)."""
+    t = _schoon(tekst).lower()
+    if eenheid == "hz":
+        ander = _ANDERE_HZ.get(str(waarde))
+        return bool(ander) and bool(re.search(rf"(?<![\d.,/]){ander}\s?hz", _BEIDE_HZ.sub(" ", t)))
+    w = int(waarde)
+    smal = [(int(a), int(b)) for a, b in _SPANNING_BEREIK.findall(t) if int(b) - int(a) < 50]
+    los = [int(v) for v in re.findall(r"(?<![\d.,])(\d{3})\s?v(?:olts?)?\b", _SPANNING_BEREIK.sub(" ", t))]
+    return (any(_netspanning(v) and v != w for v in los)
+            or any(not a <= w <= b and (_netspanning(a) or _netspanning(b)) for a, b in smal))
+
+
 def _netwaarde_bewezen(eenheid, waarde, citaat, eigen_tekst):
-    """Een citaat van de eigen aanbodpagina dat de gevraagde waarde noemt. Bij netfrequentie: noemt het citaat of de
-    eigen pagina ook de andere frequentie (50 tegen 60 Hz), behalve als een toestel voor allebei (50/60 Hz), dan is het
-    niet duidelijk welke variant dit aanbod is en blijft het onbekend (Codex X2, ronde 3: een 60 Hz-citaat van een
-    Amerikaanse variant bewijst niets voor het Europese model op dezelfde pagina)."""
-    c = _schoon(citaat).lower()
+    """Een citaat van de pagina dat de gevraagde waarde noemt, op een pagina die nergens een andere netwaarde noemt
+    (tegenstrijdig): dan is niet duidelijk welke variant of welk onderdeel het citaat beschrijft en blijft het onbekend
+    (Codex X2, ronde 3: een 60 Hz-citaat van een Amerikaanse variant bewijst niets voor het Europese model op dezelfde
+    pagina; controle 10: een robot op 50/60 Hz naast een basisstation op 50 Hz)."""
     if not citaat_op_pagina(citaat, eigen_tekst) or not _waarde_in(eenheid, waarde, citaat):
         return False
-    if eenheid == "hz":
-        beide = re.compile(r"50\s?(?:/|-|en|tot|to|bis|à)\s?60\s?hz|60\s?(?:/|-|en|tot|to|bis|à)\s?50\s?hz")
-        pagina = _schoon(eigen_tekst).lower()
-        if beide.search(c) or beide.search(pagina):
-            return True
-        ander = _ANDERE_HZ.get(waarde)
-        if ander and re.search(rf"(?<!\d){ander}\s?hz", pagina):
-            return False
-    return True
+    return not tegenstrijdig(eenheid, waarde, eigen_tekst)
 
 
 def _accessoire_ervoor(citaat, tekst):

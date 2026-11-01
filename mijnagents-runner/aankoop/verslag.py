@@ -61,10 +61,9 @@ def _bewijsregel(a):
 
 
 def _gezien(x):
-    """Een regel uit "gezien, niet nagekeken": klikbare link, de prijs alleen als ze in het zoekresultaat zelf stond
+    """Een regel uit "gezien, niet nagekeken": klikbare link, de prijs zoals ze in het zoekresultaat zelf stond
     (onderzoek.alleen_gezien), en waarom de pagina niet nagekeken is (overleg 9, X4)."""
-    prijs = (f"{x['prijs']} {x.get('munt') or 'EUR'} volgens het zoekresultaat" if x.get("prijs") is not None
-             else "prijs niet nagekeken")
+    prijs = f"{x['prijs']} {x.get('munt') or 'EUR'} volgens het zoekresultaat"
     reden = f"; {_kort(x['reden'], 100)}" if x.get("reden") else ""
     return f"- [{_kort(x['titel'], 100)}]({x['url']}): {prijs}{reden}"
 
