@@ -22,7 +22,7 @@ zoals het was.
 | Rij | Wat | Werkstand |
 |---|---|---|
 | 0 | Regel over de takenlijst in de eigen instellingen | Niet uitgevoerd; de regel staat in werkstand/instructies (T-0073) |
-| 1 | Laptopkant: Sms-, WhatsApp- en Belwacht, Fotowacht, YouTube-wacht | T-0069 (sms, WhatsApp en Belwacht aan sinds 01-11 16:16), T-0042 (Fotowacht), T-0088 (YouTube-wacht) |
+| 1 | Laptopkant: Sms-, WhatsApp- en Belwacht, Fotowacht, YouTube-wacht | T-0069 (sms, WhatsApp en Belwacht aan sinds 01-11 16:16), T-0042 (Fotowacht), T-0088 (YouTube-wacht). Dropbox-sync Data uit Mehdi draait al elke 30 minuten (log 01-11 16:54: klaar) |
 | 2 | Websitewacht aan, Wispr-wacht draaien | T-0077 |
 | 3 | Health Auto Export op de iPhone, map nakijken | T-0078 (wacht op Mehdi) |
 | 4 | Driehoeksoverleg Dagboek compleet en Ai Angel | T-0079 |

@@ -1,4 +1,4 @@
-> **Grotendeels uitgevoerd (28 tot 30-10-2026).** Nog open: alleen stap 6 (Dropbox-sync). Die zit ook in opdracht-claude1-macbook-01-11.md, stap 7. Zie WIE-DOET-WAT.md.
+> **Uitgevoerd (28-10 tot 01-11-2026).** Ook stap 6: de Dropbox-sync draait op de laptop elke 30 minuten (~/Library/Logs/mijnagents-data-uit-mehdi.log, 01-11 16:54: klaar). Open werk staat in de werkstand; zie WIE-DOET-WAT.md.
 
 # Laptop inrichten voor De Dagbundelaar
 
