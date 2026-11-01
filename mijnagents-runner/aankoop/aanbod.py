@@ -81,6 +81,9 @@ EIS_V = "netspanning {} V"
 # Een modelcode die de vraag zelf noemt, is bindend: een andere kleur of variant wordt nooit aanbevolen (overleg 35, X1).
 EIS_MODEL = "modelcode {}"
 MODELCODE_IN_VRAAG = re.compile(r"\b(?:modelcode|typenummer|artikelnummer|fabrikantcode)\s*:?\s*([A-Za-z0-9][A-Za-z0-9./-]{3,}[A-Za-z0-9])")
+# Ook zonder dat woord: hoofdletters en cijfers met een streepje, zoals MOVA-RC-V70ULC-WHT of VX-200EU (Codex
+# controle 36, punt 2). Een te veel herkende code houdt een aanbeveling hoogstens tegen, ze kiest nooit verkeerd.
+MODELCODE_ZONDER_LABEL = re.compile(r"(?<![A-Za-z0-9-])[A-Z0-9]+(?:-[A-Z0-9]+)+(?![A-Za-z0-9-])")
 
 
 def _getal(waarde):
@@ -124,7 +127,9 @@ def eisen_uit_vraag(vraag):
         eisen.append(EIS_HZ.format(h))
     for v in dict.fromkeys(re.findall(r"\b(1[01]\d|12[07]|2[234]0)\s?v(?:olt)?\b", tekst)):
         eisen.append(EIS_V.format(v))
-    for code in dict.fromkeys(c for c in MODELCODE_IN_VRAAG.findall(vraag or "") if any(t.isdigit() for t in c)):
+    codes = MODELCODE_IN_VRAAG.findall(vraag or "") + MODELCODE_ZONDER_LABEL.findall(vraag or "")
+    for code in dict.fromkeys(c for c in codes if any(t.isdigit() for t in c) and any(t.isalpha() for t in c)
+                              and sum(t.isalnum() for t in c) >= 6):
         eisen.append(EIS_MODEL.format(code))
     return eisen
 
@@ -739,7 +744,9 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         rij["via_ean"] = via_ean(a, eisen, rij["per_eis"], tekst, paginas) if paginas is not None else {}
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
-    goed.sort(key=lambda r: (r["totaal_eur"] is None, not r["kandidaat"], r["compatibel"] != "ja",
+    # Onder de kandidaten telt alleen de prijs: een bevestigde eigen eis van het model gaat niet voor een lager totaal
+    # (Codex controle 36, punt 1).
+    goed.sort(key=lambda r: (r["totaal_eur"] is None, not r["kandidaat"],
                              r["totaal_eur"] if r["totaal_eur"] is not None else float("inf")))
     kandidaten = [r for r in goed if r["kandidaat"]]
     beste = kandidaten[0] if kandidaten else None

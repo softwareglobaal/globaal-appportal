@@ -245,6 +245,10 @@ check("een EAN telt met label en geldig controlecijfer, alleen met 13 cijfers (o
 check("de modelcode uit de vraag wordt een vaste eis", A.eisen_uit_vraag(
       "MOVA V70 Ultra Complete (modelcode MOVA-RC-V70ULC-WHT), naar Suriname") ==
       ["netfrequentie 60 Hz", "modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een robotstofzuiger") == [])
+check("ook een modelcode zonder het woord modelcode wordt een vaste eis (Codex controle 36, punt 2)",
+      A.eisen_uit_vraag("MOVA V70 Ultra Complete MOVA-RC-V70ULC-WHT, levering tegen half november") ==
+      ["modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V") == ["netspanning 220 V"],
+      str(A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V")))
 check("een eis over de koper hoort niet in eisen (overleg 35, B)", "niet de koper" in O.VORM
       and "dezelfde EAN-code" in O.VORM)
 RC, VB = "https://robo.voorbeeld.com/v70", "https://keten.voorbeeld.be/v70"
@@ -277,6 +281,11 @@ check("het verslag noemt de herkomst via de EAN en wat niet bevestigd is (overle
       r["beste"]["via_ean"] == {e: VB for e in EISEN35[:3]} and "via dezelfde EAN" in V.maak("v", {}, r, "2026-10-30",
       "2026-10-30") and "niet bevestigd: levering in Belgie tegen half november" in V.maak("v", {}, r, "2026-10-30",
       "2026-10-30"), str(r["beste"].get("via_ean")))
+LEV = {"oordeel": "ja", "citaat": "Gratis levering aan huis"}
+r = A.verwerk([dict(VBA, compatibiliteit=dict(VBA["compatibiliteit"], **{EISEN35[3]: LEV})), rc()], VANDAAG, KOERSEN,
+              EISEN35, paginas=P35)
+check("een bevestigde eigen eis gaat niet voor een lager totaal (Codex controle 36, punt 1)",
+      r["beste"]["url"] == RC and r["reserve"]["url"] == VB and r["reserve"]["per_eis"][3] == "ja")
 r = A.verwerk([VBA, rc(titel="Mova Robot Vacuum P70 Ultra")], VANDAAG, KOERSEN, EISEN35, paginas=P35)
 rij = next(x for x in r["goed"] if x["url"] == RC)
 check("zelfde EAN maar een ander model in de titel: geen bewijs, nooit aanbevolen (overleg 35, K3, K5)",
@@ -364,9 +373,9 @@ r = A.verwerk([
     aanbod(url="https://b.voorbeeld.com/1/", prijs=450, compatibiliteit={e: "ja" for e in eisen}),
 ], VANDAAG, KOERSEN, eisen)
 check("het goedkoopste maar niet compatibele aanbod staat apart", [a["prijs"] for a in r["niet_compatibel"]] == [300])
-check("het beste is compatibel en volledig", r["beste"]["url"] == "https://b.voorbeeld.com/1")
-check("een eigen eis van het model zonder oordeel houdt de reserve niet tegen, maar staat erbij (overleg 35, A)",
-      r["reserve"]["url"] == "https://d.voorbeeld.com/1" and r["reserve"]["niet_bevestigd"] == ["stekker type A/B"])
+check("een eigen eis van het model zonder oordeel houdt het goedkoopste niet tegen, maar staat erbij (overleg 35, A; "
+      "Codex controle 36)", r["beste"]["url"] == "https://d.voorbeeld.com/1"
+      and r["beste"]["niet_bevestigd"] == ["stekker type A/B"] and r["reserve"]["url"] == "https://b.voorbeeld.com/1")
 check("onvolledig totaal komt achteraan", r["goed"][-1]["url"] == "https://c.voorbeeld.com/1")
 check("zonder link afgewezen, met reden", any("geen werkende link" in a["redenen"] for a in r["afgewezen"]))
 check("dezelfde link twee keer telt een keer", any(a["redenen"] == ["dubbel"] for a in r["afgewezen"]))
