@@ -969,7 +969,7 @@ def _lees_mail(dagen):
             return None
         if len(deel) >= PLAFOND:
             mis(waar, "te veel berichten", f"{naam(m)}: meer dan {PLAFOND} berichten")
-        return [dict(k, map_=m) for k in deel]       # MAIL-4: de map hoort bij de reservesleutel (een uid per map)
+        return deel
 
     for adres in postvakken + afzenders:
         u = verzonden.setdefault(adres, {"berichten": [], "onvolledig": []})
@@ -1082,12 +1082,12 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
     zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
-    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel uit uniek en map
+    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel (V.mail_sleutel)
     gezien_door_wachten = []
-    for x in bord.db_lees("SELECT uniek, postvak, map, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ?",
-                          (eerste, laatste)):
+    for x in bord.db_lees("SELECT uniek, postvak, message_id, datum, van, onderwerp, soort FROM mailbericht "
+                          "WHERE dag BETWEEN ? AND ?", (eerste, laatste)):
         kop = {"datum": x["datum"], "message_id": x.get("message_id") or "", "uniek": x.get("uniek") or "",
-               "map_": x.get("map") or ""}
+               "van": x.get("van") or "", "onderwerp": x.get("onderwerp") or ""}
         if V.mail_sleutel(x["postvak"], kop):
             gezien_door_wachten.append((x["postvak"], kop, x.get("soort")))
     soorten = {V.mail_sleutel(pv, kop): soort for pv, kop, soort in gezien_door_wachten}

@@ -1187,57 +1187,47 @@ def test_mail4_reservesleutel_voor_rijen_zonder_message_id():
     """MAIL-4 (T-0120): mailbericht kreeg pas op 19-10-2026 een kolom message_id; een oudere rij heeft ze leeg, maar draagt
     de sleutel van de wacht in uniek (postvak:Message-ID, of postvak:uid zonder Message-ID). De dagvaststelling nam alleen
     rijen met message_id, en telde zo 12-10 tot 19-10 te weinig (16-10 mch@: 6 in plaats van 12). Nu geldt een vaste
-    reservesleutel; een oude rij wordt niet aangevuld. Dezelfde mail uit IMAP en uit mailbericht telt precies een keer."""
+    reservesleutel; een oude rij wordt niet aangevuld. Dezelfde mail uit IMAP en uit mailbericht telt precies een keer.
+    Codex-toets 1 en 2: niet de uid, want die is alleen uniek per map en verandert als de wacht de mail naar een andere
+    gelezen map sorteert; een mail zonder Message-ID heeft een sleutel uit tijdstip, afzender en onderwerp."""
     pv = "proef@proef.test"
-    imap = [{"datum": f"{DAG}T08:00:00+02:00", "message_id": "<a1@x>", "uid": 11, "map_": "INBOX"},   # nog in de map
-            {"datum": f"{DAG}T09:00:00+02:00", "message_id": "", "uid": 12, "map_": "INBOX"},         # zonder Message-ID
-            # Codex-toets 1: een ander bericht zonder Message-ID met dezelfde uid in een andere gelezen map
-            {"datum": f"{DAG}T09:30:00+02:00", "message_id": "", "uid": 12, "map_": "INBOX.Werf"}]
-    rijen = [{"uniek": f"{pv}:<a1@x>", "postvak": pv, "map": "INBOX", "message_id": "", "datum": f"{DAG}T08:00:00+02:00",
-              "soort": "koud"},
-             {"uniek": f"{pv}:12", "postvak": pv, "map": "INBOX", "message_id": "", "datum": f"{DAG}T09:00:00+02:00",
-              "soort": "gewoon"},
+    t9 = f"{DAG}T09:00:00+02:00"
+    imap = [{"datum": f"{DAG}T08:00:00+02:00", "message_id": "<a1@x>", "uid": 11, "van": "a@proef.test"},  # nog in de map
+            # zonder Message-ID: door de wacht van INBOX (uid 12) naar een andere gelezen map gesorteerd, daar uid 99
+            {"datum": t9, "message_id": "", "uid": 99, "van": "b@proef.test", "onderwerp": "Vraag  over\n de werf"},
+            # een ander bericht zonder Message-ID met dezelfde uid 12 in een andere map
+            {"datum": f"{DAG}T09:30:00+02:00", "message_id": "", "uid": 12, "van": "c@proef.test", "onderwerp": "Andere vraag"}]
+    rijen = [{"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T08:00:00+02:00", "soort": "koud",
+              "van": "a@proef.test"},
+             # dezelfde mail als uid 99 hierboven, voor en na de verplaatsing: twee rijen, een mail
+             {"uniek": f"{pv}:12", "postvak": pv, "message_id": "", "datum": "2026-10-22T07:00:00+00:00", "soort": "gewoon",
+              "van": "b@proef.test", "onderwerp": "Vraag over de werf"},
+             {"uniek": f"{pv}:99", "postvak": pv, "message_id": "", "datum": t9, "soort": "gewoon",
+              "van": "b@proef.test", "onderwerp": "Vraag over de werf"},
              # weggesorteerd naar een map die de wachten niet lezen: alleen in mailbericht
-             {"uniek": f"{pv}:<a3@x>", "postvak": pv, "map": "INBOX", "message_id": "", "datum": f"{DAG}T10:00:00+02:00",
-              "soort": "melding"},
-             {"uniek": f"{pv}:13", "postvak": pv, "map": "INBOX", "message_id": "", "datum": f"{DAG}T11:00:00+02:00",
-              "soort": "melding"},
+             {"uniek": f"{pv}:<a3@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T10:00:00+02:00", "soort": "melding"},
+             {"uniek": f"{pv}:13", "postvak": pv, "message_id": "", "datum": f"{DAG}T11:00:00+02:00", "soort": "melding",
+              "van": "d@proef.test", "onderwerp": "Nieuwsbrief"},
              # een nieuwe rij met message_id, ook nog in IMAP onder dezelfde sleutel
-             {"uniek": f"{pv}:<a1@x>", "postvak": pv, "map": "INBOX", "message_id": "<a1@x>", "datum": f"{DAG}T08:00:00+02:00",
+             {"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "<a1@x>", "datum": f"{DAG}T08:00:00+02:00",
               "soort": "koud"}]
     with tempfile.TemporaryDirectory() as m:
         w = Wereld(m)
         w.mailberichten = rijen
         ronde(w, mail=lambda dagen_: ({pv: {"berichten": [dict(k) for k in imap], "onvolledig": []}}, {}, set()))
         t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
-    assert "message_id, '') != ''" not in w.mailsql and "uniek" in w.mailsql and "map" in w.mailsql, w.mailsql
+    assert "message_id, '') != ''" not in w.mailsql and "uniek" in w.mailsql and "onderwerp" in w.mailsql, w.mailsql
+    # a1, de verplaatste mail, de andere uid 12, a3 en 13: vijf mails
     assert f"  - {pv}: 5 binnen (1 gewoon, 1 koud, 2 melding)" in t, t
     assert "- mail: 5 binnen" in t, t
-    # de vaste sleutel zelf: Message-ID, anders uit uniek, anders de uid; een uid met postvak en map
     S = D.V.mail_sleutel
     assert S(pv, {"message_id": "<a1@x>", "uid": 5}) == "<a1@x>" == S(pv, {"uniek": f"{pv}:<a1@x>", "message_id": ""})
-    assert S(pv, {"uid": 12, "map_": "INBOX"}) == S(pv, {"uniek": f"{pv}:12", "map_": "INBOX"}) == f"{pv}:INBOX:12"
-    assert S(pv, {"uid": 12, "map_": "INBOX"}) != S(pv, {"uid": 12, "map_": "INBOX.Werf"}), "een uid is uniek per map"
-    assert S(pv, {"uid": 12}) != S("ander@proef.test", {"uid": 12}), "en per postvak"
-    assert S(pv, {"uid": ""}) is None and S(pv, {"uniek": "ander:12"}) is None
-
-
-def test_mail4_de_vaststelling_leest_de_map_mee():
-    """MAIL-4, Codex-toets 1: _lees_mail geeft elke kop de map waarin ze gelezen werd, zodat twee berichten zonder
-    Message-ID met dezelfde uid in twee gelezen mappen twee keer tellen."""
-    PV = Module(wachten=lambda: {"mail-info": {"postvakken": ["info@x.be"], "firma": "HARC", "antwoord_vanuit": []}},
-                postvak=lambda a: {"adres": a}, bron_uren_oud=lambda mb: None, BRON_VERS_UREN=3,
-                mappen_van=lambda a: ["INBOX", "INBOX.Werf"], mapnamen=lambda mb: {"inbox", "inbox.werf", "sent"},
-                koppen=lambda a, m, **k: [{"datum": f"{DAG}T09:00:00+02:00", "message_id": "", "uid": 12, "van": "k@proef.test"}],
-                VERZONDEN=("Sent",))
-    herstel = met_module("postvak", PV)
-    try:
-        o, u, _ = D._lees_mail([DAG])
-    finally:
-        herstel()
-    assert [k["map_"] for k in o["info@x.be"]["berichten"]] == ["INBOX", "INBOX.Werf"], o
-    m = D.V.mail_telling(DAG, o, u)
-    assert m["postvakken"]["info@x.be"]["binnen"] == 2, m
+    zelfde = {"datum": t9, "van": "B@proef.test", "onderwerp": "Vraag over de werf"}
+    assert S(pv, dict(zelfde, uniek=f"{pv}:12")) == S(pv, dict(zelfde, uid=99)) == S(pv, dict(zelfde, datum="2026-10-22T07:00:00+00:00")), \
+        "dezelfde mail in elke map en met elke uid"
+    assert S(pv, dict(zelfde, uid=12)) != S(pv, dict(zelfde, uid=12, onderwerp="Andere vraag")), "een ander bericht"
+    assert S(pv, zelfde) != S("ander@proef.test", zelfde), "per postvak"
+    assert S(pv, {"uid": 12}) is None and S(pv, {"uniek": f"{pv}:12"}) is None, "zonder tijdstip geen sleutel"
 
 
 class HartRonde:

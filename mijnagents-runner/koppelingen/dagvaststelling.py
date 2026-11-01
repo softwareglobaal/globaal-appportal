@@ -346,23 +346,23 @@ def _berichten(g):
 # --------------------------------------------------------------------------------------------------- mail ---
 def mail_sleutel(postvak, k):
     """MAIL-4 (T-0120): de vaste sleutel van een bericht, gelijk voor een kop uit de postbus en een rij uit mailbericht. De
-    Message-ID; anders de sleutel van de wacht uit uniek (postvak:Message-ID of postvak:uid, zo sinds 26-09-2026; de
-    kolom message_id bestaat pas sinds 19-10-2026 en een oudere rij wordt niet aangevuld); anders de uid van de kop. Een
-    uid is alleen uniek binnen een map van een postvak: de sleutel draagt dan ook de map (k['map_'], de map waarin de
-    wacht of de dagvaststelling het las; Codex-toets 1). None: geen sleutel."""
+    Message-ID; anders de Message-ID uit uniek (postvak:Message-ID, de sleutel van de wacht sinds 26-09-2026; de kolom
+    message_id bestaat pas sinds 19-10-2026 en een oudere rij wordt niet aangevuld); anders, voor een bericht zonder
+    Message-ID, een sleutel uit postvak, tijdstip, afzender en onderwerp. Niet de uid: die is alleen uniek binnen een map
+    en verandert als een wacht het bericht naar een andere map sorteert (Codex-toets 1 en 2). None: geen sleutel."""
     mid = (k.get("message_id") or "").strip()
     if mid:
         return mid
     rest = str(k.get("uniek") or "")
-    if rest.lower().startswith(str(postvak).lower() + ":"):
-        rest = rest[len(postvak) + 1:].strip()
-        if "@" in rest:
-            return rest
-    elif k.get("uid") not in (None, ""):
-        rest = str(k["uid"])
-    else:
+    if rest.lower().startswith(str(postvak).lower() + ":") and "@" in rest[len(postvak) + 1:]:
+        return rest[len(postvak) + 1:].strip()
+    try:
+        t = _tijd(k["datum"]).astimezone(timezone.utc).isoformat(timespec="seconds")
+    except (KeyError, TypeError, ValueError):
         return None
-    return f"{postvak}:{k.get('map_') or ''}:{rest}" if rest else None
+    van = str(k.get("van") or "").strip().lower()
+    onderwerp = re.sub(r"\s+", " ", str(k.get("onderwerp") or "")).strip()[:300]      # zoals postvak.schoon
+    return "zonder-id:" + hashlib.sha1(f"{str(postvak).lower()}|{t}|{van}|{onderwerp}".encode()).hexdigest()
 
 
 def mail_telling(dag, ontvangen, verzonden, soorten=None):
