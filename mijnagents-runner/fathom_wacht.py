@@ -49,6 +49,7 @@ AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevai
 # dezelfde lijst als De Zoomwacht en De Regisseur (EIGEN-3, tegenproef 22-10-2026). Tot dan zocht ik op deelstukken
 # ('h-architects', 'mch@'), en dan dempte een opname van een collega de nood hieronder.
 SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
+AANVUL_NOOD = "Fathom gaf deze ronde geen samenvatting en actiepunten: de aparte vraag faalde (werkverslag)"
 # FATHOM-7: een archiefmap zonder herkenning (null) telt als privé, zoals een gesprek waarop het model niet antwoordde.
 ONBEKENDE_HERKENNING = {"prive": True, "zekerheid": "laag", "waarom": "geen herkenning in het archief"}
 
@@ -249,18 +250,35 @@ def bewaar(g, tekst, herkenning):
            + ", ".join(f"{i.get('name', '')} <{i.get('email', '')}>" for i in (g.get("calendar_invitees") or []))
            + f"\n\nHerkenning: {json.dumps(herkenning, ensure_ascii=False)}\n\n")
     open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(kop + tekst)
-    if g.get("default_summary"):
-        open(os.path.join(map_, "samenvatting.md"), "w", encoding="utf-8").write(
-            "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n" + str(g["default_summary"]))
-    if g.get("action_items"):
-        open(os.path.join(map_, "actiepunten.md"), "w", encoding="utf-8").write(json.dumps(g["action_items"], ensure_ascii=False, indent=1))
+    # ANGEL-8 en FATHOM-1: de samenvatting als markdown-tekst (tot T-0120 str() van het hele object) en de actiepunten in
+    # onze vorm, alleen wat ontbreekt; de vraag met transcript levert ze niet, de aanvulvraag van deze ronde wel.
+    fathom.vul_aan(map_, g)
     if g.get("highlights"):
         open(os.path.join(map_, "hoogtepunten.md"), "w", encoding="utf-8").write(json.dumps(g["highlights"], ensure_ascii=False, indent=1))
     meta = {k: v for k, v in g.items() if k != "transcript"}
     meta["herkenning"] = herkenning
     open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8").write(json.dumps(meta, ensure_ascii=False, indent=1))
     video_link(map_, g)
+    if _INDEX is not None:
+        _INDEX[g.get("recording_id")] = map_       # zodat de aanvulvraag van deze ronde de nieuwe map ook vindt
     return map_, True
+
+
+def aanvullen(sinds):
+    """FATHOM-1 en ANGEL-8 (overleg T-0120, X9): de aparte vraag zonder transcript, met samenvatting en actiepunten, en
+    per recording_id in de bestaande archiefmap alleen wat ontbreekt (fathom.vul_aan, nooit overschrijven). Niets naar
+    het bord: geen klaarzet, geen rij, in het werkverslag alleen aantallen, ook van een privégesprek. Geeft de telling."""
+    tel = {"gesprekken": 0, "samenvatting": 0, "actiepunten": 0, "zonder_map": 0}
+    for g in fathom.samenvattingen(sinds):
+        tel["gesprekken"] += 1
+        map_ = bestaande_map(g)
+        if not map_:
+            tel["zonder_map"] += 1         # nog niet in het archief: de volgende ronde
+            continue
+        nieuw = fathom.vul_aan(map_, g)
+        tel["samenvatting"] += "samenvatting.md" in nieuw
+        tel["actiepunten"] += "actiepunten.json" in nieuw
+    return tel
 
 
 # ---------------------------------------------------------- herkennen ---
@@ -492,6 +510,17 @@ def _ronde(r):
                       "| start | min | personen | bedrijf | afdeling | thema | project | privé |", "|---|---|---|---|---|---|---|---|"]
             regels += [f"| {r['start']} | {r['minuten']} | {r['personen']} | {r['bedrijf']} | {r['afdeling']} | {r['thema'][:50]} | {r['project'][:40]} | {'ja' if r['prive'] else ''} |" for r in sorted(lijst, key=lambda x: x["start"])]
             open(os.path.join(ARCHIEF, "logboek", f"{dag}.md"), "w", encoding="utf-8").write("\n".join(regels) + "\n")
+        # FATHOM-1: samenvatting en actiepunten in een aparte vraag, voor de spiegel zodat ze deze ronde meegaan. Faalt
+        # die vraag, dan blijft de rest van de ronde staan en is het een nood, geen stille nul; in het werkverslag
+        # alleen de soort fout (de tekst van een fout kan uit het antwoord van Fathom komen).
+        try:
+            aan = aanvullen(sinds)
+            ag.log("Fathom", "schrijf", f"samenvatting en actiepunten van Fathom: {aan['samenvatting']} samenvatting(en), "
+                   f"{aan['actiepunten']} lijst(en) actiepunten aangevuld; {aan['gesprekken']} gesprekken gevraagd"
+                   + (f", {aan['zonder_map']} nog zonder archiefmap" if aan["zonder_map"] else ""))
+        except Exception as e:  # noqa: BLE001
+            aan = None
+            ag.log("Fathom", "bevinding", f"samenvatting en actiepunten niet aangevuld: {type(e).__name__}")
         # kopie van het archief naar Mehdi's eigen Dropbox (alleen wat nieuw is)
         sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom data")
         if sp["verstuurd"] or sp["fout"]:
@@ -507,6 +536,8 @@ def _ronde(r):
         nood = list(dropbox_prive.nood(wat="het Fathom-archief"))
         if any(len(p["mails"]) == 0 and "aan te vullen" in p.get("mails", []) for p in personen) or len([p for p in personen if p["mails"]]) < 6:
             nood.append({"tekst": "De tabel Betrokken personen mist e-mailadressen van collega's (dashboard van Mehdi)", "wie": "mehdi"})
+        if aan is None:
+            nood.append({"tekst": AANVUL_NOOD, "wie": "claude-code"})
         r.detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
         if sleutel is None:
             # BAS-04: de vorige stand van de sleutelnood is onbekend. Dan sluit het bord niets (nood_sluiten false): wat
