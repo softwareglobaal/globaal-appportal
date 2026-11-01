@@ -121,7 +121,7 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {geslaagd} pagina's gelezen en "
                                  f"{mislukt} niet leesbaar, {uit['tokens']} tokens via het abonnement (bron "
                                  f"{uit.get('bron')}), model {uit['model']}, {uit.get('beurten')} beurten, einde {uit['stop']}",
-           uit.get("tellers"))
+           {"tellers": uit.get("tellers"), "gelezen": list(uit.get("gelezen") or {})})   # welke pagina's (overleg 38, K4)
     if uit["stop"] == "plafond":
         r.nood(f"Prijsvraag gestopt op een grens ({uit.get('reden')})", wie="claude-code")
     elif uit["stop"] == "limiet":

@@ -121,7 +121,9 @@ komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina n
 aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
 ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een
 pagina die niet leesbaar is (HTTP 403, een viewer zonder tekst), kost geen leesbeurt: zoek dan een andere bron voor
-dezelfde modelcode, zoals de fabrikant, een PDF of een specificatieblad."""
+dezelfde modelcode, zoals de fabrikant, een PDF of een specificatieblad. Vind je geen leesbare handleiding, zoek dan op
+de EAN-code of de modelcode met het woord handleiding of manual, en lees een winkelpagina met dezelfde EAN die een
+handleiding linkt (de regel "Documenten:"): die telt als bewijs."""
 # Namen gaan nooit naar buiten, ook niet uit de werkwijze (Codex X4, ronde 2).
 NAMEN = re.compile(r"\b(?:Mehdi(?:\s+Chegini)?|Chegini)\b")
 

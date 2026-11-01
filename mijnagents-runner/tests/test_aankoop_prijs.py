@@ -252,6 +252,8 @@ check("ook een modelcode zonder het woord modelcode wordt een vaste eis (Codex c
       str(A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V")))
 check("een eis over de koper hoort niet in eisen (overleg 35, B)", "niet de koper" in O.VORM
       and "dezelfde EAN-code" in O.VORM)
+check("zonder leesbare handleiding zoekt het model op de EAN-code (overleg 38, E)",
+      "zoek dan op de EAN-code" in " ".join(O.VORM.split()))
 RC, VB = "https://robo.voorbeeld.com/v70", "https://keten.voorbeeld.be/v70"
 RCPAG = pagina(f"Mova Robot Vacuum V70 Ultra Complete\nBarcodenummer: {EAN}\nNu 949,00 euro. "
                "Verzending naar België: 12,50 euro.")
