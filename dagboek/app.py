@@ -405,7 +405,8 @@ BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/"
 BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
 # Mehdi, 01-11-2026: alleen de laatste dagen (vandaag en de drie dagen ervoor), niet meer.
 WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
-KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
+KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde",
+               "rust": "geen ronde gepland"}       # rust: T-0120 CL-4, een werkdagwacht in het weekend
 
 
 def haal_wachten(dag, naam=None, blad=None):

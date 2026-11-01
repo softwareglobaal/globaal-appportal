@@ -163,12 +163,18 @@ def lees_log(conn, wacht, van, tot):
              "fout": r["stap"] == "fout"} for r in rijen]
 
 
+# CL-4: de schrijfwijzen van 'alleen op werkdagen' in de vrije cadans van de tabel agent, en wat dat tegenspreekt (het
+# weekend, of rondes door de dag: De Agendawacht draait op werkdagen, maar haar signaalwacht elke dag om de 12 minuten).
+WERKDAGEN_RE = re.compile(r"werkdag|\bma\s*(?:-|tot)\s*vr\b|\bmaandag\s*(?:-|tot)\s*vrijdag\b|\b1-5\b")
+NIET_ALLEEN_WERKDAGEN_RE = re.compile(r"weekend|zaterdag|zondag|\bza\b|\bzo\b|elke dag|dagelijks|minuut|minuten|kwartier"
+                                      r"|\buur\b|\*/")
+
+
 def alleen_werkdagen(cadans):
-    """Of de cadans uit de tabel agent zegt dat de wacht alleen op werkdagen draait ('Elke werkdag 07:15'). Vrije tekst,
-    dus streng: 'werkdag' en geen woord dat op het weekend of op rondes door de dag wijst; De Agendawacht draait op
-    werkdagen, maar haar signaalwacht elke dag elke twaalf minuten (T-0120 CL-4)."""
+    """Of de cadans uit de tabel agent zegt dat de wacht alleen op werkdagen draait ('Elke werkdag 07:15', 'ma-vr 08:15').
+    Vrije tekst, dus streng: twijfel is geen werkdagwacht, en die blijft in het weekend grijs (T-0120 CL-4)."""
     c = str(cadans or "").casefold()
-    return "werkdag" in c and not re.search(r"weekend|zaterdag|zondag|elke dag|dagelijks|minuut|minuten|kwartier|\buur\b", c)
+    return bool(WERKDAGEN_RE.search(c)) and not NIET_ALLEEN_WERKDAGEN_RE.search(c)
 
 
 def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=""):
@@ -202,8 +208,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
     elif log:
         oordeel, kleur = "draaide, niets binnen", "oranje"
     elif alleen_werkdagen(cadans) and date.fromisoformat(dag).weekday() >= 5:
-        # T-0120 CL-4: in het weekend heeft een werkdagwacht geen ronde gepland; dat is het schema, geen grijs gat
-        oordeel, kleur = "geen ronde gepland", "groen"
+        # T-0120 CL-4: in het weekend heeft een werkdagwacht geen ronde gepland; dat is het schema, geen grijs gat en
+        # ook geen groen (dat telt als 'kwam binnen', Codex-toets 1): een eigen kleur 'rust'
+        oordeel, kleur = "geen ronde gepland", "rust"
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     bladen = max(1, -(-len(log) // MAX_LOG))
@@ -236,5 +243,5 @@ def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]
     return {"dag": dag_, "vakken": uit,
-            "telling": {k: sum(1 for w in alle if w["kleur"] == k) for k in ("groen", "oranje", "rood", "grijs")},
+            "telling": {k: sum(1 for w in alle if w["kleur"] == k) for k in ("groen", "oranje", "rood", "grijs", "rust")},
             "items": sum(w["aantal"] for w in alle)}

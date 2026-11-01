@@ -97,12 +97,17 @@ check("AG-9 de vraag aan het bord draagt wacht en blad alleen als er een blad ge
       pad == [A.BORD + "/api/wachten/dag?dag=2026-10-31&wacht=agenda-wacht&blad=2", A.BORD + "/api/wachten/dag?dag=2026-10-31"], pad)
 
 # --- CL-4
-A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(naam="calendly-wacht", label="De Calendlywacht", kleur="groen",
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(naam="calendly-wacht", label="De Calendlywacht", kleur="rust",
                                                               oordeel="geen ronde gepland", aantal=0)))
 html = C.get("/wachten/calendly-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
 check("CL-4 de kop zegt 'geen ronde gepland', niet 'kwam binnen'", "za 31 okt 2026: geen ronde gepland</h2>" in html
       and "kwam binnen</h2>" not in html, html[-4000:-2500])
 check("CL-4 het werkverslag zegt waarom er geen ronde is", "deze wacht draait alleen op werkdagen" in html)
+html = C.get("/wachten?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("CL-4 het overzicht telt 'geen ronde gepland' apart, niet als 'kwam binnen'",
+      '<span class="stip rust"></span> <span class="groot">1</span> geen ronde gepland' in html
+      and '<span class="stip groen"></span> <span class="groot">0</span> kwam binnen' in html, html[:4000])
+check("CL-4 de tegel heeft de eigen kleur en zegt 'geen ronde gepland'", "kleur-rust" in html and "geen ronde gepland" in html)
 A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(naam="calendly-wacht", label="De Calendlywacht", kleur="grijs",
                                                               oordeel="niets binnen, geen ronde", aantal=0)))
 html = C.get("/wachten/calendly-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)

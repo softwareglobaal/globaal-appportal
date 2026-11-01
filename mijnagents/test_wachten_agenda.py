@@ -105,8 +105,11 @@ check("AG-9 het blad geldt alleen voor de gevraagde wacht", bx["calendly-wacht"]
 
 # --- CL-4
 za = wachten("2026-10-31")
-check("CL-4 zaterdag zonder ronde bij een werkdagwacht: geen ronde gepland, geen grijs",
-      za["calendly-wacht"]["oordeel"] == "geen ronde gepland" and za["calendly-wacht"]["kleur"] != "grijs", za["calendly-wacht"])
+check("CL-4 zaterdag zonder ronde bij een werkdagwacht: geen ronde gepland, eigen kleur (geen grijs, geen groen)",
+      za["calendly-wacht"]["oordeel"] == "geen ronde gepland" and za["calendly-wacht"]["kleur"] == "rust", za["calendly-wacht"])
+_d31 = C.get("/api/wachten/dag?dag=2026-10-31", headers=K).get_json()
+check("CL-4 de telling van de dag zet 'geen ronde gepland' apart, niet bij groen",
+      _d31["telling"]["rust"] == 1 and _d31["telling"]["groen"] == 0, _d31["telling"])
 vr = wachten("2026-10-30")
 check("CL-4 een werkdag zonder ronde blijft grijs", vr["calendly-wacht"]["kleur"] == "grijs"
       and vr["calendly-wacht"]["oordeel"] == "niets binnen, geen ronde", vr["calendly-wacht"])
@@ -115,10 +118,13 @@ check("CL-4 een weekend met een ronde telt gewoon", zo["calendly-wacht"]["oordee
 check("CL-4 een wacht die ook in het weekend draait (signaalwacht elke 12 minuten), blijft grijs zonder ronde",
       za["agenda-wacht"]["kleur"] == "grijs", za["agenda-wacht"])
 check("CL-4 een wacht zonder 'werkdag' in de cadans blijft grijs", za["zoom-wacht"]["kleur"] == "grijs")
-check("CL-4 de cadans wordt gelezen zoals hij op het bord staat",
-      WD.alleen_werkdagen("Elke werkdag 07:15") and WD.alleen_werkdagen("elke werkdag 07:40")
-      and not WD.alleen_werkdagen("elke dag 07:15") and not WD.alleen_werkdagen("werkdagen, ook in het weekend")
-      and not WD.alleen_werkdagen("werkdagen elk uur") and not WD.alleen_werkdagen(""))
+for _c in ("Elke werkdag 07:15", "elke werkdag 07:40", "Werkdagen 07:15 UTC", "ma-vr 08:15", "ma tot vr om 07:15",
+           "maandag tot vrijdag 07:15", "cron 15 7 * * 1-5"):
+    check(f"CL-4 werkdagwacht: '{_c}'", WD.alleen_werkdagen(_c))
+for _c in ("", "elke dag 07:15", "dagelijks 07:15", "werkdagen, ook in het weekend", "werkdagen en zaterdag 10:00",
+           "werkdagen elk uur", "werkdag 06:30, daarna elke 2 uur", "elke werkdag, zo om 20:05 de week", "op verzoek",
+           "*/12 * * * 1-5", "elke 15 minuten op werkdagen"):
+    check(f"CL-4 geen werkdagwacht (blijft grijs zonder ronde): '{_c}'", not WD.alleen_werkdagen(_c))
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
