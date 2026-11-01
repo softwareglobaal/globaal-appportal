@@ -4,7 +4,8 @@
 claude -p krijgt de tool lees_pagina(url). De server haalt de pagina op vanaf de VM, maakt er tekst van (een PDF met
 pypdf, als dat er is), kapt af op MAX_TEKENS en geeft die tekst aan het model. Dezelfde tekst gaat als een JSON-regel
 naar het leeslog (LEES_LOG); dat wordt `gelezen` voor aankoop/aanbod.py. Het model leest dus precies de tekst die de
-code nakijkt, zoals vroeger met web_fetch. Na MAX_LEZEN lezingen, geslaagd of niet, antwoordt hij "leesgrens bereikt".
+code nakijkt, zoals vroeger met web_fetch. Na MAX_LEZEN geslaagde lezingen, of 2 x MAX_LEZEN pogingen samen,
+antwoordt hij "leesgrens bereikt": een foutpagina kost geen leesbeurt (overleg 29, X1).
 
 Leest alleen openbare pagina's: geen formulier, geen login, geen cookies, en nooit een adres op de VM of in het
 eigen netwerk (ook niet na een doorverwijzing), want een webpagina mag het model niet naar het bord sturen.
@@ -23,6 +24,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
+MAX_POGINGEN = 2 * MAX_LEZEN                     # geslaagd en mislukt samen: geen eindeloze lus op foutpagina's
 MAX_TEKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000")) * 4     # ongeveer vier tekens per token
 MAX_BYTES = 8_000_000
 MAX_FOTOS = 8
@@ -197,18 +199,28 @@ def pdf_tekst(data):
 
 
 def _gelezen_tot_nu(log):
+    """(geslaagd, pogingen) in het leeslog."""
+    geslaagd = pogingen = 0
     try:
         with open(log, encoding="utf-8") as f:
-            return sum(1 for r in f if r.strip())
+            for r in f:
+                if r.strip():
+                    pogingen += 1
+                    try:
+                        geslaagd += bool(json.loads(r).get("ok"))
+                    except (ValueError, AttributeError):
+                        pass
     except OSError:
-        return 0
+        pass
+    return geslaagd, pogingen
 
 
 def lees(url, log, ophalen=haal):
     """(tekst voor het model, geslaagd). Schrijft elke poging, ook een mislukte, in het leeslog."""
     url = str(url or "").strip()
-    if _gelezen_tot_nu(log) >= MAX_LEZEN:
-        return f"Leesgrens van {MAX_LEZEN} pagina's bereikt: rond af met wat je las.", False
+    geslaagd, pogingen = _gelezen_tot_nu(log)
+    if geslaagd >= MAX_LEZEN or pogingen >= MAX_POGINGEN:
+        return f"Leesgrens bereikt ({geslaagd} pagina's gelezen, {pogingen} pogingen): rond af met wat je las.", False
     regel = {"url": url, "eind_url": url, "ok": False, "tekst": "", "fout": ""}
     try:
         eind, soort, data = ophalen(url)

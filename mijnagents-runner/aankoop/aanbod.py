@@ -34,6 +34,12 @@ SPATIES = re.compile(r"[\s\xa0   ]+")
 KOSTWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison|"
                          r"opgeld|premium|aufgeld|frais|kosten|\bfee\b|toeslag|borg|deposit|statiegeld", re.I)
 VERZENDWOORDEN = re.compile(r"verzend|verzonden|levering|leverkost|shipping|delivery|versand|lieferung|livraison", re.I)
+# Een verzendtarief van een andere pagina van dezelfde winkel telt alleen als het citaat zegt dat het voor Belgie (of
+# de Benelux) of voor alle bestellingen geldt, en nooit van de pagina van een ander product (overleg 29, X2).
+VOOR_BELGIE = re.compile(r"belgi[eëu]|belgique|belgien|benelux|alle bestellingen|elke bestelling|all orders|every order|"
+                         r"alle bestellungen|jede bestellung|toutes les commandes|chaque commande", re.I)
+LANDCODE_BE = re.compile(r"(?<![A-Za-z])BE(?![A-Za-z])")
+PRODUCTPAGINA = re.compile(r'"price"\s*:|product:price:amount', re.I)
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
 # Een "past" vlak na zo'n woord kan over iets anders gaan dan het toestel zelf (Codex X2, ronde 6).
 ACCESSOIRE = re.compile(r"accessoire|accessory|accessories|zubeh|optione|optional|los verkrijgbaar|apart verkrijgbaar|"
@@ -111,6 +117,11 @@ def citaat_op_pagina(citaat, tekst):
     """Staat dit citaat letterlijk in de tekst (spaties gelijkgemaakt)? Een te kort citaat bewijst niets."""
     citaat = _schoon(str(citaat or ""))
     return len(citaat) >= MIN_CITAAT and citaat in _schoon(tekst)
+
+
+def voor_belgie(citaat):
+    """Zegt het citaat dat het tarief voor Belgie, de Benelux of alle bestellingen geldt (overleg 29, X2)?"""
+    return bool(VOOR_BELGIE.search(_schoon(citaat)) or LANDCODE_BE.search(str(citaat or "")))
 
 
 def gratis_verzending(tekst):
@@ -258,14 +269,16 @@ def in_euro(bedrag, munt, koersen):
     return bedrag / koers
 
 
-def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None):
+def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None):
     """(totaal in euro of None, wat ontbreekt, toelichting). Het totaal is alleen een getal als niets ontbreekt.
 
     Per kostenpost (Codex X9, ronde 2): de prijs (bij een veiling met opgeld en vaste kosten) krijgt 21 procent btw
     als btw_inbegrepen onwaar is; de verzending apart volgens verzending_btw_inbegrepen (onbekend telt als de prijs).
     Buiten de EU: + douane (geschat door het model) en 21 procent btw op het geheel, door de code.
     alle_tekst: de gelezen pagina's van dezelfde host, eigen_tekst: de aanbodpagina. Elke post heeft dan een citaat
-    nodig (bewijs): de verzending van de aanbodpagina, opgeld en veilingkosten van een pagina van dezelfde host:
+    nodig (bewijs): de verzending van de aanbodpagina, of van verzendtekst (de gelezen pagina's van dezelfde winkel
+    die geen productpagina zijn) als het citaat Belgie of alle bestellingen noemt (overleg 29, X2); opgeld en
+    veilingkosten van een pagina van dezelfde host:
     verzending met een verzendwoord en het bedrag, of gratis; opgeld met het percentage; veilingkosten boven nul met
     het bedrag. None slaat die toets over (alleen in tests)."""
     munt = str(aanbod.get("munt") or "").upper()
@@ -276,10 +289,14 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None):
         if alle_tekst is None:
             return True
         citaat = str(bewijs.get(veld) or "")
-        # De verzending alleen van de eigen aanbodpagina: geen woorden in een link die raden welke pagina algemeen is
-        # (Codex X12 en X16, ronde 6). Opgeld en veilingkosten van het veilinghuis zelf (zelfde host).
-        bron = (eigen_tekst if eigen_tekst is not None else alle_tekst) if veld == "verzending" else alle_tekst
-        if not citaat_op_pagina(citaat, bron):
+        if veld == "verzending":
+            # De verzendpagina van dezelfde winkel telt voor Belgie of voor alle bestellingen (Codex X16; overleg 29,
+            # X2, gemeten bij RoboCleaners); een tarief voor een ander land of een ander product niet (Codex X12).
+            eigen = eigen_tekst if eigen_tekst is not None else alle_tekst
+            if not (citaat_op_pagina(citaat, eigen) or (verzendtekst and citaat_op_pagina(citaat, verzendtekst)
+                                                         and voor_belgie(citaat))):
+                return False
+        elif not citaat_op_pagina(citaat, alle_tekst):
             return veld == "veilingkosten" and not waarde      # geen vaste kosten kan je niet citeren
         if veld == "opgeld":
             return procent_op_pagina(waarde, citaat)
@@ -505,17 +522,27 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         host = urlparse(schoon_url(url)).netloc
         return "\n".join(t for u, t in paginas.items() if urlparse(u).netloc == host)
 
+    def verzendtekst(url):
+        """De gelezen pagina's van dezelfde winkel die geen productpagina zijn: de verzendpagina (overleg 29, X2)."""
+        host, eigen = urlparse(schoon_url(url)).netloc, schoon_url(url)
+        return "\n".join(t for u, t in paginas.items()
+                         if urlparse(u).netloc == host and u != eigen and not PRODUCTPAGINA.search(t))
+
     def contexten(a, tekst):
         """Per bewijs het citaat met de tekst eromheen en de pagina waar het staat, voor het verslag."""
         uit = {}
         b = _bewijs(a)
         if b.get("prijs"):
             uit["prijs"] = (context(b["prijs"], tekst, vindplaats(b["prijs"], tekst)), a["url"])
+        host = urlparse(schoon_url(a["url"])).netloc
         if b.get("verzending") and citaat_op_pagina(b["verzending"], tekst):
             uit["verzending"] = (context(b["verzending"], tekst), a["url"])
-        host = urlparse(schoon_url(a["url"])).netloc
-        for veld in ("opgeld", "veilingkosten"):
+        for veld in ("verzending", "opgeld", "veilingkosten"):
+            if veld in uit:
+                continue
             for u, t in paginas.items():
+                if veld == "verzending" and PRODUCTPAGINA.search(t):
+                    continue                    # nooit de verzendtekst van een ander product (overleg 29, X2)
                 if b.get(veld) and urlparse(u).netloc == host and citaat_op_pagina(b[veld], t):
                     uit[veld] = (context(b[veld], t), u)
                     break
@@ -545,7 +572,8 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
         gezien.add(sleutel)
         rij = dict(a)
         rij["totaal_eur"], rij["ontbreekt"], rij["uitleg"] = (
-            totaal(a, koersen, winkeltekst(a["url"]), tekst) if paginas is not None else totaal(a, koersen))
+            totaal(a, koersen, winkeltekst(a["url"]), tekst, verzendtekst(a["url"])) if paginas is not None
+            else totaal(a, koersen))
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst, paginas)
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)

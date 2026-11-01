@@ -311,7 +311,38 @@ check("een past vlak na het woord accessoire telt niet (Codex X2, ronde 6)", r["
       and r["goed"][0]["compatibel"] == "onbekend")
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro"}, verzending=7.95)],
               VANDAAG, KOERSEN, paginas=paginas)
-check("een verzendkost van een andere pagina, ook van dezelfde winkel, telt niet (Codex X12 en X16, ronde 6)",
+check("een verzendkost van een andere pagina zonder Belgie of alle bestellingen in het citaat telt niet (overleg 29, X2)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro voor elke bestelling"},
+                      verzending=7.95)], VANDAAG, KOERSEN, paginas=paginas)
+check("de verzendpagina van dezelfde winkel telt voor alle bestellingen, met die pagina als bron (Codex X16; overleg 29, X2)",
+      r["beste"] is not None and r["beste"]["totaal_eur"] == 507.95
+      and r["beste"]["context"]["verzending"][1] == "https://winkel.voorbeeld.com/verzending", str(r["goed"]))
+LANDEN = dict(paginas, **{"https://winkel.voorbeeld.com/verzending": pagina(
+    "Verzendkosten Nederland: 6,95 euro. Verzendkosten België: 9,95 euro. Verzendkosten BE grote toestellen: 19,95 euro.")})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzendkosten Nederland: 6,95 euro"},
+                      verzending=6.95)], VANDAAG, KOERSEN, paginas=LANDEN)
+check("het tarief voor Nederland van de verzendpagina telt niet (overleg 29, X2)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzendkosten België: 9,95 euro"}, verzending=9.95),
+               aanbod(url="https://winkel.voorbeeld.com/x1", bewijs={"prijs": "X1 nu 500,00 euro",
+                      "verzending": "Verzendkosten BE grote toestellen: 19,95 euro"}, verzending=19.95)],
+              VANDAAG, KOERSEN, paginas=LANDEN)
+check("het tarief voor Belgie telt, ook met de landcode BE (overleg 29, X2)",
+      r["beste"]["totaal_eur"] == 509.95 and A.voor_belgie("Verzendkosten BE grote toestellen: 19,95 euro")
+      and not A.voor_belgie("Wij verzenden to be sure") and not A.voor_belgie("Verzending Nederland 6,95"), str(r["goed"]))
+PRODUCT_Y = dict(paginas, **{"https://winkel.voorbeeld.com/y": pagina(
+    'Product Y. {"offers": {"price": 99, "priceCurrency": "EUR"}} Gratis verzending naar België voor Y.')})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending naar België voor Y."})],
+              VANDAAG, KOERSEN, paginas=PRODUCT_Y)
+check("verzending van de productpagina van een ander product telt niet, ook met Belgie (overleg 29, X2)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"]
+      and "verzending" not in r["goed"][0]["context"], str(r["goed"]))
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro voor elke bestelling"},
+                      verzending=7.95)], VANDAAG, KOERSEN,
+              paginas={"https://winkel.voorbeeld.com/x1": paginas["https://winkel.voorbeeld.com/x1"],
+                       "https://andere.voorbeeld.com/verzending": pagina("Verzending: 7,95 euro voor elke bestelling.")})
+check("een verzendkost van een andere winkel telt niet (overleg 29, X2)",
       r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
 EIGEN = {"https://winkel.voorbeeld.com/x1": pagina("X1 nu 100,00 euro. Verzendkosten: 5,00 euro."),
          "https://winkel.voorbeeld.com/z": pagina("Z nu 130,00 euro. Gratis verzending.")}
@@ -616,7 +647,8 @@ check("weigert de hook niet, dan stopt de runner bij de zevende zoekopdracht (K3
       and uit["stop"] == "plafond" and uit["reden"] == "zoeken" and uit["zoekopdrachten"] == O.MAX_ZOEKEN + 1)
 uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + [assistent({"type": "text", "text": "."})] * (O.MAX_BEURTEN + 1)))
 check("meer dan MAX_BEURTEN beurten stopt de runner (K4)", isinstance(uit, dict) and uit["reden"] == "beurten")
-check("de grenzen: 6 zoek, 6 lees, 10.000 tokens per pagina (G2, G5)", (O.MAX_ZOEKEN, O.MAX_LEZEN, O.MAX_PAGINA_TOKENS) == (6, 6, 10000))
+check("de grenzen: 6 zoek, 6 gelezen, 10.000 tokens per pagina (G2, G5)",
+      (O.MAX_ZOEKEN, O.MAX_LEZEN, O.MAX_PAGINA_TOKENS) == (6, 6, 10000))
 uit, _, _, _, _ = nep_vraag(GEWOON)
 bewaard = json.load(open(O.LIMIET_BESTAND))
 check("de gemeten vensters worden bewaard voor de volgende vraag, rechten 600 (overleg 25, K2)",
@@ -817,8 +849,19 @@ def kapot(url):
 for _ in range(L.MAX_LEZEN - 1):
     L.lees("http://127.0.0.1/", leeslog, kapot)
 tekst, gelukt = L.lees("https://winkel.voorbeeld.com/x2", leeslog, nep_haal)
-check("na zes lezingen, ook mislukte, is de leesgrens bereikt", not gelukt and "Leesgrens" in tekst
-      and O.gelezen_uit(leeslog)[1] == (1, L.MAX_LEZEN - 1))
+check("een mislukte lezing kost geen leesbeurt (overleg 29, X1)", gelukt and O.gelezen_uit(leeslog)[1] == (2, L.MAX_LEZEN - 1))
+for _ in range(L.MAX_POGINGEN - L.MAX_LEZEN - 1):
+    L.lees("http://127.0.0.1/", leeslog, kapot)
+tekst, gelukt = L.lees("https://winkel.voorbeeld.com/x3", leeslog, nep_haal)
+check("na twaalf pogingen samen is de leesgrens bereikt, ook met weinig gelezen (overleg 29, X1)",
+      L.MAX_POGINGEN == 12 and
+      not gelukt and "Leesgrens" in tekst and sum(O.gelezen_uit(leeslog)[1]) == L.MAX_POGINGEN)
+log4 = os.path.join(NEPMAP, "tien.jsonl")
+for i in range(L.MAX_LEZEN):
+    L.lees(f"https://winkel.voorbeeld.com/p{i}", log4, nep_haal)
+tekst, gelukt = L.lees("https://winkel.voorbeeld.com/p99", log4, nep_haal)
+check("na zes gelezen pagina's is de leesgrens bereikt", not gelukt and "Leesgrens" in tekst
+      and O.gelezen_uit(log4)[1] == (L.MAX_LEZEN, 0))
 lang = ("<p>" + "woord " * 20000 + "</p>").encode()
 log2 = os.path.join(NEPMAP, "lang.jsonl")
 tekst, _ = L.lees("https://winkel.voorbeeld.com/lang", log2, lambda u: (u, "text/html", lang))
