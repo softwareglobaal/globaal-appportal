@@ -12,6 +12,7 @@ Alleen publieke diensten van de Vlaamse overheid, zonder sleutel:
 """
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -65,6 +66,20 @@ def lokaliseer(adres):
         "x": p["X_Lambert72"], "y": p["Y_Lambert72"],
         "lat": p["Lat_WGS84"], "lon": p["Lon_WGS84"],
     }
+
+
+def postinfo_gemeente(postcode):
+    """De gemeente van een postcode volgens het postinfo-register, of None voor een postcode die het niet kent. Geopunt
+    geeft bij een gemeente zonder straat geen postcode terug (01-11-2026)."""
+    if not re.fullmatch(r"[1-9]\d{3}", str(postcode or "")):
+        return None
+    try:
+        d = _register(f"postinfo/{postcode}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+    return (((d.get("gemeente") or {}).get("gemeentenaam") or {}).get("geografischeNaam") or {}).get("spelling")
 
 
 def _adres_detail(objectid):

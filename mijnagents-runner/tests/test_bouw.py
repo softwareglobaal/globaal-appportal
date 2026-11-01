@@ -452,6 +452,24 @@ print("\nRegressie na controle 6 van Codex (X1 tot X8)")
 check("X1 alleen de officiele gemeente van Geopunt gaat naar buiten", Q.officiele_gemeente(
     {"postcode": "3000", "gemeente": "Leuven"}) == "3000 Leuven" and Q.officiele_gemeente(None) is None
     and Q.officiele_gemeente({"postcode": "", "gemeente": "Jan Peeters"}) is None)
+
+# 01-11-2026: Geopunt geeft bij een gemeente zonder straat geen postcode; het postinfo-register bevestigt die uit de vraag
+GEO_GEMEENTE = {"postcode": None, "gemeente": "Herent", "lat": 50.9, "lon": 4.6}
+POSTINFO = {"3020": "Herent", "3000": "Leuven"}.get
+check("een gemeente zonder postcode van Geopunt krijgt de postcode uit de vraag als het register ze bevestigt",
+      Q.officiele_gemeente(Q.met_postcode(GEO_GEMEENTE, "3020 Herent", POSTINFO)) == "3020 Herent")
+check("een postcode van een andere gemeente gaat nooit naar buiten",
+      Q.officiele_gemeente(Q.met_postcode(GEO_GEMEENTE, "3000 Herent", POSTINFO)) is None)
+check("een postcode die het register niet kent gaat nooit naar buiten",
+      Q.officiele_gemeente(Q.met_postcode(GEO_GEMEENTE, "3021 Herent", POSTINFO)) is None)
+check("een postcode van Geopunt zelf blijft staan, zonder het register te vragen",
+      Q.met_postcode({"postcode": "3000", "gemeente": "Leuven"}, "3020 Herent", lambda pc: 1 / 0)["postcode"] == "3000")
+check("zonder punt of zonder postcode in de vraag verandert er niets",
+      Q.met_postcode(None, "3020 Herent", POSTINFO) is None
+      and Q.officiele_gemeente(Q.met_postcode(GEO_GEMEENTE, "Herent", POSTINFO)) is None)
+check("De Aannemerszoeker laat de postcode bevestigen door het register",
+      "Q.met_postcode(lokaliseer(gemeente), gemeente, postinfo_gemeente)" in open(
+          Path(__file__).resolve().parents[1] / "aannemerszoeker.py", encoding="utf-8").read())
 nieuws = Z.keur([{"naam": "Dak Nieuws", "url": "https://krant.voorbeeld.com/artikel", "postcode": "3020", "gemeente": "Herent",
                   "ondernemingsnummer": "0537.405.239"}], {"https://krant.voorbeeld.com/artikel": "Nieuws over het weer." + VUL,
                  K: GELEZEN[K]}, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))

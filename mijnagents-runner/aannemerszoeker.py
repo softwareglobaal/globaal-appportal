@@ -133,12 +133,13 @@ def een_vraag(r, tekst, vandaag, deadline):
     v["werk"], v["omvang"] = werk, omvang
     # Codex X1 (controle 6): naar buiten gaat niet de tekst van de vraag maar de officiele postcode en gemeente van
     # Geopunt; wat Geopunt niet als gemeente kent, gaat niet weg.
-    from adresregister import lokaliseer
+    from adresregister import lokaliseer, postinfo_gemeente
     try:
-        centrum = lokaliseer(gemeente)
+        centrum = Q.met_postcode(lokaliseer(gemeente), gemeente, postinfo_gemeente)
     except Exception:  # noqa: BLE001
         centrum = None
-        r.nood("Geopunt niet bereikbaar: geen aannemersvraag zonder officiele gemeente", wie="claude-code")
+        r.nood("Geopunt of het postinfo-register niet bereikbaar: geen aannemersvraag zonder officiele gemeente",
+               wie="claude-code")
     officieel = Q.officiele_gemeente(centrum)
     if not officieel:
         zet_klaar(tekst, "Aannemersvraag niet gestart: gemeente niet gevonden",
