@@ -565,6 +565,7 @@ def proefronde(status_dag, droog=False):
         L.main()
         stand = L.lees_stand()
         noden = L.ag.r.noden
+        proefronde.ronde = L.ag.r
     finally:
         for k, v in oud.items():
             setattr(L, k, v)
@@ -587,19 +588,26 @@ def test_zonder_toestelconfiguratie_sluit_de_wacht_geen_dag_af():
     assert stand["afgesloten_tot"] == "2026-10-05" and stand["versies"]["2026-10-03"] == "v1", stand
 
 
-def test_de_nood_over_afspraken_zonder_adres_noemt_de_dag_en_het_aantal():
-    """LOC-5 (01-11-2026): de nood stond altijd open, zonder dag. Nu een nood per dag met zulke afspraken, met het
-    aantal; een dag zonder zulke afspraak geeft geen nood."""
+def test_de_nood_over_afspraken_zonder_adres_noemt_de_dag_en_het_aantal_apart():
+    """LOC-5 (01-11-2026): de nood stond altijd open, zonder dag. Nu een nood per dag met zulke afspraken; het aantal
+    staat apart in het detail van de ronde, zodat de nood dezelfde blijft als het aantal verandert (Codex-toets 1: het
+    bord vergelijkt noodteksten letterlijk). Een dag zonder zulke afspraak geeft geen nood."""
     echt = L.vergelijk_agenda
-
-    def vergelijk(dag, *a, **k):
-        return [], [], (["10:00 Proefoverleg", "14:00 Proefbezoek"] if dag == "2026-10-04" else []), 0
-    try:
-        L.vergelijk_agenda = vergelijk
-        _, _, _, noden, _ = proefronde("afgesloten")
+    teksten = []
+    for aantal in (2, 3):
+        def vergelijk(dag, *a, aantal=aantal, **k):
+            return [], [], ([f"1{i}:00 Proefoverleg" for i in range(aantal)] if dag == "2026-10-04" else []), 0
+        try:
+            L.vergelijk_agenda = vergelijk
+            _, _, _, noden, _ = proefronde("afgesloten")
+        finally:
+            L.vergelijk_agenda = echt
         blind = [n for n in noden if "zonder adres" in n]
-        assert len(blind) == 1 and "2026-10-04" in blind[0] and "2 afspraken" in blind[0], noden
-        assert not re.match(r"^\d", blind[0]), "N10: geen aantal vooraan"
+        assert len(blind) == 1 and "2026-10-04" in blind[0], noden
+        assert f"2026-10-04 ({aantal})" in proefronde.ronde.detail, proefronde.ronde.detail
+        teksten.append(blind[0])
+    assert teksten[0] == teksten[1], teksten
+    try:
         L.vergelijk_agenda = lambda dag, *a, **k: ([], [], [], 0)
         _, _, _, noden, _ = proefronde("afgesloten")
         assert not [n for n in noden if "zonder adres" in n], noden
