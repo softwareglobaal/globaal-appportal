@@ -1,0 +1,2 @@
+1. **X2: nee.** Tegenproef: een verzendcitaat zegt “P70 gratis; V70 €39,95”. Door `any` in [voor_dit_product](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:129) telt gratis verzending toch voor de MOVA V70. De leestoets koos daardoor een aanbod van €1.099 boven €1.110, terwijl het eerste inclusief verzending €1.138,95 kost.
+2. **Klaar voor live en de VM-vervolgvraag: nee.** Alleen gelezen en in het geheugen getoetst; niets gewijzigd of gepusht.

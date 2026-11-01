@@ -31,7 +31,7 @@ TOKEN_BESTAND = os.path.expanduser(os.environ.get("PRIJS_TOKEN_BESTAND", "~/.con
 # is het venster nog niet herstart, dan start een vraag niet, zodat ze nooit in betaald extra verbruik begint.
 LIMIET_BESTAND = os.path.expanduser(os.environ.get("PRIJS_LIMIET_BESTAND", "~/.config/prijsonderzoeker/limiet.json"))
 MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
-MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
+MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))   # geslaagde lezingen, foutpagina's tellen niet (overleg 29, X1)
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
 MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "30"))   # assistentberichten; --max-turns bestaat niet (K4)
 # Boven dit deel van een limietvenster van het abonnement stopt de vraag, zodat ze nooit in betaald extra verbruik
@@ -85,7 +85,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
      "prijs": 0.0, "munt": "EUR", "btw_inbegrepen": true, "verzending": 0.0, "verzending_btw_inbegrepen": true,
      "opgeld_pct": null, "veilingkosten": null, "douane": null,
      "bewijs": {"prijs": "letterlijk stuk tekst van de aanbodpagina met de prijs van dit product",
-                "verzending": "letterlijk stuk tekst met de verzendkost, of met gratis verzending",
+                "verzending": "letterlijk stuk tekst met de verzendkost naar Belgie, of met gratis verzending, van de aanbodpagina of de verzendpagina van dezelfde winkel",
                 "opgeld": "letterlijk stuk uit de veilingvoorwaarden met het percentage", "veilingkosten": "idem met het bedrag"},
      "staat": "nieuw, als nieuw, gebruikt, defect", "garantie": "bv. 2 jaar, geen",
      "beschikbaar": true, "btw_factuur": true, "foto": "de url van de productfoto zoals ze in de gelezen pagina staat, of null",
@@ -101,7 +101,9 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
   "vervolgvraag": "een gebundelde vraag als iets beslissends ontbreekt (bestemming, firma of privé), anders null"
 }
 Regels voor de JSON: prijs exact zoals op de pagina, als getal in de munt van de pagina; btw_inbegrepen false als de
-pagina een prijs zonder btw toont, null als je het niet weet; verzending null als de pagina het niet zegt; bij een
+pagina een prijs zonder btw toont, null als je het niet weet; staat de verzending niet op de aanbodpagina, lees dan de
+verzendpagina van dezelfde winkel en kopieer het tarief naar Belgie met het woord Belgie erin (of de zin dat het voor
+alle bestellingen geldt), anders telt het niet; verzending null als geen van beide het zegt; bij een
 veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 als de voorwaarden geen vaste kosten
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
 btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met lees_pagina las en de prijs daar zag.
@@ -112,7 +114,10 @@ citeer je de tekst waaruit dat blijkt. Netspanning en netfrequentie staan zelden
 een pagina van de fabrikant, de handleiding of het specificatieblad van precies die modelcode, en geef die pagina als
 bewijs_url; dat telt alleen als dezelfde modelcode op de aanbodpagina en op die bewijspagina staat. In niet_nagekeken
 komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina niet leesbaar was; die worden nooit
-aanbevolen."""
+aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
+ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een
+pagina die niet leesbaar is (HTTP 403, een viewer zonder tekst), kost geen leesbeurt: zoek dan een andere bron voor
+dezelfde modelcode, zoals de fabrikant, een PDF of een specificatieblad."""
 # Namen gaan nooit naar buiten, ook niet uit de werkwijze (Codex X4, ronde 2).
 NAMEN = re.compile(r"\b(?:Mehdi(?:\s+Chegini)?|Chegini)\b")
 

@@ -1,0 +1,2 @@
+1. **X2: ja.** De nieuwe [`all`-controle](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:130) en [tegenproef](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/tests/test_aankoop_prijs.py:349) dekken het gemengde citaat. Mijn leestest met “P70 gratis; V70 €39,95” gaf het V70-aanbod van €1.099 geen bewezen verzending; het alternatief van €1.110 werd aanbevolen.
+2. **Klaar voor live en de VM-vervolgvraag: ja.** De VM-ronde is nog niet gedraaid. Ik heb niets gewijzigd of gepusht.
