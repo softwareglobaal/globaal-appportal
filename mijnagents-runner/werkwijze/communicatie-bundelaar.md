@@ -1,6 +1,7 @@
 # Werkwijze van De Communicatiebundelaar (Privé · Communicatie)
 
-Versie 2.1 (01-11-2026, T-0120 CB-1: de kanalen van de Mac en Xelion). Versie 2
+Versie 2.1 (01-11-2026, T-0120 CB-1: de kanalen van de Mac en Xelion; CB-3: een regel per ronde in het
+werkverslag; CB-4: --van). Versie 2
 (26-10-2026): eigen runner `communicatie_bundelaar.py` in plaats van het skelet. Ik leg de kanalen naast
 elkaar: per dag en per persoon hoe vaak, hoe lang en langs welk kanaal Mehdi contact had. Zo ziet De Levenscoach wie
 veel of weinig tijd kreeg en welke kanalen ongebruikt blijven. Ik beschrijf, ik oordeel niet. Versie 1 (10-09-2026)
@@ -32,7 +33,8 @@ beloofde ook wie begon en de toon; daar is geen meting voor zonder inhoud te lez
 6. Minuten alleen bij video, ter plaatse en de oproepen (whatsapp-oproep, telefoon, xelion). Chat, sms en mail
    hebben geen duur. Een gesprek zonder minuten telt als contact zonder duur, nooit als nul minuten.
 7. Per dag een klaarzet-item voor Mehdi, soort communicatie, ook voor een dag zonder contact, zodat een item de bron
-   volgt als een correctie contacten weghaalt. Een oudere dag waarvoor al een item bestaat, herzie ik ook. De Levenscoach leest het in zijn dag- en weekspiegel. De Dagbundelaar
+   volgt als een correctie contacten weghaalt. Een oudere dag waarvoor al een item bestaat, herzie ik ook. Met
+   --van haal ik eenmalig elke dag vanaf een gegeven dag in, hoogstens zestig dagen terug (CB-4). De Levenscoach leest het in zijn dag- en weekspiegel. De Dagbundelaar
    slaat het over: het hoort bij geen dossier. Elk item lees ik terug van het bord.
 8. Is de gesprekkentabel of kern niet leesbaar, dan zet ik niets klaar en meld ik een nood: onbekend is niet leeg.
 

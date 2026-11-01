@@ -19,7 +19,9 @@ waarom, link, archief of project, en een privérij is alleen een aantal, nooit e
 Draaien: python3 communicatie_bundelaar.py            (een ronde)
          python3 communicatie_bundelaar.py --droog    (geen ronde, geen klaarzet: toont wat ik zou klaarzetten)
          python3 communicatie_bundelaar.py --droog --zaad   (idem, met de werkwijze uit werkwijze/ in plaats van het bord)
+         python3 communicatie_bundelaar.py --van 2026-10-01 (eenmalig inhalen vanaf die dag, CB-4; ook met --droog)
 """
+import argparse
 import json
 import os
 import re
@@ -40,6 +42,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 
 VENSTER_DAGEN = 7    # de dagen die ik elke ronde opnieuw bundel; een item dat nog niet opgepakt is, volgt de bron
 BEKEND_DAGEN = 90    # hoe ver terug iemand uit een gesprek telt als bekend persoon voor mail (keuze 1 van Mehdi)
+INHAAL_DAGEN = 60    # CB-4: hoe ver een eenmalige inhaalronde (--van) hoogstens terug gaat
 
 # Kanaal uit het voorvoegsel van uniek (keuze 3 van Mehdi). zoom:chat: voor zoom:, het langste voorvoegsel wint. CB-1
 # (T-0120): de kanalen van de Mac en Xelion, zoals De WhatsApp-wacht, De Belwacht, De Sms-wacht en De Xelionwacht ze
@@ -310,12 +313,13 @@ def terug_lezen(gezet, lees=None):
     return fout
 
 
-def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None):
+def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None, van=None):
     """Een ronde. CB-3 (T-0120): elke ronde laat een regel in het werkverslag, alleen aantallen, ook een ronde die niets
     klaarzette (de wachtenpagina leest alleen het werkverslag en zei anders 'Geen ronde'); een ronde die breekt, een
-    regel met stap fout, zonder de tekst van de fout (die kan een naam dragen)."""
+    regel met stap fout, zonder de tekst van de fout (die kan een naam dragen). van: CB-4, eenmalig ook elke dag vanaf
+    die dag bundelen."""
     try:
-        dagen = _werk(r, vandaag, lees, collegas, zet, terug)
+        dagen = _werk(r, vandaag, lees, collegas, zet, terug, inhaal=van)
     except Exception as e:
         ag.log("ronde", "fout", f"ronde gebroken ({type(e).__name__}); niets zeker klaargezet")
         raise
@@ -323,7 +327,7 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
     return dagen
 
 
-def _werk(r, vandaag, lees, collegas, zet, terug):
+def _werk(r, vandaag, lees, collegas, zet, terug, inhaal=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         # N2: zonder grenzen geen werk. De vaste vorm staat in bord.grenzen.
@@ -334,6 +338,9 @@ def _werk(r, vandaag, lees, collegas, zet, terug):
     try:
         # Ook elke oudere dag waarvoor ik al een item zette, zodat een latere privécorrectie dat item bijwerkt (CB11).
         eerder = {x["sleutel"] for x in lees(SQL_EERDER, (NAAM,)) if x.get("sleutel") and x["sleutel"] < eerste}
+        if inhaal:
+            # CB-4: eenmalig inhalen; daarna heeft elke dag een item en herziet de gewone ronde hem zelf (CB11)
+            eerder |= {d for d in reeks(inhaal, laatste) if d < eerste}
         dagen_lijst = sorted(eerder) + reeks(eerste, laatste)
         rijen = lees(SQL)
     except bord.BordOnbekend:
@@ -371,9 +378,10 @@ def werkverslag(dagen, eerste, laatste, opgevallen, uit):
             f"{uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt")
 
 
-def droog(zaad=False):
+def droog(zaad=False, van=None):
     """Geen ronde: geen hartslag, kennis of klaarzet. Toont de items zoals ze klaargezet zouden worden. Met zaad de
-    werkwijze uit werkwijze/, om een nieuwe versie te proeven voor ze op het bord staat."""
+    werkwijze uit werkwijze/, om een nieuwe versie te proeven voor ze op het bord staat. Met van ook de dagen van een
+    inhaalronde vanaf die dag (CB-4)."""
     class Droog:
         werkwijze, detail = "", ""
 
@@ -387,16 +395,38 @@ def droog(zaad=False):
         print(f"(droog) werkwijze niet gelezen: {e}")
         return
     gezet = []
-    werk(d, zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [])
+    werk(d, zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [], van=van)
     for it in gezet:
         print(it["titel"])
         print(json.dumps(json.loads(it["inhoud"]), ensure_ascii=False, indent=1))
     print(f"(droog) {d.detail}")
 
 
+def inhaal_van(tekst, vandaag=None):
+    """CB-4: het argparse-type van --van JJJJ-MM-DD: een dag voor vandaag (Brussel), hoogstens INHAAL_DAGEN terug."""
+    try:
+        dag = date.fromisoformat(str(tekst))
+    except ValueError:
+        raise argparse.ArgumentTypeError("een dag als JJJJ-MM-DD") from None
+    vandaag = vandaag or datetime.now(BRUSSEL).date()
+    if not vandaag - timedelta(days=INHAAL_DAGEN) <= dag < vandaag:
+        raise argparse.ArgumentTypeError(f"hoogstens {INHAAL_DAGEN} dagen terug en voor vandaag")
+    return dag.isoformat()
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description="De Communicatiebundelaar: de kanalen per dag naast elkaar.")
+    p.add_argument("--droog", action="store_true", help="geen ronde, geen klaarzet: toont wat ik zou klaarzetten")
+    p.add_argument("--zaad", action="store_true", help="met --droog: de werkwijze uit werkwijze/ in plaats van het bord")
+    p.add_argument("--van", type=inhaal_van, metavar="JJJJ-MM-DD",
+                   help="eenmalig ook elke dag vanaf die dag bundelen (hoogstens 60 dagen terug)")
+    a = p.parse_args(argv)
+    if a.droog:
+        droog(zaad=a.zaad, van=a.van)
+        return
+    with ag.ronde("communicatie bundelen") as r:
+        werk(r, van=a.van)
+
+
 if __name__ == "__main__":
-    if "--droog" in sys.argv:
-        droog(zaad="--zaad" in sys.argv)
-    else:
-        with ag.ronde("communicatie bundelen") as r:
-            werk(r)
+    main()

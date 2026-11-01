@@ -365,6 +365,54 @@ def test_cb3_werkverslag_een_regel_per_ronde_zonder_naam():
         C.ag.log = oud
 
 
+def test_cb4_inhalen_vanaf_een_dag():
+    """CB-4: --van 2026-10-01 bundelt eenmalig elke dag vanaf 01-10 tot gisteren (op 01-11: 31 items); daarna houdt de
+    ronde die dagen zelf bij, want ze heeft er een item voor (SQL_EERDER). Hoogstens INHAAL_DAGEN terug, nooit vandaag
+    of later. Gebouwd, niet gedraaid (X6, X7)."""
+    import contextlib
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+    r, gezet = NepRonde(), []
+    lees = lambda sql, args=(): [] if sql == C.SQL_EERDER else list(RIJEN)   # noqa: E731
+    dagen = C.werk(r, vandaag=date(2026, 11, 1), lees=lees, collegas=lambda: COLLEGAS,
+                   zet=lambda its: gezet.extend(its) or {"nieuw": len(its)}, terug=lambda its: [], van="2026-10-01")
+    assert len(gezet) == 31 and min(dagen) == "2026-10-01" and max(dagen) == "2026-10-31", (len(gezet), sorted(dagen)[:2])
+    assert len({it["uniek"] for it in gezet}) == 31
+    gezet.clear()
+    C.werk(NepRonde(), vandaag=date(2026, 11, 1), lees=lees, collegas=lambda: COLLEGAS,
+           zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [])
+    assert len(gezet) == 7, "zonder --van het venster van zeven dagen"
+    assert C.inhaal_van("2026-10-01", date(2026, 11, 1)) == "2026-10-01"
+    for slecht in ("2026-11-01", "2026-11-02", "2026-09-01", "gisteren"):
+        try:
+            C.inhaal_van(slecht, date(2026, 11, 1))
+            raise AssertionError(slecht)
+        except C.argparse.ArgumentTypeError:
+            pass
+    gezien = []
+    oud = (C.droog, C.werk, C.ag.ronde, C.inhaal_van)
+    echt = C.inhaal_van
+    C.droog = lambda zaad=False, van=None: gezien.append(("droog", zaad, van))
+    C.werk = lambda r, van=None: gezien.append(("werk", van))
+    C.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde())
+    C.inhaal_van = lambda tekst: echt(tekst, date(2026, 11, 1))
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            C.main(["--droog", "--van", "2026-10-01"])
+            C.main(["--droog", "--zaad"])
+            C.main(["--van", "2026-10-01"])
+            C.main([])
+            try:
+                C.main(["--van", "2026-11-05"])
+                raise AssertionError("--van na gisteren")
+            except SystemExit as e:
+                assert e.code == 2
+    finally:
+        C.droog, C.werk, C.ag.ronde, C.inhaal_van = oud
+    assert gezien == [("droog", False, "2026-10-01"), ("droog", True, None), ("werk", "2026-10-01"), ("werk", None)], \
+        gezien
+
+
 def test_vreemde_met_voornaam_van_collega_is_geen_collega():
     rijen = [rij("fathom:1", "Mehdi, Zeta Vreemdeling", 10), rij("fathom:2", "Mehdi Chegini, Zeta", 5),
              rij("mail:<y2@voorbeeld.test>", "Mehdi Vreemd")]
