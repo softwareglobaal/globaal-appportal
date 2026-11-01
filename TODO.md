@@ -5,6 +5,11 @@
 
 ## Overdracht Dagboek compleet (01-11-2026, naar Claude 1 op de laptop)
 
+> De takenlijst is de werkstand (overleg T-0073, ja van Mehdi 01-11). Deze punten staan daar als: blok "Eigen werk en
+> gezondheid" live = vraag uit T-0079; Browserwacht en Wispr-wacht = T-0077; Health Auto Export = T-0078 (wacht op
+> Mehdi); overleg Dagboek compleet = T-0079; wachten = T-0042 en T-0088; getypte tekst = T-0100 (wacht op Mehdi);
+> pagina Wachten nakijken = T-0099. Zie `python3 ~/dev/werkstand/werkstand.py lijst` en `voor-mehdi`.
+
 Alles staat op main (commit 4b25b01 en eerder). Niets hiervan is live gezet zonder ja van Mehdi.
 
 - [x] Live: locatie (Onderweg, Waar was ik), blok Zoom, Fathom en Plaud, pagina Bronnen in het Dagboek.
