@@ -150,13 +150,13 @@ def telefoon_lokaal(van, tot, db=None):
 
 
 def nummers_van(spiegel):
-    """{xelion:<oid>: nummersleutel van het externe nummer}: om een paar met de iPhone te herkennen, ook als Xelion
+    """{xelion:<oid>: het volle externe nummer (nummer_vol)}: om een paar met de iPhone te herkennen, ook als Xelion
     een naam kent."""
     uit = {}
     for x in spiegel.get("rijen") or []:
         oid = "".join(c for c in str(x.get("oid") or "") if c.isalnum())
         if oid:
-            uit[f"xelion:{oid}"] = M.nummer_sleutel(x.get("extern_nummer") or "")
+            uit[f"xelion:{oid}"] = M.nummer_vol(x.get("extern_nummer") or "")
     return uit
 
 
@@ -167,9 +167,9 @@ def zelfde_wie(x, t, nummers=None):
     if not tp or tp in ("nummer verborgen", "onbekend nummer") or xp in ("nummer verborgen", "onbekend nummer"):
         return False
     if re.fullmatch(NUMMER, tp):
-        sleutel = M.nummer_sleutel(tp)
-        xs = (nummers or {}).get(x["uniek"]) or (M.nummer_sleutel(xp) if re.fullmatch(NUMMER, xp) else "")
-        return len(sleutel) >= 6 and sleutel == xs
+        sleutel = M.nummer_vol(tp)                    # Codex 01-11: het volle nummer, niet de laatste negen cijfers
+        xs = (nummers or {}).get(x["uniek"]) or (M.nummer_vol(xp) if re.fullmatch(NUMMER, xp) else "")
+        return bool(sleutel) and sleutel == xs
     return tp.casefold() == xp.casefold()
 
 

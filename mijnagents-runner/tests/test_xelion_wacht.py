@@ -193,6 +193,11 @@ def test_tel6_xelion_en_iphone_tellen_een_keer():
     for ander in ({"personen": "Ander Proef"}, {"personen": "+32470000077"}):
         r4, _ = X.rijen_van(spiegel(), M.dagen(NU))
         assert X.ontdubbel(r4, [dict(telefoon[0], **ander)], nummers) == 0, ander
+    # Codex 01-11 (toets 2): +31 en +32 met dezelfde laatste negen cijfers zijn twee bellers
+    sp = spiegel()
+    sp["rijen"][1]["extern_nummer"] = "+31470000002"
+    r7, _ = X.rijen_van(sp, M.dagen(NU))
+    assert X.ontdubbel(r7, [telefoon[1]], X.nummers_van(sp)) == 0
     # dezelfde naam als Xelion kent, ook zonder nummer op de iPhone; een verborgen nummer op beide kanten nooit
     r5, _ = X.rijen_van(spiegel(), M.dagen(NU))
     assert X.ontdubbel(r5, [dict(telefoon[0], personen="jan proef")], nummers) == 1
