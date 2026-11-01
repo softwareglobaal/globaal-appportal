@@ -6,7 +6,8 @@ Legt vast, zonder netwerk en zonder de echte mappen (alles in een tijdelijke map
 - een tweede ronde met dezelfde bronnen schrijft niets nieuws (geen versie 2, geen versies-map);
 - een nieuwe bron geeft versie 2, met versie 1 in versies/ en 'herzien: ...' in het blok over de vaststelling (D9);
 - toont het bord iets anders dan het bestand, dan faalt de ronde (teruglezen);
-- een ontvangstbewijs van de Mac met dezelfde sha256 sluit de Dropbox-nood; zonder bewijs staat ze open;
+- een ontvangstbewijs van de Mac met dezelfde sha256 sluit de Dropbox-nood; zonder bewijs staat ze open, maar pas als de
+  versie ouder is dan DROPBOX_TERMIJN (DB-1);
 - de kanaalstand komt uit de hartslag van de wacht (D2): skelet is niet aangesloten, een verse databankronde wel, een
   oude is stil;
 - het masker van het bord geldt al voor het schrijven: een privétekst staat nergens, ook niet in het bestand.
@@ -15,6 +16,7 @@ Draaien: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -57,6 +59,7 @@ class Wereld:
         self.status = {"whatsapp-wacht": {"naam": "whatsapp-wacht", "status": "rust", "taak": "", "ts": NU.isoformat()},
                        "belwacht": {"naam": "belwacht", "status": "rust", "taak": "", "ts": NU.isoformat()}}
         self.items, self.vervals = {}, None
+        self.mailberichten, self.mailsql = None, ""                  # None: de twee rijen hieronder (db_lees)
         self.dagregel = json.dumps({"telling": "volledig", "stand": "definitief", "bronnen": {"rapport": "ok", "chat": "ok"},
                                     "chat": {"telling": "ondergrens"}})
 
@@ -66,6 +69,9 @@ class Wereld:
         if "FROM klaarzet" in sql:
             return [{"uniek": f"zoom:dag:{DAG}", "inhoud": self.dagregel}] if self.dagregel is not None else []
         if "FROM mailbericht" in sql:
+            self.mailsql = sql
+            if self.mailberichten is not None:
+                return [dict(x) for x in self.mailberichten]
             return [{"postvak": "info@h-architects.be", "message_id": "<w1@x>", "datum": f"{DAG}T08:36:57+02:00", "soort": "koud"},
                     {"postvak": "info@h-architects.be", "message_id": "<w2@x>", "datum": f"{DAG}T09:00:00+02:00", "soort": "koud"}]
         if "FROM status" in sql:
@@ -87,10 +93,10 @@ class Wereld:
         return {"items": [it] if it else []}
 
 
-def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_noden=(), **k):
+def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_noden=(), doe=None, **k):
     """Een ronde van vastleggen; gisteren ligt vast (standaard ruim na DAG, zodat Zoom niet meer voorlopig is). mail: een
     eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt; open_noden: wat het bord als open noden geeft
-    (None: onbekend)."""
+    (None: onbekend); doe: in plaats van vastleggen, in dezelfde wereld (bv. main())."""
     oud = (D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren)
     D.V.gisteren = lambda nu: gisteren
     D.DAGBOEK = os.path.join(w.map, "dagboek")
@@ -108,7 +114,7 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_
     r = NepRonde()
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            detail = D.vastleggen(r, list(dagen), **k)
+            detail = doe() if doe else D.vastleggen(r, list(dagen), **k)
         return r, detail
     finally:
         D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren = oud
@@ -131,7 +137,7 @@ def test_versies_teruglezen_en_dropbox():
         assert w.items[f"vaststelling:{DAG}"]["inhoud"] == eerste, "bord en bestand dragen dezelfde tekst"
         assert "aanwijzing (auto ter plaatse 14:31-16:07" in eerste, eerste
         assert "info@h-architects.be: 2 binnen (2 koud)" in eerste, "gezien door de wachten telt mee, ontdubbeld"
-        assert any("Dropbox" in n for n in r.noden), "zonder ontvangstbewijs staat de Dropbox-nood open"
+        assert not any("Dropbox" in n for n in r.noden), "DB-1: een versie van deze ronde telt nog niet"
         assert any(n.startswith("WhatsApp:") for n in r.noden) and any(n.startswith("Telefoon:") for n in r.noden), r.noden
         assert not any(c.isdigit() for n in r.noden for c in n.split(":")[0]), "N10: geen aantal in een nood"
         # tweede ronde, zelfde bronnen: niets nieuws
@@ -153,6 +159,7 @@ def test_versies_teruglezen_en_dropbox():
         # een bewijs van een oudere versie telt niet
         with open(os.path.join(m, "ontvangst.txt"), "w") as f:
             f.write(f"{D._sha(eerste)}  ./2026/{DAG}.md\n")
+        _verouder(pad, 90)                                                  # DB-1: ouder dan de termijn
         r, _ = ronde(w)
         assert any("Dropbox" in n for n in r.noden), "oude versie in Dropbox"
 
@@ -534,7 +541,8 @@ def test_h1_antwoordadressen_van_een_privewacht():
     u = {"light@x.be": {"berichten": [{"datum": f"{DAG}T10:00:00+02:00", "message_id": "<a@x>", "aan": ["Tante Mie <t@x.be>"]}]}}
     t = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", V.mail_telling(DAG, {}, u), None, lambda a: False),
                 prive_postvakken=prive)
-    assert "Tante Mie" not in t and "light@x.be: 0 binnen, 1 verzonden" in t, t
+    # MAIL-3 (T-0120): light@ wordt alleen voor verzonden gelezen; binnen is niet gelezen, geen nul
+    assert "Tante Mie" not in t and "light@x.be: binnen: niet gelezen, 1 verzonden" in t, t
 
 
 def test_g4_ontbrekend_postvak():
@@ -593,7 +601,7 @@ def test_f9_nachtketen_noden():
     oud = (D.NACHT, D.DAG_GEGEVEN, D.lees_nacht, D.vastleggen, D.bundelen, D.KETENBESTAND)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     # Een leeg bord: zonder dit las de test op de VM de echte open noden (behoud in main) en faalde hij daar, terwijl hij
     # op de Mac en in CI slaagde omdat het bord er niet bereikbaar is (gezien 27-10-2026, sinds PR 103).
     D.ag.open_noden = lambda: []
@@ -643,7 +651,7 @@ def test_g3_zoom_van_de_ochtendketen():
         D.NACHT, D.DAG_GEGEVEN, D.KETENBESTAND = False, True, kpad
         D.lees_nacht = lambda: {}
         D.vastleggen = lambda r, dagen, zoom_gelezen=None: uit.update(ok=zoom_gelezen) or ""
-        D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+        D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
         D.ag.ronde = lambda taak, **k: R()
         try:
             for exit_, ok in ((0, True), (124, False)):
@@ -682,7 +690,7 @@ def test_c1_ochtend_sluit_geen_noden_als_de_vaststelling_faalt():
     D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": NU.isoformat(),
                             "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}
     D.vastleggen = faal
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     D.ag.ronde = lambda taak, **k: R()
     D.ag.log = lambda *a, **k: None
     bundel = "Bron zonder dossier: een opname wacht op een toewijzing"
@@ -750,7 +758,7 @@ def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=(), handmatig=False):
     D.lees_nacht = lambda: ({"start": nu, "stappen": {"zoom-wacht": {"exit": 0}}} if nacht else
                             {"start": nu, "einde": nu, "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}})
     D.vastleggen = vastleggen
-    D.bundelen = lambda: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
@@ -814,10 +822,11 @@ def test_review_dropbox_ook_s_ochtends_over_het_venster():
         w = Wereld(m)
         ronde(w, dagen=("2026-11-05",))                                     # de nacht schreef een oudere dag
         ronde(w, dagen=("2026-10-01",))                                     # en haalde een dag van zes weken terug in
-        r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
-        dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
         pad = os.path.join(m, "dagboek", "2026", "2026-11-05.md")
         oud_pad = os.path.join(m, "dagboek", "2026", "2026-10-01.md")
+        _verouder(pad, 7 * 60), _verouder(oud_pad, 7 * 60)                  # DB-1: de nacht schreef ze uren geleden
+        r, d = ronde(w, dagen=("2026-11-10",))                              # de ochtend: alleen gisteren
+        dropbox = [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]
         with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
             f.write(f"{D._sha(lees(pad))}  ./2026/2026-11-05.md\n{D._sha(lees(oud_pad))}  ./2026/2026-10-01.md\n")
         r2, d2 = ronde(w, dagen=("2026-11-10",))
@@ -1115,6 +1124,217 @@ def test_fase2_telling_naast_het_dagbestand():
         assert json.loads(lees(tpad))["dagversie"] == 2, "de telling volgt de versie van het dagbestand"
 
 
+def _verouder(pad, minuten):
+    """Het dagbestand alsof zijn huidige versie zoveel minuten geleden geschreven werd."""
+    t = (datetime.now(timezone.utc) - timedelta(minutes=minuten)).timestamp()
+    os.utime(pad, (t, t))
+
+
+def _bewijs(m, *teksten_per_dag):
+    with open(os.path.join(m, "ontvangst.txt"), "w", encoding="utf-8") as f:
+        for dag, tekst in teksten_per_dag:
+            f.write(f"{D._sha(tekst)}  ./{dag[:4]}/{dag}.md\n")
+
+
+def test_db1_dropbox_termijn_per_bestandsversie():
+    """DB-1 (T-0118, T-0120): een dag telt pas als niet in Dropbox als zijn huidige versie ouder is dan twee syncrondes
+    (DROPBOX_TERMIJN) en het ontvangstbewijs een andere sha256 heeft. Tot 01-11-2026 vergeleek de nachtronde een dag die ze
+    net herschreef met het bewijs van de vorige versie, en opende zo na elke nacht een vals alarm; in het weekend bleef
+    het open, want daar is geen ochtendronde. De leeftijd van het ontvangstbewijs telt niet: de Mac schrijft het ook als
+    de rsync van het dagboek faalde."""
+    assert D.DROPBOX_TERMIJN == timedelta(minutes=75), D.DROPBOX_TERMIJN
+    dropbox = lambda r: [n for n in r.noden if n.startswith("Dagboek nog niet bevestigd")]  # noqa: E731
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        pad = os.path.join(m, "dagboek", "2026", f"{DAG}.md")
+        r, d = ronde(w)
+        assert not dropbox(r) and "Dropbox open: 0" in d, "een versie die deze ronde schreef, kijkt de volgende na"
+        _bewijs(m, (DAG, lees(pad)))
+        _verouder(pad, 180)
+        # Nacht (vrijdag): een nagekomen gesprek geeft een nieuwe versie; het bewijs is nog van de vorige
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
+        r, d = ronde(w)
+        assert "versie 2" in lees(pad) and not dropbox(r) and "Dropbox open: 0" in d, (r.noden, d)
+        # Werkdagochtend: de versie is ouder dan twee syncrondes en het bewijs is er niet: nood open
+        _verouder(pad, 74)
+        r, d = ronde(w, dagen=("2026-11-10",))
+        assert not dropbox(r), "74 min is nog binnen de termijn"
+        _verouder(pad, 76)
+        r, d = ronde(w, dagen=("2026-11-10",))
+        assert dropbox(r) and "Dropbox open: 1" in d, (r.noden, d)
+        # Weekend: de Mac-sync liep (bewijs van versie 2); de nacht van zaterdag herschrijft de dag weer: geen nood
+        _bewijs(m, (DAG, lees(pad)))
+        w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:c", start="21:00", minuten=10))
+        r, d = ronde(w)
+        assert "versie 3" in lees(pad) and not dropbox(r), r.noden
+        # Nacht van zondag: de Mac-sync liep weer (bewijs van versie 3), niets veranderd: geen nood
+        _bewijs(m, (DAG, lees(pad)))
+        _verouder(pad, 24 * 60)
+        r, d = ronde(w)
+        assert not dropbox(r) and "Dropbox open: 0" in d, (r.noden, d)
+        # Liep de Mac-sync niet meer (bewijs bleef van versie 2), dan opent de nood na de termijn
+        with open(os.path.join(m, "dagboek", "2026", "versies", f"{DAG} v2.md"), encoding="utf-8") as f:
+            _bewijs(m, (DAG, f.read()))
+        r, d = ronde(w)
+        assert dropbox(r) and "Dropbox open: 1" in d, (r.noden, d)
+        # Een vers ontvangstbewijs bewijst niets als zijn sha256 niet klopt (de rsync kan gefaald hebben)
+        os.utime(os.path.join(m, "ontvangst.txt"))
+        r, _ = ronde(w)
+        assert dropbox(r), r.noden
+
+
+def test_mail4_reservesleutel_voor_rijen_zonder_message_id():
+    """MAIL-4 (T-0120): mailbericht kreeg pas op 19-10-2026 een kolom message_id; een oudere rij heeft ze leeg, maar draagt
+    de sleutel van de wacht in uniek (postvak:Message-ID, of postvak:uid zonder Message-ID). De dagvaststelling nam alleen
+    rijen met message_id, en telde zo 12-10 tot 19-10 te weinig (16-10 mch@: 6 in plaats van 12). Nu geldt een vaste
+    reservesleutel; een oude rij wordt niet aangevuld. Dezelfde mail uit IMAP en uit mailbericht telt precies een keer.
+    Codex-toets 1 en 2: niet de uid, want die is alleen uniek per map en verandert als de wacht de mail naar een andere
+    gelezen map sorteert; een mail zonder Message-ID heeft een sleutel uit tijdstip, afzender en onderwerp."""
+    pv = "proef@proef.test"
+    t9 = f"{DAG}T09:00:00+02:00"
+    imap = [{"datum": f"{DAG}T08:00:00+02:00", "message_id": "<a1@x>", "uid": 11, "van": "a@proef.test"},  # nog in de map
+            # zonder Message-ID: door de wacht van INBOX (uid 12) naar een andere gelezen map gesorteerd, daar uid 99
+            {"datum": t9, "message_id": "", "uid": 99, "van": "b@proef.test", "onderwerp": "Vraag  over\n de werf"},
+            # een ander bericht zonder Message-ID met dezelfde uid 12 in een andere map
+            {"datum": f"{DAG}T09:30:00+02:00", "message_id": "", "uid": 12, "van": "c@proef.test", "onderwerp": "Andere vraag"}]
+    rijen = [{"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T08:00:00+02:00", "soort": "koud",
+              "van": "a@proef.test"},
+             # dezelfde mail als uid 99 hierboven, voor en na de verplaatsing: twee rijen, een mail
+             {"uniek": f"{pv}:12", "postvak": pv, "message_id": "", "datum": "2026-10-22T07:00:00+00:00", "soort": "gewoon",
+              "van": "b@proef.test", "onderwerp": "Vraag over de werf"},
+             {"uniek": f"{pv}:99", "postvak": pv, "message_id": "", "datum": t9, "soort": "gewoon",
+              "van": "b@proef.test", "onderwerp": "Vraag over de werf"},
+             # weggesorteerd naar een map die de wachten niet lezen: alleen in mailbericht
+             {"uniek": f"{pv}:<a3@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T10:00:00+02:00", "soort": "melding"},
+             {"uniek": f"{pv}:13", "postvak": pv, "message_id": "", "datum": f"{DAG}T11:00:00+02:00", "soort": "melding",
+              "van": "d@proef.test", "onderwerp": "Nieuwsbrief"},
+             # een nieuwe rij met message_id, ook nog in IMAP onder dezelfde sleutel
+             {"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "<a1@x>", "datum": f"{DAG}T08:00:00+02:00",
+              "soort": "koud"}]
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        w.mailberichten = rijen
+        ronde(w, mail=lambda dagen_: ({pv: {"berichten": [dict(k) for k in imap], "onvolledig": []}}, {}, set()))
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+    assert "message_id, '') != ''" not in w.mailsql and "uniek" in w.mailsql and "onderwerp" in w.mailsql, w.mailsql
+    # a1, de verplaatste mail, de andere uid 12, a3 en 13: vijf mails
+    assert f"  - {pv}: 5 binnen (1 gewoon, 1 koud, 2 melding)" in t, t
+    assert "- mail: 5 binnen" in t, t
+    S = D.V.mail_sleutel
+    assert S(pv, {"message_id": "<a1@x>", "uid": 5}) == "<a1@x>" == S(pv, {"uniek": f"{pv}:<a1@x>", "message_id": ""})
+    zelfde = {"datum": t9, "van": "B@proef.test", "onderwerp": "Vraag over de werf"}
+    assert S(pv, dict(zelfde, uniek=f"{pv}:12")) == S(pv, dict(zelfde, uid=99)) == S(pv, dict(zelfde, datum="2026-10-22T07:00:00+00:00")), \
+        "dezelfde mail in elke map en met elke uid"
+    assert S(pv, dict(zelfde, uid=12)) != S(pv, dict(zelfde, uid=12, onderwerp="Andere vraag")), "een ander bericht"
+    assert S(pv, zelfde) != S("ander@proef.test", zelfde), "per postvak"
+    assert S(pv, {"uid": 12}) is None and S(pv, {"uniek": f"{pv}:12"}) is None, "zonder tijdstip geen sleutel"
+
+
+class HartRonde:
+    """ag.ronde zonder bord: de taak, de noden en het detail na de ronde."""
+
+    def __init__(self, taak):
+        self.taak, self.noden, self.detail, self.noden_onbekend = taak, [], "", False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *fout):
+        return False
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append(tekst)
+
+    def bron(self, naam, inhoud):
+        pass
+
+
+def _hand(w, argv, **k):
+    """main() met de opties van argv (zoals de VM ze zou krijgen), in de wereld w; geeft de ronde of de fout van de
+    opties. bundelen() en de lezing van de nachtketen mogen niet lopen."""
+    rondes, geroepen = [], []
+    namen = ("DAG", "DAG_GEGEVEN", "VENSTER", "WEEK", "NACHT", "ALLEEN_VASTSTELLEN", "HANDMATIG", "bundelen", "lees_nacht")
+    oud = {n: getattr(D, n) for n in namen}
+    D.DAG, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.NACHT, D.ALLEEN_VASTSTELLEN, D.HANDMATIG = D.opties(argv, nu=NU)
+    D.bundelen = lambda dag=None: geroepen.append("bundelen") or {"detail": "", "nood": [], "bronnen": 0}
+    D.lees_nacht = lambda: geroepen.append("nacht.json") or {}
+    D.ag.ronde = lambda taak, **kw: rondes.append(HartRonde(taak)) or rondes[-1]
+    try:
+        ronde(w, doe=D.main, **k)
+    finally:
+        for n, v in oud.items():
+            setattr(D, n, v)
+        D.ag.__dict__.pop("ronde", None)
+    return rondes[-1], geroepen
+
+
+def test_vol1_alleen_vaststellen_is_de_inhaalweg():
+    """VOL-1 (T-0120, overleg X7 en X9): de inhaalweg van de dagbundel. --alleen-vaststellen stelt vast zonder bundelen() en
+    zonder de controle van de nachtketen, dus zonder nood 'buiten de nachtketen'; het is een ronde met de hand, die geen
+    noden sluit en het ochtendbericht niet vrijgeeft. --dag samen met --venster weigert de runner: tot 01-11-2026 won
+    --dag dan stil (WISPR-2), en --venster zonder --nacht bundelde ook gisteren (DB-4, AG-1). Bouwen mag, draaien niet."""
+    import ochtend
+    for fout in (["--dag", "2026-10-05", "--venster", "32"], ["--nacht", "--alleen-vaststellen"],
+                 ["--alleen-vaststellen", "--dag", "2026-10-05", "--venster", "32"]):
+        try:
+            D.opties(fout, nu=NU)
+            raise AssertionError(f"{fout} moet geweigerd worden")
+        except ValueError as e:
+            assert "samen" in str(e), e
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        jaar = os.path.join(m, "dagboek", "2026")
+        os.makedirs(jaar)
+        with open(os.path.join(jaar, "2026-10-20.md"), "w", encoding="utf-8") as f:
+            f.write("# Dag 2026-10-20 vastgesteld\n\noude versie\n")
+        r, geroepen = _hand(w, ["--alleen-vaststellen", "--venster", "32"], dagen=())
+        assert not geroepen, f"geen bundelen() en geen nachtketen: {geroepen}"
+        assert r.taak == f"{ochtend.NACHTTAAK} met de hand", r.taak
+        assert not [n for n in r.noden if "nachtketen" in n], r.noden
+        tellingen = sorted(f for f in os.listdir(jaar) if f.endswith(".json"))
+        assert len(tellingen) == 32 and tellingen[-1] == "2026-11-10.json" and tellingen[0] == "2026-10-10.json", tellingen
+        assert os.path.exists(os.path.join(jaar, "versies", "2026-10-20 v1.md")), "de vorige versie blijft bewaard"
+        assert "32 dag(en) vastgesteld" in r.detail, r.detail
+        # --alleen-vaststellen --dag: precies die dag
+        r, geroepen = _hand(w, ["--alleen-vaststellen", "--dag", "2026-09-30"], dagen=())
+        assert not geroepen and os.path.exists(os.path.join(m, "dagboek", "2026", "2026-09-30.json")), geroepen
+    # de runner zelf weigert de verkeerde combinatie voor hij iets leest of schrijft
+    p = subprocess.run([sys.executable, os.path.join(RUNNER, "dagbundelaar.py"), "--dag", "2026-10-05", "--venster", "32"],
+                       capture_output=True, text=True, timeout=60,
+                       env=dict(os.environ, HOME=tempfile.gettempdir(), MIJNAGENTS_URL="http://127.0.0.1:9"))
+    assert p.returncode == 2 and "samen" in p.stderr, (p.returncode, p.stderr[-300:])
+
+
+def test_vol4_eigen_werk_en_gezondheid_standaard_uit():
+    """VOL-4 (T-0120, overleg X2): het blok Eigen werk en gezondheid staat standaard uit, tot het bestaande ja op T-0079
+    rij 7. Vlag uit: geen lezing, geen sleutel eigen in de .json van de dag en geen regels in de .md. Vlag aan: het blok
+    staat er, zodat deze test de fout ook ziet."""
+    assert D.EIGEN_AAN is False, "de vlag staat standaard uit"
+    gelezen = []
+
+    def lees_eigen(eerste):
+        gelezen.append(eerste)
+        return lambda dag: {"wispr": {"dictaten": 3, "woorden": 40, "seconden": 30}, "websites": None, "youtube": None,
+                            "gezondheid": ["Stappen: 8234", "Rusthartslag: 58"]}
+
+    oud = D.lees_eigen
+    D.lees_eigen = lees_eigen
+    try:
+        with tempfile.TemporaryDirectory() as m:
+            ronde(Wereld(m))
+            md = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+            x = json.loads(lees(os.path.join(m, "dagboek", "2026", f"{DAG}.json")))
+        assert not gelezen, "vlag uit: de gegevens worden niet eens gelezen"
+        assert "eigen" not in x and "Eigen werk" not in md and "Stappen" not in md and "Wispr" not in md, md
+        D.EIGEN_AAN = True
+        with tempfile.TemporaryDirectory() as m:
+            ronde(Wereld(m))
+            md = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert gelezen and "## Eigen werk en gezondheid" in md and "Stappen: 8234" in md, md
+    finally:
+        D.lees_eigen, D.EIGEN_AAN = oud, False
+
+
 def test_fase2_telling_niet_teruggelezen():
     """X2: de dag komt pas op het bord als de telling teruggelezen is; anders faalt de ronde."""
     with tempfile.TemporaryDirectory() as m:
@@ -1218,12 +1438,13 @@ def test_fase2_weeknood_per_ronde():
         raise RuntimeError("kapot")
 
     oud = (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET)
+           D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.bundeldagen, D.WEEK_TIJDSLIMIET)
     D.KETENBESTAND = "/bestaat/niet/keten.json"
+    D.bundeldagen = lambda nu: [D.V.gisteren(nu)]           # DB-3: zonder bord alleen gisteren
     D.weken_voor_de_nacht = lambda nu: ["2026-W43"]
     D.lees_nacht = lambda: {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}
     D.vastleggen = lambda r, dagen, zoom_gelezen=None: vastgelegd.append(len(dagen)) or ""
-    D.bundelen = lambda: {"detail": "", "nood": [], "bronnen": 0}
+    D.bundelen = lambda dag=None: {"detail": "", "nood": [], "bronnen": 0}
     D.inhaaldagen = lambda nu, dagen: []
     D.ag.ronde = lambda taak, **k: R()
     D.ag.log = lambda *a, **k: None
@@ -1266,7 +1487,7 @@ def test_fase2_weeknood_per_ronde():
         assert gemaakt == ["2026-W43"] and D.WEEKNOOD not in gemeld, gemeld
     finally:
         (D.NACHT, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen,
-         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.WEEK_TIJDSLIMIET) = oud
+         D.inhaaldagen, D.weekoverzicht_maken, D.KETENBESTAND, D.weken_voor_de_nacht, D.bundeldagen, D.WEEK_TIJDSLIMIET) = oud
         for naam in ("ronde", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
 

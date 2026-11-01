@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -32,12 +33,40 @@ def token():
 TOKEN = token()
 
 
-def call(pad, payload=None, method=None):
-    data = json.dumps(payload).encode() if payload is not None else None
+# VOL-12 (T-0120; AG-8, de RemoteDisconnected van De WhatsApp-wacht op 29-10-2026): een schrijfopdracht die het bord per
+# uniek bewaart (upsert), krijgt na een time-out of een verbroken verbinding een tweede poging. Was de eerste al bewaard,
+# dan vindt de tweede elk item onder zijn uniek terug (bestaand): geen dubbel. Zonder uniek, naar een andere weg
+# (werkverslag, hartslag), bij een lezing of bij een HTTP-fout geen tweede poging. Per weg de lijst met de items.
+HERKANSBAAR = {"/api/klaarzet": "items", "/api/gesprekken": "rijen"}
+HERKANS_WACHT = 2                          # seconden voor de tweede poging
+
+
+def herkansbaar(pad, payload, method=None):
+    """Of een tweede poging geen dubbel kan geven: een POST naar een weg uit HERKANSBAAR met een niet-lege lijst waarin
+    elk item een vaste uniek draagt."""
+    lijst = payload.get(HERKANSBAAR[pad]) if pad in HERKANSBAAR and isinstance(payload, dict) else None
+    return ((method or "POST") == "POST" and isinstance(lijst, list) and bool(lijst)
+            and all(isinstance(x, dict) and isinstance(x.get("uniek"), str) and x["uniek"].strip() for x in lijst))
+
+
+def _verstuur(pad, data, method):
     req = urllib.request.Request(f"{PLATFORM}{pad}", data=data, method=method or ("POST" if data else "GET"),
                                  headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read().decode() or "{}")
+
+
+def call(pad, payload=None, method=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    try:
+        return _verstuur(pad, data, method)
+    except urllib.error.HTTPError:
+        raise                              # het bord antwoordde: geen tweede poging
+    except (TimeoutError, ConnectionError, http.client.HTTPException, urllib.error.URLError):
+        if payload is None or not herkansbaar(pad, payload, method):
+            raise
+        time.sleep(HERKANS_WACHT)
+        return _verstuur(pad, data, method)
 
 
 def diagnose(*delen):

@@ -18,6 +18,8 @@ handmatige ronde van een gesprekkenwacht kon me zo vóór de keten laten lopen, 
      wat ontbreekt (afspraak zonder opname, opname zonder dossier);
   3. de bundels klaarzetten voor de afdeling (h-architects) en het dagverslag voor Mehdi;
   4. wat om een keuze vraagt (bij welk dossier hoort dit?) gaat als vraag naar het bord.
+Inhalen met de hand (VOL-1, T-0120): --alleen-vaststellen met --venster N of --dag JJJJ-MM-DD stelt alleen vast, zonder
+bundels en zonder de controle van de nachtketen; --dag en --venster samen weigert de runner (opties()).
 Leest het bord; schrijft alleen op het bord. Verplaatst niets vóór Mehdi's ja.
 
 De Zoom-dagregel en het lek naar de afdeling (ontwerp regie-zoom v1.2, Z14 en J14):
@@ -56,27 +58,49 @@ import weekoverzicht as WO  # noqa: E402  de week in cijfers, pure functies (dri
 
 NAAM = "dagbundelaar"
 ag = bord.Agent(NAAM)
-DAG = None
-VENSTER = None
-WEEK = None
-NACHT = "--nacht" in sys.argv          # alleen de dagvaststelling, geen bundels (keten.py --nacht, planning/gesprekken.cron)
-for i, a in enumerate(sys.argv):
-    if a == "--dag" and i + 1 < len(sys.argv):
-        DAG = sys.argv[i + 1]
-    if a == "--venster" and i + 1 < len(sys.argv):
-        VENSTER = int(sys.argv[i + 1])
-    if a == "--week" and i + 1 < len(sys.argv):
-        WEEK = sys.argv[i + 1]          # alleen het weekoverzicht van die week, met de hand (JJJJ-Www)
-DAG_GEGEVEN = DAG is not None
-# Een ronde met de hand (--dag, --venster of --week), niet uit de keten: ze kijkt niet alles na, sluit dus geen noden en
-# geeft het ochtendbericht niet vrij (Codex-controle mailnood 5)
-HANDMATIG = DAG_GEGEVEN or VENSTER is not None or WEEK is not None
-# Gisteren is de Brusselse dag: de VM loopt in UTC, en om 23:30 UTC is het in Brussel al de volgende dag.
-DAG = DAG or V.gisteren(datetime.now(timezone.utc))
+
+
+def opties(argv, nu=None):
+    """De opties van een ronde: (DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG). Een combinatie
+    die iets anders doet dan ze zegt, is een ValueError (VOL-1, T-0120): met --dag en --venster samen won --dag stil en
+    werd een dag vastgesteld in plaats van het venster (WISPR-2), en --alleen-vaststellen met --nacht zou de controle van
+    de nachtketen doen."""
+    dag = venster = week = None
+    nacht = "--nacht" in argv          # alleen de dagvaststelling, geen bundels (keten.py --nacht, planning/gesprekken.cron)
+    # VOL-1 (T-0120, overleg X7): de inhaalweg. Alleen de dagvaststelling, met de hand: geen bundelen() (dat zet items van
+    # andere agents op opgepakt) en geen controle van de nachtketen (geen nood 'buiten de nachtketen').
+    alleen = "--alleen-vaststellen" in argv
+    for i, a in enumerate(argv):
+        if a == "--dag" and i + 1 < len(argv):
+            dag = argv[i + 1]
+        if a == "--venster" and i + 1 < len(argv):
+            venster = int(argv[i + 1])
+        if a == "--week" and i + 1 < len(argv):
+            week = argv[i + 1]          # alleen het weekoverzicht van die week, met de hand (JJJJ-Www)
+    if dag is not None and venster is not None:
+        raise ValueError("--dag en --venster samen: kies een dag of een venster")
+    if alleen and nacht:
+        raise ValueError("--alleen-vaststellen en --nacht samen: de inhaalweg is een ronde met de hand, geen nachtronde")
+    # Een ronde met de hand (--dag, --venster, --week of --alleen-vaststellen), niet uit de keten: ze kijkt niet alles na,
+    # sluit dus geen noden en geeft het ochtendbericht niet vrij (Codex-controle mailnood 5)
+    handmatig = dag is not None or venster is not None or week is not None or alleen
+    # Gisteren is de Brusselse dag: de VM loopt in UTC, en om 23:30 UTC is het in Brussel al de volgende dag.
+    return (dag or V.gisteren(nu or datetime.now(timezone.utc)), dag is not None, venster, week, nacht, alleen, handmatig)
+
+
+try:
+    DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG = opties(sys.argv)
+    OPTIEFOUT = ""
+except ValueError as _e:
+    # de runner stopt in __main__, voor hij iets leest of schrijft; bij een import (tests) gelden de standaardopties
+    OPTIEFOUT = str(_e)
+    DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG = opties([])
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.path.join(DATA, "dagboek")                       # gaat naar Dropbox: Data uit Mehdi/Dagboek
 STAAT = os.path.join(DATA, "dagvaststelling-staat.json")      # per dag versie en hash; niet in de map dagboek
 ONTVANGST = os.path.join(DATA, "dagboek-ontvangst.txt")       # sha256 van de kopie in Dropbox, van de Mac-sync
+# DB-1 (T-0118): twee syncrondes van de Mac (elke 30 min) plus marge; een jongere versie telt nog niet als 'niet in Dropbox'
+DROPBOX_TERMIJN = timedelta(minutes=75)
 NACHTVENSTER = 14                                             # zoveel dagen herberekent de nachtronde (D10, E5)
 # Codex P7 (fase 2): een Mac die langer dan het venster sliep, leest bij het ontwaken tot zestig dagen terug. Een dag
 # buiten het venster met een nieuwere dekkingsrij dan zijn laatste vaststelling haalt de nacht in, hoogstens zeven.
@@ -88,14 +112,26 @@ KANAAL_UREN = 26                                              # een wacht die la
 KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht", "sms": "sms-wacht", "xelion": "xelion-wacht"}
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
 ZOOM_TERUGBLIK = 6                                            # zoom_wacht.TERUGBLIK: zolang kan een dagregel nog herzien worden
+BUNDEL_INHAAL = 7                                             # DB-3: zoveel dagen kijkt de ochtend hoogstens terug
+# DB-7, Codex-toets 2: de dagen waarvan de ochtend de klaarzetbak niet volledig las; ze komen elke ochtend terug, ook
+# ouder dan BUNDEL_INHAAL, tot ze een Dagverslag hebben (niet in de map dagboek, dus niet naar Dropbox)
+ONVOLLEDIG = os.path.join(DATA, "dagbundel-onvolledig.json")
 
 
-def bundelen():
-    """De bundels per dossier en het Dagverslag van DAG (de ochtendronde, werkwijze stap 1 tot 8). Geeft detail, noden en
-    het aantal bronnen; de hartslag doet de ronde in main."""
+def bundelen(voor_dag=None):
+    """De bundels per dossier en het Dagverslag van voor_dag, standaard DAG (de ochtendronde, werkwijze stap 1 tot 8). Geeft
+    detail, noden en het aantal bronnen; de hartslag doet de ronde in main."""
     # bundelen staat op zichzelf, zonder hulpfuncties op moduleniveau: tests/test_locatielezers.py voert alleen deze
     # functie uit, met een nagebootst bord.
     from datetime import date, timedelta
+    DAG = voor_dag or globals()["DAG"]   # DB-3 (T-0120): de ochtend bundelt ook de dagen sinds de vorige geslaagde ronde
+    # VOL-6 (T-0120): de witte lijst van bronnen. Alleen wie een bron van de dag klaarzet (afspraak, transcript,
+    # Zoom-dagregel, foto, gezondheid: de soorten waar deze functie op let) en het Commandocentrum, waarvan de keten voor
+    # barsten en scheuren ongewijzigd blijft. Tot 01-11-2026 bundelde ik elk item van de dag van elke agent en zette het
+    # op opgepakt, ook van agents buiten de groep (werfverslag, archivaris, wagenpark): die verdwenen zonder tegel.
+    # tests/test_dagbundelaar.py leidt deze lijst af uit de code.
+    bronnen = ("agenda-wacht", "fathom-wacht", "plaud-wacht", "zoom-wacht", "icloud-wacht", "gezondheid-wacht",
+               "commandocentrum")
 
     def is_datum(s):
         try:
@@ -119,7 +155,36 @@ def bundelen():
         n = (it.get("_d") or {}).get("minuten")
         return "privégesprek, " + (f"{n} min" if isinstance(n, int) and not isinstance(n, bool) else "duur onbekend")
 
-    items = bord.call(f"/api/klaarzet?status=alle&n=500").get("items", [])
+    # DB-7 (T-0120): het bord geeft hoogstens 500 items per lezing (mijnagents/app.py, /api/klaarzet), nieuwste eerst. Een
+    # afspraak die De Agendawacht dagen vooraf klaarzette (tot zeven dagen vooruit), viel buiten de laatste 500 (19-10: 12
+    # gemist). Daarom terugbladeren met tot_id, hoogstens 40 bladzijden per lezing.
+    def lees_bak(vraag, grens=None):
+        """Alle items van een lezing tot het einde van de bak, of tot een item dat voor grens gemaakt werd (ts is het
+        tijdstip van aanmaken: app.py zet het alleen bij een nieuw item). Geeft (items, volledig)."""
+        uit, tot = [], None
+        for _ in range(40):
+            deel = bord.call(vraag + (f"&tot_id={tot}" if tot else "")).get("items", [])
+            uit += deel
+            ids = [it["id"] for it in deel if isinstance(it.get("id"), int)]
+            oudste = min((it for it in deel if isinstance(it.get("id"), int)), key=lambda it: it["id"], default={})
+            if len(deel) < 500 or not ids or (grens and (oudste.get("ts") or "")[:10] < grens):
+                return uit, True
+            tot = min(ids)
+        return uit, False
+
+    # De hele bak tot twee weken voor de dag. Codex-toets 1: een verplaatste afspraak houdt haar oude ts en kan voor die
+    # grens liggen; de open afspraken lees ik daarom apart, tot het einde. Een opgepakte afspraak volgt de bron niet meer
+    # (app.py: zonder revisie blijft ze staan), dus die kan niet naar deze dag verhuizen.
+    items, alles_gelezen = lees_bak("/api/klaarzet?status=alle&n=500", (date.fromisoformat(DAG) - timedelta(days=14)).isoformat())
+    open_afspraken, open_gelezen = lees_bak("/api/klaarzet?status=klaar&soort=afspraak&n=500")
+    items += open_afspraken
+    if not (alles_gelezen and open_gelezen):
+        # Codex-toets 1: geen Dagverslag uit een onvolledige lezing, anders probeert de volgende ochtend het niet opnieuw
+        # (bundeldagen kijkt naar het Dagverslag); geen bundel en niets op opgepakt
+        ag.log(f"dag {DAG}", "fout", "klaarzetbak niet volledig gelezen (40 bladzijden): geen Dagverslag, de volgende ochtend opnieuw")
+        return {"detail": f"{DAG}: klaarzetbak niet volledig gelezen, geen Dagverslag", "bronnen": 0, "onvolledig": True,
+                "nood": [{"tekst": "Ochtendronde las de klaarzetbak niet volledig: geen Dagverslag, de volgende ochtend "
+                                   "probeert opnieuw", "wie": "claude-code"}]}
     # Z14: de Zoom-dagregels per soort lezen; n=500 over de hele bak dekt minder dan een week
     zoomlezing = bord.call("/api/klaarzet?status=klaar&soort=zoom&n=50").get("items", [])
     van_dag, zoom_dag, nagekomen, gezien = [], [], [], set()
@@ -146,6 +211,8 @@ def bundelen():
             continue  # mail volgt De Mailregisseur op; tot 19-10-2026 haalde ik hier elke nacht opvolgpunten weg (37 stuks)
         if it.get("soort") == "locatie" or it.get("van") == "locatie-wacht":
             continue  # het bewegingslogboek is alleen voor Mehdi; nooit in een bundel voor een afdeling
+        if it.get("van") not in bronnen:
+            continue  # VOL-6: geen bron van de dag; de agent die het klaarzette, sluit het zelf
         if it.get("soort") == "zoom":
             # De dagregel van De Zoomwacht: een regel in het Dagverslag, nooit een bundel. Nagekomen of herzien
             # (weer op klaar) en van de zes dagen ervoor: ook mee, zo komen vrijdag en zaterdag op maandag mee.
@@ -218,7 +285,10 @@ def bundelen():
     # Werkwijze stap 8: welke bronnen ontbraken, en wat ik nodig heb om ze te krijgen.
     # Een locatiedagboek telt alleen voor precies deze dag en uit de actieve reeks. Tot 05-10-2026
     # telde elk locatie-item, ook een oud telefoondagboek, en verborg zo een ontbrekend dagboek.
-    soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG and it.get("soort") != "locatie"}
+    # VOL-6, Codex-toets 1: alleen een bron uit de witte lijst bewijst dat een soort er is; een foto van een andere agent
+    # verborg anders dat de Fotowacht niets gaf
+    soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG and it.get("soort") != "locatie"
+               and it.get("van") in bronnen}
     if LC.dag_heeft_dagboek(DAG, items):
         soorten.add("locatie")
     nood = []
@@ -227,8 +297,8 @@ def bundelen():
                               ("locatie", "Locatiedagboek (Locatiewacht 21:30; tracker aan?)", "mehdi")):
         if soort not in soorten:
             nood.append({"tekst": f"Voor {DAG} geen {tekst}", "wie": wie})
-    # WhatsApp en telefoon meldt de dagvaststelling zelf, op grond van de hartslag van hun wacht (Codex D2)
-    nood.append({"tekst": "Plaud-opnames komen pas als de Plaud-routine op claude.ai draait", "wie": "mehdi"})
+    # WhatsApp en telefoon meldt de dagvaststelling zelf, op grond van de hartslag van hun wacht (Codex D2). Plaud meldt
+    # De Plaudwacht zelf; tot 01-11-2026 stond hier een vaste melding zonder meting (DB-2, T-0120).
     return {"detail": f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", "nood": nood, "bronnen": len(van_dag)}
 
 
@@ -254,10 +324,14 @@ def main():
                 r.detail = f"weekoverzicht {WEEK} mislukt"
             behoud(r, lambda t: True)
             return
-        nacht = lees_nacht()
+        nacht = {} if ALLEEN_VASTSTELLEN else lees_nacht()
         # G3: of De Zoomwacht in deze keten slaagde (True), faalde (False) of niet in deze keten liep (None)
         zoom_gelezen = None
-        if NACHT:
+        if ALLEEN_VASTSTELLEN:
+            # VOL-1: de inhaalweg met de hand, alleen de vaststelling; nacht.json en keten.json gaan over de keten, niet over
+            # deze ronde, en bundelen() blijft voor de ochtendronde
+            pass
+        elif NACHT:
             # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Zoomwacht
             begin = ochtend.tijdstip(nacht.get("start"))
             zoom = (nacht.get("stappen") or {}).get("zoom-wacht") or {}
@@ -270,10 +344,22 @@ def main():
             else:
                 zoom_gelezen = True
         else:
-            uit = bundelen()
-            for n in uit["nood"]:
-                r.nood(n["tekst"], wie=n["wie"])
-            delen.append(uit["detail"])
+            # DB-3 (T-0120): met --dag die dag; uit de keten gisteren en de dagen ervoor zonder Dagverslag (bundeldagen)
+            bdagen = [DAG] if DAG_GEGEVEN else bundeldagen(nu)
+            onvolledig = lees_json(ONVOLLEDIG)
+            open_voor = dict(onvolledig)
+            for bdag in bdagen:
+                uit = bundelen(bdag)
+                for n in uit["nood"]:
+                    r.nood(n["tekst"], wie=n["wie"])
+                delen.append((f"{bdag}: " if len(bdagen) > 1 else "") + uit["detail"])
+                # DB-7, Codex-toets 2: een dag zonder volledige lezing blijft open tot hij een Dagverslag heeft
+                if uit.get("onvolledig"):
+                    onvolledig.setdefault(bdag, nu.isoformat())
+                else:
+                    onvolledig.pop(bdag, None)
+            if onvolledig != open_voor:
+                _schrijf(ONVOLLEDIG, json.dumps(onvolledig, indent=1, sort_keys=True))
             begin = ochtend.tijdstip(nacht.get("start"))
             stappen = nacht.get("stappen") or {}
             if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
@@ -336,6 +422,25 @@ def main():
             # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na.
             behoud(r, alleen_nacht)
         r.detail = "; ".join(d for d in delen if d)
+
+
+def bundeldagen(nu):
+    """DB-3 (T-0120): de dagen die de ochtendronde uit de keten bundelt. Ze draait alleen op werkdagen (keten.py) en
+    bundelde tot 01-11-2026 alleen gisteren: vrijdag en zaterdag kregen nooit een Dagverslag en hun items bleven op klaar.
+    Nu gisteren en elke dag van de BUNDEL_INHAAL dagen ervoor zonder Dagverslag op het bord. Codex-toets 1: ook voorbij
+    een dag met een Dagverslag, want dat kan van een ronde met de hand zijn (zaterdag met --dag, vrijdag ontbreekt).
+    Daarbij elke dag uit ONVOLLEDIG (DB-7). Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
+    g = date.fromisoformat(V.gisteren(nu))
+    uit = [g.isoformat()]
+    for i in range(1, BUNDEL_INHAAL):
+        dag = (g - timedelta(days=i)).isoformat()
+        terug = (bord.call("/api/klaarzet?" + urllib.parse.urlencode(
+            {"uniek": f"dagverslag:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
+        if not any(x.get("uniek") == f"dagverslag:{dag}" for x in terug):
+            uit.append(dag)
+    # DB-7, Codex-toets 2: een dag die de ochtend niet volledig las, ook als hij ouder is dan BUNDEL_INHAAL
+    uit += [d for d in lees_json(ONVOLLEDIG) if d not in uit and d < g.isoformat()]
+    return sorted(uit)
 
 
 def alleen_nacht(tekst):
@@ -407,6 +512,16 @@ def telpad(dag):
 
 def weekpad(week, soort):
     return os.path.join(DAGBOEK, week[:4], "week", f"{week}.{soort}")
+
+
+def versie_ouder_dan(dag, grens):
+    """DB-1: of de huidige versie van het dagbestand voor grens geschreven werd. Het bestand verandert alleen bij een
+    nieuwe versie (vastleggen schrijft een ongewijzigde dag niet opnieuw), dus zijn wijzigingstijd is die van de versie.
+    Geen bestand: niets om na te kijken."""
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(dagpad(dag)), timezone.utc) < grens
+    except OSError:
+        return False
 
 
 def ontvangst():
@@ -487,6 +602,9 @@ def kanaal_van_dag(stand, kanaal, dag, gedekt):
 
 
 WISPR_GEBRUIKER = os.environ.get("WISPR_GEBRUIKER", "Mehdi")
+# VOL-4 (T-0120, overleg X2): het blok Eigen werk en gezondheid staat standaard uit, ongeacht wie het Dagboek leest. Pas
+# aan na het bestaande ja van Mehdi op T-0079 rij 7, met een eigen commit. Uit: niets gelezen, geen blok in de .md.
+EIGEN_AAN = False
 
 
 def _inhoud(x):
@@ -978,15 +1096,21 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
     zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
-    gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
-                                       "AND COALESCE(message_id, '') != ''", (eerste, laatste))
-    soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
+    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel (V.mail_sleutel)
+    gezien_door_wachten = []
+    for x in bord.db_lees("SELECT uniek, postvak, message_id, datum, van, onderwerp, soort FROM mailbericht "
+                          "WHERE dag BETWEEN ? AND ?", (eerste, laatste)):
+        kop = {"datum": x["datum"], "message_id": x.get("message_id") or "", "uniek": x.get("uniek") or "",
+               "van": x.get("van") or "", "onderwerp": x.get("onderwerp") or ""}
+        if V.mail_sleutel(x["postvak"], kop):
+            gezien_door_wachten.append((x["postvak"], kop, x.get("soort")))
+    soorten = {V.mail_sleutel(pv, kop): soort for pv, kop, soort in gezien_door_wachten}
     statussen = {x["naam"]: x for x in bord.db_lees(
         "SELECT naam, status, taak, ts FROM status WHERE naam IN (%s)" % ", ".join("?" * len(KANAALWACHTEN)),
         tuple(KANAALWACHTEN.values()))}
     kanalen = {k: kanaalstand(statussen.get(w), nu) for k, w in KANAALWACHTEN.items()}
     try:
-        eigen_van = lees_eigen(eerste)
+        eigen_van = lees_eigen(eerste) if EIGEN_AAN else (lambda dag: None)
     except Exception as e:  # noqa: BLE001
         ag.log("eigen", "fout", f"Wispr, websites en gezondheid niet gelezen ({type(e).__name__})")
         eigen_van = lambda dag: {"wispr": None, "websites": None, "youtube": None, "gezondheid": None}  # noqa: E731
@@ -1001,9 +1125,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         # Wat de mailwachten al zagen en daarna naar een map buiten hun leeslijst sorteerden (Opgeruimd, Nieuwsbrieven),
         # staat niet meer in de gelezen mappen: die berichten tellen mee, ontdubbeld per Message-ID in mail_telling.
         # Ze voegen alleen toe; een onleesbare map blijft onvolledig (E4).
-        for x in gezien_door_wachten:
-            ontvangen.setdefault(x["postvak"], {"berichten": [], "onvolledig": []})["berichten"].append(
-                {"datum": x["datum"], "message_id": x["message_id"]})
+        for pv, kop, _ in gezien_door_wachten:
+            ontvangen.setdefault(pv, {"berichten": [], "onvolledig": []})["berichten"].append(dict(kop))
     except Exception as e:  # noqa: BLE001
         ontvangen = verzonden = None
         prive_postvakken, mailfout = set(), f"{type(e).__name__}"
@@ -1099,8 +1222,13 @@ def vastleggen(r, dagen, zoom_gelezen=None):
     # elke dag met een dagbestand tot INHAAL terug, ook 's ochtends: de ochtend legt alleen gisteren vast en sloot deze
     # nood anders elke werkdag zonder iets na te kijken, net voor het ochtendbericht, ook voor een ingehaalde dag ouder dan
     # het nachtvenster (review en Codex-controle 6, 27-10-2026).
+    # DB-1 (T-0118, T-0120): alleen een versie die ouder is dan DROPBOX_TERMIJN telt. Een versie die deze ronde net schreef,
+    # kan de Mac nog niet hebben; de volgende ronde kijkt ze na. Tot 01-11-2026 opende zo elke nachtronde een vals alarm,
+    # dat in het weekend open bleef. De leeftijd van het ontvangstbewijs zegt niets: de Mac schrijft het ook als de rsync
+    # van het dagboek faalde (planning/mac/data_uit_mehdi_sync.sh), dus alleen de sha256 bewijst.
     gekeken = sorted(set(dagen) | {d for d in V.venster(nu, INHAAL) if os.path.exists(dagpad(d))})
-    open_ = [d for d in gekeken if d < gisteren and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
+    open_ = [d for d in gekeken if d < gisteren and versie_ouder_dan(dag=d, grens=nu - DROPBOX_TERMIJN)
+             and bewijs.get(d) != _sha(_lees(dagpad(d)) or "")]
     if open_:
         r.nood("Dagboek nog niet bevestigd in Dropbox: de sync van Data uit Mehdi op de Mac haalt het niet op", wie="mehdi")
     if ongelezen:
@@ -1141,4 +1269,7 @@ if __name__ == "__main__":
         _schrijf(sys.argv[i + 2], json.dumps({"ontvangen": o, "verzonden": u, "prive": sorted(pr)}, ensure_ascii=False,
                                              default=str))
         sys.exit(0)
+    if OPTIEFOUT:
+        print(f"dagbundelaar: {OPTIEFOUT}", file=sys.stderr)
+        sys.exit(2)
     main()

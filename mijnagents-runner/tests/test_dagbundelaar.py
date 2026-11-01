@@ -83,13 +83,15 @@ class NepRonde:
         return False
 
 
-def bundelen(dag, nb, nacht=False):
+def bundelen(dag, nb, nacht=False, gepland=False, onvolledig=None):
     """De ochtendronde van De Dagbundelaar met een nagebootst bord; de dagvaststelling heeft eigen tests
-    (test_dagbundelaar_vaststelling.py) en is hier een lege stap."""
-    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
+    (test_dagbundelaar_vaststelling.py) en is hier een lege stap. gepland: de ronde uit de keten (zonder --dag).
+    onvolledig: het bestand met de dagen die de ochtend niet volledig las (standaard een nieuw, tijdelijk bestand)."""
+    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen, D.ONVOLLEDIG)
+    D.ONVOLLEDIG = onvolledig or os.path.join(tempfile.mkdtemp(prefix="dagbundel-"), "onvolledig.json")
     bord.call = nb.call
     bord.opgepakt = lambda kid, door: nb.opgepakt.append(kid)
-    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, True, nacht
+    D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, not gepland, nacht
     D.vastleggen = lambda r, dagen, **k: nb.logs.append(("vastleggen", dagen)) or "vastgelegd"
     D.ag.ronde = lambda taak, **k: NepRonde(nb, taak)
     D.ag.klaarzet = lambda items: nb.bundels.extend(items) or {"nieuw": len(items)}
@@ -100,7 +102,7 @@ def bundelen(dag, nb, nacht=False):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
     finally:
-        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
+        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen, D.ONVOLLEDIG = oud
         for naam in ("ronde", "klaarzet", "hartslag", "log", "log_verstuur"):
             D.ag.__dict__.pop(naam, None)
     return nb
@@ -571,6 +573,193 @@ def test_nachtketen_in_het_beheerde_blok():
         raise AssertionError("een losse nachtregel buiten het blok moet geweigerd worden")
     except ValueError as e:
         assert "keten.py buiten het blok" in str(e), e
+
+
+class GroteBak(NepBord):
+    """Een bord zoals het echte: hoogstens n (500) items per lezing, nieuwste eerst, filter op status en soort, en
+    terugbladeren met tot_id."""
+
+    def call(self, pad, payload=None, method=None):
+        if pad.startswith("/api/klaarzet?") and "soort=zoom" not in pad and "uniek=" not in pad:
+            self.gelezen.append(pad)
+            q = dict(x.split("=", 1) for x in pad.split("?", 1)[1].split("&"))
+            lijst = sorted((it for it in self.alle if ("tot_id" not in q or it["id"] < int(q["tot_id"]))
+                            and q.get("status", "klaar") in ("alle", it["status"]) and q.get("soort", it["soort"]) == it["soort"]),
+                           key=lambda it: it["id"], reverse=True)
+            return {"items": [dict(it) for it in lijst[:min(int(q.get("n", 100)), 500)]]}
+        return super().call(pad, payload, method)
+
+
+def test_db7_ochtendronde_bladert_terug():
+    """DB-7 (T-0120): het bord geeft hoogstens 500 items per lezing. Een afspraak die De Agendawacht dagen vooraf
+    klaarzette, viel buiten de laatste 500 (gemeten: 19-10 12 afspraken gemist). Nu bladert de ochtendronde terug met
+    tot_id, tot een item dat meer dan twee weken voor de dag gemaakt werd: de afspraak staat in de bundel en gaat op
+    opgepakt. Codex-toets 1: een verplaatste afspraak houdt haar oude ts; de open afspraken worden apart gelezen, tot het
+    einde, zodat ook zij meekomt. Een al opgepakt item van voor de grens wordt niet meer gelezen."""
+    afspraak = dict(item(900, "agenda-wacht", "h-architects", "afspraak", "2026-10-20 10:00 werfbezoek 2531", sleutel="2531",
+                         inhoud={"datum": DAG, "start": f"{DAG}T10:00:00+02:00"}, uniek="agenda:werk:a5"), ts="2026-10-15T07:00:00")
+    verplaatst = dict(item(2, "agenda-wacht", "h-architects", "afspraak", "2026-10-20 08:00 verplaatst", sleutel="2531",
+                           inhoud={"datum": DAG}, uniek="agenda:werk:a2"), ts="2026-09-01T07:00:00")
+    oud = dict(item(1, "fathom-wacht", "h-architects", "transcript", "2026-10-20 al gebundeld", sleutel="2531",
+                    inhoud={"datum": DAG}, uniek="fathom:oud", status="opgepakt"), ts="2026-09-01T07:00:00")
+    # nieuwste eerst: 700 en 600 nieuwere items, de afspraak, 500 items van voor de grens, en twee heel oude items
+    bak = [dict(item(2000 + i, "mail-mch", "mehdi", "mail", f"mail {i}", sleutel="2026-10-21"), ts="2026-10-21T08:00:00")
+           for i in range(700)]
+    bak += [dict(item(1000 + i, "mail-mch", "mehdi", "mail", f"mail {i}", sleutel="2026-10-16"), ts="2026-10-16T08:00:00")
+            for i in range(600)]
+    bak += [dict(item(300 + i, "mail-mch", "mehdi", "mail", f"oude mail {i}", sleutel="2026-09-20"), ts="2026-09-20T08:00:00")
+            for i in range(500)]
+    nb = bundelen(DAG, GroteBak(bak + [afspraak, verplaatst, oud]))
+    bundel = next(b for b in nb.bundels if b["uniek"] == f"bundel:{DAG}:2531")
+    assert afspraak["titel"] in bundel["inhoud"] and 900 in nb.opgepakt, (bundel, nb.opgepakt)
+    assert verplaatst["titel"] in bundel["inhoud"] and 2 in nb.opgepakt, "de verplaatste afspraak komt mee"
+    lezingen = [p for p in nb.gelezen if p.startswith("/api/klaarzet?status=alle")]
+    assert len(lezingen) == 3 and "tot_id=" in lezingen[1], lezingen
+    assert oud["titel"] not in bundel["inhoud"], "voor de grens leest ze de hele bak niet verder"
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert not [t for t in noden if "klaarzetbak" in t], noden
+    # na 40 bladzijden nog niet aan de grens: een nood, geen Dagverslag en niets opgepakt, ook niet de verborgen bron
+    vol = [dict(item(30000 - i, "mail-mch", "mehdi", "mail", "m", sleutel="2026-10-21"), ts="2026-10-21T08:00:00")
+           for i in range(40 * 500 + 1)]
+    nb = bundelen(DAG, GroteBak(vol + [afspraak]))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert [t for t in noden if t.startswith("Ochtendronde las de klaarzetbak niet volledig")], noden
+    assert not nb.bundels and not nb.opgepakt, (nb.bundels, nb.opgepakt)
+    # Codex-toets 2: de bak blijft meer dan BUNDEL_INHAAL dagen te vol; daarna is ze weer leesbaar. De dag blijft open
+    # (ONVOLLEDIG) en komt dan nog aan de beurt, met de verborgen afspraak.
+    staat = os.path.join(tempfile.mkdtemp(prefix="dagbundel-"), "onvolledig.json")
+    oud_gisteren = D.V.gisteren
+    try:
+        D.V.gisteren = lambda nu: DAG
+        nb = bundelen(DAG, GroteBak(vol + [afspraak]), gepland=True, onvolledig=staat)
+        assert not nb.bundels and DAG in json.load(open(staat)), (nb.bundels, open(staat).read())
+        D.V.gisteren = lambda nu: "2026-10-28"
+        nb = bundelen("2026-10-28", GroteBak(vol + [afspraak]), gepland=True, onvolledig=staat)
+        assert not nb.bundels and DAG in json.load(open(staat)) and "2026-10-28" in json.load(open(staat))
+        D.V.gisteren = lambda nu: "2026-10-30"
+        nb = bundelen("2026-10-30", GroteBak(bak + [afspraak]), gepland=True, onvolledig=staat)
+    finally:
+        D.V.gisteren = oud_gisteren
+    verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+    assert f"dagverslag:{DAG}" in verslagen and "dagverslag:2026-10-28" in verslagen and 900 in nb.opgepakt, (verslagen, nb.opgepakt)
+    assert json.load(open(staat)) == {}, "na het Dagverslag is de dag niet meer open"
+
+
+def test_db3_maandag_bundelt_het_weekend():
+    """DB-3 (T-0120): de ochtendronde draait alleen op werkdagen (keten.py) en bundelde alleen gisteren, dus vrijdag en
+    zaterdag kregen nooit een Dagverslag (oktober: 10 van de 31 dagen) en hun items bleven op klaar. Nu bundelt ze gisteren
+    en elke dag van de week ervoor zonder Dagverslag, oplopend. Een dinsdag geeft er een."""
+    # de ochtenden van maandag tot vrijdag liepen: de Dagverslagen van 19-10 tot 22-10 staan op het bord
+    donderdag = [item(56 + i, "dagbundelaar", "mehdi", "dagbundel", f"Dagverslag {d}", sleutel=d, uniek=f"dagverslag:{d}",
+                      status="klaar") for i, d in enumerate(("2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22"))]
+    werk = {d: item(61 + i, "fathom-wacht", "h-architects", "transcript", f"{d}T11:00 Fathom: klant 2531 · overleg", sleutel="2531",
+                    inhoud={"datum": d, "start": "11:00"}, uniek=f"fathom:{d}")
+            for i, d in enumerate(("2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"))}
+    oud = (D.V.gisteren, D.DAG_GEGEVEN)
+    try:
+        D.V.gisteren = lambda nu: "2026-10-25"
+        nb = NepBord(donderdag + list(werk.values()))
+        bundelen("2026-10-25", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-23", "dagverslag:2026-10-24", "dagverslag:2026-10-25"], verslagen
+        assert sorted(nb.opgepakt) == [62, 63, 64], nb.opgepakt
+        assert all(f"bundel:{d}:2531" in {b["uniek"] for b in nb.bundels} for d in ("2026-10-23", "2026-10-24", "2026-10-25"))
+        assert nb.harten[-1]["fout"] is None and "2026-10-24:" in nb.harten[-1]["detail"], nb.harten[-1]
+        # dinsdag: maandag bundelde vrijdag tot zondag, dus alleen gisteren
+        D.V.gisteren = lambda nu: "2026-10-26"
+        zondag = [item(70 + i, "dagbundelaar", "mehdi", "dagbundel", f"Dagverslag {d}", sleutel=d, uniek=f"dagverslag:{d}",
+                       status="klaar") for i, d in enumerate(("2026-10-23", "2026-10-24", "2026-10-25"))]
+        nb = NepBord(donderdag + zondag + [item(79, "fathom-wacht", "h-architects", "transcript", "2026-10-26T11:00 Fathom: klant 2531",
+                                   sleutel="2531", inhoud={"datum": "2026-10-26"}, uniek="fathom:26")])
+        bundelen("2026-10-26", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-26"], verslagen
+        # Codex-toets 1: zaterdag is met de hand gebundeld (--dag), vrijdag ontbreekt: maandag bundelt vrijdag en zondag
+        D.V.gisteren = lambda nu: "2026-10-25"
+        zaterdag = item(80, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-24", sleutel="2026-10-24",
+                        uniek="dagverslag:2026-10-24", status="klaar")
+        nb = NepBord(donderdag + [zaterdag] + list(werk.values()))
+        bundelen("2026-10-25", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-23", "dagverslag:2026-10-25"], verslagen
+        D.V.gisteren = lambda nu: "2026-10-26"
+        # na een week zonder geslaagde ochtend: hoogstens BUNDEL_INHAAL dagen
+        nb = NepBord([])
+        bundelen("2026-10-26", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert len(verslagen) == D.BUNDEL_INHAAL and verslagen[-1] == "dagverslag:2026-10-26", verslagen
+    finally:
+        D.V.gisteren, D.DAG_GEGEVEN = oud
+
+
+DAGBRONSOORTEN = ("afspraak", "transcript", "zoom", "foto", "gezondheid")
+
+
+def agentnamen_uit_de_code():
+    """{naam: [bestanden]} van elke agent in de runner en op de Mac (NAAM = "..." of bord.Agent("..."))."""
+    import glob
+    import re
+    uit = {}
+    for pad in sorted(glob.glob(os.path.join(RUNNER, "*.py")) + glob.glob(os.path.join(RUNNER, "mac", "*.py"))):
+        bron = open(pad, encoding="utf-8").read()
+        for naam in re.findall(r'^NAAM = "([a-z0-9-]+)"', bron, re.M) + re.findall(r'bord\.Agent\("([a-z0-9-]+)"\)', bron):
+            uit.setdefault(naam, []).append(pad)
+    return uit
+
+
+def test_vol6_alleen_de_bronnen_van_de_dag():
+    """VOL-6 (T-0120): bundelen() bundelde elk item van de dag van elke agent en zette het op opgepakt, ook van agents
+    buiten de groep (werfverslag-voorbereider, archivaris, wagenpark-wacht, contracten-agent, ...): die verdwenen zonder
+    tegel. Tellen per van op het bord kon niet (de lezing van de bord-databank werd geweigerd); de witte lijst komt dus
+    uit de code: de agents die een bron van de dag klaarzetten (afspraak, transcript, Zoom-dagregel, foto, gezondheid),
+    plus het Commandocentrum, waarvan de barsten-en-scheurenketen ongewijzigd blijft (test_commandocentrum.py)."""
+    import re
+    namen = agentnamen_uit_de_code()
+    bron = {pad: open(pad, encoding="utf-8").read() for paden in namen.values() for pad in paden}
+    makers = {n for n, paden in namen.items() for pad in paden for s in DAGBRONSOORTEN
+              if f'"soort": "{s}"' in bron[pad] and re.search(rf'^NAAM = "{n}"', bron[pad], re.M)}
+    assert makers == {"agenda-wacht", "fathom-wacht", "plaud-wacht", "zoom-wacht", "icloud-wacht", "gezondheid-wacht"}, makers
+    assert "wagenpark-wacht" in namen and "werfverslag-voorbereider" in namen, "de afleiding vindt ook de anderen"
+    alle = [item(100 + i, n, "mehdi", "proef", f"proefitem van {n}", sleutel=DAG, uniek=f"proef:{n}")
+            for i, n in enumerate(sorted(namen))]
+    nb = bundelen(DAG, NepBord(alle))
+    opgepakt = {alle[kid - 100]["van"] for kid in nb.opgepakt}
+    assert opgepakt == makers | {"commandocentrum"}, sorted(opgepakt ^ (makers | {"commandocentrum"}))
+    tekst = "\n".join(b["inhoud"] for b in nb.bundels)
+    assert "proefitem van wagenpark-wacht" not in tekst and "proefitem van agenda-wacht" in tekst, tekst
+    # het geval van de meting: een item van De Wagenparkwacht met een datum als sleutel
+    wagen = item(1, "wagenpark-wacht", "mehdi", "liters", "Tankbeurt proefwagen", sleutel=DAG, inhoud={"datum": DAG})
+    nb = bundelen(DAG, NepBord([wagen, WERK]))
+    assert 1 not in nb.opgepakt and 3 in nb.opgepakt, nb.opgepakt
+    # Codex-toets 1: een foto van een agent buiten de lijst verbergt niet dat De Fotowacht niets gaf
+    vreemd = item(2, "werfverslag-voorbereider", "mehdi", "foto", "werffoto", sleutel=DAG)
+    nb = bundelen(DAG, NepBord([vreemd, WERK]))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert [t for t in noden if t.startswith(f"Voor {DAG} geen Foto's")], noden
+    nb = bundelen(DAG, NepBord([dict(vreemd, van="icloud-wacht"), WERK]))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert not [t for t in noden if t.startswith(f"Voor {DAG} geen Foto's")], noden
+    # B&S: een taak van het Commandocentrum en een afspraak met dossier gaan zoals voor VOL-6 mee; een cc-taak blijft open
+    bs = [item(11, "commandocentrum", "andere-agent", "taak", "Gewone taak", sleutel="49001", inhoud={"datum": DAG},
+               uniek="zelfstandige-taak"),
+          item(12, "agenda-wacht", "tkn", "afspraak", "Fictief bezoek", sleutel="49001", inhoud={"datum": DAG}, uniek="afspraak:test"),
+          item(13, "commandocentrum", "tkn", "impuls", "Voorbereiding", sleutel="49001", inhoud={"datum": DAG},
+               uniek="cc:afspraak:bs1:voorbereiding")]
+    nb = bundelen(DAG, NepBord(bs))
+    assert sorted(nb.opgepakt) == [11, 12], nb.opgepakt
+
+
+def test_db2_geen_vaste_plaudmelding():
+    """DB-2 (T-0120): tot 01-11-2026 zette elke ochtendronde zonder meting de nood 'Plaud-opnames komen pas als de
+    Plaud-routine op claude.ai draait' (wie mehdi). Die zei niets over de echte stand; De Plaudwacht meldt die zelf. Een
+    Plaud-transcript wordt nog gewoon gebundeld."""
+    plaud = item(51, "plaud-wacht", "h-architects", "transcript", "2026-10-20 09:00 Plaud: werfoverleg", sleutel="2531",
+                 inhoud={"datum": DAG, "start": "09:00", "minuten": 20}, uniek="plaud:51")
+    for alle in ([WERK], [WERK, plaud]):
+        nb = bundelen(DAG, NepBord(alle))
+        noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+        assert not [t for t in noden if "Plaud" in t], noden
+    assert any(plaud["titel"] in b["inhoud"] for b in nb.bundels if b["uniek"] == f"bundel:{DAG}:2531"), nb.bundels
 
 
 def test_bron_houdt_de_bestaande_grendels():

@@ -4,7 +4,9 @@
 - E02: de nieuwste ronde van een wacht met per_dag wint; een oud Wispr-item zonder per_dag telt voor zijn eigen dag;
 - E03: geen gezondheidsmetingen geeft de zin over Health Auto Export, metingen staan zonder kop;
 - E04: de Browserwacht houdt alleen de sitenaam, nooit het adres, en geen chrome:, file: of about:;
-- E05: zonder eigen (oude aanroep) blijft het blok weg en de tekst gelijk; geen gedachtestreepje.
+- E05: zonder eigen (oude aanroep) blijft het blok weg en de tekst gelijk; geen gedachtestreepje;
+- E07 (VOL-4, T-0120, overleg X2): de vlag EIGEN_AAN van De Dagbundelaar staat standaard uit (de ronde zelf toetst
+  tests/test_dagbundelaar_vaststelling.py).
 """
 import importlib.util
 import os
@@ -96,5 +98,6 @@ check("E06 oude aanroep zonder YouTube-regel", "YouTube" not in t2, t2)
 oud = dag()
 check("E05 zonder eigen geen blok", "Eigen werk en gezondheid" not in oud)
 check("E05 geen gedachtestreepje", "—" not in t + oud and "–" not in t + oud)
+check("E07 vlag standaard uit", "\nEIGEN_AAN = False\n" in src)
 print("eigen werk en gezondheid:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)

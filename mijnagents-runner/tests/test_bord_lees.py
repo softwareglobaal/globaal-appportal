@@ -108,6 +108,97 @@ def aantal(pad):
 
 
 # ------------------------------------------------------------------------------------------------- T36 ---
+class HerkansBord:
+    """urlopen van een bord dat per uniek bewaart, zoals /api/klaarzet en /api/gesprekken (upsert). `faal` is een lijst
+    van fouten, een per poging; na_bewaren: de fout komt pas nadat de poging al bewaard was (de time-out van AG-8)."""
+
+    def __init__(self, faal, na_bewaren=True):
+        self.faal, self.na_bewaren, self.pogingen, self.rijen = list(faal), na_bewaren, [], []
+
+    def __call__(self, req, timeout=None):
+        self.pogingen.append((req.get_method(), req.full_url))
+        fout = self.faal.pop(0) if self.faal else None
+        if fout is not None and not self.na_bewaren:
+            raise fout
+        antwoord = {"nieuw": 0, "bestaand": 0}
+        if req.data:
+            p = json.loads(req.data.decode())
+            for it in p.get("items") or p.get("rijen") or []:
+                if it.get("uniek") and any(r.get("uniek") == it["uniek"] for r in self.rijen):
+                    antwoord["bestaand"] += 1
+                else:
+                    self.rijen.append(it)
+                    antwoord["nieuw"] += 1
+        if fout is not None:
+            raise fout
+        tekst = json.dumps(antwoord).encode()
+
+        class Antwoord(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        return Antwoord(tekst)
+
+
+def _met_herkansbord(nb, doe):
+    oud = (bord.urllib.request.urlopen, bord.HERKANS_WACHT)
+    bord.urllib.request.urlopen, bord.HERKANS_WACHT = nb, 0
+    try:
+        return doe()
+    finally:
+        bord.urllib.request.urlopen, bord.HERKANS_WACHT = oud
+
+
+def test_vol12_een_tweede_poging_alleen_met_vaste_uniek():
+    """VOL-12 (T-0120; AG-8, de RemoteDisconnected van De WhatsApp-wacht op 29-10): een schrijfopdracht die het bord per
+    uniek bewaart, krijgt na een time-out of een verbroken verbinding een tweede poging. Was de eerste al bewaard, dan
+    vindt de tweede elk item onder zijn uniek terug: geen dubbel. Zonder uniek, naar een andere weg, bij een lezing of
+    bij een HTTP-fout geen tweede poging; een tweede fout gaat door naar de aanroeper."""
+    import http.client
+    # B&S: zonder fout precies een poging en hetzelfde antwoord, zoals voor VOL-12 (een taak van het Commandocentrum)
+    bs = {"items": [{"van": "commandocentrum", "voor": "tkn", "soort": "impuls", "titel": "Voorbereiding",
+                     "uniek": "cc:afspraak:bs1:voorbereiding"}]}
+    nb = HerkansBord([])
+    assert _met_herkansbord(nb, lambda: bord.call("/api/klaarzet", bs)) == {"nieuw": 1, "bestaand": 0} and len(nb.pogingen) == 1
+    items = {"items": [{"van": "proef", "voor": "mehdi", "soort": "proef", "titel": "a", "uniek": "proef:a"},
+                       {"van": "proef", "voor": "mehdi", "soort": "proef", "titel": "b", "uniek": "proef:b"}]}
+    nb = HerkansBord([TimeoutError("timed out")])
+    uit = _met_herkansbord(nb, lambda: bord.call("/api/klaarzet", items))
+    assert len(nb.pogingen) == 2 and uit == {"nieuw": 0, "bestaand": 2}, (nb.pogingen, uit)
+    assert sorted(r["uniek"] for r in nb.rijen) == ["proef:a", "proef:b"], "geen dubbel"
+    rijen = {"rijen": [{"uniek": "whatsapp:proef:1", "datum": "2026-10-29"}]}
+    nb = HerkansBord([http.client.RemoteDisconnected("Remote end closed connection without response")])
+    _met_herkansbord(nb, lambda: bord.call("/api/gesprekken", rijen))
+    assert len(nb.pogingen) == 2 and len(nb.rijen) == 1, nb.pogingen
+    nb = HerkansBord([urllib.error.URLError(ConnectionResetError("reset"))], na_bewaren=False)
+    _met_herkansbord(nb, lambda: bord.call("/api/klaarzet", items))
+    assert len(nb.pogingen) == 2 and len(nb.rijen) == 2, nb.pogingen
+    gevallen = [("zonder uniek", "/api/klaarzet", {"items": [dict(items["items"][0], uniek="")]}, TimeoutError("t")),
+                ("een uniek ontbreekt", "/api/klaarzet", {"items": [items["items"][0], {"titel": "c"}]}, TimeoutError("t")),
+                ("een enkel item zonder lijst", "/api/klaarzet", items["items"][0], TimeoutError("t")),
+                ("werkverslag", "/api/logboek", {"regels": [{"uniek": "x"}]}, TimeoutError("t")),
+                ("lezing", "/api/klaarzet?status=alle&n=500", None, TimeoutError("t")),
+                ("HTTP-fout", "/api/klaarzet", items, urllib.error.HTTPError("u", 500, "fout", {}, None))]
+    for naam, pad, payload, fout in gevallen:
+        nb = HerkansBord([fout])
+        try:
+            _met_herkansbord(nb, lambda: bord.call(pad, payload))
+            raise AssertionError(f"{naam}: de fout moet doorgaan")
+        except type(fout):
+            pass
+        assert len(nb.pogingen) == 1, (naam, nb.pogingen)
+    nb = HerkansBord([TimeoutError("t"), TimeoutError("t")])
+    try:
+        _met_herkansbord(nb, lambda: bord.call("/api/klaarzet", items))
+        raise AssertionError("een tweede fout gaat door")
+    except TimeoutError:
+        pass
+    assert len(nb.pogingen) == 2 and len(nb.rijen) == 2, (nb.pogingen, nb.rijen)
+
+
 def test_t36_db_lees_geeft_rijen_als_dicts():
     pad = bord_db("t36-goed")
     rijen = met_db(pad, lambda: bord.db_lees("SELECT uniek, sessie, dubbel_van FROM gesprek_log WHERE uniek IN (?, ?) ORDER BY uniek",
