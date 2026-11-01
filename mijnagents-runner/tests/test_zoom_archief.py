@@ -1031,9 +1031,12 @@ def test_sein_uit_geeft_nooit_dekking_of_veilig():
     assert not uit["dekking"] and not uit["veilig"] and not _dekking()["dekking"] and not _dekking()["wisregel_veilig"]
 
 
-def test_sein_staat_uit_in_de_code():
+def test_sein_staat_aan_in_de_code_na_het_akkoord_van_codex():
+    """T-0120 ARCH-4: het groene sein staat aan na de Codex-toetsen van 01-11-2026; het blijft een schakelaar (een regel),
+    zodat terug naar uit een regel is. Het sein zelf wist niets: zie test_sein_uit_geeft_nooit_dekking_of_veilig."""
     bron = open(os.path.join(RUNNER, "zoom_archief.py"), encoding="utf-8").read()
-    assert re.search(r"^SEIN_AAN = False$", bron, re.M), "het groene sein gaat pas aan na het akkoord van Codex"
+    assert re.search(r"^SEIN_AAN = True$", bron, re.M), "het groene sein staat aan na het akkoord van Codex"
+    assert "PATCH" not in bron and "auto_delete" not in bron, "De Zoomarchivaris zet nooit zelf een wisregel in Zoom"
 
 
 def test_codex25_twee_gelijke_bestanden_zonder_id_zijn_twee_gevallen():

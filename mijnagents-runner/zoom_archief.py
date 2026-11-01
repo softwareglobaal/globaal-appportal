@@ -82,9 +82,11 @@ POGINGEN = 3                      # een tijdelijke fout wordt pas een nood na zo
 WISREGEL_DAGEN = 30               # de wisregel van ZA-01: wat ouder is, moet bewezen in Dropbox staan
 RECHT = re.compile(r"[a-z_][a-z0-9_]*(?::[a-z0-9_]+){1,3}")
 GEMIST_ACTIE = "Zoom-opname zonder kopie als gemist aanvaarden"
-# Het groene sein (dekking ja, wisregel_veilig) staat uit tot Codex de dekkingsregel goedkeurt (Codex controle 5): het
-# kopiëren mag dan al live, want dat wist en overschrijft nooit iets; zonder sein komt er geen advies om te wissen.
-SEIN_AAN = False
+# Het groene sein (dekking ja, wisregel_veilig) stond uit tot Codex de dekkingsregel goedkeurde (Codex controle 5). T-0120
+# ARCH-4: aan na de Codex-toetsen van 01-11-2026 (tweede lezing ook op gewijzigde bewezen bestanden, ARCH-1 alleen met
+# een bewezen vervanging). Het sein zet niets in Zoom: De Zoomwacht toont het als advies ZA-01, de wisregel zelf blijft
+# Mehdi's eigen beslissing. Terug: deze regel op False (de proeven met opzet(sein=False) toetsen dat).
+SEIN_AAN = True
 AANVAARD = {"goedgekeurd", "uitgevoerd", "overgeslagen"}   # wat de uitvoerder van een goedgekeurd signaal maakt
 EXT = {"MP4": "mp4", "M4A": "m4a", "TRANSCRIPT": "vtt", "CC": "vtt", "CHAT": "txt", "TIMELINE": "json", "CSV": "csv",
        "SUMMARY": "json"}
