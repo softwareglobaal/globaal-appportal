@@ -58,7 +58,9 @@ class Koppen(unittest.TestCase):
         self.assertEqual(concept["References"].split(),
                          ["<a1@voorbeeld.test>", "<b2@voorbeeld.test>", "<x9@voorbeeld.test>",
                           "<c3@voorbeeld.test>"])
+        # onderwerp=None: bouw_bericht neemt het gevouwen Subject van de bron over.
         self.assertEqual(uit["onderwerp"], "Re: 9999 Proefstraat 1 Proefdorp - werfbezoek 1")
+        self.assertEqual(concept["Subject"], "Re: 9999 Proefstraat 1 Proefdorp - werfbezoek 1")
         self.assertEqual(uit["aan"], ["Klant Proef <klant@voorbeeld.test>"])
 
 
