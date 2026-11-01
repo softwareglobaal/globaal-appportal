@@ -67,6 +67,8 @@ class Draad:
         self.fouten = {}            # pad -> lijst van uitzonderingen die de volgende oproepen op dat pad opwerpen
         self.na_fouten = {}         # idem, maar het bord nam het verzoek aan: het antwoord ging verloren
         self.gevraagd = []          # elk pad dat de runner probeerde, ook als het mislukte
+        self.timeouts = []          # de tijdslimiet van elke oproep (overleg 14: elke bordoproep hoogstens 30 s)
+        self.bij = {}               # pad -> functie die draait als dat pad gevraagd wordt (bv. een echt signaal sturen)
 
     def urlopen(self, req, timeout=None, **_):
         url = req.full_url if isinstance(req, urllib.request.Request) else str(req)
@@ -75,6 +77,9 @@ class Draad:
         data = req.data if isinstance(req, urllib.request.Request) else None
         payload = json.loads(data.decode()) if data else None
         self.gevraagd.append(deel.path)
+        self.timeouts.append(timeout)
+        if deel.path in self.bij:
+            self.bij.pop(deel.path)()
         antwoord = self.antwoord(deel.path, pad, payload)
         self.gestuurd.append((deel.path, payload))       # alleen wat het bord aannam
         if self.na_fouten.get(deel.path):
@@ -673,6 +678,203 @@ def test_na50_weggevallen_oproepen_zijn_elke_ronde_dezelfde_nood():
     assert teksten[0] and teksten[0] == teksten[1], teksten
     assert not re.match(r"^\d", teksten[0][0]), teksten[0][0]
 
+
+
+# ------------------------------------------------------------------- Overleg 14: signalen uitstellen (E1-E3) ---
+import signal  # noqa: E402
+import subprocess  # noqa: E402
+
+
+@contextmanager
+def handlers(term, intr=None):
+    """Tijdelijk deze handlers voor SIGTERM en SIGINT; daarna de echte terug."""
+    oud = (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT))
+    signal.signal(signal.SIGTERM, term)
+    signal.signal(signal.SIGINT, intr if intr is not None else signal.default_int_handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, oud[0])
+        signal.signal(signal.SIGINT, oud[1])
+
+
+def stop_143(signum, frame):
+    """Zoals fathom_wacht.stop_bij_sigterm."""
+    raise SystemExit(128 + signum)
+
+
+def _signaal(s):
+    return lambda: os.kill(os.getpid(), s)
+
+
+def _ronde_met(draad, werkfout=None, naam="proef"):
+    gedaan = []
+    with op_het_bord(draad):
+        try:
+            with bord.Agent(naam).ronde("proef"):
+                gedaan.append(True)
+                bord.Agent(naam)            # niets; het werk
+                if werkfout is not None:
+                    raise werkfout
+            uit = None
+        except BaseException as e:  # noqa: BLE001
+            uit = e
+    return uit, gedaan
+
+
+def test_e1_sigterm_bij_het_afsluiten_wacht_op_de_eindhartslag():
+    """Een echte SIGTERM tijdens de kennis, met een handler die er SystemExit 143 van maakt (De Fathomwacht): het signaal
+    wacht, het werkverslag en de eindhartslag gaan nog weg, die hartslag is fout (niet klaar, X1), en daarna gaat
+    SystemExit 143 door."""
+    with handlers(stop_143):
+        draad = Draad(open_noden=[])
+        draad.bij["/api/agent/proef/kennis"] = _signaal(signal.SIGTERM)
+        uit, gedaan = _ronde_met(draad)
+    assert isinstance(uit, SystemExit) and uit.code == 143 and gedaan, (repr(uit), gedaan)
+    laatste = draad.statussen("proef")[-1]
+    assert laatste["status"] == "fout" and "SIGTERM (uitgesteld)" in laatste["detail"] and "nood" not in laatste, laatste
+    assert "/api/logboek" in draad.gevraagd or not draad.logregels(), draad.gevraagd
+
+
+def test_e1_ctrl_c_bij_de_eerste_hartslag_start_geen_werk():
+    """Ctrl-C (de standaardhandler van Python) terwijl de eerste hartslag onderweg is: het werk begint niet, de
+    fouthartslag gaat uit, daarna KeyboardInterrupt."""
+    with handlers(stop_143):
+        draad = Draad(open_noden=[])
+        draad.bij["/agent-status"] = _signaal(signal.SIGINT)
+        uit, gedaan = _ronde_met(draad)
+    assert isinstance(uit, KeyboardInterrupt) and not gedaan, (repr(uit), gedaan)
+    assert [s["status"] for s in draad.statussen("proef")] == ["actief", "fout"], draad.statussen("proef")
+
+
+def test_e1_genegeerd_signaal_blijft_genegeerd():
+    """Een agent die SIGTERM negeert (SIG_IGN): de ronde loopt gewoon af en de handler blijft SIG_IGN."""
+    with handlers(signal.SIG_IGN):
+        draad = Draad(open_noden=[])
+        draad.bij["/api/agent/proef/kennis"] = _signaal(signal.SIGTERM)
+        uit, gedaan = _ronde_met(draad)
+        assert signal.getsignal(signal.SIGTERM) is signal.SIG_IGN
+    assert uit is None and gedaan and draad.statussen("proef")[-1]["status"] == "klaar", (repr(uit), draad.statussen())
+
+
+STANDAARDACTIE = r"""
+import json, os, signal, sys
+sys.path.insert(0, sys.argv[1])
+import bord
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+def call(pad, payload=None, method=None):
+    if pad.endswith("/kennis"):
+        os.kill(os.getpid(), signal.SIGTERM)
+    if pad == "/agent-status":
+        print("HARTSLAG " + payload["status"], flush=True)
+    return {"werkwijze": "# Proef"} if pad.endswith("/werkwijze") else ({"nood": []} if pad == "/api/nood" else {})
+bord.call = call
+with bord.Agent("proef").ronde("proef"):
+    pass
+print("NA DE RONDE", flush=True)
+"""
+
+
+def test_e1_standaardactie_stopt_pas_na_de_eindhartslag():
+    """Een agent zonder eigen handler (SIG_DFL, zoals De Contractmaker en De Archivaris): SIGTERM tijdens het afsluiten
+    stopt het proces pas nadat de fouthartslag weg is, met de standaardactie (exitcode -15)."""
+    p = subprocess.run([sys.executable, "-B", "-c", STANDAARDACTIE, os.path.join(RUNNER, "koppelingen")],
+                       capture_output=True, text=True, timeout=60, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    regels = p.stdout.splitlines()
+    assert p.returncode == -signal.SIGTERM, (p.returncode, p.stdout, p.stderr)
+    assert regels[-1] == "HARTSLAG fout" and "NA DE RONDE" not in regels, regels
+
+
+def test_e1_genest_uitstel_geeft_door_aan_de_buitenste():
+    """Genest: de binnenste noteert, geeft bij het verlaten door aan de buitenste, en pas die levert af."""
+    with handlers(stop_143):
+        stappen = []
+        try:
+            with bord.SignalenUitgesteld() as buiten:
+                with bord.SignalenUitgesteld() as binnen:
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    stappen.append(("binnen", list(binnen.binnen)))
+                stappen.append(("buiten", list(buiten.binnen)))
+            uit = None
+        except SystemExit as e:
+            uit = e
+        assert signal.getsignal(signal.SIGTERM) is stop_143
+    assert stappen == [("binnen", [signal.SIGTERM]), ("buiten", [signal.SIGTERM])] and uit.code == 143, (stappen, uit)
+
+
+def test_e1_signaal_tijdens_het_herstel_van_de_handler_gaat_niet_verloren():
+    """Een SIGTERM precies terwijl de oude handler terugkomt: het wacht (geblokkeerd) en gaat daarna naar de herstelde
+    handler; de handler staat weer goed."""
+    echt = signal.signal
+    gestuurd = []
+
+    def herstel(s, h):
+        if h is stop_143 and not gestuurd:
+            gestuurd.append(True)
+            os.kill(os.getpid(), signal.SIGTERM)
+        return echt(s, h)
+
+    with handlers(stop_143):
+        try:
+            with bord.SignalenUitgesteld():
+                bord.signal.signal = herstel
+            uit = None
+        except SystemExit as e:
+            uit = e
+        finally:
+            bord.signal.signal = echt
+        assert signal.getsignal(signal.SIGTERM) is stop_143
+    assert gestuurd and isinstance(uit, SystemExit) and uit.code == 143, (gestuurd, repr(uit))
+
+
+def test_e1_oorspronkelijke_oorzaak_houdt_voorrang():
+    """Stopte het werk zelf door een signaal (SystemExit 130), dan blijft dat de oorzaak, ook als bij het afsluiten een
+    SIGTERM komt; was het een gewone fout, dan gaat het signaal door. De fouthartslag noemt telkens beide."""
+    for werkfout, verwacht in ((SystemExit(130), 130), (ValueError("werk kapot"), 143)):
+        with handlers(stop_143):
+            draad = Draad(open_noden=[])
+            draad.bij["/api/agent/proef/kennis"] = _signaal(signal.SIGTERM)
+            uit, _ = _ronde_met(draad, werkfout)
+        assert isinstance(uit, SystemExit) and uit.code == verwacht, (werkfout, repr(uit))
+        laatste = draad.statussen("proef")[-1]
+        assert laatste["status"] == "fout" and type(werkfout).__name__ in laatste["detail"] \
+            and "SIGTERM" in laatste["detail"], laatste
+
+
+def test_e1_elke_bordoproep_hoogstens_30_seconden():
+    """De prijs van het uitstellen (overleg 14): een time-out wacht op de lopende bordoproep, en die duurt hoogstens 30 s."""
+    draad = Draad(open_noden=[])
+    _ronde_met(draad, ValueError("werk kapot"))
+    assert draad.timeouts and all(t is not None and t <= 30 for t in draad.timeouts), draad.timeouts
+
+
+class _GebrokenUitvoer(io.StringIO):
+    def write(self, *a):
+        raise BrokenPipeError("uitvoer dicht (proef)")
+
+
+def test_e2_kapotte_foutuitvoer_breekt_het_afsluiten_niet():
+    """Codex NA65: faalde het schrijven naar stderr in een foutpad (BrokenPipeError), dan brak het afsluiten af en bleef
+    de agent op actief. Nu gaat de diagnose langs bord.diagnose, die een fout van de uitvoer zelf negeert."""
+    draad = Draad(open_noden=[])
+    draad.fouten["/api/logboek"] = [TimeoutError("traag (proef)")]
+    ag = bord.Agent("proef")
+    echt = urllib.request.urlopen
+    urllib.request.urlopen = draad.urlopen
+    oud_err = sys.stderr
+    sys.stderr = _GebrokenUitvoer()
+    try:
+        try:
+            with ag.ronde("proef"):
+                ag._log.append({"naam": "proef", "onderwerp": "", "stap": "bron", "tekst": "een regel", "detail": ""})
+                raise SystemExit(130)
+        except BaseException as e:  # noqa: BLE001
+            uit = e
+    finally:
+        sys.stderr = oud_err
+        urllib.request.urlopen = echt
+    assert isinstance(uit, SystemExit) and uit.code == 130, repr(uit)
+    assert draad.statussen("proef")[-1]["status"] == "fout", draad.statussen("proef")
 
 if __name__ == "__main__":
     import traceback

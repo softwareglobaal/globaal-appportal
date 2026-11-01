@@ -377,8 +377,10 @@ bord.call = lambda pad, payload=None, method=None: print("BORD " + json.dumps([p
 fathom.beschikbaar = lambda: True
 
 def traag(self, taak="werkwijze lezen", noden=()):
+    # een bordoproep die even duurt; sinds overleg 14 (E1) wacht het signaal tot ze klaar is (een echte hoogstens 30 s)
     print("WERK", flush=True)
-    time.sleep(60)
+    time.sleep(2)
+    return "# Fathomwacht"
 
 bord.Agent.werkwijze = traag
 runpy.run_path(os.path.join(RUNNER, "fathom_wacht.py"), run_name="__main__")
@@ -409,7 +411,9 @@ def test_k3_fathom_wacht_sigterm_als_proces():
     assert "WERK" in regels, f"de ronde kwam niet aan het werk: {regels} {fout}"
     assert p.returncode == 128 + signal.SIGTERM, f"exitcode {p.returncode}, verwacht {128 + signal.SIGTERM}: {fout}"
     assert statussen and statussen[0]["status"] == "actief" and statussen[-1]["status"] == "fout", statussen
-    assert "SystemExit" in statussen[-1]["detail"] and "nood" not in statussen[-1], statussen
+    assert "SIGTERM" in statussen[-1]["detail"] and "nood" not in statussen[-1], statussen
+    paden = [json.loads(r[5:])[0] for r in regels if r.startswith("BORD ")]
+    assert "/api/gesprekken" not in paden, f"het werk begon na het stopsignaal: {paden}"
 
 
 def test_z13_fathom_wacht_zet_de_bron_zelf():
