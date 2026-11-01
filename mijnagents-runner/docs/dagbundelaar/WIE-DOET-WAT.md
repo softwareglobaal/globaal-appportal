@@ -26,6 +26,7 @@ Laatst bijgewerkt: 01-11-2026 15:20 door Claude 2.
 
 | # | Wie | Wat | Opdracht | Stand |
 |---|---|---|---|---|
+| 0 | Claude 1 | De vaste regel over deze takenlijst in je eigen instellingen zetten. | `opdrachten/claude1-regel-takenlijst-instellen.md` | open |
 | 1 | Claude 1 (Mehdi klikt mee) | Laptopkant aanzetten: Sms-wacht, Fotowacht, YouTube-wacht, Dropbox-sync. Mehdi zet Messages in iCloud en Text Message Forwarding aan op de iPhone, geeft Full Disk Access en typt het laptopwachtwoord. | `opdrachten/opdracht-claude1-macbook-01-11.md` | open |
 | 2 | Claude 1 | Websitewacht aanzetten en Wispr-wacht een keer draaien (stap 1 tot 6). Daarna de map van de Gezondheidswacht nakijken (stap 7). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
 | 3 | Mehdi | Health Auto Export op de iPhone instellen (twee stappen onderaan). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
