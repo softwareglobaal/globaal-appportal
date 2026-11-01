@@ -11,7 +11,8 @@ Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.p
 - C04 (WISPR-2): de inhaalweg van De Wispr-wacht (--dag voor een vroegere dag): per_dag is precies het venster tot die
   dag, ook een dag zonder dictaat (0, de wacht keek), niets erna; de titel is de telling van die dag; het rapport in
   Dropbox blijft staan (het toont de stand van vandaag); een gewone ronde van vandaag schrijft het wel. De Licentiewacht
-  neemt daarna nog steeds het item van de nieuwste gebruiksdag, ook als een inhaalronde een oude dag later bijwerkte.
+  en het teamrapport van de Wispr-teamwacht nemen daarna nog steeds het item van de nieuwste gebruiksdag, ook als een
+  inhaalronde een oude dag later bijwerkte.
 
 Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis.
 Draaien: python3 mijnagents-runner/tests/test_computer_wachten.py
@@ -200,24 +201,31 @@ W.main()
 check("C04 Wispr: ronde van vandaag schrijft het rapport", os.path.exists(os.path.join(rapport, "Proef.md"))
       and os.path.exists(os.path.join(rapport, "Proef.json")))
 
-# Codex-toets 1: de Licentiewacht nam het laatst bijgewerkte item (order by ts); na een inhaalronde was dat 20-10.
-# De Licentiewacht draait op de VM (Python 3.12); onder de Python 3.9 van de laptop slaat deze proef over.
-if sys.version_info >= (3, 12):
-    sys.path.insert(0, os.path.dirname(HIER))
-    import licentiewacht as LW  # noqa: E402
-    LW.DB = os.path.join(map_, "bord.db")
-    c = sqlite3.connect(LW.DB)
-    c.execute("CREATE TABLE klaarzet (van TEXT, sleutel TEXT, soort TEXT, inhoud TEXT, ts TEXT)")
-    for d, ts in (("2026-11-01", "2026-11-01T20:30:00+00:00"), ("2026-10-20", "2026-11-02T09:00:00+00:00")):
-        c.execute("INSERT INTO klaarzet VALUES ('wispr-wacht', 'Proef', 'gebruik', ?, ?)",
-                  (json.dumps({"dienst": "Wispr Flow", "gebruiker": "Proef", "dag": d, "week_woorden": len(d)}), ts))
-    c.commit()
-    c.close()
-    g = LW.gebruik_uit_bord()
-    check("C04 Licentiewacht: nieuwste gebruiksdag, niet de laatste inhaal", g[("Wispr Flow", "Proef")]["dag"] == "2026-11-01",
-          g)
-else:
-    print("  --   C04 Licentiewacht: overgeslagen onder Python", sys.version.split()[0])
+# Codex-toets 1 en 2: de Licentiewacht en het teamrapport van de Wispr-teamwacht namen het laatst bijgewerkte item
+# (order by ts); na een inhaalronde was dat 20-10. Alleen hun keuzefunctie, uit de bron gelezen: geen bord, geen .env.
+RUNNER = os.path.dirname(HIER)
+
+
+def functie(bestand, van, tot, **ns):
+    src = open(os.path.join(RUNNER, bestand), encoding="utf-8").read()
+    ns.update(json=json, sqlite3=sqlite3)
+    exec(src[src.index(van):src.index(tot)], ns)
+    return ns
+
+
+bord_db = os.path.join(map_, "bord.db")
+c = sqlite3.connect(bord_db)
+c.execute("CREATE TABLE klaarzet (van TEXT, sleutel TEXT, soort TEXT, inhoud TEXT, ts TEXT)")
+for d, ts in (("2026-11-01", "2026-11-01T20:30:00+00:00"), ("2026-10-20", "2026-11-02T09:00:00+00:00")):
+    c.execute("INSERT INTO klaarzet VALUES ('wispr-wacht', 'Proef', 'gebruik', ?, ?)",
+              (json.dumps({"dienst": "Wispr Flow", "gebruiker": "Proef", "dag": d, "week_woorden": len(d)}), ts))
+c.commit()
+c.close()
+g = functie("licentiewacht.py", "def gebruik_uit_bord(", "def main(", DB=bord_db)["gebruik_uit_bord"]()
+check("C04 Licentiewacht: nieuwste gebruiksdag, niet de laatste inhaal", g[("Wispr Flow", "Proef")]["dag"] == "2026-11-01", g)
+g = functie("wispr_team_wacht.py", "def gebruik_per_persoon(", "def kruiscontrole(")["gebruik_per_persoon"](
+    sqlite3.connect(bord_db))
+check("C04 Wispr-teamrapport: nieuwste gebruiksdag, niet de laatste inhaal", g["proef"]["dag"] == "2026-11-01", g)
 
 print("wachten van de computer:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
