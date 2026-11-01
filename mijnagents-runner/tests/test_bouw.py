@@ -533,5 +533,57 @@ check("X6 een huisnummer voor de straat wordt weggehaald", "Voorbeeldlaan" not i
 check("X7 de uitrol stopt zonder pypdf", "import pypdf" in uitrol or "import pypdf" in open(
     Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read())
 
+print("\nHet adres van de zetel in kern, uit de KBO (01-11-2026)")
+from bouw import kern_adres as K  # noqa: E402
+
+
+def kbo_pagina(nummer="0123.456.749", adres="Voorbeeldstraat&nbsp;12 bus 3\n<br/>3000&nbsp;Leuven"):
+    return ('<tr><td class="QL">Ondernemingsnummer:</td><td class="QL" colspan="3">' + nummer + '</td></tr>'
+            '<tr><td class="RL">Adres van de zetel:</td><td class="RL" colspan="3">\n' + adres +
+            '\n<span class="upd"><br/>Sinds 1 januari 2020</span></td></tr>')
+
+
+check("de zetel wordt gelezen: straat, nummer met bus, postcode en gemeente",
+      K.zetel(kbo_pagina(), "0123456749") == {"straat": "Voorbeeldstraat", "huisnummer": "12 bus 3", "postcode": "3000",
+                                              "gemeente": "Leuven"})
+check("een pagina met een ander ondernemingsnummer geeft geen adres", K.zetel(kbo_pagina(), "0123456750") is None)
+check("een adres zonder huisnummer geeft geen adres", K.zetel(kbo_pagina(adres="Voorbeeldstraat<br/>3000 Leuven"),
+                                                              "0123456749") is None)
+
+
+class NepKern:
+    def __init__(self, rijen):
+        self.rijen, self.sql = rijen, []
+
+    def __call__(self, sql):
+        self.sql.append(sql)
+        if sql == K.SQL_LEES:
+            return self.rijen
+        if "adres_vind_of_maak" in sql:
+            return {"id": "00000000-0000-0000-0000-000000000001"}
+        return {"adres": 1, "firma": 1}
+
+
+leeg = [{"code": "HARC", "kbo": "0123.456.749", "adres_id": None}, {"code": "HARM", "kbo": "0123.456.749", "adres_id": None}]
+nk = NepKern(leeg)
+regels = K.vul(nk, lambda url: kbo_pagina(), schrijf=False)
+check("zonder --schrijf schrijft het niets in kern", len(nk.sql) == 1 and all("zou" in r for r in regels), regels)
+nk = NepKern(leeg)
+regels = K.vul(nk, lambda url: kbo_pagina(), schrijf=True)
+check("met --schrijf krijgen beide firma's het adres", all("gezet" in r for r in regels), regels)
+check("het adres komt nooit in de uitvoer", not any("Voorbeeldstraat" in r or "3000" in r for r in regels))
+check("een firma met een adres wordt nooit overschreven", all("adres_id is null" in s for s in nk.sql if "update kern.firma" in s))
+nk = NepKern([{"code": "HARC", "kbo": "0123.456.749", "adres_id": "x", "straat": "s", "nr": "1"},
+              {"code": "HARM", "kbo": "0123.456.749", "adres_id": None}])
+regels = K.vul(nk, lambda url: kbo_pagina(adres="Rue d'Exemple 4<br/>1000 Bruxelles"), schrijf=True)
+check("een bestaand adres blijft ongemoeid", "ongemoeid" in regels[0] and not any("HARC" in s for s in nk.sql[1:]))
+check("een aanhalingsteken in de straat wordt veilig doorgegeven", any("Rue d''Exemple" in s for s in nk.sql))
+check("controle 11: een gedeelde adresrij wordt alleen aangevuld als al haar velden leeg zijn",
+      all("huisnummer = '' and postcode = '' and gemeente = ''" in s for s in nk.sql if "update kern.adres" in s))
+check("controle 11: zonder volledige kern eindigt het hulpmiddel met een fout, zodat de uitrol stopt",
+      "sys.exit(0 if compleet else 1)" in open(Path(K.__file__), encoding="utf-8").read())
+check("de uitrol vult het adres voor de eerste ronde", "bouw.kern_adres --schrijf" in open(
+    Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read())
+
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
