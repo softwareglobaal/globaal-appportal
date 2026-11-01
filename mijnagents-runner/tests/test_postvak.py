@@ -274,6 +274,110 @@ def test_apple_hide_my_email_alleen_een_label():
     assert len(lang) <= 200 and lang.endswith("via Apple Hide My Email"), "het label valt nooit weg door het afkappen"
 
 
+# VOL-9 (T-0120): een bericht met tekst, html, een logo in de handtekening, een pdf en een dwg (de bestandsnaam van de dwg
+# komt als literal, zoals imaplib die als tuple geeft). Verzonnen namen.
+BS_KOP = (b'1 (UID 7 BODYSTRUCTURE (((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"quoted-printable\" 120 4 NIL NIL NIL '
+          b'NIL)(\"text\" \"html\" (\"charset\" \"utf-8\") NIL NIL \"quoted-printable\" 800 20 NIL NIL NIL NIL) \"alternative\" '
+          b'(\"boundary\" \"b1\") NIL NIL NIL)(\"image\" \"png\" (\"name\" \"image001.png\") \"<logo@proef>\" NIL \"base64\" 4000 '
+          b'NIL (\"inline\" (\"filename\" \"image001.png\")) NIL NIL)(\"application\" \"pdf\" (\"name\" \"=?utf-8?B?b2ZmZXJ0ZS5wZGY=?=\")'
+          b' NIL NIL \"base64\" 160000 NIL (\"attachment\" (\"filename\" \"=?utf-8?B?b2ZmZXJ0ZS5wZGY=?=\")) NIL NIL)'
+          b'(\"application\" \"octet-stream\" (\"name\" {13}')
+BS_RUW = [(BS_KOP, b"Proefplan.dwg"),
+          b') NIL NIL "base64" 400000 NIL ("attachment" ("filename" "Proefplan.dwg")) NIL NIL) "mixed" ("boundary" "b0") NIL NIL NIL))',
+          b'2 (UID 8 BODYSTRUCTURE ("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 300 9 NIL NIL NIL NIL))']
+
+
+def test_bijlagen_alleen_metadata_uit_bodystructure():
+    """VOL-9 (T-0120): per mail het aantal bijlagen, de soort en de grootte, uit BODYSTRUCTURE. Nooit de bestandsnaam,
+    nooit iets gedownload; een logo in de handtekening (inline met een Content-ID) is geen bijlage."""
+    regels = postvak._antwoorden(BS_RUW)
+    assert len(regels) == 2, regels
+    uid, bs = postvak._uid_en_structuur(regels[0])
+    assert uid == 7
+    assert postvak.bijlagen_uit_structuur(bs) == [{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}]
+    uid, bs = postvak._uid_en_structuur(regels[1])
+    assert uid == 8 and postvak.bijlagen_uit_structuur(bs) == []
+    assert "Proefplan" not in str(postvak.bijlagen_uit_structuur(postvak._uid_en_structuur(regels[0])[1]))
+
+
+def test_bijlagen_lezen_verandert_niets_in_het_postvak():
+    """VOL-9: alleen een readonly-select en FETCH (UID BODYSTRUCTURE): geen BODY[] zonder PEEK, geen STORE, niets als
+    gelezen gemarkeerd. Alleen de mail van de laatste dagen; lukt het niet, dan blijft het onbekend (geen fout, geen bron-
+    probleem: de wacht las het postvak wel)."""
+    nu = datetime.fromisoformat("2026-10-29T15:00:00+01:00")
+    gedaan = []
+
+    class M:
+        def select(self, naam, readonly=False):
+            gedaan.append(("select", naam, readonly))
+            return "OK", [b"2"]
+
+        def uid(self, cmd, reeks, items=None):
+            gedaan.append(("uid", cmd, reeks, items))
+            return "OK", BS_RUW
+
+    class Sessie:
+        def __init__(self, mb):
+            pass
+
+        def __enter__(self):
+            return M()
+
+        def __exit__(self, *a):
+            return False
+
+    class Bron:
+        _Sessie = Sessie
+
+        @staticmethod
+        def _selecteer(Mx, naam):
+            return Mx.select(f'"{naam}"', readonly=True)
+
+    log = []
+
+    class Ag:
+        def log(self, *a):
+            log.append(a)
+    oud = postvak._postbus
+    postvak._postbus = lambda: (None, Bron)
+    try:
+        berichten = [{"uid": 7, "map_": "INBOX", "datum": "2026-10-29T10:00:00+01:00"},
+                     {"uid": 8, "map_": "INBOX", "datum": "2026-10-29T11:00:00+01:00"},
+                     {"uid": 3, "map_": "INBOX", "datum": "2026-10-01T11:00:00+01:00"}]
+        postvak.bijlagen_lezen({"adres": "p@voorbeeld.test"}, berichten, nu, Ag())
+        assert [b.get("bijlagen") for b in berichten] == [[{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}],
+                                                         [], None], berichten
+        assert gedaan == [("select", '"INBOX"', True), ("uid", "FETCH", "7,8", "(UID BODYSTRUCTURE)")], gedaan
+        postvak.bijlagen_lezen({"adres": "h@hotmail.test", "bron": "/x"}, [{"uid": 1, "map_": "INBOX",
+                                                                         "datum": "2026-10-29T10:00:00+01:00"}], nu, Ag())
+        assert len(gedaan) == 2, "een kopie in een bestand (hotmail): niets gelezen"
+
+        class Kapot(Bron):
+            class _Sessie(Sessie):
+                def __enter__(self):
+                    raise OSError("time-out")
+        postvak._postbus = lambda: (None, Kapot)
+        nog = [{"uid": 7, "map_": "INBOX", "datum": "2026-10-29T10:00:00+01:00"}]
+        postvak.bijlagen_lezen({"adres": "p@voorbeeld.test"}, nog, nu, Ag())
+        assert "bijlagen" not in nog[0] and log and log[-1][1] not in ("bron", "fout"), log
+    finally:
+        postvak._postbus = oud
+    bron = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
+    deel = bron[bron.index("def bijlagen_lezen"):bron.index("def bijlagen_lezen") + 2500]
+    assert "_selecteer_schrijfbaar" not in deel and "STORE" not in deel and "BODY[" not in deel
+
+
+def test_bijlagen_gaan_mee_naar_het_bord():
+    """VOL-9: elke rij voor /api/mail draagt 'bijlagen' (aantal of None als onbekend) en 'bijlagen_info' (soort en grootte);
+    hotmail (een kopie in een bestand) is onbekend, nooit nul."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    alle, _, _, _ = _ronde([_in(1, "klant@voorbeeld.test", "Plannen", "2026-10-19T10:00:00+02:00")], nu)
+    assert alle["Plannen"]["bijlagen"] is None and alle["Plannen"]["bijlagen_info"] is None
+    assert postvak._bijlagenrij({"bijlagen": [{"soort": "pdf", "bytes": 10}]}) == {"bijlagen": 1, "bijlagen_info":
+                                                                                 [{"soort": "pdf", "bytes": 10}]}
+    assert postvak._bijlagenrij({"bijlagen": []}) == {"bijlagen": 0, "bijlagen_info": []}
+
+
 def test_verdwenen_en_zonder_sleutel():
     """Resultaattoets 19-10-2026: een open punt binnen het venster dat niet meer in het volledig gelezen postvak staat, wordt
     'verdwenen' (K4); een bericht zonder Message-ID en zonder uid wordt overgeslagen (K5)."""

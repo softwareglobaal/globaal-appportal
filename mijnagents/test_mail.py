@@ -453,5 +453,27 @@ check("werkdagen tellen het weekend niet (vrijdag tot maandag is een werkdag)",
       A._werkdagen_sinds("2026-09-25T10:00:00+02:00", date(2026, 9, 28)) == 1)
 check("een onleesbare datum geeft geen fout", A._werkdagen_sinds("", date(2026, 9, 28)) is None)
 
+# VOL-9 (T-0120): bijlagen alleen als metadata (aantal, soort, grootte), nooit de naam van het bestand. Een ronde die de
+# bijlagen niet las (None of zonder veld), laat staan wat er stond; onbekend blijft onbekend, nooit nul.
+import json  # noqa: E402
+b9 = bericht("<bijlage9@proef>", "midden", "klant@voorbeeld.test", onderwerp="Plannen", bijlagen=2,
+             bijlagen_info=[{"soort": "pdf", "bytes": 120000},
+                            {"soort": "dwg", "bytes": 300000, "naam": "Geheim proefplan.dwg"}, "rommel"])
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [b9]})
+x = rij(b9["uniek"])
+check("VOL-9 aantal en soort bewaard", x["bijlagen"] == 2 and json.loads(x["bijlagen_info"]) ==
+      [{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}], (x["bijlagen"], x["bijlagen_info"]))
+check("VOL-9 nooit een bestandsnaam", "Geheim" not in str(x["bijlagen_info"]) and "naam" not in str(x["bijlagen_info"]))
+zonder = {k: v for k, v in b9.items() if k not in ("bijlagen", "bijlagen_info")}
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [zonder]})
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [dict(b9, bijlagen=None, bijlagen_info=None)]})
+x = rij(b9["uniek"])
+check("VOL-9 een ronde zonder bijlagen laat ze staan", x["bijlagen"] == 2 and "pdf" in (x["bijlagen_info"] or ""), x["bijlagen"])
+b0 = bericht("<geen9@proef>", "melding", "info@voorbeeld.test", onderwerp="Zonder bijlage", bijlagen=0, bijlagen_info=[])
+bo = bericht("<onbekend9@proef>", "melding", "info@voorbeeld.test", onderwerp="Onbekend")
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [b0, bo]})
+check("VOL-9 nul is nul, onbekend is onbekend", rij(b0["uniek"])["bijlagen"] == 0 and rij(b0["uniek"])["bijlagen_info"] == "[]"
+      and rij(bo["uniek"])["bijlagen"] is None and rij(bo["uniek"])["bijlagen_info"] is None)
+
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -38,6 +38,7 @@ import re
 import sys
 import urllib.parse
 from datetime import datetime, timedelta
+from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
@@ -52,6 +53,7 @@ OPVOLGEN_NA_WERKDAGEN = 1   # een gewoon bericht zonder antwoord wordt na zoveel
 TERUG_DAGEN = 30            # zover kijken we terug: naar berichten die op antwoord wachten, en voor de cijfers
 ACTIE_DAGEN = 7             # zolang blijft een automatisch bericht met gevolg op de lijst
 BEKEND_DAGEN = 180          # wie we in deze periode mailden, is een bekend contact
+BIJLAGEN_DAGEN = 2          # van de mail van zoveel dagen leest elke ronde de bijlagen (alleen metadata, VOL-9)
 
 # Rollen en woorden, overgenomen van de Mac-mailwacht (mac/mail_wacht.py), uitgebreid met
 # wat op 25-09-2026 in info@ H-Architects en info@ H-Invest binnenkwam.
@@ -598,6 +600,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             continue
         # Wat het postvak zelf verstuurde, is geen opvolgpunt (Gmail 'Alle e-mail' bevat ook de verzonden post).
         berichten = [b for b in berichten if (b.get("van") or "").lower() != adres.lower()]
+        bijlagen_lezen(mb, berichten, nu, ag)
         opl = oplichting_regels(adres)
         if opl is None:
             ag.log("oplichting", "bron", f"{adres}: de [oplichting]-lijst van mailregels niet gelezen")
@@ -634,7 +637,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                          "message_id": (b.get("message_id") or "")[:250], "opvolging": opvolging,
                          "antwoord_door": door[:120], "antwoord_ts": wanneer, "antwoord_naar": naar[:120],
                          "stap": stap(soort, opvolging, door, wanneer, naar), "dringend": 1 if dringend else 0,
-                         "werkdagen": wacht, "regel": regel, "auto_opruimen": ""})
+                         "werkdagen": wacht, "regel": regel, "auto_opruimen": "", **_bijlagenrij(b)})
             if d >= nu - timedelta(days=1):
                 tel[soort] += 1
                 if soort in ("hoog", "midden", "actie"):
@@ -766,6 +769,189 @@ def met_relaylabel(waarom, van):
     if not zelfde_domein(_domein((van or "").lower()), APPLE_RELAY):
         return waarom
     return f"{(waarom or '')[:200 - len(RELAY_LABEL) - 2]}; {RELAY_LABEL}" if waarom else RELAY_LABEL
+
+
+# Bijlagen zichtbaar, alleen als metadata (VOL-9, T-0120): per bericht het aantal bijlagen, de soort (de extensie, anders
+# het subtype) en de grootte, uit de BODYSTRUCTURE die de server geeft. Alleen lezend: readonly-select en FETCH (UID
+# BODYSTRUCTURE); dat zet geen \Seen (alleen BODY[] zonder PEEK doet dat) en haalt niets binnen. Nooit de bestandsnaam:
+# die kan een klant of een project noemen. Een logo in de handtekening (een afbeelding met een Content-ID) is geen bijlage.
+SOORT_VAN_SUBTYPE = {"rfc822": "eml", "octet-stream": "bestand"}
+
+
+def _antwoorden(data):
+    """De FETCH-antwoorden van imaplib als hele regels: een literal komt als (kop, inhoud), de rest van de regel erna."""
+    uit, bezig = [], False
+    for el in data or []:
+        if isinstance(el, tuple):
+            stuk = (el[0] or b"") + (el[1] or b"")
+            if bezig:
+                uit[-1] += stuk
+            else:
+                uit.append(stuk)
+            bezig = True
+        elif isinstance(el, bytes):
+            if bezig:
+                uit[-1] += el
+            else:
+                uit.append(el)
+            bezig = False
+    return uit
+
+
+def _lijst(buf):
+    """Een IMAP-antwoord als geneste lijsten: strings en atomen als bytes, NIL als None. Een literal {n} is n bytes."""
+    top = []
+    stapel, i, n = [top], 0, len(buf)
+    while i < n:
+        c = buf[i:i + 1]
+        if c in (b" ", b"\r", b"\n", b"\t"):
+            i += 1
+        elif c == b"(":
+            nieuw = []
+            stapel[-1].append(nieuw)
+            stapel.append(nieuw)
+            i += 1
+        elif c == b")":
+            if len(stapel) > 1:
+                stapel.pop()
+            i += 1
+        elif c == b'"':
+            j, stuk = i + 1, bytearray()
+            while j < n and buf[j:j + 1] != b'"':
+                if buf[j:j + 1] == b"\\" and j + 1 < n:
+                    j += 1
+                stuk += buf[j:j + 1]
+                j += 1
+            stapel[-1].append(bytes(stuk))
+            i = j + 1
+        elif c == b"{":
+            j = buf.index(b"}", i)
+            lengte = int(buf[i + 1:j])
+            stapel[-1].append(buf[j + 1:j + 1 + lengte])
+            i = j + 1 + lengte
+        else:
+            j = i
+            while j < n and buf[j:j + 1] not in (b" ", b"(", b")", b"\r", b"\n"):
+                j += 1
+            atoom = buf[i:j]
+            stapel[-1].append(None if atoom.upper() == b"NIL" else atoom)
+            i = j
+    return top
+
+
+def _uid_en_structuur(regel):
+    """(uid, bodystructuur als geneste lijst) uit een regel '5 (UID 12 BODYSTRUCTURE (...))'; (None, None) als het er niet is."""
+    lst = next((x for x in _lijst(regel) if isinstance(x, list)), [])
+    uid = bs = None
+    for k, v in zip(lst[::2], lst[1::2]):
+        k = k.upper() if isinstance(k, bytes) else b""
+        if k == b"UID":
+            uid = int(v)
+        elif k == b"BODYSTRUCTURE":
+            bs = v
+    return uid, bs
+
+
+def _txt(x):
+    return x.decode("utf-8", "replace") if isinstance(x, bytes) else ""
+
+
+def _paren(lst):
+    """Een IMAP-parameterlijst ("name" "x.pdf" ...) als dict met kleine sleutels."""
+    lst = lst if isinstance(lst, list) else []
+    return {_txt(k).lower(): _txt(v) for k, v in zip(lst[::2], lst[1::2])}
+
+
+def _bestandsnaam(params):
+    """De naam (ook RFC 2231 in delen en een encoded-word), alleen om de extensie te kennen; nooit bewaard."""
+    for sleutel in ("filename", "name"):
+        delen = [v for k, v in sorted(params.items()) if k == sleutel or k.startswith(sleutel + "*")]
+        if delen:
+            naam = "".join(delen)
+            try:
+                return str(make_header(decode_header(naam)))
+            except Exception:  # noqa: BLE001
+                return naam
+    return ""
+
+
+def bijlagen_uit_structuur(deel, uit=None):
+    """De bijlagen in een BODYSTRUCTURE: [{'soort': 'pdf', 'bytes': 120000}, ...]. De grootte is die van het bestand
+    (base64 telt ongeveer 4/3), de soort de extensie van de naam, anders het subtype. Een doorgestuurd bericht telt als een
+    bijlage; wat erin zit niet."""
+    uit = [] if uit is None else uit
+    if not isinstance(deel, list) or not deel:
+        return uit
+    if isinstance(deel[0], list):  # multipart: eerst de delen, dan het subtype en de uitbreidingen
+        for d in deel:
+            if not isinstance(d, list):
+                break
+            bijlagen_uit_structuur(d, uit)
+        return uit
+    soort, sub = _txt(deel[0]).lower(), _txt(deel[1] if len(deel) > 1 else None).lower()
+    params = _paren(deel[2] if len(deel) > 2 else None)
+    cid = deel[3] if len(deel) > 3 else None
+    codering = _txt(deel[5] if len(deel) > 5 else None).lower()
+    try:
+        grootte = int(deel[6]) if len(deel) > 6 else 0
+    except (TypeError, ValueError):
+        grootte = 0
+    # na de vaste velden: text heeft nog het aantal regels, message/rfc822 envelope, body en regels; dan md5, dispositie
+    begin = 8 if soort == "text" else 10 if (soort, sub) == ("message", "rfc822") else 7
+    dsp = deel[begin + 1] if len(deel) > begin + 1 else None
+    dsp_soort = _txt(dsp[0]).lower() if isinstance(dsp, list) and dsp else ""
+    naam = _bestandsnaam(_paren(dsp[1]) if isinstance(dsp, list) and len(dsp) > 1 else {}) or _bestandsnaam(params)
+    if dsp_soort == "attachment" or (naam and not (soort == "image" and cid)):
+        ext = naam.rsplit(".", 1)[-1].lower() if "." in naam else ""
+        if not re.fullmatch(r"[a-z0-9]{1,8}", ext):
+            ext = SOORT_VAN_SUBTYPE.get(sub) or re.sub(r"[^a-z0-9-]", "", sub)[:12] or "bestand"
+        uit.append({"soort": ext, "bytes": grootte * 3 // 4 if codering == "base64" else grootte})
+    return uit
+
+
+def bijlagen_lezen(mb, berichten, nu, ag=None):
+    """Zet b['bijlagen'] (een lijst van {'soort', 'bytes'}) bij de berichten van de laatste BIJLAGEN_DAGEN dagen, uit hun
+    BODYSTRUCTURE: een sessie per postvak, readonly-select per map, FETCH (UID BODYSTRUCTURE) per 200. Een kopie in een
+    bestand (hotmail) heeft geen bodystructuur. Wat niet lukt, blijft zonder (onbekend, nooit nul) en staat in het logboek
+    als onvolledig, niet als bron- of leesfout: de wacht las het postvak wel."""
+    if not mb or mb.get("bron"):
+        return
+    grens = nu - timedelta(days=BIJLAGEN_DAGEN)
+    per_map = {}
+    for b in berichten:
+        d = _datum(b)
+        if d and d >= grens and b.get("map_") and str(b.get("uid") or "").isdigit():
+            per_map.setdefault(b["map_"], {})[int(b["uid"])] = b
+    if not per_map:
+        return
+    _, imapbron = _postbus()
+    try:
+        with imapbron._Sessie(mb) as M:
+            for m, op_uid in per_map.items():
+                imapbron._selecteer(M, m)
+                uids = sorted(op_uid)
+                for i in range(0, len(uids), 200):
+                    ok, data = M.uid("FETCH", ",".join(str(u) for u in uids[i:i + 200]), "(UID BODYSTRUCTURE)")
+                    if ok != "OK":
+                        raise ValueError(f"{m}: BODYSTRUCTURE niet gegeven")
+                    for regel in _antwoorden(data):
+                        try:
+                            uid, bs = _uid_en_structuur(regel)
+                        except (ValueError, IndexError):
+                            continue
+                        if uid in op_uid and isinstance(bs, list):
+                            op_uid[uid]["bijlagen"] = bijlagen_uit_structuur(bs)
+    except Exception as e:  # noqa: BLE001
+        if ag:
+            ag.log("bijlagen", "onvolledig", f"{mb.get('adres')}: bijlagen niet gelezen ({type(e).__name__})")
+
+
+def _bijlagenrij(b):
+    """De velden voor /api/mail: het aantal en de soort en grootte, of None als het onbekend is."""
+    lijst = b.get("bijlagen")
+    if not isinstance(lijst, list):
+        return {"bijlagen": None, "bijlagen_info": None}
+    return {"bijlagen": len(lijst), "bijlagen_info": lijst[:20]}
 
 
 class _Droog:
