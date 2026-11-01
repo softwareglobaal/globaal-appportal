@@ -6,7 +6,8 @@ hele organisatie, alle leden en al hun event types. Ontbreekt die, dan valt hij
 terug op losse sleutels per account.
 
 Meldt: dode types, dezelfde typenaam op meerdere accounts, types die het
-agenda-document niet kent, boekingen zonder afspraak in de negen agenda's, en
+agenda-document niet kent, boekingen zonder afspraak in de agenda's van De
+Agendawacht (met haar archief, twee weken terug tot twee weken vooruit), en
 annuleringen die nog in de toekomst liggen. Schrijft nooit in Calendly.
 
 Draaien: calendly_wacht.py [--dagen 90]
@@ -25,15 +26,15 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from koppelingen import bord  # noqa: E402
 
-try:
-    from koppelingen import agenda as google_agenda
-except Exception:  # noqa: BLE001
-    google_agenda = None
-
 NAAM = "calendly-wacht"
 API = "https://api.calendly.com"
 DOOD_NA_DAGEN = 90
 VOORUIT_DAGEN = 14
+# T-0120 CL-2: ook een boeking van de voorbije twee weken zonder afspraak is een melding (de meting keek alleen vooruit),
+# en die melding is een vaste nood voor Mehdi, geen los signaal. Geen aantal of datum in de tekst (N10); het detail
+# staat in het signaal.
+TERUG_DAGEN = 14
+ZONDER_NOOD = "Calendly-boeking zonder afspraak in de agenda"
 # De server draait in UTC; de agenda van Mehdi is altijd Brusselse tijd.
 BRUSSEL = ZoneInfo("Europe/Brussels")
 
@@ -206,6 +207,35 @@ def firma_aliassen():
         return {}
 
 
+def agenda_starts(van_dagen, tot_dagen):
+    """De starttijden (Brussel, tot op de minuut) van de afspraken in precies de agenda's van De Agendawacht, met haar
+    archiefagenda's, en de agenda's die niet gelezen werden (T-0120 CL-2; tot 01-11-2026 las ik er maar drie). Alleen
+    lezen. Een privé-agenda heet hier 'een privé-agenda', zonder haar naam."""
+    import agenda_wacht as W  # noqa: PLC0415  pas hier: het laden van De Agendawacht leest organisatie.globaal.be
+    ruw = W.afspraken(van_dagen, tot_dagen, alleen_lezen=True)
+    archief = W.archief_afspraken(van_dagen, tot_dagen, alleen_lezen=True)
+    ongelezen = {"een privé-agenda" if x.get("kalender") in W.PRIVE_KALENDERS else W.KALENDERS.get(x.get("kalender"), "een agenda")
+                 for x in ruw if x.get("fout")}
+    if W.ARCHIEF_FOUT:
+        ongelezen.add("archief")
+    return {(x.get("start") or "")[:16] for x in ruw + archief if not x.get("fout")}, sorted(ongelezen)
+
+
+def zonder_afspraak(boekingen, starts, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DAGEN):
+    """De actieve boekingen van terug dagen geleden tot vooruit dagen verder die op hun geboekte uur geen afspraak hebben,
+    als 'JJJJ-MM-DD UU:MM type'. starts: de starttijden uit agenda_starts."""
+    uit = []
+    for b in boekingen:
+        if b.get("status") != "active" or not b.get("start_time"):
+            continue
+        lok = datetime.datetime.fromisoformat(b["start_time"].replace("Z", "+00:00")).astimezone(BRUSSEL)
+        if lok < nu - datetime.timedelta(days=terug) or lok > nu + datetime.timedelta(days=vooruit):
+            continue
+        if lok.strftime("%Y-%m-%dT%H:%M") not in starts:
+            uit.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}")
+    return sorted(uit)
+
+
 def main():
     ag = bord.Agent(NAAM)
     vandaag = datetime.datetime.now(BRUSSEL).date().isoformat()
@@ -273,23 +303,23 @@ def main():
         signalen.append(f"type '{nm}' staat op meerdere accounts ({', '.join(waar)}): "
                         "boekingen komen dan op verschillende agenda's")
 
+    # Een mislukte of onvolledige lezing is onbekend, niet leeg: dan vergelijk ik niet (geen vals alarm) en meld ik de
+    # lezing aan Claude.
     zonder = []
-    if google_agenda is not None:
-        try:
-            afspraken = google_agenda.afspraken(van_dagen=0, tot_dagen=VOORUIT_DAGEN)
-            starts = {(x.get("start") or "")[:16] for x in afspraken}
-            for b in boekingen:
-                if b.get("status") != "active" or not b.get("start_time"):
-                    continue
-                lok = datetime.datetime.fromisoformat(b["start_time"].replace("Z", "+00:00")).astimezone(BRUSSEL)
-                if lok < nu_b or lok > nu_b + datetime.timedelta(days=VOORUIT_DAGEN):
-                    continue
-                if lok.strftime("%Y-%m-%dT%H:%M") not in starts:
-                    zonder.append(f"{lok:%Y-%m-%d %H:%M} {b.get('name')}")
-        except Exception as e:  # noqa: BLE001
-            noden.append({"tekst": f"agendacontrole mislukt: {str(e)[:60]}", "wie": "claude-code"})
+    try:
+        starts, ongelezen = agenda_starts(-TERUG_DAGEN - 1, VOORUIT_DAGEN + 1)
+    except Exception as e:  # noqa: BLE001
+        noden.append({"tekst": f"agendacontrole mislukt ({type(e).__name__}): boekingen zonder afspraak niet nagekeken",
+                      "wie": "claude-code"})
+    else:
+        if ongelezen:
+            noden.append({"tekst": "agendacontrole onvolledig, niet gelezen: " + ", ".join(ongelezen)
+                                   + "; boekingen zonder afspraak niet nagekeken", "wie": "claude-code"})
+        else:
+            zonder = zonder_afspraak(boekingen, starts, nu_b)
     if zonder:
-        signalen.append(f"{len(zonder)} boeking(en) zonder afspraak in de negen agenda's: " + "; ".join(zonder[:8]))
+        signalen.append(f"{len(zonder)} boeking(en) zonder afspraak in de agenda's van De Agendawacht: " + "; ".join(zonder[:8]))
+        noden.append({"tekst": ZONDER_NOOD, "wie": "mehdi"})
 
     ag.log(f"dag {vandaag}", "bron", "; ".join(regels))
     if signalen:
