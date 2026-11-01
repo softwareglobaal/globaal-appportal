@@ -381,7 +381,8 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel="", oplichting=None):
         return "rommel", "op het maildashboard op Helemaal weg gezet"
     if regel in ("ruis", "opruimen"):
         return "rommel", "Mehdi zette deze afzender op ruis"
-    nep = nepmail(b, eigen_domeinen, bekend, oplichting)  # na de beslissing van Mehdi, voor rol en woord (MAIL-1)
+    # na de beslissing van Mehdi, voor rol en woord (MAIL-1); wie Mehdi op Niet opruimen (houden) zette, is nooit nep
+    nep = "" if regel == "houden" else nepmail(b, eigen_domeinen, bekend, oplichting)
     if nep:
         return "verdacht", nep
     if automatisch_antwoord(ond):

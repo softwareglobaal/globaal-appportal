@@ -1041,6 +1041,7 @@ def test_nepmail_die_een_firma_claimt_is_verdacht():
     # de beslissing van Mehdi gaat voor
     assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst", regel="belangrijk")[0] == "hoog"
     assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling", regel="ruis")[0] == "rommel"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling", regel="houden")[0] != "verdacht", "Niet opruimen"
     # zonder lijst (zoals De Wagenparkwacht trieer(b) aanroept) alleen (a)
     assert postvak.trieer(kop("x@anderdomein.test", "Terugbetaling", "De Watergroep"))[0] != "verdacht"
     assert postvak.trieer(kop("lid@enquetedienst.test", "Uw mening telt", "facturatie@waterproef.test via Enquetedienst"))[0] \
