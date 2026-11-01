@@ -776,6 +776,9 @@ json.dump({"env": dict(os.environ), "cwd": os.getcwd(), "invoer": sys.stdin.read
 for regel in open(uit):
     if regel.strip() == "SLAAP":
         time.sleep(30)
+    if regel.startswith("STDERR:"):
+        sys.stderr.write(regel[7:])
+        continue
     print(regel.rstrip("\n"), flush=True)
 sys.exit(code)
 """
@@ -889,6 +892,11 @@ with tempfile.TemporaryDirectory() as _d:
     e = fout_van()
     check("een geweigerde login vraagt Mehdi om aan te melden, zonder het token te tonen", e is not None and e.aanmelden
           and "sk-ant-oat01-nep" not in str(e))
+    nep_claude([INIT, "STDERR:kapot bij sk-ant-oat01-nep: stream afgebroken"], code=2)
+    e = fout_van()
+    check("controle 26: zonder eindresultaat staan code en foutuitvoer in de melding, zonder token", e is not None
+          and "code 2" in str(e) and "stream afgebroken" in str(e) and "sk-ant-oat01-nep" not in str(e)
+          and "[token]" in str(e), str(e))
     nep_claude([INIT, {"type": "result", "subtype": "error_max_turns", "is_error": True}], code=1)
     e = fout_van()
     check("te veel beurten is een fout, geen half antwoord", e is not None and not e.aanmelden and not e.limiet)
