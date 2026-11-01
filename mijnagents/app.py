@@ -3795,6 +3795,10 @@ mcp_bode.registreer(app, gebruiker, groepen, db, nu)
 import felix_pagina  # noqa: E402
 felix_pagina.registreer(app, gebruiker, groepen, md, nu)
 
+# De Fotowacht (fotowacht.py, T-0120 FOTO-4 en FOTO-5): foto-metadata en voorvertoningen van de Mac, als bestand op de VM.
+import fotowacht  # noqa: E402
+fotowacht.registreer(app, TOKEN, os.path.dirname(DB_PAD))
+
 # Genummerde werfmigraties bij startup; /api/werf-context zelf voert uitsluitend SELECT uit.
 with sqlite3.connect(DB_PAD) as _werf_start:
     _werfbezoek_tabel(_werf_start)

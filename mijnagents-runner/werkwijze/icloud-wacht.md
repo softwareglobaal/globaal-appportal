@@ -1,7 +1,7 @@
 # Werkwijze van De iCloud-wacht (Privé)
 
-Versie 3 (22-10-2026: root-eigen app en wachtrondes voor TKN; v2 21-10-2026,
-v1 09-09-2026).
+Versie 4 (01-11-2026, T-0120: indeling per project, inhalen, voorvertoningen; v3 22-10-2026 root-eigen app en
+wachtrondes voor TKN; v2 21-10-2026, v1 09-09-2026).
 Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
 zijn Mac (de fotobibliotheek staat alleen daar; de VM ziet haar niet) en meld
 aan het bord. Elke avond zet ik de foto's van de dag klaar: tijd, plaats,
@@ -47,8 +47,10 @@ komen nooit op Dropbox. Dus:
 
 1. Ik lees elke avond de **metadata** van alle foto's van de dag (tijd, GPS, uuid, groep per
    plek) en schrijf die als `metadata.json` en `overzicht.md` in `Fotos/<JJJJ-MM-DD>/`
-   (Mehdi's Dropbox-app-map Apps/Mehdi Agents, ook in Data uit Mehdi/Fotos). Van
-   privéfoto's staat daar alleen tijd en plek, geen bestand.
+   (Mehdi's Dropbox-app-map Apps/Mehdi Agents, ook in Data uit Mehdi/Fotos). Sinds T-0120
+   FOTO-8 (01-11-2026, `versie` 2) staan daar tijd en plek alleen van werkfoto's; de andere
+   foto's alleen geteld (`niet_werk`), zonder tijd of plek. Een bestaande metadata.json van
+   voor die versie laat ik staan (VOL-20); weghalen alleen na Mehdi's ja.
 2. Ik haal de **werkafspraken met adres** van die dag uit de bak van De Agendawacht en
    zoek de coördinaten van het adres op (OpenStreetMap, met cache op de Mac).
 3. Een foto **hoort bij een bezoek** als ze binnen 300 m van het adres genomen is, tussen
@@ -100,3 +102,30 @@ Voor TKN-taken blijft de taak open tot de fotoselectie in twee wachtrondes die m
 worden in de volgende ronde alsnog geleverd. H-A-taken volgen hun bestaande regeling.
 Nood: controleer Full Disk Access en Photos Automation voor de root-eigen iCloudWacht.app;
 geef deze rechten niet aan de algemene Python-interpreter.
+
+## Indeling per project, inhalen en voorvertoningen (T-0120, 01-11-2026)
+
+Mehdi, 01-11-2026: "voor de fotos zijn de projecten van de bedrijven belangrijk niet de fotos van de mensen" en "ik wil
+elke foto en elke file van wachter kunnen zien en begrijpen".
+
+- **Elke avond twee dagen en de gemiste dagen** (FOTO-2): ik lees vandaag en gisteren (late foto's), en elke dag sinds
+  01-10 (hoogstens 35 dagen terug) waarvoor nog geen foto-metadata op het bord staat. Een ingehaalde dag levert alleen
+  metadata: geen export van originelen, niets in Dropbox.
+- **Alleen metadata naar de VM** (FOTO-4): per dag `/api/fotometadata` met per foto tijd, GPS, soort en de vlaggen van
+  Photos: schermafbeelding, bewaard uit een app, mensen (een gezicht van 10% of meer van het beeld, of de vlag "mensen in
+  beeld"; niet geanalyseerd is onbekend). Nooit een beeld of bestandsnaam. Het bord bewaart dat als bestand
+  (`mijnagents-data/fotometadata/<dag>.json`, alleen voor de VM-gebruiker), niet in zijn databank en niet in Dropbox; op
+  het bord staat per dag alleen een merkteken met aantallen. Lukte het lezen van de werkafspraken niet, dan is dat
+  onbekend: geen export, en de dag komt later opnieuw volledig.
+- **Een foto met mensen** wordt nooit als werkfoto naar Dropbox geëxporteerd en nooit geopend; een privé- of online
+  afspraak maakt geen werkfoto.
+- **De indeling gebeurt op de VM** (`koppelingen/fotoindeling.py`, planning `planning/foto.cron`): werf zeker (binnen
+  150 m van een buitenafspraak met firmacode of van de auto bij een project), werkkandidaat (alleen bij een projectplek),
+  mensen, privé, scherm of app, onbeslist. Per werfgroep en kandidaat een item voor Mehdi; wat geen werk is alleen als
+  telling, zonder plaats. Welke firma's projectplekken krijgen, kiest Mehdi (LOC-3, VOL-8).
+- **Voorvertoningen** (FOTO-5): alleen van een werkfoto zonder mensen, uit het lokale beeld (nooit uit iCloud gehaald),
+  hoogstens 480 px, naar de VM (`/api/fotovoorbeeld`), nooit naar Dropbox. Mehdi ziet ze op dagboek.globaal.be/fotos/<dag>.
+  Een foto van mensen open ik nooit.
+- **Fototaken** (FOTO-1, FOTO-6): een taak die op gegevens van de voorbereider wacht, is een melding (hoogstens één per
+  taak per dag), geen fout; exit 1 alleen bij een eigen fout. Een nieuw `00 fotos*.md` alleen als de lijst verandert.
+  De TKN-taken van de keten Barsten en scheuren leveren zoals voorheen (VOL-18).

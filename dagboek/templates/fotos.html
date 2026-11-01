@@ -1,0 +1,64 @@
+{% extends "basis.html" %}
+{% block titel %}Foto's {{ naam }} · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>Foto's per project, {{ naam }}</h1>
+  <a href="{{ url_for('wacht_pagina', naam='icloud-wacht') }}">De Fotowacht</a>
+  {% if vorige %}<a href="{{ url_for('fotos_dag', dag=vorige) }}">vorige dag</a>{% endif %}
+  {% if volgende %}<a href="{{ url_for('fotos_dag', dag=volgende) }}">volgende dag</a>{% endif %}
+</header>
+<main>
+  {% if not ind %}
+  <div class="kaart"><span class="stip grijs"></span> <b>Nog niet ingedeeld.</b>
+    <div class="zacht">De Fotowacht heeft de foto's van deze dag nog niet ingedeeld. Dat is onbekend, niet leeg.</div></div>
+  {% else %}
+  <div class="kaart samen">
+    <h2>{{ ind['totaal'] }} foto's en video's</h2>
+    <div class="cijfers">
+      <div><span class="groot">{{ ind['werf']|sum(attribute='aantal') }}</span> werkfoto's in {{ ind['werf']|length }} {{ 'werfgroep' if ind['werf']|length == 1 else 'werfgroepen' }}</div>
+      <div><span class="groot">{{ ind['kandidaat']|sum(attribute='aantal') }}</span> kandidaat</div>
+      <div><span class="groot">{{ ind['telling'].values()|sum }}</span> geen werk</div>
+    </div>
+  </div>
+  {% for g in ind['werf'] %}
+  <div class="kaart">
+    <h2><span class="stip groen"></span> {{ g['firma'] }} {{ g['nummer'] }} {{ g['naam'] }}</h2>
+    <p class="zacht">{{ g['aantal'] }} werkfoto's{% if g['van'] %}, {{ g['van'] }} tot {{ g['tot'] }}{% endif %}{% if g['met_mensen'] %}, {{ g['met_mensen'] }} met mensen (niet getoond){% endif %}{% if g.get('onbekend') %}, {{ g['onbekend'] }} met een onbekende vlag van Photos (niet getoond){% endif %}{% if g['zonder_plaats'] %}, {{ g['zonder_plaats'] }} zonder plaats{% endif %}{% if g['video'] %}, {{ g['video'] }} video{% endif %}.
+      {% if g['anker']['soort'] == 'afspraak' %}Bij de afspraak "{{ g['anker']['titel'] }}" ({{ g['anker']['start'] }} tot {{ g['anker']['einde'] }}){% else %}De auto stond bij het project ({{ g['anker']['aankomst'] }} tot {{ g['anker']['vertrek'] }}){% endif %}{% if g['auto_min'] %}; de auto stond er {{ g['auto_min'] }} min{% endif %}.
+      {% if g['link'] %}<a href="{{ g['link'] }}">project openen</a>{% endif %}
+      {% if g.get('bezoek') %}<a href="{{ g['bezoek']['pagina'] }}">werfbezoek openen</a> <span class="klein">bezoekmap: {{ g['bezoek']['bezoekmap'] }}</span>{% endif %}</p>
+    <div class="beelden">
+      {% for f in g['fotos'] %}
+      {% if f['beeld'] %}<figure><img src="{{ url_for('fotos_voorbeeld', dag=dag, fid=f['id']) }}" alt="werkfoto {{ f['tijd'] }}" loading="lazy"><figcaption>{{ f['tijd'] }}</figcaption></figure>
+      {% else %}<figure class="geen"><span>{{ f['tijd'] }}</span><figcaption>{{ 'nog geen voorvertoning' if f['voorbeeld'] else 'niet getoond' }}</figcaption></figure>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% for g in ind['kandidaat'] %}
+  <div class="kaart">
+    <h2><span class="stip oranje"></span> Kandidaat: {{ g['firma'] }} {{ g['nummer'] }} {{ g['naam'] }}</h2>
+    <p class="zacht">{{ g['aantal'] }} foto's bij de projectplek{% if g['van'] %}, {{ g['van'] }} tot {{ g['tot'] }}{% endif %}, zonder afspraak en zonder auto: nog niet bevestigd als werk. Geen voorvertoning.
+      {% if g['link'] %}<a href="{{ g['link'] }}">project openen</a>{% endif %}</p>
+  </div>
+  {% endfor %}
+  <div class="kaart">
+    <h2>Geen werk ({{ ind['telling'].values()|sum }})</h2>
+    <p>Privé {{ ind['telling']['prive'] }}, met mensen {{ ind['telling']['mensen'] }}, scherm of app {{ ind['telling']['overig'] }}, onbeslist {{ ind['telling']['onbeslist'] }}.</p>
+    <p class="zacht klein">Alleen geteld: geen plaats, geen tijd en geen beeld. Een privéfoto komt nooit van de Mac.</p>
+  </div>
+  {% if ind.get('bronnen') %}
+  <p class="zacht klein">Ingedeeld met {{ ind['bronnen']['projectplekken'] }} projectplekken, {{ ind['bronnen']['afspraken'] }} buitenafspraken met firmacode ({{ ind['bronnen']['afspraken_zonder_plaats'] }} zonder plaats) en {{ ind['bronnen']['verblijven'] }} verblijven van de auto bij een project; locatiecontext {{ ind['bronnen']['locatiecontext'] }}. Straal 150 m.</p>
+  {% endif %}
+  {% endif %}
+</main>
+<style>
+  .samen .cijfers{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .samen .groot{font-size:24px;font-weight:700}
+  .beelden{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .beelden figure{margin:0;background:#1d212a;border-radius:10px;overflow:hidden}
+  .beelden img{display:block;width:100%;height:120px;object-fit:cover}
+  .beelden figure.geen{display:flex;flex-direction:column;justify-content:center;align-items:center;height:146px;color:var(--zacht)}
+  .beelden figcaption{font-size:12px;color:var(--zacht);padding:4px 8px}
+</style>
+{% endblock %}

@@ -620,3 +620,6 @@ def dag_pagina(dag):
     return render_template("dag.html", d=dag_gegevens(dag, lc), vorige=vorige.isoformat(), ritten=ritten,
                            auto=auto_spoor(lb), buiten=bool((lb or {}).get("buiten_reeks")),
                            volgende=volgende.isoformat() if volgende < vandaag() else None)
+
+
+__import__("fotos").registreer(app, mag)  # T-0120 FOTO-5: de foto's per project, in een eigen module (fotos.py)

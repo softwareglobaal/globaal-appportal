@@ -40,8 +40,10 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_dagvaststelling.py",
     "mijnagents-runner/tests/test_eigen_werk_gezondheid.py",
     "mijnagents-runner/tests/test_fathom_wacht.py",
+    "mijnagents-runner/tests/test_fotoindeling.py",
     "mijnagents-runner/tests/test_geen_echte_namen.py",
     "mijnagents-runner/tests/test_hotmail_server.py",
+    "mijnagents-runner/tests/test_icloud_status.py",
     "mijnagents-runner/tests/test_keten.py",
     "mijnagents-runner/tests/test_mehdi_agent.py",
     "mijnagents-runner/tests/test_postvak.py",          # T-0120 groep mail, sinds 01-11-2026
@@ -61,11 +63,13 @@ BESTANDEN = (
     "mijnagents-runner/tests/fixtures/claude_stream_proef.jsonl",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "dagboek/test_wacht_pagina.py",
+    "dagboek/test_fotos.py",
     "mijnagents/test_gesprekken_api.py",
     "mijnagents/test_mail.py",                          # T-0120 groep mail, sinds 01-11-2026
     "mijnagents/test_wachten_dag.py",
     "dagboek/test_dagboek.py",
     "mijnagents/test_wachten_agenda.py",
+    "mijnagents/test_fotowacht.py",
 )
 
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige

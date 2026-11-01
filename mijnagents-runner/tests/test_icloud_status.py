@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Geen foto-I/O/export/netwerk: geweigerde bron blijft als fout zichtbaar."""
+import base64
 import importlib.util
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sqlite3
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 import urllib.error
+from urllib.parse import parse_qs, urlsplit
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -35,6 +37,7 @@ class ICloudStatus(unittest.TestCase):
             spec.loader.exec_module(self.module)
         self.module.TOKEN = "alleen-fictief-testtoken"
         self.export_orig = self.module.exporteer_naar
+        self.exporteer_dag_orig = self.module.exporteer
         self.export_jpg_orig = self.module.exporteer_jpg_naar
         self.hartslag_orig = self.module.hartslag
         self.module.DROPBOX_LOKAAL = str(Path(self.home.name) / "Dropbox")
@@ -45,6 +48,8 @@ class ICloudStatus(unittest.TestCase):
         self.module.exporteer_jpg_naar = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.exporteer = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.bord = lambda *a: self.fail("deze fout mag geen inhoud publiceren")
+        # Geen netwerk in de proef: geen foto-metadata op het bord (dan haalt de avondronde vanaf 01-10 in, FOTO-2).
+        self.module.bord_lees = lambda pad: {"items": []}
 
     def test_fototaak_met_authorization_denied_blijft_open_en_gaat_op_fout(self):
         m = self.module
@@ -140,7 +145,7 @@ class ICloudStatus(unittest.TestCase):
 
     def test_geen_automatische_straalverruiming_bij_lege_selectie(self):
         code, exports, _ = self.fake_run([self.foto("tussen_300_600m", lat=50.004)])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [])
         self.assertEqual(self.afgevinkt, [])
         self.assertIn("fotoselectie_leeg", self.statussen[-1][1]["detail"])
@@ -158,6 +163,68 @@ class ICloudStatus(unittest.TestCase):
         self.statussen.clear()
         self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
         self.assertEqual(self.statussen[-1][0], "fout")
+
+    def logregels(self, logs):
+        return [r for pad, data in logs if pad == "/api/logboek" for r in data.get("regels", [])]
+
+    def wachtenpagina(self, regels, dag="2026-10-14"):
+        """De kleur van De Fotowacht op de wachtenpagina (mijnagents/wachten_dag.py) met deze werkverslagregels."""
+        spec = importlib.util.spec_from_file_location("wachten_dag_proef", Path(__file__).resolve().parents[2] / "mijnagents/wachten_dag.py")
+        wd = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wd)
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        con.execute("CREATE TABLE klaarzet (van, voor, soort, sleutel, titel, inhoud, uniek, status, ts)")
+        con.execute("CREATE TABLE logboek (id INTEGER PRIMARY KEY, naam, onderwerp, stap, tekst, detail, ts)")
+        van, _ = wd.grenzen(dag)
+        for r in regels:
+            con.execute("INSERT INTO logboek(naam, onderwerp, stap, tekst, ts) VALUES(?,?,?,?,?)",
+                        (r["naam"], r.get("onderwerp", ""), r["stap"], r["tekst"], van))
+        return wd.per_wacht(con, "icloud-wacht", "De Fotowacht", dag)["kleur"]
+
+    def test_foto1_wachtende_taak_is_melding_exit_0_en_niet_rood(self):
+        # T-0120 FOTO-1: een taak zonder venster wacht op de voorbereider. Geen stap 'fout', exit 0, niet rood op de
+        # wachtenpagina, en hoogstens één melding per taak per dag (tot 01-11 elke 30 minuten een rode regel).
+        data = self.inhoud()
+        data.pop("start")
+        code, _, logs = self.fake_run([], inhoud=data)
+        regels = self.logregels(logs)
+        self.assertEqual(code, 0)
+        self.assertEqual([r["stap"] for r in regels], ["melding"])
+        self.assertIn("bezoekvenster_ontbreekt", regels[0]["detail"])
+        self.assertNotEqual(self.wachtenpagina(regels), "rood")
+        code, _, logs = self.fake_run([], inhoud=data)
+        self.assertEqual((code, self.logregels(logs)), (0, []))
+        self.assertEqual(self.statussen[-1][0], "klaar")
+
+    def test_foto1_een_taak_met_een_andere_reden_dezelfde_dag_meldt_niet_opnieuw(self):
+        # Codex 1: hoogstens één melding per taak per dag, ook als de reden verandert.
+        data = self.inhoud()
+        data.pop("start")
+        _, _, logs = self.fake_run([], inhoud=data)
+        self.assertEqual(len(self.logregels(logs)), 1)
+        _, _, logs = self.fake_run([self.foto("ver", lat=50.01)])
+        self.assertEqual(self.logregels(logs)[-1:], [])
+        self.assertIn("fotoselectie_leeg", self.statussen[-1][1]["detail"])
+        _, _, logs = self.fake_run([], inhoud=data, taak_id=13)
+        self.assertEqual([r["stap"] for r in self.logregels(logs)], ["melding"])
+
+    def test_foto1_gedeeltelijk_met_onbesliste_foto_blijft_een_eigen_fout(self):
+        # Codex 3: met een onbesliste foto erbij koos de wacht de wachtreden en gaf exit 0 bij een mislukte levering.
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede"), self.foto("geen_gps", lat=None)], geleverd=1)
+        self.assertEqual(code, 1)
+        self.assertIn("fotolevering_gedeeltelijk", self.statussen[-1][1]["detail"])
+        self.assertEqual([r["stap"] for r in self.logregels(logs)][-1], "fout")
+
+    def test_foto1_gedeeltelijke_levering_is_fout_en_exit_1(self):
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
+        regels = self.logregels(logs)
+        self.assertEqual(code, 1)
+        self.assertIn("fout", [r["stap"] for r in regels])
+        self.assertEqual(self.wachtenpagina(regels), "rood")
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
+        self.assertEqual(code, 1)
+        self.assertIn("fout", [r["stap"] for r in self.logregels(logs)])
 
     def test_lege_of_gedeeltelijke_export_wordt_nooit_afgevinkt(self):
         for n in (0, 1):
@@ -184,7 +251,7 @@ class ICloudStatus(unittest.TestCase):
         data.pop("start")
         self.module.fotos_van = lambda day: self.fail("ontbrekend venster mag geen foto's lezen")
         code, exports, _ = self.fake_run([], inhoud=data)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [])
         self.assertEqual(self.afgevinkt, [])
         self.assertEqual(self.lezingen, [])
@@ -218,9 +285,80 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(len(versies), 1)
         self.assertIn("Venster:", versies[0].read_text())
 
+    def test_foto6_gelijke_selectie_geeft_geen_nieuw_fotolijstje(self):
+        # T-0120 FOTO-6 (T-0107): een open H-A-taak schreef elke 30 minuten een nieuw '00 fotos <tijd>.md' (150 in een
+        # bezoekmap). Nu alleen een nieuwe lijst als de inhoud verschilt van de laatste.
+        data = self.inhoud(lat=50.0, lon=4.0)
+        doel = Path(self.module.taakdoel(data))
+        for _ in range(2):
+            self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 1)
+        self.fake_run([self.foto("goed"), self.foto("nog_een"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
+        self.fake_run([self.foto("goed"), self.foto("nog_een"), self.foto("geen_gps", lat=None)], inhoud=data)
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
+
+    def nep_bak(self, items):
+        """Een nep-bord dat /api/klaarzet beantwoordt zoals mijnagents/app.py: filter op soort, nieuwste eerst, hoogstens n (500)."""
+        vragen = []
+
+        class Antwoord:
+            def __init__(self, data):
+                self.data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return self.data
+
+        def urlopen(req, timeout=None):
+            url = req.full_url
+            vragen.append(url)
+            q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
+            lijst = [dict(it, id=i) for i, it in enumerate(items, 1)][::-1]
+            lijst = [it for it in lijst if (not q.get("soort") or it["soort"] == q["soort"])
+                     and (not q.get("tot_id") or it["id"] < int(q["tot_id"]))]
+            return Antwoord(json.dumps({"items": lijst[:min(int(q.get("n", 100)), 500)]}).encode())
+        return vragen, urlopen
+
+    def test_foto3_afspraak_tussen_600_andere_items_wordt_gevonden(self):
+        # T-0120 FOTO-3: werkafspraken() las de laatste 500 items van de hele bak, zonder filter op soort; op 31-10 viel
+        # de buitenafspraak met adres er zo uit. Nu vraagt ze alleen afspraken.
+        afspraak = {"soort": "afspraak", "titel": "fictief", "inhoud": json.dumps(
+            {"datum": "2026-10-31", "start": "2026-10-31T09:00:00+01:00", "einde": "2026-10-31T12:00:00+01:00",
+             "titel": "[HA] 9999 plaatsbezoek", "locatie": "Proefstraat 1, 9999 Proefdorp", "firma": "HARC", "nummer": "9999"})}
+        items = [afspraak] + [{"soort": "signaal", "titel": f"ander {i}", "inhoud": "{}"} for i in range(600)]
+        vragen, urlopen = self.nep_bak(items)
+        with patch.object(self.module.urllib.request, "urlopen", urlopen):
+            gevonden = self.module.werkafspraken("2026-10-31")
+        self.assertEqual([a["adres"] for a in gevonden], ["Proefstraat 1, 9999 Proefdorp"])
+        self.assertIn("soort=afspraak", vragen[0])
+        # Codex 2: ook achter 1200 nieuwere afspraken, door terug te bladeren
+        andere = [{"soort": "afspraak", "titel": f"ander {i}", "inhoud": json.dumps({"datum": "2026-10-30"})} for i in range(1200)]
+        vragen, urlopen = self.nep_bak([afspraak] + andere)
+        with patch.object(self.module.urllib.request, "urlopen", urlopen):
+            self.assertEqual(len(self.module.werkafspraken("2026-10-31")), 1)
+        self.assertEqual((len(vragen), "tot_id" in vragen[-1]), (3, True))
+        # een antwoord zonder lijst is onbekend, geen nul
+        class Leeg:
+            def __enter__(s):
+                return s
+
+            def __exit__(s, *a):
+                return False
+
+            def read(s):
+                return b'{"fout": "fictief"}'
+        with patch.object(self.module.urllib.request, "urlopen", lambda *a, **k: Leeg()):
+            self.assertIsNone(self.module.werkafspraken("2026-10-31"))
+
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
         self.assertEqual(exports, [["goed"]])
         self.assertEqual(self.afgevinkt, [])
         self.assertIn("fotoselectie_onbeslist", self.statussen[-1][1]["detail"])
@@ -230,10 +368,22 @@ class ICloudStatus(unittest.TestCase):
                      self.inhoud(start="2026-10-14T11:00:00"), self.inhoud(bezoek_id=None), self.inhoud(straal_m=600)):
             with self.subTest(gegevens=data):
                 code, exports, _ = self.fake_run([self.foto("fictief")], inhoud=data)
-                self.assertEqual(code, 1)
+                self.assertEqual(code, 0)  # FOTO-1: wachten is geen eigen fout
                 self.assertEqual(exports, [])
                 self.assertEqual(self.afgevinkt, [])
                 self.assertEqual(self.lezingen, [])
+
+    def test_foto7_fotos_zonder_gps_binnen_45_minuten_in_een_groep(self):
+        # T-0120 FOTO-7: een foto zonder GPS maakte altijd een eigen groep (31-10: 17 foto's zonder plaats, 17 items).
+        zonder = [{"tijd": t, "lat": None, "lon": None} for t in ("10:00", "10:02", "10:05", "10:07", "10:10")]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(zonder)], [5])
+        later = zonder + [{"tijd": "11:00", "lat": None, "lon": None}, {"tijd": "11:01", "lat": 50.0, "lon": 4.0},
+                          {"tijd": "11:02", "lat": None, "lon": None}]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(later)], [5, 1, 1, 1])
+        # Codex 2: in de nacht van de wintertijd lijken 02:10 (zomertijd) en 02:40 (wintertijd) 30 minuten uiteen; het is 90.
+        nacht = [{"tijd": "02:10", "vastgelegd_utc": "2026-10-25T00:10:00+00:00", "lat": None, "lon": None},
+                 {"tijd": "02:40", "vastgelegd_utc": "2026-10-25T01:40:00+00:00", "lat": None, "lon": None}]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(nacht)], [1, 1])
 
     def test_dubbel_lokaal_uur_bij_wintertijd_wordt_op_utc_gescheiden(self):
         m = self.module
@@ -242,6 +392,88 @@ class ICloudStatus(unittest.TestCase):
         selected, onbeslist = m.selecteer(fotos, start, einde, (50.0, 4.0), 300)
         self.assertEqual([f["uuid"] for f in selected], ["eerste_0230"])
         self.assertEqual(onbeslist, 0)
+
+    def test_foto8_metadata_zonder_werkafspraak_heeft_geen_plaats(self):
+        # T-0120 FOTO-8: metadata.json en overzicht.md in de H-A-Dropbox droegen tijd en GPS van alle foto's, ook privé.
+        # Nu alleen werkfoto's met plaats en tijd; de rest alleen geteld. VOL-20: een bestaand oud bestand blijft staan.
+        m = self.module
+        m.EXPORT = str(Path(self.home.name) / "export")
+        m.LIB = str(Path(self.home.name) / "originelen")
+        fotos = [dict(self.foto("prive-1", lat=50.12345, lon=4.12345), tijd="10:01"),
+                 dict(self.foto("prive-2", lat=None, lon=None), tijd="10:02")]
+        for f in fotos:
+            f["werk"] = ""
+        self.exporteer_dag_orig(fotos, "2026-10-14", m.groepeer(fotos))
+        doel = Path(m.EXPORT, "2026-10-14")
+        meta, overzicht = (doel / "metadata.json").read_text(), (doel / "overzicht.md").read_text()
+        for tekst in (meta, overzicht):
+            self.assertNotIn("50.12345", tekst)
+            self.assertNotIn("10:01", tekst)
+            self.assertNotIn("prive-1", tekst)
+        d = json.loads(meta)
+        self.assertEqual((d["aantal"], d["werk"], d["fotos"], d["groepen"]), (2, 0, [], []))
+        self.assertNotIn('"lat"', meta)
+        # met een werkfoto: alleen die draagt plaats en tijd
+        werk = dict(self.foto("werk-1", lat=50.5, lon=4.5), tijd="11:00", werk="Plaatsbezoek 9999", bestand="w.jpg")
+        bron = Path(m.LIB) / "w" / "werk-1.jpg"
+        bron.parent.mkdir(parents=True)
+        bron.write_bytes(b"fictief")
+        self.exporteer_dag_orig(fotos + [werk], "2026-10-15", m.groepeer(fotos + [werk]))
+        d = json.loads(Path(m.EXPORT, "2026-10-15", "metadata.json").read_text())
+        self.assertEqual([(f["uuid"], f["lat"]) for f in d["fotos"]], [("werk-1", 50.5)])
+        self.assertEqual([g["aantal"] for g in d["groepen"]], [1])
+        self.assertNotIn("50.12345", Path(m.EXPORT, "2026-10-15", "overzicht.md").read_text())
+        # VOL-20: een metadata.json van voor deze versie wordt niet overschreven
+        oud = Path(m.EXPORT, "2026-10-16")
+        oud.mkdir()
+        (oud / "metadata.json").write_text('{"datum": "2026-10-16", "fotos": [{"lat": 50.1}]}')
+        (oud / "overzicht.md").write_text("oud overzicht\n")
+        self.exporteer_dag_orig(fotos, "2026-10-16", m.groepeer(fotos))
+        self.assertEqual((oud / "metadata.json").read_text(), '{"datum": "2026-10-16", "fotos": [{"lat": 50.1}]}')
+        self.assertEqual((oud / "overzicht.md").read_text(), "oud overzicht\n")
+
+    def test_foto8_gemengde_groep_draagt_alleen_plaats_en_tijd_van_de_werkfoto(self):
+        # Codex 1: een groep met eerst een privéfoto gaf diens plaats en begintijd aan metadata.json en overzicht.md.
+        m = self.module
+        m.EXPORT = str(Path(self.home.name) / "export")
+        m.LIB = str(Path(self.home.name) / "originelen")
+        prive = dict(self.foto("prive-1", lat=50.00011, lon=4.00011), tijd="09:58", werk="")
+        werk = dict(self.foto("werk-1", lat=50.00055, lon=4.00055), tijd="10:05", werk="Plaatsbezoek 9999", bestand="w.jpg")
+        (Path(m.LIB) / "w").mkdir(parents=True)
+        (Path(m.LIB) / "w" / "werk-1.jpg").write_bytes(b"fictief")
+        groepen = m.groepeer([prive, werk])
+        self.assertEqual(len(groepen), 1)
+        self.exporteer_dag_orig([prive, werk], "2026-10-17", groepen)
+        meta = Path(m.EXPORT, "2026-10-17", "metadata.json").read_text()
+        overzicht = Path(m.EXPORT, "2026-10-17", "overzicht.md").read_text()
+        self.assertEqual(json.loads(meta)["groepen"], [{"van": "10:05", "tot": "10:05", "lat": 50.00055, "lon": 4.00055, "aantal": 1}])
+        for tekst in (meta, overzicht):
+            self.assertNotIn("50.00011", tekst)
+            self.assertNotIn("09:58", tekst)
+
+    def test_foto8_mensen_en_privéafspraken_worden_nooit_werkfoto(self):
+        # Codex 1: een foto met mensen, of een foto bij een privé- of online afspraak, ging als werk naar Dropbox.
+        m = self.module
+        m.coord = lambda adres: (50.0, 4.0)
+        afspraak = {"titel": "Plaatsbezoek 9999", "start": "10:00", "einde": "11:00", "adres": "Proefstraat 1, 9999 Proefdorp"}
+        zeker = {"mensen": False, "scherm": False, "app": False}
+        fotos = [dict(self.foto(uid, lat=50.0, lon=4.0), tijd="10:15", **dict(zeker, **vlag)) for uid, vlag in (
+            ("mens", {"mensen": True}), ("onbekend", {"mensen": None}), ("scherm", {"scherm": True}), ("app", {"app": True}),
+            ("scherm-onbekend", {"scherm": None}), ("werf", {}))]
+        self.assertEqual(m.koppel_werk(fotos, [afspraak]), 1)
+        self.assertEqual([f["uuid"] for f in fotos if f["werk"]], ["werf"])
+        inhoud = lambda **k: json.dumps(dict({"datum": "2026-10-31", "start": "2026-10-31T10:00:00+01:00",
+                                              "einde": "2026-10-31T11:00:00+01:00", "titel": "fictief", "firma": "HARC",
+                                              "locatie": "Proefstraat 1, 9999 Proefdorp"}, **k))
+        items = [{"soort": "afspraak", "voor": "prive", "inhoud": inhoud(firma="PRIVE", titel="privé")},
+                 {"soort": "afspraak", "voor": "h-architects", "inhoud": inhoud(locatie="Microsoft Teams Meeting", titel="online")},
+                 {"soort": "afspraak", "voor": "h-architects", "inhoud": inhoud(firma="", titel="zonder firma")},
+                 {"soort": "afspraak", "voor": "h-architects", "inhoud": inhoud(titel="werf")}]
+        _, urlopen = self.nep_bak(items)
+        with patch.object(m.urllib.request, "urlopen", urlopen):
+            self.assertEqual([a["titel"] for a in m.werkafspraken("2026-10-31")], ["werf"])
+        with patch.object(m.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(urllib.error.URLError("fictief"))):
+            self.assertIsNone(m.werkafspraken("2026-10-31"))
 
     def test_meer_dan_80_fictieve_originelen_hervat_alleen_ontbrekende(self):
         m = self.module
@@ -278,6 +510,205 @@ class ICloudStatus(unittest.TestCase):
         con.close()
         self.assertIsNone(m.fotos_van("2026-10-14")[0]["origineel"])
 
+    def test_foto4_vlaggen_scherm_app_en_mensen_uit_photos_sqlite(self):
+        # T-0120 FOTO-4: de vlaggen die Photos zelf zet (gemeten met PRAGMA op 01-11), nooit het beeld. Een gezicht van 10%
+        # of meer, of de vlag 'mensen in beeld', is mensen; niet geanalyseerd is onbekend (None), nooit 'geen mensen'.
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, "
+                    "ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER, ZISDETECTEDSCREENSHOT INTEGER)")
+        con.execute("CREATE TABLE ZADDITIONALASSETATTRIBUTES (ZASSET INTEGER, ZORIGINALFILENAME TEXT, ZIMPORTEDBY INTEGER, "
+                    "ZFACEANALYSISVERSION INTEGER, ZHASPEOPLESCENEMIDORGREATERCONFIDENCE INTEGER)")
+        con.execute("CREATE TABLE ZDETECTEDFACE (ZASSETFORFACE INTEGER, ZSIZE REAL, ZHIDDEN INTEGER)")
+        rijen = [  # pk, uuid, scherm, importedby, analyse, mensvlag, gezichten (grootte, verborgen)
+            (1, "werf", 0, 1, 12, 0, [(0.04, 0)]), (2, "portret", 0, 1, 12, 0, [(0.31, 0)]), (3, "groep", 0, 2, 12, 1, []),
+            (4, "scherm", 1, 1, 12, 0, []), (5, "app", 0, 8, 12, 0, []), (6, "nieuw", 0, 1, 0, 0, []),
+            (7, "verborgen", 0, 1, 12, 0, [(0.5, 1)]), (8, "kleine-gezichten", 0, 1, 12, 0, [(0.03, 0), (0.04, 0), (0.02, 0)])]
+        for pk, uid, scherm, door, analyse, vlag, gezichten in rijen:
+            con.execute("INSERT INTO ZASSET VALUES (?, ?, 'X.HEIC', ?, 50, 4, 0, 0, ?)", (pk, uid, t + pk, scherm))
+            con.execute("INSERT INTO ZADDITIONALASSETATTRIBUTES VALUES (?, 'IMG.HEIC', ?, ?, ?)", (pk, door, analyse, vlag))
+            for grootte, verborgen in gezichten:
+                con.execute("INSERT INTO ZDETECTEDFACE VALUES (?, ?, ?)", (pk, grootte, verborgen))
+        con.commit()
+        con.close()
+        uit = {f["uuid"]: (f["scherm"], f["app"], f["mensen"], f["gezicht"]) for f in m.fotos_van("2026-10-14")}
+        # Codex 3: een klein gezicht is geen 'mensen' voor de indeling, maar wel een gezicht: dan nooit een voorvertoning.
+        self.assertEqual(uit, {"werf": (False, False, False, True), "portret": (False, False, True, True),
+                               "groep": (False, False, True, True), "scherm": (True, False, False, False),
+                               "app": (False, True, False, False), "nieuw": (False, False, None, None),
+                               "verborgen": (False, False, False, False), "kleine-gezichten": (False, False, False, True)})
+
+    def test_foto8_tijd_is_die_van_brussel_ook_op_een_mac_elders(self):
+        # Codex 3: de tijd per foto kwam uit de tijdzone van de Mac; een Mac in Suriname zette een privéfoto zo bij een
+        # Brusselse werkafspraak.
+        import time
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER)")
+        con.execute("INSERT INTO ZASSET VALUES (1, 'uuid', 'UUID.HEIC', ?, 50, 4, 0, 0)", (t,))
+        con.commit()
+        con.close()
+        oud = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Paramaribo"
+            time.tzset()
+            self.assertEqual(m.fotos_van("2026-10-14")[0]["tijd"], "11:30")
+        finally:
+            if oud is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = oud
+            time.tzset()
+
+    def nep_avond(self, vandaag, fotos_per_dag, gelezen=(), afspraken=lambda dag: [], nog=0):
+        """Een avondronde tegen een nep-bord: klaarzet op uniek zoals mijnagents/app.py, /api/fotometadata per dag."""
+        m = self.module
+        m.DAG, m.DAG_GEGEVEN = vandaag, False
+        self.bak = getattr(self, "bak", {f"fotodag:{d}": {"van": "icloud-wacht", "voor": "fotoindeling", "soort": "fotometadata",
+                                                         "sleutel": d, "uniek": f"fotodag:{d}", "inhoud": {"export": "gedaan"}}
+                                         for d in gelezen})
+        self.verslag = getattr(self, "verslag", [])
+        self.metadata = getattr(self, "metadata", {})
+        self.uitvoer = []
+
+        def bord(pad, data):
+            if pad == "/api/klaarzet":
+                uit = {"nieuw": 0, "bestaand": 0, "bijgewerkt": 0}
+                for it in data["items"]:
+                    oud = self.bak.get(it["uniek"])
+                    uit["nieuw" if oud is None else "bestaand" if oud == it else "bijgewerkt"] += 1
+                    self.bak[it["uniek"]] = it
+                return uit
+            if pad == "/api/fotometadata":
+                self.metadata[data["dag"]] = data
+                return {"ok": True}
+            self.verslag.extend(data.get("regels", []))
+            return {"ok": True}
+
+        def bord_lees(pad):
+            self.assertTrue(pad.startswith("/api/klaarzet?"), "alleen /api/klaarzet mag met het token door de forward-auth")
+            q = {k: v[0] for k, v in parse_qs(urlsplit(pad).query).items()}
+            return {"items": [dict(it, inhoud=json.dumps(it["inhoud"])) for it in reversed(list(self.bak.values()))
+                              if it["soort"] == q["soort"] and it["voor"] == q["voor"]][:int(q["n"])]}
+        m.bord, m.bord_lees = bord, bord_lees
+        m.fotos_van = lambda dag: [dict(f) for f in fotos_per_dag.get(dag, [])]
+        m.werkafspraken = afspraken
+        m.exporteer = lambda fotos, dag, groepen: self.uitvoer.append(dag) or (0, 0, nog)
+        with patch.object(m.os.path, "exists", return_value=True):
+            return m.main()
+
+    def proeffoto(self, uid, lat=50.0):
+        return {"uuid": uid, "tijd": "10:00", "vastgelegd_utc": "2026-10-01T08:00:00+00:00", "lat": lat, "lon": 4.0,
+                "video": False, "scherm": False, "app": False, "mensen": False}
+
+    def test_foto2_gemiste_dagen_en_gisteren_worden_ingehaald_zonder_dubbel(self):
+        # T-0120 FOTO-2: in oktober las de wacht 4 van de 31 dagen, en een dag alleen om 21:15 van die dag. Nu leest de
+        # avondronde gisteren opnieuw en haalt ze elke dag zonder foto-metadata in, alleen als metadata (geen export).
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        f = self.proeffoto
+        bib = {"2026-10-01": [f("a1"), f("a2")], "2026-10-02": [f("b1"), f("b2-laat")], "2026-10-03": [f("c1")]}
+        self.assertEqual(self.nep_avond("2026-10-03", bib, gelezen=["2026-10-02"]), 0)
+        bron = [r["onderwerp"] for r in self.verslag if r["stap"] == "bron"]
+        self.assertEqual(bron, ["dag 2026-10-01", "dag 2026-10-02", "dag 2026-10-03"])
+        self.assertEqual(self.uitvoer, ["2026-10-02", "2026-10-03"])  # de ingehaalde dag: geen export
+        self.assertIn("2 foto's/video's op 2026-10-02", [r["tekst"] for r in self.verslag if r["stap"] == "bron"][1])
+        self.assertEqual(sorted(self.bak), ["fotodag:2026-10-01", "fotodag:2026-10-02", "fotodag:2026-10-03"])
+        self.assertEqual([self.bak[k]["inhoud"]["export"] for k in sorted(self.bak)], ["niet", "gedaan", "gedaan"])
+        # Codex 1: op het bord geen GPS en geen id per foto; die gaan alleen naar het bestand op de VM
+        self.assertNotIn("50.0", json.dumps(self.bak))
+        self.assertNotIn("a1", json.dumps(self.bak))
+        self.assertEqual([x["id"] for x in self.metadata["2026-10-01"]["fotos"]], ["a1", "a2"])
+        self.assertNotIn("bestand", json.dumps(self.metadata))
+        # tweede ronde dezelfde avond: geen dubbel item, en de ingehaalde dag niet opnieuw
+        self.nep_avond("2026-10-03", bib)
+        self.assertEqual(len(self.bak), 3)
+        self.assertEqual([r["onderwerp"] for r in self.verslag if r["stap"] == "bron"][3:], ["dag 2026-10-02", "dag 2026-10-03"])
+        self.assertFalse([r for r in self.verslag if "50.0" in str(r.get("detail", "")) + r["tekst"]])
+
+    def test_foto2_storing_bij_de_werkafspraken_wordt_later_volledig_ingehaald(self):
+        # Codex 1: een mislukte lezing van de afspraken is onbekend, geen nul; de dag komt binnen het venster opnieuw volledig.
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        bib = {"2026-10-02": [self.proeffoto("b1")]}
+        self.nep_avond("2026-10-02", bib, afspraken=lambda dag: None)
+        self.assertEqual(self.uitvoer, [])
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "mislukt")
+        self.assertIn("melding", [r["stap"] for r in self.verslag if "werkafspraken niet gelezen" in r["tekst"]])
+        self.nep_avond("2026-10-04", bib)          # twee dagen later: niet meer gisteren, toch opnieuw volledig
+        self.assertIn("2026-10-02", self.uitvoer)
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "gedaan")
+        self.uitvoer.clear()
+        self.nep_avond("2026-10-05", bib)
+        self.assertNotIn("2026-10-02", self.uitvoer)
+
+    def test_foto2_originelen_nog_in_icloud_is_geen_volledige_export(self):
+        # Codex 2: een export met originelen die nog in iCloud zitten, telde als gedaan.
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        bib = {"2026-10-02": [self.proeffoto("b1")]}
+        self.nep_avond("2026-10-02", bib, nog=1)
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "mislukt")
+        self.nep_avond("2026-10-04", bib)
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "gedaan")
+
+    def test_foto2_onleesbaar_werkverslag_slaat_alleen_het_inhalen_over(self):
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        m.bord_lees = lambda pad: (_ for _ in ()).throw(urllib.error.URLError("fictief"))
+        dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
+        self.assertEqual(dagen, [("2026-10-04", True), ("2026-10-05", True)])
+        self.assertIn("inhalen overgeslagen", melding)
+        # Codex 3: een antwoord zonder lijst is geen 'niets gelezen' (anders werd een gedane dag als ingehaald overschreven)
+        m.bord_lees = lambda pad: {"fout": "fictief"}
+        dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
+        self.assertEqual((dagen, "inhalen overgeslagen" in melding), ([("2026-10-04", True), ("2026-10-05", True)], True))
+
+    def test_foto5_voorvertoning_alleen_van_een_werkfoto_zonder_mensen(self):
+        # T-0120 FOTO-5: de Mac maakt alleen de voorvertoningen die de indeling vraagt, kijkt zelf de vlaggen na en opent
+        # nooit een foto van mensen (of onbekend), een video of een foto die alleen in iCloud staat.
+        m = self.module
+        bib = Path(self.home.name) / "Bibliotheek.photoslibrary"
+        m.LIB = str(bib / "originals")
+        uid = lambda n: f"aaaaaaa{n}-0000-4000-8000-000000000000"
+        rij = lambda n, **k: dict({"uuid": uid(n), "bestand": f"{uid(n)}.HEIC", "video": False, "scherm": False, "app": False,
+                                   "mensen": False, "gezicht": False}, **k)
+        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6), rij(8, scherm=None),
+                 rij(9, gezicht=True)]
+        afgeleid = bib / "resources/derivatives/a" / f"{uid(1)}_1_105_c.jpeg"
+        afgeleid.parent.mkdir(parents=True)
+        afgeleid.write_bytes(b"fictieve afgeleide")
+        for n in (2, 3, 4, 6):
+            origineel = bib / "originals/a" / f"{uid(n)}.HEIC"
+            origineel.parent.mkdir(parents=True, exist_ok=True)
+            origineel.write_bytes(b"fictief origineel")
+        m.fotos_van = lambda dag: [dict(f) for f in fotos]
+        m.bord_lees = lambda pad: {"items": [{"van": "icloud-wacht", "soort": "fotoindeling", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 10)]})}]}
+        geopend, gepost = [], []
+
+        def sips(cmd, **kw):
+            geopend.append(Path(cmd[-3]).name)
+            Path(cmd[-1]).write_bytes(b"\xff\xd8\xff fictieve kleine jpeg \xff\xd9")
+            return SimpleNamespace(returncode=0, stderr="")
+        m.bord = lambda pad, data: gepost.append((pad, data)) or {"ok": True}
+        with patch.object(m.subprocess, "run", sips):
+            uit = m.voorvertoningen()
+        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 6, "fouten": []})
+        self.assertEqual(geopend, [afgeleid.name, f"{uid(6)}.HEIC"])
+        self.assertEqual([(p, d["id"]) for p, d in gepost], [("/api/fotovoorbeeld", uid(1)), ("/api/fotovoorbeeld", uid(6))])
+        self.assertTrue(base64.b64decode(gepost[0][1]["jpeg"]).startswith(b"\xff\xd8\xff"))
+        # het bord weigert: een eigen fout, zichtbaar
+        def weiger(pad, data):
+            raise urllib.error.HTTPError(pad, 409, "fictief", {}, None)
+        m.bord = weiger
+        with patch.object(m.subprocess, "run", sips):
+            self.assertEqual(m.voorvertoningen()["fouten"], ["bord_409", "bord_409"])
+
     def test_tkn_tijd_aliasen_en_alleen_fotos_naar_bestaande_fotomap(self):
         data = self.inhoud_tkn()
         fotos = [self.foto("goed"), self.foto("film")]
@@ -306,7 +737,7 @@ class ICloudStatus(unittest.TestCase):
         fotos = [self.foto("eerste")]
         for nu in ("2026-10-14T11:00:00+00:00", "2026-10-14T11:44:59+00:00"):
             code, exports, _ = self.fake_run(fotos, inhoud=data, nu=nu)
-            self.assertEqual((code, exports[-1], self.afgevinkt), (1, ["eerste"], []))
+            self.assertEqual((code, exports[-1], self.afgevinkt), (0, ["eerste"], []))
         self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
         code, _, _ = self.fake_run(fotos, inhoud=data, nu="2026-10-14T11:45:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
@@ -320,7 +751,7 @@ class ICloudStatus(unittest.TestCase):
         tweede = self.foto("tweede")
         self.fake_run([eerste], inhoud=data, nu="2026-10-14T11:00:00+00:00")
         code, exports, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T11:46:00+00:00")
-        self.assertEqual((code, exports, self.afgevinkt), (1, [["eerste", "tweede"]], []))
+        self.assertEqual((code, exports, self.afgevinkt), (0, [["eerste", "tweede"]], []))
         self.assertFalse((Path(self.module.taakdoel(data)) / "00 fotos.md").exists())
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T12:31:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
@@ -332,7 +763,7 @@ class ICloudStatus(unittest.TestCase):
         self.fake_run([eerste], inhoud=data, nu="2026-10-14T15:59:59+00:00")
         self.assertEqual(self.afgevinkt, [])
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:00:00+00:00")
-        self.assertEqual((code, self.afgevinkt), (1, []))
+        self.assertEqual((code, self.afgevinkt), (0, []))
         code, _, _ = self.fake_run([eerste, tweede], inhoud=data, nu="2026-10-14T16:30:00+00:00")
         self.assertEqual((code, self.afgevinkt), (0, [12]))
         nieuw = self.inhoud_tkn(bezoek_ref="verslagopdracht:13")
@@ -356,11 +787,11 @@ class ICloudStatus(unittest.TestCase):
                 self.statussen.clear()
                 self.afgevinkt.clear()
                 code, exports, _ = self.fake_run([self.foto("goed")], inhoud={**basis, **changes})
-                self.assertEqual((code, exports, self.afgevinkt, self.lezingen), (1, [], [], []))
+                self.assertEqual((code, exports, self.afgevinkt, self.lezingen), (0, [], [], []))
                 self.assertIn(fout, self.statussen[-1][1]["detail"])
         ontbreekt = {**basis, "projectmap": "/Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand"}
         code, exports, _ = self.fake_run([self.foto("goed")], inhoud=ontbreekt)
-        self.assertEqual((code, exports), (1, []))
+        self.assertEqual((code, exports), (0, []))
         self.assertIn("fotomap_ontbreekt", self.statussen[-1][1]["detail"])
         self.assertFalse(Path(self.module.DROPBOX_LOKAAL, "Work/TKN BURO WORK/1 Projects/2026/47035_Onbestaand").exists())
 
@@ -470,6 +901,40 @@ class ICloudStatus(unittest.TestCase):
         self.assertIn("omzetting_mislukt", self.statussen[-1][1]["detail"])
         self.assertFalse((doel / "00 fotos.md").exists())
         self.assertFalse((doel / "IMG_0004.jpg").exists())
+
+    def test_vol18_bs_fototaak_van_het_commandocentrum_houdt_dezelfde_uitkomst(self):
+        # T-0120 VOL-18: de fototaak van de keten Barsten en scheuren, gemaakt zoals commandocentrum.py:321-379 ze maakt
+        # (taakinhoud), levert, vinkt af en schrijft één 00 fotos.md zoals voor FOTO-1 en FOTO-6. Wat de keten leest (bord-
+        # taak, fotomap, manifest, hartslag) blijft gelijk; alleen wachten geeft geen exit 1 en geen rode regel meer.
+        runner = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(runner / "plaud"))
+        spec = importlib.util.spec_from_file_location("commandocentrum_vol18", runner / "commandocentrum.py")
+        cc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cc)
+        project = "/Work/TKN BURO WORK/1 Projects/2026/47035_Barsten & Scheuren_Proeflaan 23, 9998 Proefgem"
+        rij = {"uniek": "afspraak:bs1", "dossier": "3999", "firma": "UNAB", "klant": "Proefklant", "adres": "Proeflaan 23, 9998 Proefgem",
+               "datum": "2026-10-21", "start": "2026-10-21T08:00:00+02:00", "einde": "2026-10-21T10:00:00+02:00",
+               "titel": "BS bezoek", "agenda": "werk", "deal_id": ""}
+        oud = {**rij, "id": 77, "dossiermap": project, "bezoekmap": project, "pakket": {}, "taken": []}
+        data, _ = cc.taakinhoud(rij, oud, cc.vs.SOORTEN["barsten-scheuren"], "barsten-scheuren")
+        (Path(self.module.DROPBOX_LOKAAL) / PurePosixPath(data["doelmap"]).parent.as_posix().lstrip("/")).mkdir(parents=True)
+        doel = Path(self.module.taakdoel(data))
+        nu = "2026-10-21T20:00:00+00:00"
+        goed = self.foto("goed", "2026-10-21T07:00:00+00:00")
+        # wachten: geen foto in het venster
+        code, exports, logs = self.fake_run([self.foto("ver", lat=50.01)], inhoud=data, nu=nu)
+        self.assertEqual((code, exports, self.afgevinkt, doel.joinpath("00 fotos.md").exists()), (0, [], [], False))
+        self.assertEqual((self.statussen[-1][0], [r["stap"] for r in self.logregels(logs)]), ("klaar", ["melding"]))
+        # gedeeltelijk: een eigen fout, zoals voorheen
+        code, exports, _ = self.fake_run([goed, self.foto("tweede", "2026-10-21T07:05:00+00:00")], inhoud=data, nu=nu, geleverd=1)
+        self.assertEqual((code, self.afgevinkt, doel.joinpath("00 fotos.md").exists()), (1, [], False))
+        self.assertEqual(self.statussen[-1][0], "fout")
+        # volledig: geleverd, afgevinkt, één manifest
+        code, exports, _ = self.fake_run([goed], inhoud=data, nu=nu, taak_id=13)
+        self.assertEqual((code, exports, self.afgevinkt), (0, [["goed"]], [13]))
+        self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 1)
+        self.assertIn("verslagopdracht:77", (doel / "00 fotos.md").read_text())
+        self.assertEqual(self.statussen[-1][0], "klaar")
 
     def test_hartslag_vermeldt_versie_of_onbekend(self):
         m = self.module

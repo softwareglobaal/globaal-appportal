@@ -177,6 +177,7 @@ INVENTARIS = {
     "mijnagents/app.py": "/api/dagcijfers en /api/beleid van de tegel; oude locatie-items niet getoond",
     "mijnagents-runner/planning/locatie_cron_zetten.py": "planning, leest geen gegevens",
     "mijnagents-runner/werfverslag_voorbereider.py": "locatiecontext (verblijven_in_venster, projectplek): grens, alleen positieve projectverblijven; auto = let_op, geen bewijs van persoonlijke aanwezigheid (W2)",
+    "mijnagents-runner/koppelingen/fotoindeling.py": "locatiecontext.context en bronbeleid.dag_toegestaan (grens, alleen positieve autoverblijven) en /api/projectplekken (projectplaatsen, geen metingen); privé alleen geteld (T-0120 FOTO-4)",
 }
 PATRONEN = re.compile(r"soort\"\]? ?[!=]= ?\"locatie\"|\"soort\"\) ?== ?\"locatie\"|locatielogboek/dagen|/api/dag|"
                       r"/api/context|/api/beweging|:3031|locatiecontext|locatie_op\(|/api/dagboek|/api/dagcijfers|/api/plekken")
