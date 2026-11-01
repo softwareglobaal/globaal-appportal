@@ -14,6 +14,9 @@ import urllib.request
 BASIS = "https://api.fathom.ai/external/v1"
 POGINGEN = int(os.environ.get("FATHOM_POGINGEN", "5"))
 PAUZE = float(os.environ.get("FATHOM_PAUZE", "2.5"))  # s tussen pagina's met transcript
+# FATHOM-1 (Codex T-0120, toets 1): de aanvulvraag is een extra en mag de ronde niet ophouden; minder herkansingen per
+# pagina (hoogstens circa 130 s in plaats van 450 s) en een tijdsgrens over alle pagina's samen.
+AANVUL_POGINGEN = int(os.environ.get("FATHOM_AANVUL_POGINGEN", "2"))
 
 
 def _env(pad):
@@ -45,20 +48,20 @@ def beschikbaar():
     return bool(sleutels())
 
 
-def _haal(sleutel, pad, params=None):
+def _haal(sleutel, pad, params=None, pogingen=None):
     """Een GET met herkansing bij 429 (Fathom: circa 30 zware calls per minuut).
     Wacht de Retry-After af, anders oplopend 10, 20, 40, 80 s; daarna pas de fout doorgeven.
     Een afgebroken antwoord of verbinding (29-10-2026: IncompleteRead midden in een pagina van 600 kB) krijgt
     dezelfde herkansing, met de oplopende pauze."""
     url = f"{BASIS}{pad}" + ("?" + urllib.parse.urlencode(params) if params else "")
     req = urllib.request.Request(url, headers={"X-Api-Key": sleutel, "Accept": "application/json"})
-    wacht = 10
-    for poging in range(POGINGEN):
+    wacht, pogingen = 10, pogingen or POGINGEN
+    for poging in range(pogingen):
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
-            if e.code != 429 or poging == POGINGEN - 1:
+            if e.code != 429 or poging == pogingen - 1:
                 raise
             try:
                 pauze = max(int(e.headers.get("Retry-After", "0")), wacht)
@@ -67,21 +70,25 @@ def _haal(sleutel, pad, params=None):
             time.sleep(min(pauze, 120))
             wacht *= 2
         except (http.client.IncompleteRead, ConnectionError, TimeoutError, urllib.error.URLError):
-            if poging == POGINGEN - 1:
+            if poging == pogingen - 1:
                 raise
             time.sleep(wacht)
             wacht *= 2
 
 
-def _alle(sinds_iso, vlaggen, pauze):
+def _alle(sinds_iso, vlaggen, pauze, pogingen=None, tot=None):
+    """Alle pagina's van /meetings over alle sleutels. tot: een tijdstip (time.monotonic) waarna geen nieuwe pagina meer
+    gevraagd wordt; dan een TimeoutError, want een half antwoord is geen volledig antwoord."""
     uit = []
     for s in sleutels():
         cursor = None
         while True:
+            if tot is not None and time.monotonic() > tot:
+                raise TimeoutError("tijdsgrens van de vraag aan Fathom bereikt")
             params = {"created_after": sinds_iso, **vlaggen}
             if cursor:
                 params["cursor"] = cursor
-            d = _haal(s, "/meetings", params)
+            d = _haal(s, "/meetings", params) if pogingen is None else _haal(s, "/meetings", params, pogingen=pogingen)
             uit += d.get("items") or d.get("meetings") or []
             cursor = d.get("next_cursor")
             if not cursor:
@@ -96,17 +103,17 @@ def gesprekken(sinds_iso, met_transcript=False):
     return _alle(sinds_iso, {"include_transcript": "true" if met_transcript else "false"}, met_transcript)
 
 
-def samenvattingen(sinds_iso):
+def samenvattingen(sinds_iso, tot=None):
     """FATHOM-1 en ANGEL-8 (overleg T-0120, X9): alle gesprekken sinds een ISO-tijdstip met de samenvatting en de
     actiepunten van Fathom (include_summary en include_action_items staan standaard uit), zonder transcript. Een aparte
     vraag, niet bij die met transcript: zo'n pagina was al 600 kB en brak af (29-10-2026). Gemeten 01-11-2026: met de
-    twee vlaggen 18 van 18 samenvattingen, zonder 0."""
+    twee vlaggen 18 van 18 samenvattingen, zonder 0. Met AANVUL_POGINGEN per pagina en de tijdsgrens tot."""
     return _alle(sinds_iso, {"include_transcript": "false", "include_summary": "true", "include_action_items": "true"},
-                 True)
+                 True, pogingen=AANVUL_POGINGEN, tot=tot)
 
 
 # --------------------------------------------- samenvatting en actiepunten in de archiefmap (FATHOM-1) ---
-# Het contract met De Dagbundelaar: per gesprek in de archiefmap (gesprek_log.archief, op recording_id) staan
+# Het contract met De Dagbundelaar (ook in docs/dagbundelaar/naslag/fathom-samenvatting-en-actiepunten.md): per gesprek in de archiefmap (gesprek_log.archief, op recording_id) staan
 #   samenvatting.md    de kop hieronder en dan de markdown-tekst van Fathom (default_summary.markdown_formatted);
 #   actiepunten.json   {"bron": "fathom", "recording_id": ..., "actiepunten": [{"tekst", "wie", "tijd", "klaar"}]}, met
 #                      tekst de beschrijving, wie de naam van wie het moet doen ('' als niemand), tijd het moment in de

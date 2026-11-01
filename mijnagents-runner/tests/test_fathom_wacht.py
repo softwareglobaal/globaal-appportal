@@ -65,8 +65,8 @@ def _nep_haal(F, paginas):
     """Een nagebootste fathom._haal: per sleutel een lijst pagina's; onthoudt (sleutel, pad, params) van elke vraag."""
     gevraagd = []
 
-    def haal(sleutel, pad, params=None):
-        gevraagd.append((sleutel, pad, dict(params or {})))
+    def haal(sleutel, pad, params=None, pogingen=None):
+        gevraagd.append((sleutel, pad, dict(params or {}, pogingen=pogingen)))
         nr = sum(1 for s, _, _ in gevraagd if s == sleutel) - 1
         return paginas[sleutel][nr]
     return haal, gevraagd
@@ -89,10 +89,17 @@ def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcrip
             assert p["include_summary"] == "true" and p["include_action_items"] == "true", p
             assert p["include_transcript"] == "false" and p["created_after"] == "2026-10-01T00:00:00Z", p
         assert gevraagd[1][2].get("cursor") == "c2" and "cursor" not in gevraagd[0][2], gevraagd
+        assert all(p["pogingen"] == F.AANVUL_POGINGEN for _, _, p in gevraagd), "minder herkansingen voor de aanvulvraag"
+        F._haal, gevraagd = _nep_haal(F, paginas)
+        try:
+            F.samenvattingen("2026-10-01T00:00:00Z", tot=F.time.monotonic() - 1)
+            assert False, "over de tijdsgrens hoort een TimeoutError"
+        except TimeoutError:
+            assert gevraagd == [], "over de tijdsgrens geen nieuwe pagina"
         F._haal, gevraagd = _nep_haal(F, {"s1": [{"items": []}], "s2": [{"items": []}]})
         F.gesprekken("2026-10-01T00:00:00Z", met_transcript=True)
         assert all(p["include_transcript"] == "true" and "include_summary" not in p and "include_action_items" not in p
-                   for _, _, p in gevraagd), f"de vraag met transcript krijgt er niets bij: {gevraagd}"
+                   and p["pogingen"] is None for _, _, p in gevraagd), f"de vraag met transcript krijgt er niets bij: {gevraagd}"
     finally:
         F._haal, F.sleutels, F.time.sleep = echt
 
@@ -174,7 +181,7 @@ def test_fathom1_ronde_vult_aan_en_zet_niets_op_het_bord():
     nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
     gezet, scherm, _ = fathom_ronde(nb, [(werk, herkenning(["Jan Proef"], "Proefdak")),
                                          (prive, herkenning(["Zeta Thuis"], "thuis", prive=True, afdeling="prive"))],
-                                    archief=archief, samenvattingen=lambda sinds: gevraagd.append(sinds) or met)
+                                    archief=archief, samenvattingen=lambda sinds, tot=None: gevraagd.append(sinds) or met)
     fw = _fathom_wacht()
     assert gevraagd and nb.statussen()[-1]["status"] == "waakt", (gevraagd, nb.statussen()[-1])
     for g in (werk, prive):
@@ -186,10 +193,31 @@ def test_fathom1_ronde_vult_aan_en_zet_niets_op_het_bord():
     assert "samenvatting en actiepunten van Fathom: 2 samenvatting(en), 2 lijst(en) actiepunten" in scherm, scherm
 
 
+def test_fathom1_aanvulvraag_pas_na_tabel_en_klaarzet():
+    """Codex T-0120, toets 1: een trage aanvulvraag mag de gesprekkentabel en de klaarzet-items niet ophouden; ze komt
+    pas als die van deze ronde verstuurd zijn, met een tijdsgrens."""
+    nb, gezien = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[]), []
+    echt_call = nb.call
+
+    def call(pad, payload=None, method=None):
+        gezien.append(pad)
+        return echt_call(pad, payload, method)
+    nb.call = call
+    grens = []
+
+    def traag(sinds, tot=None):
+        grens.append((tot, "/api/gesprekken" in gezien and "/api/klaarzet" in gezien))   # de ronde vangt een fout hier op
+        return []
+    fathom_ronde(nb, [(gesprek(7451, "2026-10-21T08:00:00Z", "2026-10-21T08:30:00Z"), herkenning(["Jan Proef"], "Proefdak"))],
+                 samenvattingen=traag)
+    assert len(grens) == 1 and grens[0][1], f"de aanvulvraag kwam voor de tabel of de klaarzet-items: {gezien}"
+    assert grens[0][0] is not None, "de aanvulvraag krijgt een tijdsgrens"
+
+
 def test_fathom1_mislukte_aanvulvraag_laat_de_ronde_staan_met_een_nood():
     """Faalt de aparte vraag, dan blijven de gesprekkentabel en de klaarzet-items van deze ronde staan; de fout is een
     nood (geen stille nul) en het werkverslag noemt alleen de soort fout."""
-    def kapot(sinds):
+    def kapot(sinds, tot=None):
         raise ValueError("Fathom kapot met Geheime tekst (proef)")
 
     nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
@@ -291,6 +319,36 @@ def test_fathom4_geen_dekking_zonder_bewijs():
     finally:
         fw.bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.bekende_dekking = echt
     assert "/api/gesprekken" not in gezet and nb.statussen()[-1]["status"] == "fout", (gezet, nb.statussen()[-1])
+
+
+def test_fathom4_geen_dekking_als_de_aanvulvraag_faalde():
+    """Codex T-0120, toets 1: een ronde waarvan de aanvulvraag faalde, is niet volledig; ook met een eigen opname in het
+    venster schrijft ze geen dekking."""
+    def kapot(sinds, tot=None):
+        raise TimeoutError("proef")
+    eigen = gesprek(8601, "2026-10-20T07:00:00Z", "2026-10-20T07:30:00Z", door=MEHDI)
+    nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+    gezet, _, _ = fathom_ronde(nb, [(eigen, herkenning(["Jan Proef"], "Proefdak"))], nu=ZATERDAG, dagen=14,
+                               dekking=lambda e, l: set(), samenvattingen=kapot)
+    assert _dekking(gezet) == [] and nb.statussen()[-1]["status"] == "waakt", (_dekking(gezet), nb.statussen()[-1])
+
+
+def test_fathom4_dekking_valt_in_het_nachtvenster_van_de_dagbundelaar():
+    """VOL-13: een nieuwe dekkingsrij voor een dag buiten het nachtvenster laat De Dagbundelaar die dag inhalen
+    (dagbundelaar.inhaaldagen). Elke dag die De Fathomwacht dekt, ligt in het venster van de eerstvolgende nachtronde
+    (keten --nacht om 23:30 UTC), ook rond de overgang naar het winteruur (25-10-2026) en voor de rondes van 07:00 en
+    13:00 UTC: de gewone dekking geeft dus geen extra inhaalbeurt."""
+    fw = _fathom_wacht()
+    sys.path.insert(0, os.path.dirname(HIER))
+    import dagbundelaar as D  # noqa: PLC0415
+    from koppelingen import dagvaststelling as V  # noqa: PLC0415
+    for dag in range(20, 31):
+        for uur in (7, 13):
+            nu = datetime(2026, 10, dag, uur, 1, tzinfo=timezone.utc)
+            nacht = datetime(2026, 10, dag, 23, 30, tzinfo=timezone.utc)
+            venster = set(V.venster(nacht, D.NACHTVENSTER))
+            dekking = {r["datum"] for r in fw.dekkingsrijen(nu - timedelta(days=fw.STANDAARD_DAGEN), nu, set())}
+            assert dekking and dekking <= venster, (nu, sorted(dekking - venster))
 
 
 def test_fathom4_bekende_dekking_leest_het_bord_of_zegt_onbekend():

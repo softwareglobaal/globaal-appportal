@@ -510,7 +510,7 @@ def test_z13_fathom_wacht_zet_de_bron_zelf():
            "spiegel": fw.dropbox_prive.spiegel_map, "dnood": fw.dropbox_prive.nood}
     bord.call, fw.ARCHIEF, fw._INDEX = call, archief, None
     fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = (lambda: True), (lambda sinds, met_transcript=False: [g]), (lambda: ["proef"])
-    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (lambda sinds: [])   # FATHOM-1: geen netwerk
+    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (lambda sinds, tot=None: [])   # FATHOM-1: geen netwerk
     oud["dekking"], fw.bekende_dekking = fw.bekende_dekking, (lambda eerste, laatste: None)        # FATHOM-4: onbekend
     fw.deals_index = lambda: []
     fw.dropbox_prive.spiegel_map = lambda lokaal, extern: {"verstuurd": 0, "fout": "", "rest": 0}
@@ -582,7 +582,7 @@ def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None, samenvatting
     if nu is not None:
         fw.nu_utc = lambda: nu
     fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = (lambda: True), haal, (lambda: ["proef"])
-    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (samenvattingen or (lambda sinds: []))
+    oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (samenvattingen or (lambda sinds, tot=None: []))
     oud["dekking"], fw.bekende_dekking = fw.bekende_dekking, (dekking or (lambda eerste, laatste: None))
     fw.deals_index = lambda: []
     fw.dropbox_prive.spiegel_map = lambda lokaal, extern: {"verstuurd": 0, "fout": "", "rest": 0}

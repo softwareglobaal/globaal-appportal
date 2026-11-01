@@ -18,6 +18,7 @@ import os
 import re
 import signal
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 BE = ZoneInfo("Europe/Brussels")
@@ -52,6 +53,7 @@ AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevai
 SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
 # FATHOM-4: een dekkingsrij telt nooit als gesprek, zoals mac_gesprekken.DEKKING van de Mac-wachten.
 DEKKING = "buiten:dekking"
+AANVUL_SECONDEN = float(os.environ.get("FATHOM_AANVUL_SECONDEN", "300"))
 AANVUL_NOOD = "Fathom gaf deze ronde geen samenvatting en actiepunten: de aparte vraag faalde (werkverslag)"
 # FATHOM-7: een archiefmap zonder herkenning (null) telt als privé, zoals een gesprek waarop het model niet antwoordde.
 ONBEKENDE_HERKENNING = {"prive": True, "zekerheid": "laag", "waarom": "geen herkenning in het archief"}
@@ -278,9 +280,10 @@ def bewaar(g, tekst, herkenning):
 def aanvullen(sinds):
     """FATHOM-1 en ANGEL-8 (overleg T-0120, X9): de aparte vraag zonder transcript, met samenvatting en actiepunten, en
     per recording_id in de bestaande archiefmap alleen wat ontbreekt (fathom.vul_aan, nooit overschrijven). Niets naar
-    het bord: geen klaarzet, geen rij, in het werkverslag alleen aantallen, ook van een privégesprek. Geeft de telling."""
+    het bord: geen klaarzet, geen rij, in het werkverslag alleen aantallen, ook van een privégesprek. Hoogstens
+    AANVUL_SECONDEN lang nieuwe pagina's (daarna TimeoutError: de rest komt de volgende ronde). Geeft de telling."""
     tel = {"gesprekken": 0, "samenvatting": 0, "actiepunten": 0, "zonder_map": 0}
-    for g in fathom.samenvattingen(sinds):
+    for g in fathom.samenvattingen(sinds, tot=time.monotonic() + AANVUL_SECONDEN):
         tel["gesprekken"] += 1
         map_ = bestaande_map(g)
         if not map_:
@@ -550,9 +553,17 @@ def _ronde(r):
                       "| start | min | personen | bedrijf | afdeling | thema | project | privé |", "|---|---|---|---|---|---|---|---|"]
             regels += [f"| {r['start']} | {r['minuten']} | {r['personen']} | {r['bedrijf']} | {r['afdeling']} | {r['thema'][:50]} | {r['project'][:40]} | {'ja' if r['prive'] else ''} |" for r in sorted(lijst, key=lambda x: x["start"])]
             open(os.path.join(ARCHIEF, "logboek", f"{dag}.md"), "w", encoding="utf-8").write("\n".join(regels) + "\n")
-        # FATHOM-1: samenvatting en actiepunten in een aparte vraag, voor de spiegel zodat ze deze ronde meegaan. Faalt
-        # die vraag, dan blijft de rest van de ronde staan en is het een nood, geen stille nul; in het werkverslag
-        # alleen de soort fout (de tekst van een fout kan uit het antwoord van Fathom komen).
+        # kopie van het archief naar Mehdi's eigen Dropbox (alleen wat nieuw is)
+        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom data")
+        if sp["verstuurd"] or sp["fout"]:
+            ag.log("Fathom", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd, {sp['rest']} nog te gaan"
+                   + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
+        bord.call("/api/gesprekken", {"rijen": rijen})
+        uit = ag.klaarzet(klaar)
+        # FATHOM-1: samenvatting en actiepunten in een aparte vraag, pas als de gesprekkentabel en de klaarzet-items van
+        # deze ronde staan (Codex T-0120, toets 1: een trage vraag hield ze anders op); de spiegel neemt de nieuwe
+        # bestanden de volgende ronde mee. Faalt de vraag of loopt ze over de tijd, dan is het een nood, geen stille
+        # nul, en deze ronde schrijft geen dekking; in het werkverslag alleen de soort fout.
         try:
             aan = aanvullen(sinds)
             ag.log("Fathom", "schrijf", f"samenvatting en actiepunten van Fathom: {aan['samenvatting']} samenvatting(en), "
@@ -561,13 +572,6 @@ def _ronde(r):
         except Exception as e:  # noqa: BLE001
             aan = None
             ag.log("Fathom", "bevinding", f"samenvatting en actiepunten niet aangevuld: {type(e).__name__}")
-        # kopie van het archief naar Mehdi's eigen Dropbox (alleen wat nieuw is)
-        sp = dropbox_prive.spiegel_map(ARCHIEF, "/Fathom data")
-        if sp["verstuurd"] or sp["fout"]:
-            ag.log("Fathom", "schrijf", f"Dropbox privé: {sp['verstuurd']} bestand(en) verstuurd, {sp['rest']} nog te gaan"
-                   + (f"; fout: {sp['fout']}" if sp["fout"] else ""))
-        bord.call("/api/gesprekken", {"rijen": rijen})
-        uit = ag.klaarzet(klaar)
         # BAS-01: van een privérij alleen datum en start, zoals in de bevinding
         ag.log("Fathom", "bron", f"{len(gesprekken)} gesprekken sinds {sinds[:10]} van {len(fathom.sleutels())} sleutel(s); {nieuw_archief} nieuw in het archief; {prive_n} privé; {len(personen)} personen in de tabel",
                "\n".join(f"{r['datum']} {r['start']} (privé)" if r["prive"] else f"{r['datum']} {r['start']} {r['personen'][:40]} | {r['afdeling']} | {r['thema'][:50]}" for r in rijen))
@@ -579,9 +583,9 @@ def _ronde(r):
         if aan is None:
             nood.append({"tekst": AANVUL_NOOD, "wie": "claude-code"})
         r.detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
-        # FATHOM-4: de dekking pas als de gesprekken en de klaarzet-items van deze ronde staan, en alleen met het bewijs
-        # dat Mehdi's eigen sleutel meelas (een eigen opname in het venster); anders blijft de dag onbekend
-        if sleutel == []:
+        # FATHOM-4: de dekking pas als de gesprekken, de klaarzet-items en de aanvulling van deze ronde staan, en alleen
+        # met het bewijs dat Mehdi's eigen sleutel meelas (een eigen opname in het venster); anders blijft de dag onbekend
+        if sleutel == [] and aan is not None:
             gisteren = (nu.astimezone(BE).date() - timedelta(days=1)).isoformat()
             bekend = bekende_dekking(volle, gisteren) if volle <= gisteren else set()
             if bekend is None:
