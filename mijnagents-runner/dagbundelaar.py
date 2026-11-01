@@ -480,10 +480,11 @@ def kanaalstand(rij, nu):
 
 def kanaal_van_dag(stand, kanaal, dag, gedekt):
     """F5: een aangesloten wacht bewijst alleen de dagen die ze zelf als gelezen meldt: een rij dekking:<kanaal>:<dag>
-    (bron dekking) in de gesprekkentabel. Een dag zonder die rij is onbekend, nooit nul."""
-    if stand != "aangesloten":
-        return stand
-    return "aangesloten" if (kanaal, dag) in gedekt else "onbekend voor deze dag"
+    (bron dekking) in de gesprekkentabel. Een dag zonder die rij is onbekend, nooit nul. WA-8: de dekking van de dag gaat
+    voor de hartslag van nu; een gelezen dag blijft aangesloten, ook als de wacht nu langer dan KANAAL_UREN zweeg."""
+    if (kanaal, dag) in gedekt:
+        return "aangesloten"
+    return "onbekend voor deze dag" if stand == "aangesloten" else stand
 
 
 WISPR_GEBRUIKER = os.environ.get("WISPR_GEBRUIKER", "Mehdi")

@@ -1117,6 +1117,29 @@ def test_w1_oudere_dag_die_zijn_dekking_verliest_wordt_opnieuw_vastgesteld():
     assert "- telefoon: onbekend (onbekend voor deze dag)" in tekst, tekst
 
 
+def test_wa8_gelezen_dag_blijft_aangesloten_als_de_wacht_nu_stil_is():
+    """WA-8: een dag met een dekkingsrij is gelezen, ook als de wacht nu langer dan KANAAL_UREN zweeg (de laptop stond
+    uit): die dag blijft 'aangesloten' en wordt geen 'stil sinds ...'. Alleen een dag zonder dekkingsrij krijgt de stand
+    van nu. Een vervallen dekkingsrij bewijst niets (Codex V1)."""
+    nu = datetime(2026, 10, 30, 9, 0, tzinfo=timezone.utc)
+    stil = D.kanaalstand({"status": "klaar", "taak": WA.TAAK, "ts": (nu - timedelta(hours=40)).isoformat()}, nu)
+    assert stil.startswith("stil sinds"), stil
+    rijen = [{"uniek": f"dekking:whatsapp:{DAG}", "datum": DAG, "dubbel_van": M.DEKKING},
+             {"uniek": "dekking:whatsapp:2026-10-21", "datum": "2026-10-21", "dubbel_van": M.VERVALLEN}]
+    gedekt = D.gedekte_dagen(rijen)
+    assert D.kanaal_van_dag(stil, "whatsapp", DAG, gedekt) == "aangesloten"
+    assert D.kanaal_van_dag(stil, "whatsapp", "2026-10-23", gedekt) == stil           # zonder dekking: de stand van nu
+    assert D.kanaal_van_dag(stil, "whatsapp", "2026-10-21", gedekt) == stil           # vervallen dekking: geen bewijs
+    assert D.kanaal_van_dag(stil, "telefoon", DAG, gedekt) == stil                    # dekking van een ander kanaal
+    assert D.kanaal_van_dag("aangesloten", "whatsapp", "2026-10-23", gedekt) == "onbekend voor deze dag"
+    assert D.kanaal_van_dag("niet aangesloten", "whatsapp", "2026-10-23", gedekt) == "niet aangesloten"
+    rij = {"uniek": "whatsapp:0a1b:" + DAG, "datum": DAG, "start": "09:00", "minuten": 0, "personen": JAN,
+           "thema": "3 berichten (1 in, 2 uit), 09:00 tot 09:30", "prive": 1, "bron": "whatsapp", "dubbel_van": ""}
+    tekst = V.tekst(V.vaststellen(DAG, [], [], [rij], {}, [], "volledig", None,
+                                  {"whatsapp": D.kanaal_van_dag(stil, "whatsapp", DAG, gedekt)}, lambda x: False))
+    assert "- WhatsApp: 3 berichten in 1 gesprekken, 0 oproepen, 0 min gezien\n" in tekst + "\n", tekst
+
+
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():
     with tempfile.TemporaryDirectory() as map_:
         pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
