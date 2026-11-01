@@ -25,6 +25,8 @@ Wat ik doe, op de uren van UREN (Brussel; de cron draait elk uur op :20, plannin
      taken), 's ochtends "Te doen vandaag" en 's avonds "Avondoverzicht" (soort verslag; De Bode bundelt die), en lees
      elk item terug van het bord.
 Lukt Claude niet, dan blijft de lijst van de vorige ronde staan, met een nood.
+Claude via de API (standaard) of, met MEHDI_AGENT_ROUTE=abonnement, op het Claude-abonnement van Mehdi zonder
+API-sleutel (koppelingen/claude_abonnement.py, ANGEL-3); die keuze is van Mehdi (werkstand T-0122).
 
 Ik verstuur nooit zelf iets: een concept blijft een concept tot Mehdi het zelf stuurt.
 
@@ -53,7 +55,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import organisatie  # noqa: E402
-import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
+import claude_abonnement  # noqa: E402  alleen met MEHDI_AGENT_ROUTE=abonnement (ANGEL-3); start niets bij import
 
 NAAM = "mehdi-agent"
 ag = bord.Agent(NAAM)
@@ -62,6 +64,10 @@ DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.environ.get("MEHDI_AGENT_DAGBOEK", os.path.join(DATA, "dagboek"))
 STAAT = os.environ.get("MEHDI_AGENT_STAAT", os.path.join(DATA, "mehdi-agent", "staat.json"))
 MODEL = os.environ.get("MEHDI_AGENT_MODEL", "claude-opus-5-5")
+# "api" (wat nu draait) of "abonnement": Claude op het abonnement van Mehdi, zoals De Prijsonderzoeker (ANGEL-3 en VOL-17
+# van T-0120). De standaard blijft de API tot Mehdi kiest (werkstand T-0122); het model op het abonnement kiest
+# ABONNEMENT_MODEL (koppelingen/claude_abonnement.py).
+ROUTE = os.environ.get("MEHDI_AGENT_ROUTE", "api")
 # Twintig minuten na de rondes van De Dagbundelaar (driehoeksoverleg Dagboek compleet, P5). De VM loopt in UTC en
 # Debian-cron kent geen tijdzone: de cron draait elk uur en ik kijk zelf of het een van deze uren is in Brussel.
 UREN = tuple(int(u) for u in os.environ.get("MEHDI_AGENT_UREN", "7,10,13,16,19,22").split(",") if u.strip())
@@ -290,10 +296,14 @@ def invoer(nu, m, bundels, staat, gezegd, kern):
     }
 
 
-def vraag_claude(system, inhoud, client=None):
+def vraag_claude(system, inhoud, client=None, route=None, vraag=None):
     """Een aanroep met een gestructureerd antwoord (json_schema), zoals weekconsolidatie.py. Een weigering of een afgekapt
-    antwoord is een gewoon antwoord met status 200: dat vang ik apart op, anders lijkt een leeg antwoord een rustige dag."""
+    antwoord is een gewoon antwoord met status 200: dat vang ik apart op, anders lijkt een leeg antwoord een rustige dag.
+    route (standaard ROUTE): "abonnement" gaat naar vraag_abonnement en raakt de API-sleutel nooit aan."""
+    if (route or ROUTE) == "abonnement":
+        return vraag_abonnement(system, inhoud, vraag)
     if client is None:
+        import sleutelbron  # de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064), alleen op de API-weg
         sleutelbron.zet_anthropic()
         from anthropic import Anthropic
         client = Anthropic()
@@ -313,6 +323,57 @@ def vraag_claude(system, inhoud, client=None):
         raise RuntimeError(f"antwoord afgekapt ({meta['tokens_uit']} tokens uit)")
     tekst = next((x.text for x in resp.content if getattr(x, "type", "") == "text"), "")
     return json.loads(tekst), meta
+
+
+VORM = ("=== VORM VAN JE ANTWOORD ===\nAntwoord met precies een JSON-object volgens dit JSON-schema, zonder tekst ervoor of "
+        "erna. Elk veld is verplicht; een veld zonder inhoud is een lege tekst of een lege lijst.\n")
+
+
+def vraag_abonnement(system, inhoud, vraag=None):
+    """Dezelfde vraag op het abonnement van Mehdi (koppelingen/claude_abonnement.py), zonder gereedschap, zoals De
+    Prijsonderzoeker: het schema staat in de opdracht, het antwoord gaat door json.loads en schema_fout. Een
+    claude_abonnement.Fout (aanmelden, limiet) gaat ongewijzigd naar werk(): de lijst van de vorige ronde blijft staan.
+    vraag is te vervangen in een test."""
+    vraag = vraag or claude_abonnement.vraag
+    uit = vraag(system + "\n\n" + VORM + json.dumps(SCHEMA, ensure_ascii=False), json.dumps(inhoud, ensure_ascii=False),
+                tools=(), timeout=900, max_beurten=2)
+    meta = {"model": uit.get("model") or claude_abonnement.MODEL, "stop_reason": uit.get("stop") or "",
+            "tokens_in": int(uit.get("tokens") or 0), "tokens_uit": 0}
+    tekst = str(uit.get("tekst") or "").strip()
+    blok = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", tekst, re.S)     # een codeblok rond het object mag
+    try:
+        obj = json.loads(blok.group(1) if blok else tekst)
+    except ValueError:
+        raise RuntimeError(f"antwoord van het abonnement is geen JSON ({len(tekst)} tekens)") from None
+    fout = schema_fout(obj, SCHEMA)
+    if fout:
+        raise RuntimeError(f"antwoord van het abonnement past niet in het schema: {fout}")
+    return obj, meta
+
+
+def schema_fout(w, s, pad="antwoord"):
+    """De eerste plek waar w niet in het strikte schema s past (object, array, string en enum, zoals SCHEMA), of "".
+    Zonder de waarde zelf: die kan een naam dragen, en de melding komt in het werkverslag."""
+    soort = s.get("type")
+    if soort == "object":
+        if not isinstance(w, dict):
+            return f"{pad}: geen object"
+        velden = s.get("properties") or {}
+        for k in s.get("required") or ():
+            if k not in w:
+                return f"{pad}.{k}: ontbreekt"
+        if s.get("additionalProperties") is False and set(w) - set(velden):
+            return f"{pad}: {len(set(w) - set(velden))} velden die het schema niet kent"
+        return next((f for k, sub in velden.items() if k in w for f in [schema_fout(w[k], sub, f"{pad}.{k}")] if f), "")
+    if soort == "array":
+        if not isinstance(w, list):
+            return f"{pad}: geen lijst"
+        return next((f for i, x in enumerate(w) for f in [schema_fout(x, s.get("items") or {}, f"{pad}[{i}]")] if f), "")
+    if soort == "string":
+        if not isinstance(w, str):
+            return f"{pad}: geen tekst"
+        return f"{pad}: geen toegelaten waarde" if "enum" in s and w not in s["enum"] else ""
+    return f"{pad}: soort {soort} kent de controle niet"
 
 
 # ----------------------------------------------------------------------------------------- controleren ---
@@ -607,6 +668,17 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
     except Weigering as e:
         ag.log("claude", "fout", str(e)[:200])
         r.nood("Claude weigerde de takenlijst te maken", wie="claude-code")
+    except claude_abonnement.Fout as e:  # het abonnement (ANGEL-3): wacht tot het weer kan, zonder extra verbruik
+        if e.soort:                      # een vaste tekst van de koppeling: mag in het werkverslag
+            ag.log("claude", "fout", f"abonnement, {e.soort}: {str(e)[:200]}")
+        else:                            # kan een stuk antwoord dragen: alleen in het cronlog op de VM, nooit op het bord
+            ag.log("claude", "fout", "abonnement: geen bruikbaar antwoord (de reden staat in het cronlog)")
+            print(f"abonnement: {str(e)[:300]}", file=sys.stderr)
+        tekst, wie = {"aanmelden": (claude_abonnement.AANMELDEN_NOOD, "mehdi"),
+                      "limiet": (claude_abonnement.LIMIET_NOOD, "mehdi"),
+                      "bron": (claude_abonnement.BRON_NOOD, "claude-code")}.get(
+                          e.soort, ("Claude niet bereikbaar voor de takenlijst", "claude-code"))
+        r.nood(tekst, wie=wie)
     except Exception as e:  # noqa: BLE001  netwerk, sleutel, limiet, onleesbaar antwoord: de lijst van gisteren blijft
         ag.log("claude", "fout", f"{type(e).__name__}: {str(e)[:200]}")
         r.nood("Claude niet bereikbaar voor de takenlijst", wie="claude-code")

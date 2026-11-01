@@ -505,6 +505,97 @@ def test_vraag_claude_met_nagebootste_client():
             pass
 
 
+# ANGEL-3 en VOL-17 (T-0120): Ai Angel kan op het Claude-abonnement van Mehdi draaien, zoals De Prijsonderzoeker. De
+# route staat achter MEHDI_AGENT_ROUTE; de standaard blijft de API tot Mehdi kiest (werkstand T-0122). Geen echt model:
+# de vraag aan het abonnement is nagebootst.
+class NepAbonnement:
+    """Bootst claude_abonnement.vraag na: geeft tekst zoals lees_stroom, of gooit een Fout."""
+
+    def __init__(self, tekst="", fout=None):
+        self.tekst, self.fout, self.oproepen = tekst, fout, []
+
+    def __call__(self, systeem, gebruiker, **kw):
+        self.oproepen.append((systeem, gebruiker, kw))
+        if self.fout:
+            raise self.fout
+        return {"tekst": self.tekst, "gereedschap": [], "tokens": 1234, "beurten": 1, "stop": "success",
+                "model": "nepmodel", "fout": None}
+
+
+def test_route_staat_standaard_op_de_api_en_importeert_geen_sleutel_bovenaan():
+    import ast
+    assert M.ROUTE == "api", M.ROUTE                     # wat nu draait, tot Mehdi kiest (T-0122)
+    bron = open(os.path.join(RUNNER, "mehdi_agent.py"), encoding="utf-8").read()
+    assert 'os.environ.get("MEHDI_AGENT_ROUTE", "api")' in bron
+    bovenaan = set()
+    for n in ast.parse(bron).body:
+        if isinstance(n, ast.Import):
+            bovenaan |= {a.name.split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ImportFrom):
+            bovenaan.add((n.module or "").split(".")[0])
+    assert not bovenaan & {"anthropic", "sleutelbron"}, bovenaan
+    assert "claude_abonnement" in bovenaan
+
+
+def test_abonnement_geeft_een_geldig_antwoord_zonder_api_sleutel():
+    nep = NepAbonnement("```json\n" + json.dumps(antwoord([taak("Bel Klant Omega terug", "16:10 telefoon")])) + "\n```")
+    weg = object()
+    oud = {k: sys.modules.get(k, weg) for k in ("sleutelbron", "anthropic")}
+    sys.modules["sleutelbron"] = None                    # elke import van de API-weg faalt nu meteen
+    sys.modules["anthropic"] = None
+    try:
+        uit, meta = M.vraag_claude("regelboek", {"a": 1}, route="abonnement", vraag=nep)
+    finally:
+        for k, v in oud.items():
+            if v is weg:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    assert uit["taken"][0]["tekst"] == "Bel Klant Omega terug"
+    assert meta["tokens_in"] + meta["tokens_uit"] == 1234 and meta["model"] == "nepmodel"
+    ((systeem, gebruiker, kw),) = nep.oproepen
+    assert systeem.startswith("regelboek") and json.dumps(M.SCHEMA, ensure_ascii=False) in systeem
+    assert json.loads(gebruiker) == {"a": 1} and kw["tools"] == () and kw["max_beurten"] <= 2
+    uit, _ = M.vraag_claude("regelboek", {}, route="abonnement", vraag=NepAbonnement(json.dumps(antwoord())))
+    assert uit == antwoord()                             # ook zonder codeblok
+
+
+def test_abonnement_buiten_het_schema_of_geen_json_is_een_fout_zonder_inhoud():
+    slecht = antwoord([taak("Bel Proefpersoon Zeta", "16:10 telefoon", voor="Proefpersoon Zeta")])
+    extra = dict(antwoord(), uitleg="Proefpersoon Zeta")
+    zonder = {k: v for k, v in antwoord().items() if k != "tip"}
+    for tekst in (json.dumps(slecht), json.dumps(extra), json.dumps(zonder), "Ik kan dit niet.", "[]"):
+        try:
+            M.vraag_claude("regelboek", {}, route="abonnement", vraag=NepAbonnement(tekst))
+            raise AssertionError(f"geen fout bij {tekst[:40]}")
+        except RuntimeError as e:
+            assert "Zeta" not in str(e), e              # de melding komt in het werkverslag: nooit een naam
+    assert M.schema_fout(antwoord(), M.SCHEMA) == ""
+    assert M.schema_fout(slecht, M.SCHEMA) == "antwoord.taken[0].voor: geen toegelaten waarde"
+
+
+def test_abonnement_aan_zijn_limiet_of_niet_aangemeld_lijst_blijft_met_nood():
+    import claude_abonnement as CA
+    o = Omgeving()
+    try:
+        o.ronde(uit=antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega")]))
+        for soort, nood, wie in (("limiet", CA.LIMIET_NOOD, "mehdi"), ("aanmelden", CA.AANMELDEN_NOOD, "mehdi"),
+                                 ("bron", CA.BRON_NOOD, "claude-code"),
+                                 (None, "Claude niet bereikbaar voor de takenlijst", "claude-code")):
+            o.gezegd.append({"id": len(o.gezegd) + 20, "ts": "2026-10-31T11:00", "tekst": "nog iets?", "antwoord": ""})
+            nep = NepAbonnement(fout=CA.Fout("Claude via het abonnement: proef", soort))
+            r = NepRonde()
+            staat = M.werk(r, nu=MIDDAG_UTC, map_=o.map, gezegd=lambda nu: list(o.gezegd), kern=lambda: list(KERN),
+                           claude=lambda s, i: M.vraag_claude(s, i, route="abonnement", vraag=nep),
+                           zet=o.zet, lees=o.lees, staatpad=o.staat)
+            assert len(nep.oproepen) == 1 and r.noden == [(nood, wie)], (soort, r.noden)
+            assert [t["tekst"] for t in staat["taken"].values()] == ["Bel Klant Omega terug"]
+            assert "Bel Klant Omega terug" in o.bord["mehdi-agent:taken:2026-10-31"]["inhoud"]
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
 def test_staat_wordt_atomair_bewaard_en_teruggelezen():
     d = tempfile.mkdtemp(prefix="mehdi-agent-staat-")
     try:

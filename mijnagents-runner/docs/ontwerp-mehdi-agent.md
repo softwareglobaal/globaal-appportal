@@ -104,6 +104,15 @@ Claude Opus 5.5 kost 4 dollar per miljoen tokens in en 20 dollar per miljoen uit
 zijn dat twee tot zes rondes met Claude per dag: naar schatting 15 tot 60 dollar per maand. Ander model kiezen kan met
 `MEHDI_AGENT_MODEL`.
 
+Op het abonnement (ANGEL-3 en VOL-17 van T-0120, gebouwd op 01-11-2026, staat uit): met `MEHDI_AGENT_ROUTE=abonnement`
+vraagt de agent Claude via `koppelingen/claude_abonnement.py`, zoals De Prijsonderzoeker: zonder API-sleutel en zonder
+gereedschap, met het JSON-schema in de opdracht. De code leest het antwoord met `json.loads` en houdt het tegen het
+schema (`schema_fout`); past het niet, dan is het een fout zonder inhoud in het werkverslag. Zit het abonnement aan zijn
+limiet of is Claude op de VM niet aangemeld, dan blijft de lijst van de vorige ronde staan en komt de vaste nood van de
+koppeling voor Mehdi. De sleutelbron en `anthropic` laadt de agent alleen nog op de API-weg. De standaard blijft de API
+tot Mehdi kiest (werkstand T-0122): het abonnement deelt zijn weekvenster met Claude 1, 2 en 3, en zolang extra
+verbruik op het account aan staat, is nul euro niet gegarandeerd.
+
 ## Live zetten (gedaan op 31-10-2026, op Mehdi's ja)
 
 Alles via `softwareglobaal/globaal-vm-beheer` (workflow vm):
