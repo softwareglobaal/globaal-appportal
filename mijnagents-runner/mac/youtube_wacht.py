@@ -139,6 +139,12 @@ def main(vragen=None):
                  nood=[{"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"}])
         print("geen browsergeschiedenis gevonden", file=sys.stderr)
         return 1
+    if onleesbaar:
+        # Codex 01-11 (onbekend is nooit 0): een onleesbare browser maakt de telling onvolledig: niets klaarzetten
+        hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", nood=M.browser_nood(onleesbaar))
+        print("browsergeschiedenis niet volledig gelezen: " + ", ".join(f"{b} ({u})" for b, u in onleesbaar.items()),
+              file=sys.stderr)
+        return 1
     per_dag = tel(bekeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "gebruiker": GEBRUIKER,
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag,

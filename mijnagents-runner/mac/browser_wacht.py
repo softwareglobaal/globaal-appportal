@@ -109,15 +109,14 @@ def main(vragen=None):
         return 1
     bezoeken = [(browser, t, s) for browser, t, s, *_ in rijen]
     per_dag = tel(bezoeken, dagen)
-    nood = []
-    if "geweigerd" in onleesbaar.values():
-        nood.append({"tekst": "MacGesprekkenKopie mag een browser niet lezen: Full Disk Access (System Settings > "
-                              "Privacy & Security > Full Disk Access)", "wie": "mehdi"})
-    if not gelezen:
-        # Codex 01-11 (onbekend is nooit 0): zonder enige gelezen browser geen telling klaarzetten
-        nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
-        hartslag("fout", taak="geen browsergeschiedenis gelezen", nood=nood)
-        print("geen browsergeschiedenis gelezen", file=sys.stderr)
+    nood = M.browser_nood(onleesbaar)
+    if not gelezen or onleesbaar:
+        # Codex 01-11 (onbekend is nooit 0): zonder alle browsers geen telling klaarzetten; de vorige blijft staan
+        if not gelezen:
+            nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
+        hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", nood=nood)
+        print("browsergeschiedenis niet volledig gelezen: " + (", ".join(f"{b} ({u})" for b, u in onleesbaar.items())
+                                                               or "geen browser"), file=sys.stderr)
         return 1
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
@@ -134,8 +133,8 @@ def main(vragen=None):
                   + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")},
         {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf",
          "tekst": f"{titel}; {DAGEN} dagen klaargezet ({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)"}]})
-    hartslag("klaar" if gelezen else "fout", taak=f"websites {DAG} klaargezet",
-             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen) or 'geen'}", nood=nood)
+    hartslag("klaar", taak=f"websites {DAG} klaargezet",
+             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen)}")
     print(titel)
     return 0
 

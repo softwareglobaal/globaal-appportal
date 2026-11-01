@@ -406,7 +406,8 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
             overgeslagen += 1
             continue
         nummer = re.sub(r"[^\d+*#]", "", str(adres or ""))
-        persoon = (boek.bij_nummer(nummer) or (nummer if onbekend_als_nummer else "onbekend nummer")) if nummer \
+        # Codex 01-11 (toets 3): de naam op het nummer zoals het binnenkwam, want nummer_vol haalt ook (0) weg
+        persoon = (boek.bij_nummer(adres) or (nummer if onbekend_als_nummer else "onbekend nummer")) if nummer \
             else "nummer verborgen"
         thema = f"{soort}, {'uitgaand' if uitgaand else 'inkomend'}"
         if duur <= 0:
@@ -709,6 +710,21 @@ def browser_kopie(sinds, vragen=None):
     finally:
         wis(pad)
     return bezoeken, dict(gelezen), onleesbaar
+
+
+def browser_nood(onleesbaar):
+    """Codex 01-11 (toets 3, onbekend is nooit 0): een browser die niet te lezen was, maakt de telling onvolledig. De
+    wachten zetten dan niets klaar en melden dit: een weigering is voor Mehdi (Full Disk Access voor de helper, nooit
+    voor Python), een andere fout voor Claude."""
+    nood = []
+    if "geweigerd" in onleesbaar.values():
+        nood.append({"tekst": "MacGesprekkenKopie mag een browser niet lezen: Full Disk Access (System Settings > "
+                              "Privacy & Security > Full Disk Access)", "wie": "mehdi"})
+    anders = sorted(b for b, u in onleesbaar.items() if u != "geweigerd")
+    if anders:
+        nood.append({"tekst": f"Browsergeschiedenis niet volledig gelezen ({', '.join(anders)}): niets klaargezet",
+                     "wie": "claude-code"})
+    return nood
 
 
 def wis(pad):

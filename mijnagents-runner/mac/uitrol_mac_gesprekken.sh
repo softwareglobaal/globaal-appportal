@@ -94,6 +94,9 @@ stempel() {
     local h
     h=$("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' | cut -d= -f2) || true
     [[ $h =~ '^[0-9a-f]{8,64}$' ]] || { print -u2 "Geen CDHash voor $HELPER: geen proefbewijs"; return 1; }
+    # Codex 01-11 (toets 3): code die na de proef in de worktree veranderde, hoort niet bij het bewijs
+    [[ -z "$(git -C "$WERK" status --porcelain 2>/dev/null)" ]] ||
+        { print -u2 "Eigen wijzigingen in $WERK: geen proefbewijs"; return 1; }
     print "$h $(git -C "$WERK" rev-parse HEAD)"
 }
 

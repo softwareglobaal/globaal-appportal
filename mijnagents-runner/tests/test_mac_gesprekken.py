@@ -315,6 +315,14 @@ def test_nummer_vol_kent_het_land():
     assert M.nummer_vol("+31 470 00 00 01") == "31470000001" and M.nummer_vol("8850") == ""
     boek = M.Adresboek([("Jan Proef", "", "", "+32470000001")])
     assert boek.bij_nummer("0470 00 00 01") == "Jan Proef" and boek.bij_nummer("+31470000001") == ""
+    # Codex 01-11 (toets 3): de hele weg van een oproep met (0) naar de naam
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
+            ("H1", a(bxl(2026, 10, 22, 8, 0)), 60.0, 0, 1, "+32 (0)470 00 00 01", "com.apple.Telephony"),
+            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony")],
+            [(1, "Jan Proef", "", "", "+32470000001")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+        rijen, _ = M.telefoon_rijen(pad, DAGEN)
+    assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001"], rijen
 
 
 # --------------------------------------------------------------------------------------------- dekking ---
@@ -1553,18 +1561,17 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
     dag = "2026-10-30"
     t = bxl(2026, 10, 30, 10, 0).timestamp()
     with tempfile.TemporaryDirectory() as map_:
-        def kopie(_kanaal):
+        def kopie(_kanaal, bronnen=(("Chrome", "ok"), ("Chrome", "ok"), ("Firefox", "ok")), leeg=False):
             pad = Path(map_, "kopie.sqlite")
             con = sqlite3.connect(pad)
             con.executescript("CREATE TABLE BEZOEK (browser, tijd, site, video, titel, duur); CREATE TABLE BRON (browser, uitkomst);"
                               "CREATE TABLE META (sleutel, waarde);")
-            con.executemany("INSERT INTO BEZOEK VALUES(?,?,?,?,?,?)", [
+            con.executemany("INSERT INTO BEZOEK VALUES(?,?,?,?,?,?)", [] if leeg else [
                 ("Chrome", t, "monday.com", None, None, None), ("Chrome", t + 60, "monday.com", None, None, None),
                 ("Chrome", t + 120, "youtube.com", "abcdefgh123", "(2) Proef Video - YouTube", 600.0),
                 ("Firefox", t + 180, "youtu.be", "zyxwvu987", "Andere Video", None),
                 ("Chrome", t - 40 * 86400, "oud.example.org", None, None, None)])
-            con.executemany("INSERT INTO BRON VALUES(?,?)", [("Chrome", "ok"), ("Chrome", "ok"), ("Firefox", "ok"),
-                                                           ("Safari", "geweigerd")])
+            con.executemany("INSERT INTO BRON VALUES(?,?)", bronnen)
             con.commit()
             con.close()
             return pad, datetime.now(timezone.utc)
@@ -1579,19 +1586,28 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
             assert not Path(map_, "kopie.sqlite").exists()
             item = post[0][1]["items"][0]
             regels = " ".join(r["tekst"] for r in post[1][1]["regels"])
-            assert "gelezen: Chrome (2), Firefox (1)" in regels and "onleesbaar: Safari" in regels, regels
+            assert "gelezen: Chrome (2), Firefox (1)" in regels and "onleesbaar" not in regels, regels
+            assert hart[-1][0] == "klaar", hart[-1]
             if naam == "browser_wacht":
                 v = item["inhoud"]["per_dag"][dag]
                 assert item["uniek"] == f"websites:{dag}" and v["bezoeken"] == 4 and v["sites"] == 3, v
                 assert v["top"][0] == ["monday.com", 2] and v["per_browser"] == {"Chrome": 3, "Firefox": 1}, v
-                assert any("Full Disk Access" in n["tekst"] and "Python" not in n["tekst"] and n["wie"] == "mehdi"
-                           for n in hart[-1][1]), hart
             else:
                 v = item["inhoud"]["per_dag"][dag]
                 assert v["videos"] == 2 and v["keer"] == 2 and v["minuten"] == 10, v
                 assert v["top"] == [["Proef Video", 1], ["Andere Video", 1]], v
-            # zonder kopie: een hartslag fout met de nood van de helper, en niets klaargezet
+            # Codex 01-11 (toets 3): een gelezen browser zonder bezoeken en een geweigerde met bezoeken is onbekend, nooit
+            # 0: niets klaargezet, een fout met een nood voor Mehdi (Full Disk Access voor de helper, nooit voor Python)
             post.clear()
+            for kop in (lambda k: kopie(k, (("Chrome", "ok"), ("Safari", "geweigerd")), leeg=True),
+                        lambda k: kopie(k, (("Chrome", "ok"), ("Chrome", "fout")))):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    assert mod.main(kop) == 1
+                assert not post and hart[-1][0] == "fout" and hart[-1][1], hart[-1]
+            assert any(n["wie"] == "mehdi" and "Full Disk Access" in n["tekst"] and "Python" not in n["tekst"]
+                       for n in M.browser_nood({"Safari": "geweigerd"}))
+            assert [n["wie"] for n in M.browser_nood({"Chrome": "fout"})] == ["claude-code"]
+            # zonder kopie: een hartslag fout met de nood van de helper, en niets klaargezet
 
             def geen(_kanaal):
                 raise M.MacFout("macOS weigert de databank", "MacGesprekkenKopie heeft geen volledige schijftoegang",
@@ -1800,6 +1816,11 @@ def test_r6_drie_uitrollen_en_terug():
         assert r.returncode != 0, r.stderr
         assert re.search(r"helper: CDHash=[0-9a-f]{8}\n", uitrol("controleer")), uitrol("controleer")
         (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
+        # Codex 01-11 (toets 3): code die na de proef in de worktree verandert, maakt het bewijs ongeldig
+        bron_c = werk / "mijnagents-runner" / "mac" / "kopie" / "macgesprekken_kopie.c"
+        bron_c.write_text("ander\n")
+        assert "eerst" in uitrol("aan", ok=False)
+        git("checkout", "-q", "--", ".", cwd=werk)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
