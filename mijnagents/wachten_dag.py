@@ -103,7 +103,8 @@ def lees_gesprekken(conn, bron, dag):
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
-            if str(r["uniek"] or "").startswith(f"dekking:{bron}:"):
+            # een vervallen dekkingsrij (de bron toont de dag niet meer) bewijst niets (Codex V1, TEL-8)
+            if str(r["uniek"] or "").startswith(f"dekking:{bron}:") and r["dubbel_van"] != "buiten:vervallen":
                 gedekt = True
             continue
         if is_prive_gesprek(r):

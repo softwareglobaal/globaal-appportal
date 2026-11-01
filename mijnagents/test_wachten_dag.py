@@ -147,6 +147,14 @@ check("W13 gelezen zonder ronde: niets gebeurd", w30["xelion-wacht"]["oordeel"] 
 check("W13 gelezen met ronde: niets gebeurd", w30["sms-wacht"]["oordeel"] == "gelezen, niets gebeurd"
       and w30["sms-wacht"]["kleur"] == "groen", w30["sms-wacht"]["oordeel"])
 check("W13 niet gelezen blijft grijs", w30["belwacht"]["kleur"] == "grijs", w30["belwacht"]["oordeel"])
+# Codex 01-11: een vervallen dekkingsrij (de bron toont de dag niet meer) is geen bewijs dat de dag gelezen is
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("UPDATE gesprek_log SET dubbel_van='buiten:vervallen' WHERE uniek='dekking:xelion:2026-10-30'")
+con.commit()
+con.close()
+w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
+check("W13 vervallen dekking is niet gelezen", w30["xelion-wacht"]["kleur"] == "grijs"
+      and w30["xelion-wacht"]["gedekt"] is False, (w30["xelion-wacht"]["oordeel"], w30["xelion-wacht"]["gedekt"]))
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
