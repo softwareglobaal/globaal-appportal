@@ -1,61 +1,39 @@
 # De Dagbundelaar: wie doet wat
 
-> **Regel voor elke Claude (Claude 1 en Claude 2) en elk agent:**
-> lees dit bestand eerst, voor je iets doet aan de Dagbundelaar, de wachten, het Dagboek of Ai Angel.
-> Werk het bij na elk werk: zet je rij op gedaan, zet er een nieuwe rij bij als er iets openkomt, en push naar main.
-> Dit is de enige takenlijst. Wat hier niet staat, is niet afgesproken.
+**Dit is geen takenlijst meer.** Sinds 01-11-2026 is de werkstand de enige takenlijst, ook voor de Dagbundelaar, de
+wachten, het Dagboek en Ai Angel (driehoeksoverleg T-0073, 14 punten aangenomen; ja van Mehdi in de chat op
+01-11-2026). Twee lijsten die elk zeiden de enige te zijn, maakten onduidelijk wie wat moest doen.
 
-Plaats: repo globaal-appportal, `mijnagents-runner/docs/dagbundelaar/WIE-DOET-WAT.md`.
-Laatst bijgewerkt: 01-11-2026 17:45 door Claude 1.
+## Waar dan wel
 
-## Wie is wie
+- De taken: repo softwareglobaal/werkstand, lokaal `~/dev/werkstand`. Bekijken met
+  `python3 ~/dev/werkstand/werkstand.py lijst`; werk op jouw naam staat bovenaan onder "Voor jou".
+- Wat op Mehdi wacht: `python3 ~/dev/werkstand/werkstand.py voor-mehdi`. Een chat vraagt Mehdi niets wat daar niet staat.
+- Werk voor een andere Claude: `python3 ~/dev/werkstand/werkstand.py nieuw --titel "..." --doel "..." --voor claude1`.
+- De werkwijze: `WERKWIJZE.md` in de werkstand, deel "Eén takenlijst".
+- Claude 1, 2 en 3 zijn de toestellen uit `toestellen.json` (laptop, Mac mini, Mac Studio). Werk je vanuit een tweede
+  Claude-account of de cloud, dan krijg je eerst een eigen id (taak T-0085).
 
-- **Mehdi**: beslist, en doet de klikken die alleen hij kan (iPhone, een wachtwoord, Full Disk Access).
-- **Claude 1**: werkt op de MacBook van Mehdi (browser, account mch@h-architects.be). Voert de opdrachten uit.
-- **Claude 2**: bouwt code en zet de server live (desktop-app, account hotmail). Schrijft de opdrachten.
+De opdrachten in `opdrachten/` blijven als uitleg per stap; de taak in de werkstand verwijst ernaar. `naslag/` blijft
+zoals het was.
 
-## Hoe we samenwerken
+## Waar de rijen van de oude tabel naartoe gingen
 
-1. Claude 2 schrijft een opdracht in de map `opdrachten/` en zet een rij in de tabel hieronder.
-2. Claude 1 haalt de repo op (`git -C ~/dev/globaal-appportal pull --rebase origin main`), leest dit bestand en doet zijn rijen.
-3. Claude 1 zet zijn resultaat in de kolom Stand (gedaan, of fout met de foutregel) en pusht. Mehdi hoeft niets door te sturen.
-4. Een opdracht die niet meer geldt, gaat naar `opdrachten/vervallen/` met bovenaan VERVALLEN.
-5. Overzichten en momentopnames staan in `naslag/`. Die zijn niet om uit te voeren.
-
-## Open taken
-
-| # | Wie | Wat | Opdracht | Stand |
-|---|---|---|---|---|
-| 0 | Claude 1 | De vaste regel over deze takenlijst in je eigen instellingen zetten. | `opdrachten/claude1-regel-takenlijst-instellen.md` | niet uitgevoerd (Claude 1, 01-11): de werkregels verbieden handwerk in ~/.claude/CLAUDE.md. Het driehoeksoverleg van 01-11 (werkstand T-0073) zette de regel in werkstand/instructies. |
-| 1 | Claude 1 (Mehdi klikt mee) | Laptopkant aanzetten: Sms-wacht, Fotowacht, YouTube-wacht, Dropbox-sync. Mehdi zet Messages in iCloud en Text Message Forwarding aan op de iPhone, geeft Full Disk Access en typt het laptopwachtwoord. | `opdrachten/opdracht-claude1-macbook-01-11.md` | deels, 01-11 16:16 (Claude 1): Sms-wacht, WhatsApp-wacht en Belwacht aan, proef geslaagd, rondes op het bord. Full Disk Access werkte pas na verwijderen (-) en opnieuw toevoegen; uit en aan zetten hield de oude versie vast. Open: Fotowacht (wachtwoord Mehdi, werkstand T-0042); YouTube-wacht vindt onder launchd geen browsergeschiedenis (in Terminal wel), voor Claude 2. |
-| 2 | Claude 1 | Websitewacht aanzetten en Wispr-wacht een keer draaien (stap 1 tot 6). Daarna de map van de Gezondheidswacht nakijken (stap 7). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
-| 3 | Mehdi | Health Auto Export op de iPhone instellen (twee stappen onderaan). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
-| 4 | Claude 1 | Driehoeksoverleg draaien over Dagboek compleet en Ai Angel. Verslagen in de map `naslag/` zetten als `rapport-dagboek-compleet.md` en `rapport-mehdi-agent.md`, en pushen. | `opdrachten/driehoeksoverleg-starten-voor-claude-1.md` | open |
-| 5 | Claude 1 | Plaud-routine op claude.ai laten draaien. Er wachten 6 opnames op een transcript. | `../Plaud-routine instellen (voor Mehdi).md` | open |
-| 6 | Mehdi | Kiezen: mag Ai Angel de tekst van berichten lezen (WhatsApp, sms)? Ja of nee. | geen | open |
-| 7 | Mehdi | Ja of nee: blok "Eigen werk en gezondheid" live zetten in het Dagboek (kaart in de taak "Maak het dagboek compleet"). | geen | open, als nog niet beantwoord |
-| 8 | Claude 2 | Na taak 4: de Dagbundelaar levert samenvatting en actiepunten van gesprekken, wie op antwoord wacht, afspraken van morgen, zes keer per dag. Ook de vaste Dropbox-map "Dagbundelaar". | `opdrachten/opdracht-driehoeksoverleg-dagboek-compleet.md` (P2, P5, P7) | wacht op taak 4 |
-| 9 | Claude 2 | Ai Angel: taken echt doorgeven voor werk dat geen agent vanzelf oppakt. | `../ontwerp-mehdi-agent.md` | open |
-| 10 | Claude 2 | De Agendawacht: meldingen over titels en adressen van afspraken wegwerken. | geen | open |
-| 11 | Claude 2 | Na taak 1: op het bord nakijken dat alle wachten van de laptop groen staan. | geen | wacht op taak 1 |
-| 12 | Claude 2 | Vanaf 08-11: nakijken of oproepen dubbel tellen (Xelion en iPhone). | geen | later |
-| 13 | Mehdi | Ja of nee: de pagina Wachten in het Dagboek live zetten (per wacht wat binnenkwam, 31-10 en 01-11). Afbeelding in `naslag/afbeeldingen/wachten-per-dag.png`. | geen | open |
-| 14 | Claude 2 | Na de ja van taak 13: bord en Dagboek opnieuw bouwen op de server, de pagina nakijken met Mehdi en verbeteren. | `dagboek/README.md` | wacht op taak 13 |
-| 13 | Claude 2 | Lees in de werkstand WERKWIJZE.md, deel "Eén takenlijst" (driehoeksoverleg 01-11, T-0073, 14 punten aangenomen). De werkstand is de enige takenlijst; nieuw werk voor Claude 1 maak je met werkstand.py nieuw --voor claude1. Claude 1, 2 en 3 zijn toestellen; werk je vanuit een tweede account of de cloud, laat dan eerst een eigen id in toestellen.json zetten. Of dit bestand een verwijzing wordt, beslist Mehdi (K5). | werkstand T-0073 | open |
-
-## Gedaan (laatste dagen)
-
-| Wanneer | Wie | Wat |
+| Rij | Wat | Werkstand |
 |---|---|---|
-| 01-11 | Claude 2 | Pagina Wachten gebouwd (Dagboek, `/wachten`): per wacht het aantal items, de items en fouten, voor vandaag en gisteren. Getest, nog niet live. |
-| 01-11 | Claude 2 | Server live: Sms-wacht, Belwacht Xelion, YouTube-wacht op het bord; Xelion draait elk uur. |
-| 01-11 | Claude 2 | Ai Angel zet geen taak meer voor werk dat een agent vanzelf doet. |
-| 31-10 | Claude 2 | Ai Angel live (7, 10, 13, 16, 19 en 22 uur). Alle Dagbundelaar-agents in één groep op het bord. |
-| 31-10 | Claude 2 | Fotowacht en Wispr-wacht hersteld in de code. Dagboek toont locatie, gesprekken en de pagina Bronnen. |
-| 28 tot 30-10 | Claude 1 | Laptop ingericht: WhatsApp-wacht en Belwacht iPhone groen. |
+| 0 | Regel over de takenlijst in de eigen instellingen | Niet uitgevoerd; de regel staat in werkstand/instructies (T-0073) |
+| 1 | Laptopkant: Sms-, WhatsApp- en Belwacht, Fotowacht, YouTube-wacht | T-0069 (sms, WhatsApp en Belwacht aan sinds 01-11 16:16; YouTube-wacht nog open), T-0042 (Fotowacht) |
+| 2 | Websitewacht aan, Wispr-wacht draaien | T-0077 |
+| 3 | Health Auto Export op de iPhone, map nakijken | T-0078 (wacht op Mehdi) |
+| 4 | Driehoeksoverleg Dagboek compleet en Ai Angel | T-0079 |
+| 5 | Plaud-routine op claude.ai | T-0080 |
+| 6 | Mag Ai Angel berichttekst lezen | T-0079 zet de vraag met advies uit het verslag |
+| 7 | Blok "Eigen werk en gezondheid" live | T-0079 zet de vraag met advies uit het verslag |
+| 8 | Dagbundelaar: samenvatting, actiepunten, wie wacht, afspraken morgen | T-0081 |
+| 9 | Ai Angel geeft taken echt door | T-0082 |
+| 10 | Agendawacht: meldingen over titels en adressen | T-0083 |
+| 11 | Laptopwachten groen op het bord | Nagekeken 01-11 16:16 (T-0069) |
+| 12 | Oproepen dubbel tellen (Xelion en iPhone), vanaf 08-11 | T-0084 |
+| 13 | Claude 2 leest de nieuwe werkwijze | T-0085 |
 
-## Mappen
-
-- `opdrachten/`: wat nog uitgevoerd moet worden.
-- `opdrachten/vervallen/`: oude opdrachten, niet meer uitvoeren.
-- `naslag/`: overzichten (welke agent, welke bron, stand op een dag) en afbeeldingen.
+De oude tabel staat in de git-geschiedenis van dit bestand (laatste versie: commit b85103a).
