@@ -407,6 +407,34 @@ def test_f3_fathom_wacht_vangnet_als_de_ronde_haar_fout_niet_meer_kon_melden():
             assert isinstance(uit, ValueError) and statussen[-1]["taak"] == "Fathom ophalen", (repr(uit), statussen)
             assert [s["status"] for s in statussen].count("fout") == 1, "het vangnet stuurde een tweede fouthartslag"
 
+
+def test_na74_fathom_wacht_zonder_sleutel_valt_ook_onder_het_vangnet():
+    """Codex NA74: zonder Fathom-sleutel stonden actief en fout buiten het vangnet. Kwam een SIGTERM (als SystemExit)
+    terwijl de fouthartslag vertrok, dan bleef ze op actief; main probeerde het via zijn finally opnieuw."""
+    fw = _fathom_wacht()
+    nb = BordNabootsing(open_noden=[])
+    gestuurd = []
+
+    def call(pad, payload=None, method=None):
+        if pad == "/agent-status" and payload.get("taak") == "geen Fathom-sleutel" and not gestuurd:
+            gestuurd.append(True)
+            raise SystemExit(143)
+        return nb.call(pad, payload, method)
+
+    echt = (bord.call, fw.fathom.beschikbaar)
+    bord.call, fw.fathom.beschikbaar = call, (lambda: False)
+    try:
+        try:
+            fw.main()
+            uit = None
+        except SystemExit as e:
+            uit = e
+    finally:
+        bord.call, fw.fathom.beschikbaar = echt
+    statussen = nb.statussen()
+    assert isinstance(uit, SystemExit) and uit.code == 143, repr(uit)
+    assert [s["status"] for s in statussen] == ["actief", "fout"] and statussen[-1]["taak"] == "ronde afgebroken", statussen
+
 STUURPROGRAMMA = r"""
 import json, os, runpy, sys, time
 RUNNER = sys.argv[1]

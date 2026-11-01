@@ -167,7 +167,6 @@ def main():
     p.add_argument("--prive", action="store_true", help="alles alleen voor Mehdi, nooit voor een afdeling")
     a = p.parse_args()
     naam = a.naam
-    bord("/agent-status", {"naam": naam, "status": "actief", "taak": "mail lezen"})
     regels = regelboek(naam)             # voor het wachtwoord en het postvak (overleg 12, X3)
     if regels is None:
         return 1
@@ -176,6 +175,8 @@ def main():
         bord("/agent-status", {"naam": naam, "status": "rust", "taak": "geen wachtwoord", "detail": "wacht op Keychain",
                                "nood": [{"tekst": f"Geen wachtwoord in de Keychain voor {a.account}: security add-generic-password -s onemail -a {a.account} -w (hotmail: app-wachtwoord)", "wie": "mehdi"}]})
         print("geen wachtwoord"); return
+    # pas actief als regelboek en wachtwoord er zijn (Codex NA75): faalde daarvoor een melding, dan bleef ik op actief
+    bord("/agent-status", {"naam": naam, "status": "actief", "taak": "mail lezen"})
     extra = afzenders_uit_werkwijze(regels)
     if extra:
         print(f"{extra} afzender-kenmerken met hoog belang uit de werkwijze op het bord")

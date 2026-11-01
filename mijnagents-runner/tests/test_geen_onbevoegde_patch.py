@@ -511,6 +511,7 @@ volgorde = []
 class Rondeverslag:
     """De agent onder de gedeelde ronde (bord.Ronde): wat de ronde en de staart ermee doen, komt in volgorde."""
     naam = "agenda-wacht"
+    hartslag_ok = True               # de nagebootste hartslag komt altijd aan
 
     def log(self, onderwerp, stap, tekst, detail=""):
         volgorde.append(("log", tekst))
