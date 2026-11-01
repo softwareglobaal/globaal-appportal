@@ -114,6 +114,17 @@ def naar_buiten_fouten(v):
     return list(dict.fromkeys(fouten))
 
 
+def met_postcode(punt, gevraagd, postinfo):
+    """Geopunt geeft bij een gemeente zonder straat geen postcode (01-11-2026). Dan telt de postcode uit de vraag, maar
+    alleen als het postinfo-register die postcode bij dezelfde gemeente zet. postinfo: postcode -> gemeente of None."""
+    if not isinstance(punt, dict) or str(punt.get("postcode") or "").strip() or not punt.get("gemeente"):
+        return punt
+    m = re.match(r"^\s*([1-9]\d{3})\s", str(gevraagd or "") + " ")
+    if not m or str(postinfo(m.group(1)) or "").strip().lower() != str(punt["gemeente"]).strip().lower():
+        return punt
+    return {**punt, "postcode": m.group(1)}
+
+
 def officiele_gemeente(punt):
     """'postcode Gemeente' zoals Geopunt het adres kent, of None. Alleen dit gaat als gebied naar buiten."""
     if not isinstance(punt, dict):
