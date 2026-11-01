@@ -14,13 +14,11 @@
     <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
       <div class="zacht">Daardoor weet het Dagboek nu niet wat deze wacht op {{ dagnaam_ }} kreeg. Dat is onbekend, niet leeg.</div></div>
   {% else %}
-  {# PLAUD-8 (T-0120): 'regels' is het aantal regels in het werkverslag; een ouder bord gaf dat als 'rondes' #}
-  {% set regels = w['regels'] if 'regels' in w else w['rondes'] %}
   <div class="kaart samen">
     <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
       <div><span class="groot">{{ 'onbekend' if w['leesfout'] else w['aantal'] }}</span> items binnen</div>
-      <div><span class="groot">{{ 'onbekend' if w['logfout'] else regels }}</span> {{ 'regel' if regels == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
+      <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
       {% if is_vandaag and w['status'] and w['status']['laatste'] %}<div>laatste ronde <span class="groot">{{ w['status']['laatste'] }}</span></div>{% endif %}
       {% if w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
     </div>
@@ -57,7 +55,7 @@
     {% endif %}
   </div>
   <div class="kaart">
-    <h2>Werkverslag van deze dag ({{ 'onbekend' if w['logfout'] else regels }})</h2>
+    <h2>Werkverslag van deze dag ({{ 'onbekend' if w['logfout'] else w['rondes'] }})</h2>
     {% if w['logfout'] %}
     <p class="leeg">Onbekend: het bord kon het werkverslag niet lezen ({{ w['logfout'] }}). Dat is niet hetzelfde als geen ronde.</p>
     {% elif w['log'] %}

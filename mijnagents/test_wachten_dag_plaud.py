@@ -1,8 +1,9 @@
 """Grendel op De Plaudwacht in /api/wachten/dag (T-0120, groep plaud). Apart van test_wachten_dag.py, zodat de groepen
 elkaar daar niet in de weg zitten; het draait in dezelfde Docker-build.
 
-- P01 (PLAUD-8): 'regels' is het aantal regels in het werkverslag; 'rondes' telt alleen de slotregels 'ronde:' van De
-  Plaudwacht (29-10: 408 regels, 24 rondes). Een wacht zonder zo'n slotregel heeft geen meetbare rondes: None, nooit 0.
+- P01 (PLAUD-8): 'rondes' blijft het aantal regels in het werkverslag (zo toont de pagina het); 'rondes_geteld' telt
+  alleen de slotregels 'ronde:' van De Plaudwacht (29-10: 408 regels, 24 rondes). Een wacht zonder zo'n slotregel heeft
+  geen meetbare rondes: None, nooit 0.
 - P02 (PLAUD-7): een opname uit het manifest van de Mac zonder rij in de gesprekkentabel (wacht op transcript, kort,
   onvolledig) staat er als item met tijd, duur en toestand, zonder naam; een opname met een rij staat er niet nog eens bij.
   'plaud' telt per dag de opnames, ook die zonder audio. Nooit een naam uit Plaud, nooit een pad of link.
@@ -54,12 +55,13 @@ con.close()
 
 w = wachten("2026-10-29")
 pl = w["plaud-wacht"]
-check("P01 plaud: regels is het aantal regels in het werkverslag", pl["regels"] == 9 and len(pl["log"]) == 9, pl["regels"])
-check("P01 plaud: rondes telt de slotregels 'ronde:'", pl["rondes"] == 3, pl["rondes"])
+check("P01 plaud: rondes blijft het aantal regels in het werkverslag", pl["rondes"] == 9 and len(pl["log"]) == 9,
+      pl["rondes"])
+check("P01 plaud: rondes_geteld telt de slotregels 'ronde:'", pl["rondes_geteld"] == 3, pl["rondes_geteld"])
 be = w["belwacht"]
-check("P01 een wacht zonder slotregel: rondes onbekend, niet 0", be["rondes"] is None and be["regels"] == 1, be)
-check("P01 een wacht zonder werkverslag: 0 regels, rondes onbekend", w["zoom-wacht"]["regels"] == 0
-      and w["zoom-wacht"]["rondes"] is None, w["zoom-wacht"])
+check("P01 een wacht zonder slotregel: rondes_geteld onbekend, niet 0", be["rondes_geteld"] is None and be["rondes"] == 1, be)
+check("P01 een wacht zonder werkverslag: 0 regels, rondes_geteld onbekend", w["zoom-wacht"]["rondes"] == 0
+      and w["zoom-wacht"]["rondes_geteld"] is None, w["zoom-wacht"])
 
 # ---------------------------------------------------------------- P02, P03: het manifest van de Mac ---
 import json  # noqa: E402
