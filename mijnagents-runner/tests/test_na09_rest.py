@@ -316,6 +316,24 @@ def test_mac_mailwacht_met_regelboek_leest_het_postvak():
     assert draad.statussen("mail-proef")[-1]["status"] == "waakt", draad.statussen("mail-proef")
 
 
+# ------------------------------------------------------------------------------- De zelfcontrole (Agendawacht) ---
+import zelfcontrole as ZC  # noqa: E402
+
+
+def test_zelfcontrole_noemt_onbekend_geen_drift():
+    """Bord en repo dragen dezelfde werkwijze (A11). Een antwoord zonder werkwijze werd een lege tekst, en dan meldde de
+    zelfcontrole 'werkwijze op het bord v? (<hash van niets>)', alsof er een oude werkwijze stond. Onbekend is een
+    eigen bevinding, leeg ook."""
+    nu = datetime(2026, 11, 2, 9, 0).astimezone()
+    for werkwijze, verwacht in (({}, "niet te lezen"), (_http(404), "niet te lezen"), ("", "leeg")):
+        with op_het_bord(Draad(werkwijze=werkwijze)):
+            uit = [b for b in ZC.omgeving(nu) if b["controle"] == "bord_werkwijze_oud"]
+        assert len(uit) == 1 and verwacht in uit[0]["tekst"] and "v?" not in uit[0]["tekst"], (werkwijze, uit)
+    repo = (ZC.HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
+    with op_het_bord(Draad(werkwijze=repo)):
+        assert not [b for b in ZC.omgeving(nu) if b["controle"] == "bord_werkwijze_oud"], "gelijke werkwijze is geen drift"
+
+
 # ---------------------------------------------------------------------------------------------- De Archivaris ---
 import archivaris as AR  # noqa: E402
 
@@ -382,6 +400,43 @@ def test_levenscoach_spiegelt_niet_zonder_regelboek_en_gaat_door_de_ronde():
     _ronde_kennis(draad, "levenscoach")
     laatste = draad.statussen("levenscoach")[-1]
     assert laatste["status"] == "waakt" and any("Gezondheidsgegevens" in n["tekst"] for n in laatste["nood"]), laatste
+
+
+# --------------------------------------------------------------------------------------------- De Agendawacht ---
+def test_agendawacht_hoofdronde_gaat_door_de_ronde_en_terugkijken_niet():
+    """De volledige ronde van de Agendawacht las streng, maar buiten de ronde, met een eigen kennisregel zonder lessen of
+    collega's. Nu neemt main() de gedeelde ronde en draait de romp (_ronde) erbinnen; zonder regelboek begint ze niet. De
+    terugkijkstand blijft bewust buiten de ronde (overleg 12, X7): ze leest streng, maar zet geen hartslag en geen kennis,
+    want die zouden de echte ronde overschrijven."""
+    import agenda_wacht as AW  # noqa: PLC0415
+    gedaan = []
+    rust = ((AW.agenda, "beschikbaar", lambda: True), (AW, "slot_nemen", lambda *a, **k: None),
+            (AW, "_wachtrij_begin", lambda: True), (AW, "_ronde", lambda rd: gedaan.append(rd.werkwijze)),
+            (AW, "terugkijktaken", lambda: gedaan.append("terugkijktaken")))
+    draad = Draad(werkwijze="# Agendawacht\n\nRegel.")
+    with op_het_bord(draad), vervangen(*rust):
+        uit = AW.main()
+    assert uit == 0 and gedaan == ["# Agendawacht\n\nRegel."], (uit, gedaan)
+    _ronde_kennis(draad, "agenda-wacht")
+    gedaan.clear()
+    draad = Draad(werkwijze={})
+    with op_het_bord(draad), vervangen(*rust):
+        uit = AW.main()
+    assert uit == 1 and not gedaan, (uit, gedaan)
+    _gestopt(draad, "agenda-wacht", ONBEKEND, "claude-code")
+    draad = Draad(werkwijze="# Agendawacht\n\nRegel.")
+    with op_het_bord(draad), vervangen(*rust):
+        uit = AW.terugkijkstand(["--taken"])
+    assert uit == 0 and gedaan == ["terugkijktaken"], (uit, gedaan)
+    assert not draad.statussen("agenda-wacht") and not draad.kennis("agenda-wacht"), draad.gestuurd
+    gedaan.clear()
+    with op_het_bord(Draad(werkwijze={})), vervangen(*rust):
+        try:
+            AW.terugkijkstand(["--taken"])
+            gestopt = False
+        except bord.RondeGestopt:
+            gestopt = True
+    assert gestopt and not gedaan, "de terugkijkstand werkte zonder regelboek"
 
 
 if __name__ == "__main__":

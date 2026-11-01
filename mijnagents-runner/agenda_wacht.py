@@ -6963,14 +6963,6 @@ def zonder_rit_indelen(rregels):
     return zonder_rit
 
 
-def noden_voor_hartslag(noden, dag_arg):
-    """F8 (overleg 27-10-2026): het bord sluit elke open nood die niet in de lijst staat. Een dagronde (--dag) ziet maar
-    een dag en bouwt de mailnoden niet, dus ze mag noden openen maar nooit sluiten: open noden plus de nieuwe. Is het
-    bord niet te lezen, dan geen lijst (None), zodat het bord niets sluit. Alleen de volledige ronde stuurt de
-    gezaghebbende lijst."""
-    return ag.noden_bij_breuk(noden) if dag_arg else noden
-
-
 WEEKCONSOLIDATIE_MAP = os.path.expanduser("~/appportal/mijnagents-data/export/Agendawacht/weekconsolidatie")
 WEEKNOOD = {"tekst": "Weekoverzicht van de Agendawacht ontbreekt: de weekconsolidatie liep niet goed. Start een "
                      "Claude-sessie om ze te herstellen en opnieuw te draaien.", "wie": "mehdi"}
@@ -7784,13 +7776,25 @@ def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
     global WACHTRIJ_KLAAR
     WACHTRIJ_KLAAR = _wachtrij_begin()
-    werkwijze = ag.werkwijze()
-    ag.hartslag("actief", taak="agenda lezen")
+    if not agenda.beschikbaar():
+        ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
+        print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
+        return 78                        # niet 0: niets verwerkt (A6)
+    # De gedeelde ronde (N12, NA09-rest 01-11-2026, overleg 12): de werkwijze van het bord, of geen ronde; en wat ik las
+    # (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, met een eigen kennisregel.
+    # De terugkijkstand en het kleurherstel gaan bewust niet door de ronde: ze zouden de hartslag en de kennis van deze
+    # ronde overschrijven.
     try:
-        if not agenda.beschikbaar():
-            ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
-            print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
-            return 78                    # niet 0: niets verwerkt (A6)
+        with ag.ronde("agenda in het oog") as r:
+            _ronde(r)
+    except bord.RondeGestopt as e:
+        print(f"ronde gestopt: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _ronde(rd):
+    try:
         items = afspraken(-1, 8)
         fouten = [i for i in items if i.get("fout")]
         items = [i for i in items if not i.get("fout")]
@@ -8047,15 +8051,14 @@ def main():
             _, routes_gebruikt = routes_vandaag()
             ag.log(f"dag {vandaag}", "bron", f"Google Routes: {routes_gebruikt} van {ROUTES_DAGLIMIET} aanroepen vandaag"
                    + (" (plafond bereikt, reistijden verder op de filefactor)" if ROUTES_GESTOPT else ""))
-        # Norm N4: melden welk regelboek ik deze ronde las, zodat achteraf te zien is
-        # welke versie van de regels gold toen ik iets deed.
+        # Norm N4: welk regelboek ik deze ronde las, met een vingerafdruk per bron; de ronde meldt het bij het einde,
+        # naast de werkwijze van het bord, de lessen en de collega's.
         try:
-            ag.kennis(f"werkwijze van het bord, {len(werkwijze or '')} tekens; "
-                      f"afspraken uit werkwijze/agenda-taken.json; "
-                      f"firmacodes uit organisatie.globaal.be ({len(FIRMACODES)} firma's)",
-                      bron="bord + agenda-taken.json + kern.firma")
-        except Exception:  # noqa: BLE001
+            rd.bron("werkwijze/agenda-taken.json",
+                   (Path(__file__).resolve().parent / "werkwijze" / "agenda-taken.json").read_text(encoding="utf-8"))
+        except OSError:
             pass
+        rd.bron("firmacodes uit organisatie.globaal.be (kern.firma)", FIRMACODES)
         # Norm N10: een nood draagt geen aantal in zijn tekst, anders is elke ronde
         # formeel een nieuwe nood en sluit de lus nooit. Het aantal hoort in het detail.
         noden = list(mail_noden)       # wat de mailbron vond (FR-101)
@@ -8138,23 +8141,25 @@ def main():
             noden.append({"tekst": "Agenda's die ik niet kan lezen: " + ", ".join(f["kalender"][:30] for f in fouten),
                           "wie": "mehdi"})
         # Laag 4 (overleg 27-10-2026): een ontbrekend weekoverzicht is een nood tot de volgende geslaagde run; ook in een
-        # dagronde, want die mag hem openen (noden_voor_hartslag). De fout zelf staat in het detail, nooit in de tekst.
+        # dagronde, want die mag hem openen. De fout zelf staat in het detail, nooit in de tekst.
         weeknood = weekconsolidatie_noden()
         noden.extend(weeknood)
         weekfout = weekconsolidatie_fout() if weeknood else ""
         onderweg = locatiebeweging.kort(locatiebeweging.lees())
-        ag.hartslag("waakt", taak="agenda in het oog",
-                    detail=f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
-                           f"{len(niet_conform)} zonder code; "
-                           f"{len(onvolledig)} zonder adres; {onderweg}"
-                           + (f"; weekoverzicht: {weekfout or 'geen geslaagde run sinds zondag 20:00'}" if weeknood else ""),
-                    nood=noden_voor_hartslag(noden, DAG_ARG))
-        # H1-1, driehoeksoverleg C2, 17-10-2026: ook vragen en de vastgelopen-oproep horen bij dit rondeverslag.
-        ag.log_verstuur()
-    except Exception as e:  # noqa: BLE001
+        rd.detail = (f"vandaag {len(dagplan)} afspraken; {gekoppeld} gekoppeld; "
+                     f"{len(niet_conform)} zonder code; "
+                     f"{len(onvolledig)} zonder adres; {onderweg}"
+                     + (f"; weekoverzicht: {weekfout or 'geen geslaagde run sinds zondag 20:00'}" if weeknood else ""))
+        # F8 (overleg 27-10-2026): een dagronde (--dag) ziet maar een dag en bouwt de mailnoden niet, dus ze mag noden
+        # openen maar nooit sluiten: in de ronde is dat noden_onbekend (nood_sluiten false). Alleen de volledige ronde
+        # stuurt de gezaghebbende lijst, zodat opgeloste noden sluiten.
+        rd.noden_onbekend = bool(DAG_ARG)
+        for n in noden:
+            rd.nood(n["tekst"], wie=n.get("wie") or "mehdi")
+        # H1-1, driehoeksoverleg C2, 17-10-2026: ook vragen en de vastgelopen-oproep horen bij dit rondeverslag; de ronde
+        # verstuurt het bij haar einde, na alles hierboven.
+    except Exception as e:  # noqa: BLE001  de ronde zet de fouthartslag en houdt de open noden open
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
         raise
 
 

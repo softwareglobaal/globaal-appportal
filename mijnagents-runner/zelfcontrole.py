@@ -243,18 +243,25 @@ def omgeving(nu):
     # staat het voor, dan veranderde iemand tekst die de code niet uitvoert.
     try:
         import bord as _bord  # noqa: PLC0415
-        t_bord = _bord.call("/api/agent/agenda-wacht/werkwijze").get("werkwijze") or ""
+        # NA09-rest (01-11-2026): de strenge leesweg. Een antwoord zonder werkwijze werd hier een lege tekst, en dan
+        # meldde ik drift met de hash van niets; onbekend is nu "niet te lezen" met de soort, leeg is leeg.
+        t_bord = _bord.Agent("agenda-wacht").werkwijze_lezen()
         t_repo = (HIER / "werkwijze" / "agenda-wacht.md").read_text(encoding="utf-8")
         v_bord, v_repo = re.search(r"Versie ([0-9.]+)", t_bord), re.search(r"Versie ([0-9.]+)", t_repo)
         # de inhoud telt, niet alleen het versienummer: dezelfde versie met een andere tekst is ook drift (v1.2, A11)
-        if inhoud_hash(t_bord) != inhoud_hash(t_repo):
+        if not t_bord.strip():
+            uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
+                        "tekst": "de werkwijze op het bord is leeg: werkwijze_naar_bord.py agenda-wacht (eerst het verschil), "
+                                 "dan --zet", "door": ""})
+        elif inhoud_hash(t_bord) != inhoud_hash(t_repo):
             uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
                         "tekst": f"werkwijze op het bord v{v_bord.group(1) if v_bord else '?'} ({inhoud_hash(t_bord)}), in de repo "
                                  f"v{v_repo.group(1) if v_repo else '?'} ({inhoud_hash(t_repo)}): werkwijze_naar_bord.py agenda-wacht "
                                  f"(eerst het verschil), dan --zet", "door": ""})
     except Exception as e:  # noqa: BLE001
         uit.append({"controle": "bord_werkwijze_oud", "dag": nu.date().isoformat(), "uur": "", "agenda": "", "titel": "",
-                    "tekst": f"de werkwijze op het bord is niet te lezen ({type(e).__name__})", "door": ""})
+                    "tekst": f"de werkwijze op het bord is niet te lezen ({getattr(e, 'soort', '') or type(e).__name__})",
+                    "door": ""})
     # Een mailbron die achterloopt is onvolledige dekking, geen 'niets gevonden' (audit A1, FR-101): de laatste geslaagde
     # lezing per mailbox, niet het draaien van een proces
     try:

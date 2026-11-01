@@ -457,9 +457,10 @@ check("A4: bekende Calendly-reeks geeft geen GET en één voorstel", api.get == 
       and len(regels) == 1 and "VOORSTEL" in regels[0], f"{resultaat}; GET={api.get}")
 
 
-# Voer het afsluitende deel van main uit met nagebootste stappen. Op HEAD staat de verzending vóór dit deel.
+# Voer het afsluitende deel van de ronde uit met nagebootste stappen. Op HEAD staat de verzending vóór dit deel.
+# Sinds NA09-rest (01-11-2026) staat de romp in _ronde(rd), binnen de gedeelde ronde van main().
 bronboom = ast.parse(BRON.read_text(encoding="utf-8"))
-main = next(n for n in bronboom.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+main = next(n for n in bronboom.body if isinstance(n, ast.FunctionDef) and n.name == "_ronde")
 ronde = next(n for n in main.body if isinstance(n, ast.Try))
 
 # A9: drie werkelijke weigeringen worden elk als voorstel door de signaalstap van main gelezen.
@@ -508,14 +509,37 @@ volgorde = []
 
 
 class Rondeverslag:
+    """De agent onder de gedeelde ronde (bord.Ronde): wat de ronde en de staart ermee doen, komt in volgorde."""
+    naam = "agenda-wacht"
+
     def log(self, onderwerp, stap, tekst, detail=""):
         volgorde.append(("log", tekst))
 
     def log_verstuur(self):
         volgorde.append(("verstuur", ""))
 
-    def hartslag(self, *args, **kwargs):
+    def hartslag(self, status, *args, **kwargs):
+        volgorde.append(("hartslag", status))
+
+    def werkwijze(self, taak="", noden=()):
+        return "# Proef\n\nRegel."
+
+    def kennis(self, *args, **kwargs):
         pass
+
+    def noden_bij_breuk(self, nieuw):
+        return None
+
+
+def in_de_ronde(code):
+    """Voer code uit zoals main() het doet: binnen de gedeelde ronde, met de ronde als rd (NA09-rest, 01-11-2026)."""
+    oud_call, W.bord.call = W.bord.call, (lambda *a, **k: [])        # geen collega's van een echt bord
+    try:
+        with W.bord.Ronde(dummy["ag"], "agenda in het oog", {}) as rd:
+            dummy["rd"] = rd
+            exec(compile(code, str(BRON), "exec"), dummy)
+    finally:
+        W.bord.call = oud_call
 
 
 def vragen(items, **_kwargs):
@@ -536,24 +560,25 @@ dummy = {"ag": Rondeverslag(), "vragen_in_agenda": vragen, "bel_als_vastgelopen"
          "fouten": [], "noden": [], "locatiebeweging": SimpleNamespace(kort=lambda x: "", lees=lambda: {}),
          "dagplan": [], "gekoppeld": 0, "niet_conform": [], "onvolledig": []}
 # fase 1 (overleg 27-10-2026): de weeknood en de noodlijst van een dagronde staan nu ook aan het einde van de ronde
-dummy.update({"weekconsolidatie_noden": lambda: [], "weekconsolidatie_fout": lambda: "",
-              "noden_voor_hartslag": lambda noden, _dag: noden})
-resultaat = veilig(lambda: exec(compile(staart, str(BRON), "exec"), dummy))
-namen = [x[0] if x[0] == "verstuur" else x[1] for x in volgorde]
+dummy.update({"weekconsolidatie_noden": lambda: [], "weekconsolidatie_fout": lambda: ""})
+resultaat = veilig(lambda: in_de_ronde(staart))
+namen = [x[0] if x[0] in ("verstuur", "hartslag") else x[1] for x in volgorde]
+verstuurd = max((i for i, x in enumerate(volgorde) if x[0] == "verstuur"), default=-1)
 check("rondeverslag gaat na vragen en vastgelopen-oproep weg",
-      resultaat is None and volgorde and volgorde[-1][0] == "verstuur"
-      and any("vragen in de agenda" in x for x in namen) and any("vastgelopen" in x for x in namen),
+      resultaat is None and verstuurd > 0 and volgorde[-1][0] == "hartslag"
+      and any("vragen in de agenda" in x for x in namen[:verstuurd]) and any("vastgelopen" in x for x in namen[:verstuurd]),
       f"{resultaat} {volgorde}")
 
 handler = ronde.handlers[0]
 foutpad = ast.fix_missing_locations(ast.Module(body=[ast.Try(body=[ast.Raise(exc=ast.Call(
     func=ast.Name(id="RuntimeError", ctx=ast.Load()), args=[ast.Constant(value="proef")], keywords=[]), cause=None)],
-    handlers=[ast.ExceptHandler(type=ast.Name(id="Exception", ctx=ast.Load()), name="e",
-                                body=[n for n in handler.body if not isinstance(n, ast.Raise)])],
+    handlers=[ast.ExceptHandler(type=ast.Name(id="Exception", ctx=ast.Load()), name="e", body=handler.body)],
     orelse=[], finalbody=[])], type_ignores=[]))
 volgorde.clear()
-resultaat = veilig(lambda: exec(compile(foutpad, str(BRON), "exec"), dummy))
-check("foutpad verstuurt de foutlog", resultaat is None and [x[0] for x in volgorde] == ["log", "verstuur"],
+resultaat = veilig(lambda: in_de_ronde(foutpad))
+# de foutregel staat in het verslag dat de ronde verstuurt, en de laatste hartslag is fout (N11)
+check("foutpad verstuurt de foutlog", isinstance(resultaat, RuntimeError)
+      and [x[0] for x in volgorde][-3:] == ["log", "verstuur", "hartslag"] and volgorde[-1] == ("hartslag", "fout"),
       f"{resultaat} {volgorde}")
 
 print(f"H1-1: {ok} goed, {fout} fout")

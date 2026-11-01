@@ -444,32 +444,40 @@ finally:
     sys.argv = _argv
 
 import inspect                      # noqa: E402
-_bron = inspect.getsource(W.main)
-_i_nood, _i_hart = _bron.find("weekconsolidatie_noden("), _bron.find('ag.hartslag("waakt"')
-check("weeknood: main zet de weeknood voor de hartslag, buiten 'if not DAG_ARG'",
+# Sinds NA09-rest (01-11-2026, overleg 12) loopt de ronde van de Agendawacht door de gedeelde ronde: main() neemt het
+# slot en de ronde, _ronde(rd) is de romp, en de ronde zet de eindhartslag met rd.detail en de noden.
+_bron = inspect.getsource(W._ronde)
+_i_nood, _i_hart = _bron.find("weekconsolidatie_noden("), _bron.find("rd.detail = ")
+check("weeknood: de ronde zet de weeknood voor de eindhartslag, buiten 'if not DAG_ARG'",
       0 < _i_nood < _i_hart and re.search(r"\n {8}weeknood = weekconsolidatie_noden\(\)", _bron) is not None)
 
 # ---------- F8 (overleg 27-10-2026): een dagronde opent noden, sluit ze nooit ----------
-check("F8: main stuurt de noden via noden_voor_hartslag", "nood=noden_voor_hartslag(noden, DAG_ARG)" in _bron)
-_open = [{"tekst": "Buitenafspraken zonder reistijd, reden: rit zonder afspraak", "wie": "mehdi"},
-         {"tekst": "Afspraken uit mail kloppen niet met de agenda; details in je privé-agenda", "wie": "mehdi"}]
-_oud_open = W.ag.open_noden
+# Tot NA09-rest deed noden_voor_hartslag dat (open plus nieuw, of geen lijst); nu zet een dagronde rd.noden_onbekend, en
+# dan stuurt de ronde haar noden met nood_sluiten false: wat nieuw is komt erbij, wat open stond blijft open.
+check("F8: een dagronde zet noden_onbekend, de volledige ronde niet", "rd.noden_onbekend = bool(DAG_ARG)" in _bron)
+_gestuurd = []
+
+
+def _f8_call(pad, payload=None, method=None):
+    _gestuurd.append((pad, payload))
+    if pad.endswith("/werkwijze"):
+        return {"werkwijze": "# Proef F8\n\nRegel."}
+    return [] if pad == "/api/agents" else {}
+
+
+_oud_call, W.bord.call = W.bord.call, _f8_call
 try:
-    W.ag.open_noden = lambda: [dict(n) for n in _open]
-    check("F8: een dagronde die niets vindt, stuurt de open noden mee: het bord sluit niets",
-          W.noden_voor_hartslag([], "2026-10-27") == _open)
-    _nieuw = [{"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}, dict(_open[0])]
-    _lijst = W.noden_voor_hartslag(_nieuw, "2026-10-27")
-    check("F8: een dagronde met een nieuwe nood stuurt open plus nieuw, zonder dubbel",
-          [n["tekst"] for n in _lijst] == [_open[0]["tekst"], _open[1]["tekst"], "TE KRAP: kies welke afspraak schuift"],
-          str(_lijst))
-    check("F8: de volledige ronde stuurt precies haar eigen lijst, zodat opgeloste noden sluiten",
-          W.noden_voor_hartslag(_nieuw, None) is _nieuw)
-    W.ag.open_noden = lambda: None
-    check("F8: is het bord niet te lezen, dan stuurt een dagronde geen lijst (None), nooit een lege",
-          W.noden_voor_hartslag(_nieuw, "2026-10-27") is None)
+    for _dag, _sluit in ((None, True), ("2026-10-27", False)):
+        _gestuurd.clear()
+        with W.bord.Agent("proef-f8").ronde("proef") as _rd:
+            _rd.noden_onbekend = bool(_dag)
+            _rd.nood("TE KRAP: kies welke afspraak schuift", wie="mehdi")
+        _laatste = [p for pad, p in _gestuurd if pad == "/agent-status"][-1]
+        check(f"F8: {'een dagronde opent de nood en sluit niets' if _dag else 'de volledige ronde stuurt haar eigen lijst'}",
+              (_laatste.get("nood_sluiten") is not False) == _sluit
+              and _laatste["nood"] == [{"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}], str(_laatste))
 finally:
-    W.ag.open_noden = _oud_open
+    W.bord.call = _oud_call
 _zr = W.zonder_rit_indelen([
     "2026-11-23T16:00 Reistijd: x: mijn rit zonder afspraak weggehaald",
     "2026-11-23T16:00 Reistijd: x: rit zonder afspraak (zonder mijn merk: ik verhuis of haal hem niet weg)",
