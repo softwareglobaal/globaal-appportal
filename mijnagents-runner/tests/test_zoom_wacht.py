@@ -3755,6 +3755,30 @@ def test_t0120_wacht6_elke_onleesbare_sessie_telt_in_een_stuk_en_een_keer_over_s
     assert "(per soort: niet leesbaar 1 kanaal; zonder bestemming 1 1:1)" in bron, bron
 
 
+@bord_nodig
+def test_t0120_wacht6_twee_sessies_met_dezelfde_sleutel_in_twee_stukken_tellen_twee():
+    """WACHT-6 (Codex, toets 2): geeft Zoom in elk stuk een andere onleesbare sessie met dezelfde sleutel (een ander laatste
+    bericht), dan zijn dat twee gesprekken; dezelfde sessie in twee stukken blijft een."""
+    w = Wereld()
+    oud_ = {"type": "1:1", "peer_contact_email": "mu@elders.test", "name": "Proefpersoon Mu", "weg": True,
+            "last_message_sent_time": "2026-10-05T09:00:00Z"}
+    nieuw_ = dict(oud_, last_message_sent_time="2026-10-30T09:00:00Z")
+    echt = w.zoom.antwoord
+
+    def antwoord(pad, q):
+        if pad == f"/chat/users/{IK['id']}/sessions":
+            return {"sessions": [oud_ if q["from"] < "2026-10-15" else nieuw_]}
+        if pad == f"/chat/users/{IK['id']}/messages":
+            return None
+        return echt(pad, q)
+    w.zoom.antwoord = antwoord
+    assert w.ronde(datetime(2026, 11, 1, 7, 20, tzinfo=UTC), "--inhaal", "35") is None
+    assert len(_zoom_vragen(w, f"/chat/users/{IK['id']}/sessions")) == 2
+    bron = _bronregel(w)
+    assert "2 chatgesprek(ken) niet leesbaar" in bron and "(per soort: niet leesbaar 2 1:1)" in bron, bron
+    assert "Mu" not in bron.replace("Mehdi", ""), bron
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = over = 0

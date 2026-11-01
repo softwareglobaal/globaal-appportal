@@ -556,18 +556,19 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None, soorten=
         for k, n in sorted(weg.items()):
             ouderdom.extend(weg_tijden[k][:n])
     if soorten is not None:
-        for (soort, _), n in weg.items():
+        for (soort, *_), n in weg.items():
             soorten[("niet leesbaar", soort)] += n
-        for (soort, _), n in zonder.items():
+        for (soort, *_), n in zonder.items():
             soorten[("zonder bestemming", soort)] += n
     return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((sum(weg.values()), "niet leesbaar"), (sum(zonder.values()), "zonder bestemming")) if n]
 
 
 def _chat_stuk(ik, venster, personen, domeinen, weg, zonder, weg_tijden):
-    """De chatrijen van een stuk van het venster (chat_rijen). weg en zonder: per (soort, sleutel) het hoogste aantal
-    sessies met een 404 of zonder bestemming in een stuk, over de stukken heen: zo telt elke sessie in een stuk, en een
-    gesprek dat in twee stukken staat een keer (Codex, toets 1). weg_tijden: per (soort, sleutel) het laatste bericht
-    van elke onleesbare sessie, voor de ouderdom."""
+    """De chatrijen van een stuk van het venster (chat_rijen). weg en zonder: per sessie (soort, sleutel, naam en tijd
+    van het laatste bericht, wat Zoom over een sessie geeft, los van het venster) het hoogste aantal met een 404 of
+    zonder bestemming in een stuk, over de stukken heen: zo telt elke sessie in een stuk, een sessie die in twee
+    stukken staat een keer, en twee sessies met dezelfde sleutel in twee stukken twee keer (Codex, toets 1 en 2).
+    weg_tijden: per sessie het laatste bericht van elke onleesbare, voor de ouderdom."""
     sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
     rijen, zonder_hier, weg_hier, tijd_hier = [], Counter(), Counter(), defaultdict(list)
     for s in sessies:
@@ -578,13 +579,14 @@ def _chat_stuk(ik, venster, personen, domeinen, weg, zonder, weg_tijden):
             p["to_contact"] = s.get("peer_contact_email", "")
         else:
             p["to_channel"] = s.get("channel_id", "")
+        sessie = (soort, chat_sleutel(s), s.get("name") or "", str(s.get("last_message_sent_time") or ""))
         if not (p.get("to_contact") or p.get("to_channel")):
-            zonder_hier[(soort, chat_sleutel(s))] += 1
+            zonder_hier[sessie] += 1
             continue
         berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if berichten is None:
-            weg_hier[(soort, chat_sleutel(s))] += 1
-            tijd_hier[(soort, chat_sleutel(s))].append(s.get("last_message_sent_time"))
+            weg_hier[sessie] += 1
+            tijd_hier[sessie].append(s.get("last_message_sent_time"))
             continue
         if not berichten:
             continue
