@@ -1541,6 +1541,26 @@ def test_t0120_arch4_een_bewezen_bestand_dat_tussen_de_lezingen_verandert_houdt_
         assert not _dekking()["dekking"] and not _dekking()["wisregel_veilig"], wijziging
 
 
+def test_t0120_arch1_arch4_een_later_apart_deel_is_geen_vervanging_en_geen_groen():
+    """ARCH-1 en ARCH-4 (Codex, toets 2): een later, apart deel van de opname van dezelfde soort (een andere starttijd) is
+    geen vervanging van een verdwenen verwerkingsbestand. Het geval blijft verdwenen, ook na volledige rondes, en er
+    komt geen groen sein."""
+    z, _, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    x = _in_verwerking(z, "u1", start)
+    ronde()
+    m = z.meeting("u1", start, bestanden=[("MP4", "shared_screen_with_speaker_view", b"deel twee")])
+    m["bestanden"][0].update(id="u1-deel2", start="2026-10-28T09:40:00Z")
+    z.inhoud["u1-deel2"] = z.inhoud.pop("u1-f0")
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    staat = ZA.lees_staat()
+    assert uit["gedaan"] == 1 and x in staat["verdwenen"] and x not in staat["vervallen"], staat["vervallen"]
+    assert VERDWENEN in teksten(r)
+    for uur in (2, 3):
+        r, uit = ronde(nu=NU + timedelta(hours=uur))
+        assert not uit["dekking"] and not _dekking()["dekking"] and VERDWENEN in teksten(r), (uur, uit)
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

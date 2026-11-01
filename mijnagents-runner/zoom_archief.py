@@ -418,14 +418,17 @@ def vervanging(fid, oud, per_meeting, geclaimd):
     """ARCH-1 (meting 01-11-2026): Zoom vervangt een bestand in verwerking door de afgewerkte bestanden, met andere id's.
     Een verwerkings-id dat uit de lijst weg is, is geen verlies als dezelfde meeting nu een afgewerkt bestand van
     dezelfde soort (en, als ik die kende, hetzelfde opnametype) heeft dat nieuw is: het stond niet in de meeting toen ik
-    het verwerkingsbestand voor het eerst zag (ook niet onbewezen, Codex toets 1), en geen ander verdwenen id nam het al
-    als vervanging. Geeft het id van die vervanging, of leeg:
+    het verwerkingsbestand voor het eerst zag (ook niet onbewezen, Codex toets 1), het begint op dezelfde seconde (een
+    later, apart deel van de opname is geen vervanging, Codex toets 2; zo vond de meting de 21 gevallen), en geen ander
+    verdwenen id nam het al als vervanging. Geeft het id van die vervanging, of leeg:
     dan is het verdwenen. Een geval zonder meeting, status of soort (van voor deze regel) heeft nooit een vervanging."""
     m = per_meeting.get(oud.get("uuid") or "")
-    if oud.get("status") != "processing" or not oud.get("soort") or not m:
+    begin = _utc(oud.get("start"))
+    if oud.get("status") != "processing" or not oud.get("soort") or not m or not begin:
         return ""
     kandidaten = [f["id"] for f in m["bestanden"] if f.get("id") and f["id"] != fid and f.get("status") == "completed"
                   and f.get("soort") == oud["soort"] and f["id"] not in (oud.get("al_bekend") or ())
+                  and _utc(f.get("start")) == begin
                   and (not oud.get("opnametype") or f.get("opnametype") == oud["opnametype"])
                   and f["id"] not in geclaimd]
     if oud.get("vervangen_door") in kandidaten:
