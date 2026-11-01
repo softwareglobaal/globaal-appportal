@@ -173,6 +173,49 @@ def _uit(uid, aan, onderwerp, datum, antwoord_op=None):
             "message_id": f"<s{uid}@proef>", "aan": [aan], "cc": [], "verwijst": [], "in_antwoord_op": antwoord_op or ""}
 
 
+def test_hinvest_leest_zoom_en_bpost_en_zegt_wat_bewust_niet():
+    """MAIL-2 (overleg 01-11-2026, X2 en X9): een filter bij one.com zet Zoom- en bpost-mail van info@h-invest.be meteen in
+    INBOX.Zoom en INBOX.Bpost; de wacht las die nooit (259 van de 430 berichten in oktober). Nu wel, alleen lezend (VOL-3
+    eerst). Elke map waar de sorteerregels post naartoe zetten, wordt gelezen of staat bewust bij 'bewust_niet_gelezen'."""
+    cfg = postvak.wachten()
+    mappen = postvak.mappen_van("info@h-invest.be")
+    assert {"INBOX.Zoom", "INBOX.Bpost"} <= set(mappen)
+    assert {"INBOX.Zoom", "INBOX.Bpost"} <= set(postvak.alleen_lezen_van("info@h-invest.be")), "VOL-3 voor MAIL-2"
+    import uitschrijven as U
+    assert not {"INBOX.Zoom", "INBOX.Bpost"} & set(U.mappen_voor("info@h-invest.be", {"imap_host": "imap.one.com"},
+                                                                 U.instellingen(cfg))), "nooit uitschrijven uit Zoom of bpost"
+    niet = cfg["bewust_niet_gelezen"]["info@h-invest.be"]
+    assert not set(niet) & set(mappen), "een map wordt gelezen of bewust niet, nooit allebei"
+    regels = [r.strip()[1:-1] for r in open(postvak.sorteerregels_van("info@h-invest.be"), encoding="utf-8")
+              if r.strip().startswith("[")]
+    doelen = [r for r in regels if r not in ("oplichting", "archief")] + [postvak._sorteren().laad_regels(
+        postvak.sorteerregels_van("info@h-invest.be"))["archief"]["map"]]
+    assert [d for d in doelen if d not in mappen and d not in niet] == [], "een sorteermap zonder keuze verdwijnt uit beeld"
+    # een Zoom- en een bpost-melding uit die mappen komen binnen, zonder opvolgpunt
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    nu = datetime.fromisoformat("2026-10-29T15:00:00+01:00")
+    berichten = [dict(_in(1, "no-reply@zoom.us", "Cloud-opname van Proefvergadering is klaar", "2026-10-29T10:00:00+01:00"),
+                      map="INBOX.Zoom", van_naam="Zoom"),
+                 dict(_in(2, "noreply@bpost.be", "Je pakje komt morgen", "2026-10-29T11:00:00+01:00"), map="INBOX.Bpost",
+                      van_naam="bpost")]
+    json.dump({"gemaakt": nu.isoformat(), "berichten": berichten}, open(os.path.join(d, "koppen.json"), "w"))
+    json.dump({"bronnen": {"proef@h-invest.be": os.path.join(d, "koppen.json")},
+               "mappen": {"proef@h-invest.be": ["INBOX", "INBOX.Zoom", "INBOX.Bpost"]},
+               "mail-proef": {"firma": "HINV", "postvakken": ["proef@h-invest.be"], "antwoord_vanuit": [],
+                              "eigen_domeinen": ["h-invest.be"]}}, open(os.path.join(d, "mailwachten.json"), "w"))
+    oud = postvak.WACHTEN
+    postvak.WACHTEN = os.path.join(d, "mailwachten.json")
+    try:
+        items, tel, _, alle = postvak.ronde("mail-proef", postvak._DroogAgent(), postvak._Droog(), nu)
+    finally:
+        postvak.WACHTEN = oud
+    assert sorted((a["map"], a["soort"], a["opvolging"]) for a in alle) == [("INBOX.Bpost", "melding", "geen"),
+                                                                          ("INBOX.Zoom", "melding", "geen")], alle
+    assert items == [] and tel["open"] == 0
+
+
 def test_drempels_eigen_domein_en_kopieermachine():
     """19-10-2026: gewone mail na een werkdag; eigen domein alleen uit bij een automatisch bericht; de kopieermachine is
     automatisch (op het exacte adres), een collega die een scan doorstuurt niet."""
