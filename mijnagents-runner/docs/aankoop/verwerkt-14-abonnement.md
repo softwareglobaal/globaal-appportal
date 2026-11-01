@@ -176,3 +176,10 @@ Lessen: `lessen-nieuwe-agent.md`. Werkwijze 1.3. Tests: 249 prijstests groen.
    meting ook als ze stopt.
 
 Tests: 255 prijstests groen.
+
+## Verwerking Codex-controle 27 (niet klaar)
+
+De twee punten van controle 26 waren opgelost. Nieuw en hersteld: zonder herstarttijd blokkeert een meting boven 90
+procent zo lang als haar venster duurt (`five_hour` vijf uur, `seven_day` zeven dagen, een onbekend venster zeven dagen),
+gerekend vanaf de meting; een bestand zonder meettijd telt vanaf de tijd van het bestand. Geen eindeloze blokkade: de
+agent moet blijven werken (overleg 25, K4). Tests: 259 prijstests groen.

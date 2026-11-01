@@ -282,22 +282,26 @@ def omgeving(token, werkmap, bron=None):
     return env
 
 
-ONBEKENDE_HERSTART = 5 * 3600     # zonder herstarttijd: vijf uur na de meting (het kortste venster)
+# Zonder herstarttijd: de duur van het venster na de meting; een onbekend venster telt als het langste (Codex 27).
+VENSTERDUUR = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
+LANGSTE_VENSTER = 7 * 86400
 
 
 def te_vol(nu=None):
     """Lag de laatst gemeten benutting van een venster boven de grens, en is dat venster nog niet herstart? Zonder
-    bekende herstarttijd geldt vijf uur na de meting (Codex controle 26, punt 1)."""
+    bekende herstarttijd geldt de duur van dat venster na de meting; zonder meettijd de tijd van het bestand."""
     nu = time.time() if nu is None else nu
     try:
         with open(LIMIET_BESTAND, encoding="utf-8") as f:
             bewaard = json.load(f)
-        vensters, gemeten = bewaard.get("vensters") or {}, float(bewaard.get("gemeten_ts") or 0)
+        vensters = bewaard.get("vensters") or {}
+        gemeten = float(bewaard.get("gemeten_ts") or os.path.getmtime(LIMIET_BESTAND))
     except (OSError, ValueError, AttributeError, TypeError):
         return False
-    for v in vensters.values():
+    for naam, v in vensters.items():
         if isinstance(v, dict) and isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK:
-            herstart = v.get("resetsAt") if isinstance(v.get("resetsAt"), (int, float)) else gemeten + ONBEKENDE_HERSTART
+            herstart = (v["resetsAt"] if isinstance(v.get("resetsAt"), (int, float))
+                        else gemeten + VENSTERDUUR.get(str(naam), LANGSTE_VENSTER))
             if herstart > nu:
                 return True
     return False

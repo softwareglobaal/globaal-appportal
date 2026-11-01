@@ -637,12 +637,24 @@ uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, alleen_boven]))
 uit, args, _, _, _ = nep_vraag(GEWOON)
 check("een herstarttijd die alleen bovenaan de melding staat, telt ook (Codex 26, punt 1)",
       isinstance(uit, dict) and uit["reden"] == "vol_vooraf" and args is None, str(uit)[:200])
-with open(O.LIMIET_BESTAND, "w") as f:
-    json.dump({"vensters": {"x": {"utilization": 0.95}}, "gemeten_ts": time.time()}, f)
-check("zonder herstarttijd blokkeert een meting boven 90 procent vijf uur (Codex 26, punt 1)", O.te_vol())
-with open(O.LIMIET_BESTAND, "w") as f:
-    json.dump({"vensters": {"x": {"utilization": 0.95}}, "gemeten_ts": time.time() - 6 * 3600}, f)
+def vol_bestand(naam, uren_geleden, met_ts=True):
+    with open(O.LIMIET_BESTAND, "w") as f:
+        json.dump({"vensters": {naam: {"utilization": 0.95}}, **({"gemeten_ts": time.time() - uren_geleden * 3600}
+                                                                 if met_ts else {})}, f)
+
+
+vol_bestand("five_hour", 1)
+check("zonder herstarttijd blokkeert een vijfuursvenster vijf uur (Codex 26 en 27)", O.te_vol())
+vol_bestand("five_hour", 6)
 check("na die vijf uur niet meer", not O.te_vol())
+vol_bestand("seven_day", 6)
+check("een weekvenster zonder herstarttijd blokkeert een week, niet vijf uur (Codex 27)", O.te_vol())
+vol_bestand("seven_day", 8 * 24)
+check("na een week niet meer", not O.te_vol())
+vol_bestand("onbekend", 6 * 24)
+check("een onbekend venster telt als het langste (Codex 27)", O.te_vol())
+vol_bestand("seven_day", 0, met_ts=False)
+check("een oud bestand zonder meettijd telt vanaf de tijd van het bestand (Codex 27)", O.te_vol())
 with open(O.LIMIET_BESTAND, "w") as f:
     json.dump({"vensters": {"five_hour": {"utilization": 0.95, "resetsAt": time.time() + 3600}}}, f)
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
