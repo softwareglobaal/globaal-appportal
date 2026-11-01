@@ -52,6 +52,7 @@ import subprocess
 import sys
 import time
 import traceback
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -369,10 +370,15 @@ def _map_kort(pad):
 
 
 def _soort_uit_naam(pad):
-    """De soort uit een bestandsnaam '<HHMMSS> <soort> <id6>.<ext>' (bestandsnaam), of de extensie."""
+    """De soort uit een bestandsnaam '<HHMMSS> <soort> <id6>.<ext>' (bestandsnaam), alleen als het een vaste soortnaam
+    is (SOORT). Een onbekend opnametype van Zoom staat als vrije tekst in de bestandsnaam en kan alles zijn (Codex
+    toets 1): dan 'bestand' met de extensie als die een vaste is."""
     naam = (pad or "").rsplit("/", 1)[-1]
-    delen = naam.rsplit(".", 1)[0].split(" ")
-    return " ".join(delen[1:-1]) or (naam.rsplit(".", 1)[-1] if "." in naam else "bestand")
+    soort = " ".join(naam.rsplit(".", 1)[0].split(" ")[1:-1])
+    if soort in set(SOORT.values()):
+        return soort
+    ext = naam.rsplit(".", 1)[-1].lower() if "." in naam else ""
+    return f"bestand ({ext})" if ext in set(EXT.values()) else "bestand"
 
 
 def _dag_van(iso):
@@ -411,14 +417,15 @@ def wachten_overzicht(staat, moment):
 def vervanging(fid, oud, per_meeting, geclaimd):
     """ARCH-1 (meting 01-11-2026): Zoom vervangt een bestand in verwerking door de afgewerkte bestanden, met andere id's.
     Een verwerkings-id dat uit de lijst weg is, is geen verlies als dezelfde meeting nu een afgewerkt bestand van
-    dezelfde soort (en, als ik die kende, hetzelfde opnametype) heeft dat nog niet bewezen was toen ik het in
-    verwerking zag, en dat geen ander verdwenen id al als vervanging nam. Geeft het id van die vervanging, of leeg:
+    dezelfde soort (en, als ik die kende, hetzelfde opnametype) heeft dat nieuw is: het stond niet in de meeting toen ik
+    het verwerkingsbestand voor het eerst zag (ook niet onbewezen, Codex toets 1), en geen ander verdwenen id nam het al
+    als vervanging. Geeft het id van die vervanging, of leeg:
     dan is het verdwenen. Een geval zonder meeting, status of soort (van voor deze regel) heeft nooit een vervanging."""
     m = per_meeting.get(oud.get("uuid") or "")
     if oud.get("status") != "processing" or not oud.get("soort") or not m:
         return ""
     kandidaten = [f["id"] for f in m["bestanden"] if f.get("id") and f["id"] != fid and f.get("status") == "completed"
-                  and f.get("soort") == oud["soort"] and f["id"] not in (oud.get("al_bewezen") or ())
+                  and f.get("soort") == oud["soort"] and f["id"] not in (oud.get("al_bekend") or ())
                   and (not oud.get("opnametype") or f.get("opnametype") == oud["opnametype"])
                   and f["id"] not in geclaimd]
     if oud.get("vervangen_door") in kandidaten:
@@ -448,14 +455,20 @@ def oud_vervallen(staat, moment):
     bewaarden geen meeting, status of soort. Een oud geval vervalt alleen met het bewijs uit de meting van 01-11-2026:
     een bestand dat ik in verwerking zag (grootte 0, geen meeting- of bestandsleutel), en een map met precies drie
     bewezen bestanden met dezelfde starttijd tot op de seconde, video, tijdlijn en transcript, bewezen in de ronde
-    waarin het verdween. Het gaat met dat bewijs naar 'vervallen'; niets gaat uit de staat. Elk ander geval blijft
-    verdwenen, voor Mehdi. Geeft de vervallen id's."""
+    waarin het verdween. Een bewijs geldt voor een geval (Codex toets 1): delen twee verdwenen gevallen dezelfde
+    starttijd, of diende een bestand al als bewijs of vervanging, dan vervalt er geen. Het gaat met dat bewijs naar
+    'vervallen'; niets gaat uit de staat. Elk ander geval blijft verdwenen, voor Mehdi. Geeft de vervallen id's."""
     uit = []
+    per_start = Counter(_utc(v.get("start")) for v in staat["verdwenen"].values())
+    gebruikt = {i for v in staat["vervallen"].values()
+                for i in list((v.get("bewijs") or {}).get("bewezen") or []) + ([v["door"]] if v.get("door") else [])}
     for fid, v in sorted(staat["verdwenen"].items()):
         st, sinds = _utc(v.get("start")), _utc(v.get("sinds"))
-        if fid.startswith(("meeting:", "bestand:")) or v.get("grootte") or not st or not sinds:
+        if fid.startswith(("meeting:", "bestand:")) or v.get("grootte") or not st or not sinds or per_start[st] > 1:
             continue
         zelfde = {i: b for i, b in staat["bestanden"].items() if _utc(b.get("start")) == st}
+        if set(zelfde) & gebruikt:
+            continue
         mappen = {b["pad"].rsplit("/", 1)[0] for b in zelfde.values()}
         soorten = sorted(b["pad"].rsplit(".", 1)[-1].lower() for b in zelfde.values())
         tijden = [_utc(b.get("ts")) for b in zelfde.values()]
@@ -466,6 +479,7 @@ def oud_vervallen(staat, moment):
                                    "bewijs": {"bewezen": sorted(zelfde), "soorten": soorten,
                                               "bewezen_om": sorted(b["ts"] for b in zelfde.values())}}
         del staat["verdwenen"][fid]
+        gebruikt.update(zelfde)
         uit.append(fid)
     return uit
 
@@ -789,16 +803,24 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
         eerder = staat["gezien"].get(f["id"]) or {}
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
         if f.get("status") == "processing":
-            # ARCH-1: genoeg om later een vervanging te bewijzen; al_bewezen blijft die van de eerste keer dat ik het zag
+            # ARCH-1: genoeg om later een vervanging te bewijzen; al_bekend (elk bestand van de meeting) blijft die van
+            # de eerste keer dat ik het zag
             m = per_id[f["id"]][0]
             staat["gezien"][f["id"]].update(
                 uuid=m["uuid"], status="processing", soort=f.get("soort", ""), opnametype=f.get("opnametype", ""),
-                al_bewezen=eerder.get("al_bewezen", sorted(g["id"] for g in m["bestanden"] if g.get("id") in staat["bestanden"])))
+                al_bekend=eerder.get("al_bekend", sorted(g["id"] for g in m["bestanden"] if g.get("id"))))
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:
         volgorde = sorted(te_doen, key=lambda f: int(f.get("grootte") or 0))[:proef]
 
+    for m in meetings:
+        if m["uuid"] in staat["meetings"] and m["uuid"] not in staat["beschreven"]:
+            # ARCH-5: een beschrijving van voor deze regel. Wat nu bewezen is, staat erin (in oktober 2026 kreeg geen
+            # enkel gesprek een later bestand, meting 01-11-2026); wat er daarna bij komt, krijgt een volgende. Voor het
+            # kopiëren, zodat een bestand dat deze ronde bewezen wordt niet in die basis valt (Codex toets 1).
+            staat["beschreven"][m["uuid"]] = {"ids": sorted(f["id"] for f in m["bestanden"]
+                                                            if f.get("id") in staat["bestanden"]), "versie": 1}
     gedaan, gestopt = [], "de gesprekkenketen draait: alleen geteld en nagekeken" if alleen_tellen else ""
     werkmap = os.path.join(DATA, "werk")
     if not droog and not alleen_tellen:
@@ -841,10 +863,6 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 break
             ids = [f.get("id") for f in m["bestanden"]]
             u = m["uuid"]
-            if u in staat["meetings"] and u not in staat["beschreven"]:
-                # ARCH-5: een beschrijving van voor deze regel. Wat nu bewezen is, staat erin (in oktober 2026 kreeg geen
-                # enkel gesprek een later bestand, meting 01-11-2026); wat er daarna bij komt, krijgt een volgende.
-                staat["beschreven"][u] = {"ids": sorted(i for i in ids if i in staat["bestanden"]), "versie": 1}
             vorige = staat["beschreven"].get(u)
             if (ids and all(ids) and (u not in staat["meetings"] or set(ids) - set(vorige["ids"]))
                     and all(f.get("status") == "completed" for f in m["bestanden"])
@@ -923,9 +941,15 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             dekking = veilig = False
         else:
             nieuw_open = [f for m in tweede for f in m["bestanden"] if f.get("id") not in staat["bestanden"]]
-            if any(problemen(m) for m in tweede) or nieuw_open:
+            # Codex toets 1 (ARCH-4): ook een bewezen bestand dat Zoom tussen de twee lezingen anders opgeeft (een
+            # andere grootte, of weer in verwerking), klopt niet meer met zijn bewijs: geen groen
+            gewijzigd = [f for m in tweede for f in m["bestanden"] if f.get("id") in staat["bestanden"]
+                         and (f.get("status") != "completed" or not f.get("grootte")
+                              or f["grootte"] != staat["bestanden"][f["id"]]["grootte"])]
+            if any(problemen(m) for m in tweede) or nieuw_open or gewijzigd:
                 dekking = False
-                if any(problemen(m) for m in tweede) or any((_utc(f.get("start")) or grens) <= grens for f in nieuw_open):
+                if any(problemen(m) for m in tweede) or gewijzigd or \
+                        any((_utc(f.get("start")) or grens) <= grens for f in nieuw_open):
                     veilig = False
         binnen = klok() <= hard
         dekking, veilig = dekking and binnen, veilig and binnen

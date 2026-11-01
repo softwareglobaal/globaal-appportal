@@ -1426,6 +1426,121 @@ def test_t0120_arch2_overzicht_per_dag_voor_de_wachtenpagina_zonder_onderwerp():
     assert open(pad, encoding="utf-8").read() == voor, "een droge ronde schrijft geen overzicht"
 
 
+def test_t0120_arch3_het_patroon_vindt_de_letterlijke_opdracht_van_de_vm():
+    """ARCH-3 (Codex, toets 1): de letterlijke opdracht uit planning/gesprekken.cron telt als keten, ook met --nacht; de
+    flock die de keten start, een shell met die regel en een lezer van het bestand niet."""
+    oud = ZA.KETEN_PY
+    ZA.KETEN_PY = "/home/ubuntu/appportal/mijnagents-runner/keten.py"
+    try:
+        p = re.compile(ZA.keten_patroon())
+        venv = "/home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/keten.py"
+        assert p.search(venv) and p.search(venv + " --nacht"), ZA.keten_patroon()
+        cron = open(os.path.join(RUNNER, "planning", "gesprekken.cron"), encoding="utf-8").read()
+        assert venv in cron, "de opdracht van de proef is die van de cron"
+        for geen in (f"/usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock {venv}", f"/bin/sh -c {venv} >> keten.log",
+                     "cat /home/ubuntu/appportal/mijnagents-runner/keten.py", f"{venv}.bak", f"{venv}x"):
+            assert not p.search(geen), geen
+    finally:
+        ZA.KETEN_PY = oud
+
+
+def test_t0120_arch1_een_bestand_dat_er_al_was_is_geen_vervanging():
+    """ARCH-1 (Codex, toets 1): een afgewerkt bestand van dezelfde soort dat al in de meeting stond toen ik het
+    verwerkingsbestand zag (nog niet gekopieerd), is geen vervanging: verdwijnt het verwerkingsbestand, dan is het
+    verdwenen, ook als dat andere bestand daarna bewezen wordt."""
+    z, _, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    m = z.meeting("u1", start, bestanden=[("MP4", "shared_screen_with_speaker_view", b"video"),
+                                          ("MP4", "shared_screen_with_speaker_view", b"")])
+    y, x = m["bestanden"][0]["id"], m["bestanden"][1]["id"]
+    m["bestanden"][1].update(status="processing", grootte=None, link=False)
+    z.fout[y] = Z.ZoomFout("download: HTTP 500")
+    ronde()
+    assert ZA.lees_staat()["gezien"][x]["al_bekend"] == sorted([x, y])
+    m["bestanden"].pop(1)
+    del z.fout[y]
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    staat = ZA.lees_staat()
+    assert uit["gedaan"] == 1 and y in staat["bestanden"], uit
+    assert x in staat["verdwenen"] and x not in staat["vervallen"] and VERDWENEN in teksten(r), staat["vervallen"]
+
+
+def test_t0120_arch1_twee_oude_gevallen_met_hetzelfde_bewijs_vervallen_niet():
+    """ARCH-1 (Codex, toets 1): een bewijs geldt voor een geval. Delen twee oude gevallen dezelfde starttijd, dan vervalt
+    er geen: beide blijven verdwenen, voor Mehdi."""
+    opzet()
+    voor = _oude_staat()
+    staat = ZA.lees_staat()
+    staat["verdwenen"]["oud-a2"] = dict(staat["verdwenen"]["oud-a"])
+    ZA.schrijf_staat(staat)
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert ZA.main(["--vervallen-markeren"]) == 0
+    staat = ZA.lees_staat()
+    assert {"oud-a", "oud-a2"} <= set(staat["verdwenen"]) and not staat["vervallen"], staat["vervallen"]
+    assert staat["bestanden"] == voor["bestanden"]
+
+
+def test_t0120_arch5_een_bestand_in_de_eerste_ronde_na_de_overgang_krijgt_ook_een_beschrijving():
+    """ARCH-5 (Codex, toets 1): de basis van een oude beschrijving komt voor het kopiëren. Een bestand dat in de eerste
+    ronde na de overgang gekopieerd wordt, valt er dus niet in, en krijgt opname-2.json."""
+    z, d, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    m = z.meeting("u1", start, bestanden=DRIE)
+    ronde()
+    staat = ZA.lees_staat()
+    del staat["beschreven"]["u1"]                     # zoals een staat van voor ARCH-5
+    ZA.schrijf_staat(staat)
+    z.inhoud["u1-later"] = b"chat"
+    z.meetings["u1"]["bestanden"].append({"id": "u1-later", "soort": "CHAT", "status": "completed", "start": start,
+                                          "einde": start, "grootte": 4, "opnametype": "chat_file", "extensie": "CHAT",
+                                          "link": True})
+    _, uit = ronde(nu=NU + timedelta(hours=1))
+    assert uit["gedaan"] == 1
+    tweede = json.loads(d.bestanden[ZA.mapnaam(m) + "/opname-2.json"])
+    assert len(tweede["bestanden"]) == 4, tweede
+
+
+def test_t0120_arch2_een_onbekend_opnametype_komt_niet_als_vrije_tekst_in_het_overzicht():
+    """ARCH-2 (Codex, toets 1): een opnametype dat Zoom geeft maar dat ik niet ken, staat als vrije tekst in de
+    bestandsnaam. Het overzicht neemt alleen vaste soortnamen over; anders 'bestand' met de extensie."""
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-10-27T08:05:00Z", bestanden=[("MP4", "Proefpersoon Kappa view", b"video"),
+                                                       ("XYZ", "Proefpersoon Lambda", b"x")])
+    ronde()
+    tekst = open(os.path.join(ZA.DATA, "wachten.json"), encoding="utf-8").read()
+    soorten = sorted(f["soort"] for d in json.loads(tekst)["dagen"].values() for f in d["gekopieerd"])
+    assert soorten == ["bestand", "bestand (mp4)"], soorten
+    assert "Kappa" not in tekst and "Lambda" not in tekst and "proefpersoon" not in tekst.lower(), tekst
+
+
+def test_t0120_arch4_een_bewezen_bestand_dat_tussen_de_lezingen_verandert_houdt_groen_tegen():
+    """ARCH-4 (Codex, toets 1): de tweede lezing keek alleen naar nieuwe id's. Geeft Zoom een bewezen bestand tussen de
+    twee lezingen een andere grootte, of zet het weer in verwerking, dan klopt het bewijs niet meer: geen dekking en
+    niet veilig voor de wisregel."""
+    for wijziging in ("grootte", "verwerking"):
+        z, _, _ = opzet()
+        m = z.meeting("u1", "2026-08-01T09:00:00Z", bestanden=[("M4A", "audio_only", b"a")])
+        _tot_ja(z)
+        echt = z.opnames
+        gezien = {"n": 0}
+
+        def opnames(van, tot, profiel="lees", prullenbak="", streng=False, bewaker=None, wijziging=wijziging):
+            uit = echt(van, tot, profiel, prullenbak, streng, bewaker)
+            if prullenbak == "recording_file":
+                gezien["n"] += 1
+                if gezien["n"] == 1:  # het einde van de eerste lezing
+                    f = m["bestanden"][0]
+                    if wijziging == "grootte":
+                        f["grootte"] += 1
+                    else:
+                        f.update(status="processing", grootte=None)
+            return uit
+        Z.opnames = opnames
+        _, uit = ronde(nu=NU + timedelta(hours=1))
+        assert gezien["n"] == 2 and not uit["dekking"] and not uit["veilig"], (wijziging, gezien, uit)
+        assert not _dekking()["dekking"] and not _dekking()["wisregel_veilig"], wijziging
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):
