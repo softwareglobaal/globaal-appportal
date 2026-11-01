@@ -8,7 +8,8 @@ de site (bijvoorbeeld monday.com), nooit het volledige adres, nooit een zoekopdr
 venster laat geen geschiedenis na en telt dus nooit mee.
 
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
-op in het dagbestand. Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
+op in het dagbestand. Safari telt alleen wat op deze Mac bekeken werd, niet wat iCloud van de gsm meebrengt (WEB-3,
+01-11-2026). Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
 import glob
@@ -49,8 +50,10 @@ BRONNEN = (
      f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
     ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
      "SELECT v.visit_date / 1000000.0, p.url FROM moz_historyvisits v JOIN moz_places p ON p.id = v.place_id"),
+    # WEB-3: alleen de bezoeken van deze Mac (origin 0); origin 1 komt via iCloud van een ander toestel (de gsm)
     ("Safari", "Library/Safari/History.db",
-     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item"),
+     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item "
+     "WHERE v.origin = 0"),
 )
 
 

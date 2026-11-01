@@ -57,9 +57,10 @@ BRONNEN = (
     ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
      "SELECT v.visit_date / 1000000.0, p.url, p.title, NULL FROM moz_historyvisits v "
      "JOIN moz_places p ON p.id = v.place_id WHERE p.url LIKE '%youtu%'"),
+    # WEB-3: alleen de bezoeken van deze Mac (origin 0); origin 1 komt via iCloud van een ander toestel (de gsm)
     ("Safari", "Library/Safari/History.db",
      f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url, v.title, NULL FROM history_visits v "
-     "JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%'"),
+     "JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%' AND v.origin = 0"),
 )
 
 

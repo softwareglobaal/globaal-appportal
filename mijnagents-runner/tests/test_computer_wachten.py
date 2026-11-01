@@ -4,7 +4,9 @@ Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.p
 - C01 (YT-2): weigert macOS de browsergeschiedenis, dan noemt de melding "geweigerd" met de browser en staat de ronde
   als fout in het werkverslag; een kapot bestand is "onleesbaar"; zonder enig bestand blijft het "niet gevonden";
 - C02 (WEB-2): leest De Websitewacht geen enkele browser, dan zet ze niets klaar (onbekend is nooit 0 bezoeken): alleen
-  een foute hartslag en een foutregel in het werkverslag.
+  een foute hartslag en een foutregel in het werkverslag;
+- C03 (WEB-3): Safari telt alleen de bezoeken van deze Mac (origin 0), niet die van een ander toestel via iCloud
+  (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube.
 
 Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis.
 Draaien: python3 mijnagents-runner/tests/test_computer_wachten.py
@@ -14,6 +16,8 @@ import os
 import sqlite3
 import sys
 import tempfile
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 MAC = os.path.join(os.path.dirname(HIER), "mac")
@@ -107,6 +111,30 @@ for naam, thuis in (("lege map", tempfile.mkdtemp()), ("geweigerd", tempfile.mkd
     check(f"C02 websites ({naam}): hartslag fout met de reden", rc == 1 and st["status"] == "fout"
           and any(("geweigerd: Chrome" if naam == "geweigerd" else "Geen browsergeschiedenis gevonden") in n["tekst"] for n in st["nood"]), st)
     check(f"C02 websites ({naam}): fout in het werkverslag", [r["stap"] for r in log] == ["fout"], log)
+
+# C03 (WEB-3): een verzonnen Safari-geschiedenis met een bezoek op deze Mac en een van de gsm (iCloud).
+SAFARI_EPOCH = 978307200
+middag = datetime(2026, 10, 30, 12, 0, tzinfo=ZoneInfo("Europe/Brussels")).timestamp()
+thuis = tempfile.mkdtemp()
+pad = bestand(thuis, "Library/Safari/History.db")
+c = sqlite3.connect(pad)
+c.execute("CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT)")
+c.execute("CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, title TEXT, "
+          "origin INTEGER)")
+for i, (adres, oorsprong) in enumerate((("https://proef-werk.test/a", 0), ("https://proef-gsm.test/b", 1),
+                                         ("https://www.youtube.com/watch?v=werkvideo1", 0),
+                                         ("https://www.youtube.com/watch?v=gsmvideo12", 1)), 1):
+    c.execute("INSERT INTO history_items VALUES (?, ?)", (i, adres))
+    c.execute("INSERT INTO history_visits VALUES (?, ?, ?, ?, ?)", (i, i, middag - SAFARI_EPOCH + i, f"Proef {i}", oorsprong))
+c.commit()
+c.close()
+B, Y = laad("browser_wacht"), laad("youtube_wacht")
+q = next(x for b, _, x in B.BRONNEN if b == "Safari")
+sites = sorted({s for _, s in B.lees_bestand(pad, q, 0)})
+check("C03 websites: alleen Safari van deze Mac", sites == ["proef-werk.test", "youtube.com"], sites)
+q = next(x for b, _, x in Y.BRONNEN if b == "Safari")
+videos = [v for _, v, _, _ in Y.lees_bestand(pad, q, 0)]
+check("C03 YouTube: alleen Safari van deze Mac", videos == ["werkvideo1"], videos)
 
 print("wachten van de computer:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
