@@ -173,6 +173,49 @@ def _uit(uid, aan, onderwerp, datum, antwoord_op=None):
             "message_id": f"<s{uid}@proef>", "aan": [aan], "cc": [], "verwijst": [], "in_antwoord_op": antwoord_op or ""}
 
 
+def test_hinvest_leest_zoom_en_bpost_en_zegt_wat_bewust_niet():
+    """MAIL-2 (overleg 01-11-2026, X2 en X9): een filter bij one.com zet Zoom- en bpost-mail van info@h-invest.be meteen in
+    INBOX.Zoom en INBOX.Bpost; de wacht las die nooit (259 van de 430 berichten in oktober). Nu wel, alleen lezend (VOL-3
+    eerst). Elke map waar de sorteerregels post naartoe zetten, wordt gelezen of staat bewust bij 'bewust_niet_gelezen'."""
+    cfg = postvak.wachten()
+    mappen = postvak.mappen_van("info@h-invest.be")
+    assert {"INBOX.Zoom", "INBOX.Bpost"} <= set(mappen)
+    assert {"INBOX.Zoom", "INBOX.Bpost"} <= set(postvak.alleen_lezen_van("info@h-invest.be")), "VOL-3 voor MAIL-2"
+    import uitschrijven as U
+    assert not {"INBOX.Zoom", "INBOX.Bpost"} & set(U.mappen_voor("info@h-invest.be", {"imap_host": "imap.one.com"},
+                                                                 U.instellingen(cfg))), "nooit uitschrijven uit Zoom of bpost"
+    niet = cfg["bewust_niet_gelezen"]["info@h-invest.be"]
+    assert not set(niet) & set(mappen), "een map wordt gelezen of bewust niet, nooit allebei"
+    regels = [r.strip()[1:-1] for r in open(postvak.sorteerregels_van("info@h-invest.be"), encoding="utf-8")
+              if r.strip().startswith("[")]
+    doelen = [r for r in regels if r not in ("oplichting", "archief")] + [postvak._sorteren().laad_regels(
+        postvak.sorteerregels_van("info@h-invest.be"))["archief"]["map"]]
+    assert [d for d in doelen if d not in mappen and d not in niet] == [], "een sorteermap zonder keuze verdwijnt uit beeld"
+    # een Zoom- en een bpost-melding uit die mappen komen binnen, zonder opvolgpunt
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    nu = datetime.fromisoformat("2026-10-29T15:00:00+01:00")
+    berichten = [dict(_in(1, "no-reply@zoom.us", "Cloud-opname van Proefvergadering is klaar", "2026-10-29T10:00:00+01:00"),
+                      map="INBOX.Zoom", van_naam="Zoom"),
+                 dict(_in(2, "noreply@bpost.be", "Je pakje komt morgen", "2026-10-29T11:00:00+01:00"), map="INBOX.Bpost",
+                      van_naam="bpost")]
+    json.dump({"gemaakt": nu.isoformat(), "berichten": berichten}, open(os.path.join(d, "koppen.json"), "w"))
+    json.dump({"bronnen": {"proef@h-invest.be": os.path.join(d, "koppen.json")},
+               "mappen": {"proef@h-invest.be": ["INBOX", "INBOX.Zoom", "INBOX.Bpost"]},
+               "mail-proef": {"firma": "HINV", "postvakken": ["proef@h-invest.be"], "antwoord_vanuit": [],
+                              "eigen_domeinen": ["h-invest.be"]}}, open(os.path.join(d, "mailwachten.json"), "w"))
+    oud = postvak.WACHTEN
+    postvak.WACHTEN = os.path.join(d, "mailwachten.json")
+    try:
+        items, tel, _, alle = postvak.ronde("mail-proef", postvak._DroogAgent(), postvak._Droog(), nu)
+    finally:
+        postvak.WACHTEN = oud
+    assert sorted((a["map"], a["soort"], a["opvolging"]) for a in alle) == [("INBOX.Bpost", "melding", "geen"),
+                                                                          ("INBOX.Zoom", "melding", "geen")], alle
+    assert items == [] and tel["open"] == 0
+
+
 def test_drempels_eigen_domein_en_kopieermachine():
     """19-10-2026: gewone mail na een werkdag; eigen domein alleen uit bij een automatisch bericht; de kopieermachine is
     automatisch (op het exacte adres), een collega die een scan doorstuurt niet."""
@@ -181,9 +224,9 @@ def test_drempels_eigen_domein_en_kopieermachine():
         _uit(90, "klant@bouwheer.be", "Offerte", "2026-09-01T09:00:00+02:00"),
         _in(1, "klant@bouwheer.be", "Vraag over de offerte", "2026-10-16T10:00:00+02:00"),       # vrijdag: 1 werkdag
         _in(2, "klant@bouwheer.be", "Nog een vraag", "2026-10-19T09:00:00+02:00"),               # vandaag
-        _in(3, "shaniel@h-architects.be", "Vraag over dossier 2145", "2026-10-16T10:00:00+02:00"),
+        _in(3, "collega2@h-architects.be", "Vraag over dossier 2145", "2026-10-16T10:00:00+02:00"),
         _in(4, "scan@harmoniebouw.be", "Message from KM_C258", "2026-10-16T10:00:00+02:00"),
-        _in(5, "angela@globaal.be", "Fwd: Message from KM_C258", "2026-10-16T10:00:00+02:00"),
+        _in(5, "collega@globaal.be", "Fwd: Message from KM_C258", "2026-10-16T10:00:00+02:00"),
         _in(6, "noreply@h-architects.be", "Uw bestelling", "2026-10-16T10:00:00+02:00"),
         _in(7, "iemand@vreemd.be", "Message from KM_C258", "2026-10-16T10:00:00+02:00"),
     ], nu)
@@ -193,7 +236,7 @@ def test_drempels_eigen_domein_en_kopieermachine():
     assert alle["Message from KM_C258"]["soort"] in ("melding", "koud") and alle["Message from KM_C258"]["opvolging"] == "geen"
     assert postvak.automatisch({"van": "scan@harmoniebouw.be", "onderwerp": "Message from KM_C258"})
     assert not postvak.automatisch({"van": "iemand@vreemd.be", "onderwerp": "Message from KM_C258"}), "het onderwerp alleen niet"
-    assert alle["Fwd: Message from KM_C258"]["opvolging"] == "open", "Angela die een scan doorstuurt"
+    assert alle["Fwd: Message from KM_C258"]["opvolging"] == "open", "een collega die een scan doorstuurt"
     assert alle["Uw bestelling"]["opvolging"] == "geen"
     assert postvak.OPVOLGEN_NA_WERKDAGEN == 1
     assert tel["open"] == len(items) == 3
@@ -214,6 +257,132 @@ def test_beantwoord_in_de_ronde_en_oude_punten():
     assert alle["Herinnering premie"]["opvolging"] == "open", "Iets anders naar KBC sluit de herinnering niet"
     assert alle["Akte"]["opvolging"] == "beantwoord" and alle["Akte"]["uniek"] == "proef@h-architects.be:<oud@notaris>"
     assert tel["verzonden_volledig"]
+
+
+def test_apple_hide_my_email_alleen_een_label():
+    """MAIL-5 (overleg 01-11-2026, X5 2-1): mail via Apple Hide My Email (privaterelay.appleid.com) stond als onbekende
+    afzender. Alleen een label in waarom; de afzender wordt nooit overschreven en niet ontcijferd. Verzonnen adressen."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    relay = "proef_at_voorbeeld_test_q1w2e3@privaterelay.appleid.com"
+    alle, _, _, _ = _ronde([_in(1, relay, "Vraag over een verbouwing", "2026-10-16T10:00:00+02:00"),
+                            _in(2, "klant@voorbeeld.test", "Vraag over de verbouwing", "2026-10-16T11:00:00+02:00")], nu)
+    a, b = alle["Vraag over een verbouwing"], alle["Vraag over de verbouwing"]
+    assert a["waarom"].endswith("via Apple Hide My Email") and a["van"] == relay, a
+    assert a["soort"] == b["soort"], "het label verandert de soort niet"
+    assert "Apple" not in b["waarom"], b
+    lang = postvak.met_relaylabel("x" * 300, relay)
+    assert len(lang) <= 200 and lang.endswith("via Apple Hide My Email"), "het label valt nooit weg door het afkappen"
+
+
+# VOL-9 (T-0120): een bericht met tekst, html, een logo in de handtekening, een pdf en een dwg (de bestandsnaam van de dwg
+# komt als literal, zoals imaplib die als tuple geeft). Verzonnen namen.
+BS_KOP = (b'1 (UID 7 BODYSTRUCTURE (((\"text\" \"plain\" (\"charset\" \"utf-8\") NIL NIL \"quoted-printable\" 120 4 NIL NIL NIL '
+          b'NIL)(\"text\" \"html\" (\"charset\" \"utf-8\") NIL NIL \"quoted-printable\" 800 20 NIL NIL NIL NIL) \"alternative\" '
+          b'(\"boundary\" \"b1\") NIL NIL NIL)(\"image\" \"png\" (\"name\" \"image001.png\") \"<logo@proef>\" NIL \"base64\" 4000 '
+          b'NIL (\"inline\" (\"filename\" \"image001.png\")) NIL NIL)(\"application\" \"pdf\" (\"name\" \"=?utf-8?B?b2ZmZXJ0ZS5wZGY=?=\")'
+          b' NIL NIL \"base64\" 160000 NIL (\"attachment\" (\"filename\" \"=?utf-8?B?b2ZmZXJ0ZS5wZGY=?=\")) NIL NIL)'
+          b'(\"application\" \"octet-stream\" (\"name\" {13}')
+BS_RUW = [(BS_KOP, b"Proefplan.dwg"),
+          b') NIL NIL "base64" 400000 NIL ("attachment" ("filename" "Proefplan.dwg")) NIL NIL) "mixed" ("boundary" "b0") NIL NIL NIL))',
+          b'2 (UID 8 BODYSTRUCTURE ("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 300 9 NIL NIL NIL NIL))']
+
+
+def test_bijlagen_alleen_metadata_uit_bodystructure():
+    """VOL-9 (T-0120): per mail het aantal bijlagen, de soort en de grootte, uit BODYSTRUCTURE. Nooit de bestandsnaam,
+    nooit iets gedownload; een logo in de handtekening (inline met een Content-ID) is geen bijlage."""
+    regels = postvak._antwoorden(BS_RUW)
+    assert len(regels) == 2, regels
+    uid, bs = postvak._uid_en_structuur(regels[0])
+    assert uid == 7
+    assert postvak.bijlagen_uit_structuur(bs) == [{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}]
+    uid, bs = postvak._uid_en_structuur(regels[1])
+    assert uid == 8 and postvak.bijlagen_uit_structuur(bs) == []
+    assert "Proefplan" not in str(postvak.bijlagen_uit_structuur(postvak._uid_en_structuur(regels[0])[1]))
+    # Codex-toets 1: een meegestuurd bericht zonder dispositie of naam telt als een bijlage; wat erin zit niet
+    eml = (b'3 (UID 9 BODYSTRUCTURE (("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 50 2 NIL NIL NIL NIL)("message" '
+           b'"rfc822" NIL NIL NIL "7bit" 2000 ("Mon, 19 Oct 2026 10:00:00 +0200" "Proef" NIL NIL NIL NIL NIL NIL NIL '
+           b'"<x@proef>") ("application" "pdf" ("name" "binnen.pdf") NIL NIL "base64" 400 NIL ("attachment" ("filename" '
+           b'"binnen.pdf")) NIL NIL) 40 NIL NIL NIL NIL) "mixed" ("boundary" "b2") NIL NIL NIL))')
+    uid, bs = postvak._uid_en_structuur(postvak._antwoorden([eml])[0])
+    assert uid == 9 and postvak.bijlagen_uit_structuur(bs) == [{"soort": "eml", "bytes": 2000}], bs
+
+
+def test_bijlagen_lezen_verandert_niets_in_het_postvak():
+    """VOL-9: alleen een readonly-select en FETCH (UID BODYSTRUCTURE): geen BODY[] zonder PEEK, geen STORE, niets als
+    gelezen gemarkeerd. Alleen de mail van de laatste dagen; lukt het niet, dan blijft het onbekend (geen fout, geen bron-
+    probleem: de wacht las het postvak wel)."""
+    nu = datetime.fromisoformat("2026-10-29T15:00:00+01:00")
+    gedaan = []
+
+    class M:
+        def select(self, naam, readonly=False):
+            gedaan.append(("select", naam, readonly))
+            return "OK", [b"2"]
+
+        def uid(self, cmd, reeks, items=None):
+            gedaan.append(("uid", cmd, reeks, items))
+            return "OK", BS_RUW
+
+    class Sessie:
+        def __init__(self, mb):
+            pass
+
+        def __enter__(self):
+            return M()
+
+        def __exit__(self, *a):
+            return False
+
+    class Bron:
+        _Sessie = Sessie
+
+        @staticmethod
+        def _selecteer(Mx, naam):
+            return Mx.select(f'"{naam}"', readonly=True)
+
+    log = []
+
+    class Ag:
+        def log(self, *a):
+            log.append(a)
+    oud = postvak._postbus
+    postvak._postbus = lambda: (None, Bron)
+    try:
+        berichten = [{"uid": 7, "map_": "INBOX", "datum": "2026-10-29T10:00:00+01:00"},
+                     {"uid": 8, "map_": "INBOX", "datum": "2026-10-29T11:00:00+01:00"},
+                     {"uid": 3, "map_": "INBOX", "datum": "2026-10-01T11:00:00+01:00"}]
+        postvak.bijlagen_lezen({"adres": "p@voorbeeld.test"}, berichten, nu, Ag())
+        assert [b.get("bijlagen") for b in berichten] == [[{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}],
+                                                         [], None], berichten
+        assert gedaan == [("select", '"INBOX"', True), ("uid", "FETCH", "7,8", "(UID BODYSTRUCTURE)")], gedaan
+        postvak.bijlagen_lezen({"adres": "h@hotmail.test", "bron": "/x"}, [{"uid": 1, "map_": "INBOX",
+                                                                         "datum": "2026-10-29T10:00:00+01:00"}], nu, Ag())
+        assert len(gedaan) == 2, "een kopie in een bestand (hotmail): niets gelezen"
+
+        class Kapot(Bron):
+            class _Sessie(Sessie):
+                def __enter__(self):
+                    raise OSError("time-out")
+        postvak._postbus = lambda: (None, Kapot)
+        nog = [{"uid": 7, "map_": "INBOX", "datum": "2026-10-29T10:00:00+01:00"}]
+        postvak.bijlagen_lezen({"adres": "p@voorbeeld.test"}, nog, nu, Ag())
+        assert "bijlagen" not in nog[0] and log and log[-1][1] not in ("bron", "fout"), log
+    finally:
+        postvak._postbus = oud
+    bron = open(os.path.join(HIER, "koppelingen", "postvak.py"), encoding="utf-8").read()
+    deel = bron[bron.index("def bijlagen_lezen"):bron.index("def bijlagen_lezen") + 2500]
+    assert "_selecteer_schrijfbaar" not in deel and "STORE" not in deel and "BODY[" not in deel
+
+
+def test_bijlagen_gaan_mee_naar_het_bord():
+    """VOL-9: elke rij voor /api/mail draagt 'bijlagen' (aantal of None als onbekend) en 'bijlagen_info' (soort en grootte);
+    hotmail (een kopie in een bestand) is onbekend, nooit nul."""
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    alle, _, _, _ = _ronde([_in(1, "klant@voorbeeld.test", "Plannen", "2026-10-19T10:00:00+02:00")], nu)
+    assert alle["Plannen"]["bijlagen"] is None and alle["Plannen"]["bijlagen_info"] is None
+    assert postvak._bijlagenrij({"bijlagen": [{"soort": "pdf", "bytes": 10}]}) == {"bijlagen": 1, "bijlagen_info":
+                                                                                 [{"soort": "pdf", "bytes": 10}]}
+    assert postvak._bijlagenrij({"bijlagen": []}) == {"bijlagen": 0, "bijlagen_info": []}
 
 
 def test_verdwenen_en_zonder_sleutel():
@@ -621,6 +790,165 @@ def test_uitschrijven_ronde_logboek_plafond_en_grendels():
     assert U.mappen_voor("melodiebvba@gmail.com", {"imap_host": "imap.gmail.com"}, cfg_echt)[-2:] == ["Opgeruimd", "Nieuwsbrieven"]
 
 
+def test_alleen_lezen_mappen_blijven_buiten_het_uitschrijven():
+    """VOL-3, voor MAIL-2 (overleg 01-11-2026, X9): zodra de wacht van info@h-invest.be INBOX.Zoom en INBOX.Bpost leest,
+    werden die meldingen kandidaat voor een automatische uitschrijving (een POST naar de afzender). Die mappen staan op een
+    lijst 'alleen lezen' (mailwachten.json): het uitschrijven leest ze niet, en wat er toch uit komt, valt af."""
+    import uitschrijven as U
+    assert set(postvak.alleen_lezen_van("info@h-invest.be")) == {"INBOX.Zoom", "INBOX.Bpost"}
+    assert postvak.alleen_lezen_van("mch@h-architects.be") == []
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    brieven = []
+    for i, m in enumerate(("INBOX.Zoom", "INBOX.Bpost", "INBOX.Opgeruimd")):
+        brieven += [_nieuwsbrief(van=f"news{i}@brand.be", map=m, message_id=f"<n{i}@brand.be>"),
+                    _nieuwsbrief(van=f"news{i}@brand.be", map=m, message_id=f"<o{i}@brand.be>",
+                                 datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    oud_pv, oud_mv = postvak.postvak, postvak.mappen_van
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    postvak.mappen_van = lambda a: ["INBOX", "INBOX.Zoom", "INBOX.Bpost"]   # zoals na MAIL-2
+    gelezen = []
+    try:
+        mb = postvak.postvak("info@h-invest.be")
+        assert U.mappen_voor("info@h-invest.be", mb, inst) == ["INBOX", "INBOX.Opgeruimd"]
+        cfg = postvak.wachten()["mail-hinv"]
+        for lezen in (lambda mb, mappen, sinds: gelezen.append(list(mappen)) or [b for b in brieven if b["map"] in mappen],
+                      lambda mb, mappen, sinds: brieven):   # ook als een lezer toch alles teruggeeft
+            uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]), lezen=lezen, inst=inst)
+            assert {b["map"] for b, _url, _pv in uit.values()} == {"INBOX.Opgeruimd"}, (uit, redenen)
+        assert gelezen == [["INBOX", "INBOX.Opgeruimd"]], gelezen
+    finally:
+        postvak.postvak, postvak.mappen_van = oud_pv, oud_mv
+
+
+def test_nepmail_nooit_uitschrijven_ook_niet_na_helemaal_weg():
+    """MAIL-1, Codex-toets 1: Helemaal weg (regel uitschrijven), ruis en opruimen gaan in trieer voor de nepmailtoets. De
+    knop van nepmail bevestigt het adres bij de afzender: het uitschrijven slaat nepmail daarom altijd over; een gewone
+    afzender op Helemaal weg met een geldige knop wordt wel uitgeschreven."""
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    oud_pv = postvak.postvak
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        for naam, verwacht in (("De Watergroep", set()), ("facturatie@waterproef.test via Brand", set()),
+                               ("Brand", {"news@brand.be"})):
+            for regel in ("uitschrijven", "ruis"):
+                brieven = [_nieuwsbrief(van_naam=naam), _nieuwsbrief(van_naam=naam, message_id="<o@brand.be>",
+                                                                     datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+                uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {("p@h-architects.be", "news@brand.be"): regel},
+                                            U.staat_per_sleutel([]), lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+                assert {b["van"] for b, _u, _p in uit.values()} == verwacht, (naam, regel, redenen)
+                if not verwacht:
+                    assert redenen.get("lijkt nepmail: nooit uitschrijven") == 2, redenen
+    finally:
+        postvak.postvak = oud_pv
+
+
+def test_zonder_oplichtingslijst_niemand_uitschrijven():
+    """MAIL-1, Codex-toets 3: is de [oplichting]-lijst niet leesbaar, dan kan het uitschrijven nepmail niet herkennen
+    (een ondertekende mail die een merk claimt). Dan schrijft het die ronde in dat postvak niemand uit."""
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    brieven = [_nieuwsbrief(van_naam="Microsoft 365 nieuws"),
+               _nieuwsbrief(van_naam="Microsoft 365 nieuws", message_id="<o@brand.be>",
+                            datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    oud_pv, oud_opl = postvak.postvak, postvak.oplichting_regels
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+        assert not uit, "met de lijst: nepmail, nooit uitschrijven"
+        postvak.oplichting_regels = lambda adres: None
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+        assert not uit and redenen.get("oplichtingslijst niet leesbaar: niemand uitschrijven") == 1, redenen
+    finally:
+        postvak.postvak, postvak.oplichting_regels = oud_pv, oud_opl
+
+
+def test_een_aanvraag_wordt_nooit_uitgeschreven_of_als_oplichting_opgeruimd():
+    """MAIL-1, Codex-toets 2: "Aanvraag: barsten en scheuren" is in de wacht nooit nepmail; dan mag het uitschrijven zo'n
+    terugkerende afzender ook niet raken, en mogen de sorteerregels haar niet als oplichting naar Opgeruimd zetten (de
+    volledige sorteerroute: sorteren.bestemming, die postvak.sorteer en de Mac gebruiken, met elk regelbestand)."""
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    ond = "Aanvraag: barsten en scheuren"
+    brieven = [_nieuwsbrief(onderwerp=ond), _nieuwsbrief(onderwerp=ond, message_id="<o@brand.be>",
+                                                          datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    assert postvak.trieer(brieven[0], ("h-architects.be",))[0] == "koud", "zonder de bescherming zou dit kunnen"
+    oud_pv = postvak.postvak
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+    finally:
+        postvak.postvak = oud_pv
+    assert not uit and redenen.get("antwoord, doorgestuurd of aanvraag") == 2, redenen
+    s = postvak._sorteren()
+
+    def rij(addr, name, subject):
+        return {"addr": addr, "name": name, "subject": subject, "unsub": False, "datum": None}
+    for bestand in ("regels_hinvest.txt", "regels_info.txt", "regels_mch.txt", "regels_melo.txt"):
+        r = s.laad_regels(os.path.join(postvak.REGELMAP, bestand))
+        for name, subject in (("De Watergroep", "Aanvraag plaatsbezoek barsten in de gevel"),
+                              ("Isabel Proefnaam", "Scheuren in de muur, kan u komen kijken?")):
+            assert s.bestemming(rij("proefklant@gmail.com", name, subject), r, True, None)[1] != "oplichting", (bestand, name)
+        assert s.bestemming(rij("itgroep@googlegroups.com", "'Microsoft 365 nieuws' via ITgroep", "Nieuwe functies"),
+                            r, False, None)[1] != "oplichting", bestand
+        assert s.bestemming(rij("x@anderdomein.test", "De Watergroep", "Terugbetaling"), r, False, None) == \
+            (s.OPGERUIMD, "oplichting"), bestand
+        # Codex-toets 3: ook niet als "nieuwe reclame" omdat de mail een List-Unsubscribe-kop draagt
+        aanvraag = dict(rij("formulier@webdienst.test", "Webformulier", "Aanvraag: barsten en scheuren"), unsub=True)
+        assert s.bestemming(aanvraag, r, True, None)[1] != "nieuwe reclame", bestand
+        assert s.bestemming(dict(rij("news@winkelproef.test", "Winkel", "Najaarsactie"), unsub=True), r, True, None)[1] \
+            == "nieuwe reclame", "gewone reclame blijft opgeruimd"
+
+
+def test_mail_zonder_datum_staat_in_het_werkverslag():
+    """MAIL-6, Codex-toets 2: een bericht zonder leesbare datum of sleutel wordt overgeslagen, maar niet meer stil: het
+    staat als bron in het werkverslag, zodat de wachtenpagina dan nooit "postvak gelezen, 0 nieuwe mails" zegt."""
+    log = []
+
+    class Ag:
+        def log(self, *a):
+            log.append(a)
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    # zoals imapbron.lijst een onleesbare Date-kop geeft: datum None (de server vond het bericht op zijn eigen datum)
+    zonder = dict(_in(1, "klant@voorbeeld.test", "Zonder datum", "2026-10-19T10:00:00+02:00"), datum=None, map_="INBOX")
+    oud, oud_km = postvak._DroogAgent, postvak.koppen_mappen
+    postvak._DroogAgent = Ag
+    postvak.koppen_mappen = lambda adres, mappen, sinds, ag=None, plafond=1000, fouten=None: [zonder]
+    try:
+        alle, _, _, _ = _ronde([], nu)
+    finally:
+        postvak._DroogAgent, postvak.koppen_mappen = oud, oud_km
+    assert not alle and ("inbox", "bron") in [(a[0], a[1]) for a in log], log
+
+
+def test_een_plafond_staat_in_het_werkverslag():
+    """MAIL-6, Codex-toets 1: een map die het plafond haalt, is niet volledig gelezen. Dat staat nu als bron in het
+    werkverslag, zodat de wachtenpagina nooit 'postvak gelezen' zegt na een onvolledige lezing."""
+    log = []
+
+    class Ag:
+        def log(self, *a):
+            log.append(a)
+    oud = postvak.koppen
+    postvak.koppen = lambda adres, m, sinds=None, plafond=1000: [{"uid": i} for i in range(plafond)]
+    try:
+        fouten = []
+        postvak.koppen_mappen("p@voorbeeld.test", ["INBOX"], "2026-10-01", Ag(), plafond=3, fouten=fouten)
+    finally:
+        postvak.koppen = oud
+    assert fouten and [(a[0], a[1]) for a in log] == [("mappen", "bron")], log
+
+
 def test_rommel_naar_opgeruimd_alleen_met_exacte_domeinen():
     """19-10-2026: alleen rommel, met een exacte domeinvergelijking; 'ing.be' zat ooit in valoprojectontwikkeling.be."""
     def r(van, mid, soort="rommel", **k):
@@ -665,6 +993,29 @@ def test_mch_antwoordt_ook_vanuit_andere_postvakken():
     """19-10-2026: antwoord_vanuit voor mch@ was leeg; met de draad kan een extra postvak alleen sluiten wat echt beantwoord is."""
     cfg = postvak.wachten()
     assert {"info@h-architects.be", "info@h-invest.be"} <= set(cfg["mail-mch"]["antwoord_vanuit"])
+
+
+def test_postvakken_zonder_wacht_staan_in_de_lijst_en_in_het_dagboek():
+    """VOL-10 (T-0120): light@, standaard@ en boekhouding@ worden alleen gelezen voor hun verzonden post (antwoord_vanuit),
+    maar 'zonder_wacht' was leeg en het Dagboek noemde ze nergens. Elk postvak dat de server leest zonder dat een wacht zijn
+    binnenkomende post leest, staat nu in 'zonder_wacht', met de keuze die bij Mehdi ligt (MAIL-7, werkstand). Zo'n postvak
+    geeft geen nood meer bij elke ronde van De Mailregisseur: de vraag staat al in de werkstand. /bronnen in het Dagboek
+    noemt ze als niet bewaakt (dagboek/app.py, BRONNEN)."""
+    import mail_regisseur as M
+    cfg = postvak.wachten()
+    wachten = [c for c in cfg.values() if isinstance(c, dict) and "postvakken" in c]
+    bewaakt = {a for c in wachten for a in c["postvakken"]}
+    alleen_verzonden = {a for c in wachten for a in c.get("antwoord_vanuit") or []} - bewaakt
+    zonder = cfg["zonder_wacht"]
+    assert {z["postvak"] for z in zonder} == alleen_verzonden == {
+        "light@h-architects.be", "standaard@h-architects.be", "boekhouding@h-invest.be"}
+    assert all(z.get("waarom") and z.get("keuze") for z in zonder), zonder
+    assert M.zonder_wacht_melden(cfg) == [], "de keuze ligt in de werkstand: geen nood bij elke ronde"
+    assert M.zonder_wacht_melden({"zonder_wacht": [{"postvak": "nieuw@voorbeeld.test"}]}) == ["nieuw@voorbeeld.test"], \
+        "een nieuw postvak zonder wacht en zonder keuze wordt wel gemeld"
+    bron = open(os.path.join(os.path.dirname(HIER), "dagboek", "app.py"), encoding="utf-8").read()
+    mail = next(r for r in bron[bron.index("BRONNEN = ("):].split("\n    (") if r.startswith('"Mail"'))
+    assert "niet bewaakt" in mail and all(z["postvak"].split("@")[0] + "@" in mail for z in zonder), mail
 
 
 def test_de_mailregisseur_leest_dezelfde_lijst():
@@ -789,6 +1140,91 @@ def test_de_beslissing_van_mehdi_gaat_voor_de_regels():
     assert postvak.trieer(kop("info@lamella-mail.com", "Word dealer"), EIGEN, regel="belangrijk")[0] == "hoog"
     assert postvak.trieer(kop("vincent@verz.kbc.be", "Schorsing"), EIGEN, regel="opruimen")[0] == "rommel"
     assert postvak.trieer(kop("x@gmail.com", "Action requise", "My MINFIN"), EIGEN, regel="belangrijk")[0] == "verdacht"
+
+
+def test_nepmail_die_een_firma_claimt_is_verdacht():
+    """T-0117, MAIL-1 (driehoeksoverleg 01-11-2026, X1 3-0): in oktober kwam nepmail binnen als melding, hoog of koud, nooit
+    als verdacht. (a) De naam noemt een adres op een ander hoofddomein dan de afzender (de vorm van een enquetedienst die
+    'klantendienst@firma via ...' schrijft); (b) de naam claimt een merk uit de [oplichting]-lijst van mailregels. Alle
+    adressen zijn verzonnen, behalve de echte domeinen die in die lijst staan."""
+    opl = postvak.oplichting_regels("info@h-invest.be")
+    t = lambda van, naam, ond="Uw mening telt", **k: postvak.trieer(  # noqa: E731
+        kop(van, ond, naam), EIGEN, k.pop("bekend", frozenset()), k.pop("regel", ""), opl)
+    # (a) een adres van een firma in de naam, de afzender is een ander domein
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst")[0] == "verdacht"
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst", ond="Uw factuur")[0] == "verdacht"
+    # (b) een merk uit de lijst op een domein dat er niet bij hoort (de vormen van oktober, verzonnen afzenders)
+    assert t("info@drukluchtproef.test", "CSAM", ond="Teruggave belasting")[0] == "verdacht"
+    assert t("x@chocoproef.test", "Isabel 6", ond="Uw certificaat verloopt")[0] == "verdacht"
+    assert t("x@afvalproef.test", "Kruispuntbank van Ondernemingen", ond="Actualisatie")[0] == "verdacht"
+    assert t("proefpersoon@gmail.com", "one.com", ond="Uw domein verloopt")[0] == "verdacht"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling")[0] == "verdacht"
+    # niet: de echte firma, een Google-groep, een adres op hetzelfde (hoofd)domein, een eigen domein
+    assert t("proef@dewatergroep.be", "De Watergroep", ond="Uw factuur")[0] != "verdacht", "echte De Watergroep"
+    assert t("bouwgroep@googlegroups.com", "'Proef Persoon' via Bouwgroep")[0] != "verdacht"
+    assert t("bouwgroep@googlegroups.com", "'proef@voorbeeld.test' via Bouwgroep")[0] != "verdacht", "een lijst, geen nep"
+    for van, naam in (("info@winkelproef.test", "info@winkelproef.test"),
+                      ("noreply@mail.winkelproef.test", "service@winkelproef.test"),
+                      ("x@nieuws.proefbedrijf.co.uk", "info@proefbedrijf.co.uk via Proefbedrijf")):
+        assert t(van, naam)[0] != "verdacht", (van, naam)
+    assert t("website@h-invest.be", "klant@voorbeeld.test via webformulier")[0] != "verdacht", "eigen domein"
+    # een klant met een gratis adres via een webformulier is een mens, geen firma die geclaimd wordt
+    assert t("formulier@webdienst.test", "proefklant@gmail.com via webformulier", ond="Vraag")[0] != "verdacht"
+    # een bekend contact of een aanvraag wordt nooit verdacht door de naam alleen
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst",
+             bekend=frozenset({"lid@enquetedienst.test"}))[0] != "verdacht"
+    # Codex-toets 1: een bekende klant achter een formulierdienst (het adres in de naam is bekend), een aanvraag barsten
+    # en scheuren met een firma-adres, Amazon uit een andere Europese winkel, en een Google-groep met een merk in de naam
+    klant = frozenset({"jan@aannemerproef.test"})
+    assert t("formulier@webdienst.test", "jan@aannemerproef.test via webformulier", ond="Plannen voor de werf",
+             bekend=klant)[0] != "verdacht"
+    assert t("formulier@webdienst.test", "jan@aannemerproef.test via webformulier", ond="Aanvraag: barsten en scheuren",
+             bekend=klant)[0] != "verdacht"
+    assert t("formulier@webdienst.test", "iemand@firmaproef.test via webformulier", ond="Aanvraag: barsten en scheuren")[0] \
+        != "verdacht", "een onbekende klant met een firma-adres die een plaatsbezoek vraagt"
+    assert t("lid@enquetedienst.test", "ceo@aannemerproef.test via Enquetedienst", ond="Uw factuur", bekend=klant)[0] \
+        == "verdacht", "Codex-toets 2: een ander adres op een bekend domein claimen blijft verdacht"
+    assert t("bestelling@amazon.co.uk", "Amazon.co.uk", ond="Uw bestelling")[0] != "verdacht"
+    assert t("itgroep@googlegroups.com", "'Microsoft 365 nieuws' via ITgroep", ond="Nieuwe functies")[0] != "verdacht"
+    assert t("x@anderdomein.test", "Amazon", ond="Uw account is geblokkeerd")[0] == "verdacht", "nep-Amazon blijft verdacht"
+    # de beslissing van Mehdi gaat voor
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst", regel="belangrijk")[0] == "hoog"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling", regel="ruis")[0] == "rommel"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling", regel="houden")[0] != "verdacht", "Niet opruimen"
+    # zonder lijst (zoals De Wagenparkwacht trieer(b) aanroept) alleen (a)
+    assert postvak.trieer(kop("x@anderdomein.test", "Terugbetaling", "De Watergroep"))[0] != "verdacht"
+    assert postvak.trieer(kop("lid@enquetedienst.test", "Uw mening telt", "facturatie@waterproef.test via Enquetedienst"))[0] \
+        == "verdacht"
+    waarom = t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst")[1]
+    assert "waterproef.test" in waarom and "enquetedienst.test" in waarom, waarom
+
+
+def test_nepmail_ook_voor_hotmail_en_bs_aanvraag_blijft():
+    """MAIL-1: hotmail heeft geen sorteerregels; de gedeelde [oplichting]-lijst (regels_hinvest.txt, waaruit de andere
+    regelbestanden gemaakt worden) geldt er toch. Een aanvraag barsten en scheuren (B&S) via een webformulier, van een klant
+    met een gratis adres of een firma-adres, blijft precies wat ze was: gewoon, met opvolging (nooit verdacht)."""
+    hotmail = postvak.wachten()["mail-prive"]["postvakken"][0]   # het adres staat in mailwachten.json, niet in de test
+    assert postvak.sorteerregels_van(hotmail) is None
+    opl = postvak.oplichting_regels(hotmail)
+    assert opl and any(m == "de watergroep" for m, _ in opl["oplichting"]), "de gedeelde lijst, met De Watergroep"
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    aanvragen = [
+        _in(1, "formulier@webdienst.test", "Aanvraag plaatsbezoek barsten in de gevel", "2026-10-15T10:00:00+02:00",
+            van_naam="proefklant@gmail.com via webformulier"),
+        _in(2, "formulier@webdienst.test", "Offerteaanvraag scheuren in de muur", "2026-10-15T11:00:00+02:00",
+            van_naam="proef@bouwbedrijfproef.test via webformulier"),
+        _in(3, "proefklant2@gmail.com", "Aanvraag plaatsbezoek scheuren", "2026-10-15T12:00:00+02:00",
+            van_naam="Isabel Proefnaam"),
+        _in(4, "lid@enquetedienst.test", "Uw mening telt", "2026-10-15T13:00:00+02:00",
+            van_naam="facturatie@waterproef.test via Enquetedienst"),
+        _in(5, "x@anderdomein.test", "Terugbetaling", "2026-10-15T14:00:00+02:00", van_naam="De Watergroep"),
+    ]
+    alle, items, tel, _ = _ronde(aanvragen, nu)
+    voor = {b["onderwerp"]: postvak.trieer(b, ("h-architects.be", "harmoniebouw.be", "globaal.be"))[0] for b in aanvragen[:3]}
+    for ond in ("Aanvraag plaatsbezoek barsten in de gevel", "Offerteaanvraag scheuren in de muur", "Aanvraag plaatsbezoek scheuren"):
+        assert alle[ond]["soort"] == "midden" == voor[ond] and alle[ond]["opvolging"] == "open", (ond, alle[ond])
+    assert alle["Uw mening telt"]["soort"] == "verdacht" and alle["Uw mening telt"]["opvolging"] == "geen"
+    assert alle["Terugbetaling"]["soort"] == "verdacht", "de gedeelde lijst geldt ook voor een postvak zonder sorteerregels"
 
 
 def test_opruimen_raakt_alleen_de_juiste_afzender():

@@ -51,7 +51,7 @@
       {% endfor %}
     </table>
     {% else %}
-    <p class="leeg">Niets binnengekomen op deze dag.</p>
+    <p class="leeg">{{ 'Postvak gelezen, 0 nieuwe mails op deze dag.' if w['oordeel'] == 'postvak gelezen, 0 nieuwe mails' else 'Niets binnengekomen op deze dag.' }}</p>
     {% endif %}
   </div>
   <div class="kaart">

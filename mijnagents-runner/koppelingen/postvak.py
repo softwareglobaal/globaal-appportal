@@ -16,7 +16,8 @@ De wachtwoorden blijven in ~/post-config/mailboxen.yaml; deze module leest ze da
 schrijft ze nergens heen.
 
 De soorten, van stil naar luid:
-  verdacht  lijkt phishing (bank of overheid vanaf een gratis adres): alleen geteld
+  verdacht  lijkt phishing (bank of overheid vanaf een gratis adres, of een naam die een firma of dienst claimt op
+            een domein dat er niet bij hoort, zie nepmail): alleen geteld
   rommel    reclame, nieuwsbrief, afmeldbevestiging: alleen geteld
   koud      een mens die we niet kennen, zonder aanvraag (koude verkoop): alleen geteld
   melding   automatisch bericht zonder gevolg (pakje, bestelling): alleen geteld
@@ -37,6 +38,7 @@ import re
 import sys
 import urllib.parse
 from datetime import datetime, timedelta
+from email.header import decode_header, make_header
 from email.utils import parseaddr, parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
@@ -51,6 +53,7 @@ OPVOLGEN_NA_WERKDAGEN = 1   # een gewoon bericht zonder antwoord wordt na zoveel
 TERUG_DAGEN = 30            # zover kijken we terug: naar berichten die op antwoord wachten, en voor de cijfers
 ACTIE_DAGEN = 7             # zolang blijft een automatisch bericht met gevolg op de lijst
 BEKEND_DAGEN = 180          # wie we in deze periode mailden, is een bekend contact
+BIJLAGEN_DAGEN = 2          # van de mail van zoveel dagen leest elke ronde de bijlagen (alleen metadata, VOL-9)
 
 # Rollen en woorden, overgenomen van de Mac-mailwacht (mac/mail_wacht.py), uitgebreid met
 # wat op 25-09-2026 in info@ H-Architects en info@ H-Invest binnenkwam.
@@ -109,6 +112,12 @@ GRATIS = ("gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "i
 GRATIS_DIENSTEN = ("gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "outlook.com", "outlook.be", "live.com",
                    "live.be", "yahoo.com", "icloud.com", "me.com", "telenet.be", "skynet.be", "proximus.be")
 VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius", "ing ", "itsme", "politie", "bpost"]
+# Nepmail die een firma of dienst claimt (T-0117, MAIL-1; driehoeksoverleg 01-11-2026, X1 3-0). In oktober 2026 kwam ze
+# binnen als melding, hoog of koud, nooit als verdacht: een enquetedienst met "klantendienst@<firma> via ..." als naam, en
+# namen als CSAM, Isabel, Kruispunt of one.com op een vreemd domein. Een adres in de naam op een ander hoofddomein telt;
+# een gratis adres in de naam niet (een klant via een webformulier is een mens), een mailinglijst ook niet.
+ADRES_IN_NAAM = re.compile(r"[\w.+-]+@((?:[\w-]+\.)+[a-z]{2,})")
+LIJSTDIENSTEN = ("googlegroups.com",)   # "'iemand@firma.be' via Groep": de groep stuurt door wat een lid schreef
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
 # de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
@@ -139,6 +148,15 @@ def mappen_van(adres):
         return ["INBOX"]
 
 
+def alleen_lezen_van(adres):
+    """De mappen van dit postvak die de wacht alleen leest (mailwachten.json, 'alleen_lezen'): nooit uitschrijven,
+    opruimen of sorteren daaruit (VOL-3). Opruimen, sorteren en rommel naar Opgeruimd werken toch alleen op de INBOX."""
+    try:
+        return list(wachten().get("alleen_lezen", {}).get((adres or "").lower()) or [])
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
 def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000, fouten=None):
     """Koppen uit meerdere mappen; een map die niet bestaat of niet leesbaar is, wordt overgeslagen en gelogd. Wat niet
     volledig gelezen werd (onleesbaar, of het plafond bereikt), komt in `fouten`."""
@@ -148,8 +166,11 @@ def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000, fouten=None):
             deel = koppen(adres, m, sinds=sinds, plafond=plafond)
             uit += [dict(b, map_=m) for b in deel]
             gelukt += 1
-            if fouten is not None and len(deel) >= plafond:
-                fouten.append(f"{adres} {m}: meer dan {plafond} berichten")
+            if len(deel) >= plafond:
+                if fouten is not None:
+                    fouten.append(f"{adres} {m}: meer dan {plafond} berichten")
+                if ag:  # niet volledig gelezen: zo zegt de wachtenpagina nooit "postvak gelezen" (Codex-toets 1, T-0120)
+                    ag.log("mappen", "bron", f"{adres} {m}: meer dan {plafond} berichten, niet volledig gelezen")
         except Exception as e:  # noqa: BLE001
             if fouten is not None:
                 fouten.append(f"{adres} {m}: {type(e).__name__}")
@@ -311,10 +332,51 @@ def regel_voor(regels, postvak_adres, van):
     return ""
 
 
-def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
+def _hoofddomein(dom):
+    """Het geregistreerde domein, zoals bij het uitschrijven: mail.firma.be -> firma.be, x.firma.co.uk -> firma.co.uk."""
+    if HIER not in sys.path:
+        sys.path.insert(0, HIER)
+    import uitschrijven  # noqa: E402  (importeert dit bestand; pas hier, niet bovenaan)
+    return uitschrijven.hoofddomein(dom)
+
+
+def nepmail(b, eigen_domeinen=(), bekend=frozenset(), oplichting=None):
+    """Waarom dit bericht nepmail lijkt die een firma of dienst claimt, of ''. (a) De naam noemt een adres op een ander
+    hoofddomein dan de afzender; (b) de naam claimt een merk uit de [oplichting]-lijst van mailregels op een domein dat er
+    niet bij hoort (sorteren.is_oplichting, dezelfde toets als het sorteren; `oplichting` is laad_regels van die lijst).
+    Nooit bij een eigen domein, een mailinglijst (Google Groups), een bekend contact (de afzender of het adres in de naam)
+    of een aanvraag: een klant die via een webformulier om een plaatsbezoek vraagt (barsten en scheuren), blijft een
+    aanvraag (Codex-toets 1, T-0120)."""
+    van, naam = (b.get("van") or "").lower(), b.get("van_naam") or ""
+    dom = _domein(van)
+    if not dom or zelfde_domein(dom, eigen_domeinen) or zelfde_domein(dom, LIJSTDIENSTEN):
+        return ""
+    reden, genoemd = "", [m.group(0) for m in ADRES_IN_NAAM.finditer(naam.lower())]
+    for a in genoemd:
+        d = _domein(a)
+        if not zelfde_domein(d, GRATIS_DIENSTEN) and _hoofddomein(d) != _hoofddomein(dom):
+            reden = f"de naam noemt een adres op {d}, de afzender is {dom}"
+            break
+    if not reden and oplichting and _sorteren().is_oplichting(naam, van, oplichting):
+        reden = f"'{naam[:60]}' claimt een firma of dienst die niet bij {dom} hoort"
+    if not reden:
+        return ""
+    o = schoon(b.get("onderwerp")).lower()
+    # bekend: de afzender (adres of domein, zoals bij trieer), of precies het adres in de naam; een ander adres op een bekend
+    # domein claimen ("ceo@klant" terwijl alleen "jan@klant" bekend is) blijft verdacht (Codex-toets 2)
+    gemaild = {_domein(a) for a in bekend if not zelfde_domein(_domein(a), GRATIS_DIENSTEN)}
+    kent = van in bekend or zelfde_domein(dom, gemaild) or any(a in bekend for a in genoemd)
+    # een aanvraag via een webformulier ("Aanvraag: barsten en scheuren") valt nooit uit de opvolging (B&S); AANVRAAG zelf
+    # blijft gelijk, de ruimere toets is die van het sorteren (sorteren.AANVRAAG_ONDERWERP)
+    aanvraag = any(w in o for w in AANVRAAG) or _sorteren().AANVRAAG_ONDERWERP.search(o)
+    return "" if kent or aanvraag else reden
+
+
+def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel="", oplichting=None):
     """(soort, waarom) voor een kop uit imapbron.lijst; zie de lijst bovenaan dit bestand.
     Een bron mag zelf zeggen dat een bericht automatisch is ('automatisch', zoals Mail op de Mac dat bijhoudt)
-    of van een mailinglijst komt ('lijst'). `regel` is wat Mehdi over deze afzender besliste (regel_voor)."""
+    of van een mailinglijst komt ('lijst'). `regel` is wat Mehdi over deze afzender besliste (regel_voor).
+    `oplichting`: de [oplichting]-lijst voor dit postvak (oplichting_regels); zonder lijst alleen toets (a) van nepmail."""
     van, naam, ond = (b.get("van") or "").lower(), (b.get("van_naam") or "").lower(), schoon(b.get("onderwerp"))
     o = ond.lower()
     dom = _domein(van)
@@ -329,6 +391,10 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
         return "rommel", "op het maildashboard op Helemaal weg gezet"
     if regel in ("ruis", "opruimen"):
         return "rommel", "Mehdi zette deze afzender op ruis"
+    # na de beslissing van Mehdi, voor rol en woord (MAIL-1); wie Mehdi op Niet opruimen (houden) zette, is nooit nep
+    nep = "" if regel == "houden" else nepmail(b, eigen_domeinen, bekend, oplichting)
+    if nep:
+        return "verdacht", nep
     if automatisch_antwoord(ond):
         return "melding", "automatisch antwoord of ontvangstbevestiging"
     if van.startswith(MAILSERVER) or naam in ("postmaster", "mail delivery subsystem", "mail delivery system"):
@@ -545,16 +611,23 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             continue
         # Wat het postvak zelf verstuurde, is geen opvolgpunt (Gmail 'Alle e-mail' bevat ook de verzonden post).
         berichten = [b for b in berichten if (b.get("van") or "").lower() != adres.lower()]
+        bijlagen_lezen(mb, berichten, nu, ag)
+        opl = oplichting_regels(adres)
+        if opl is None:
+            ag.log("oplichting", "bron", f"{adres}: de [oplichting]-lijst van mailregels niet gelezen")
         afwezig = {}
         for b in berichten:
             if automatisch_antwoord(b.get("onderwerp")) and _datum(b):
                 afwezig.setdefault((b.get("van") or "").lower(), []).append((_datum(b), b.get("onderwerp") or ""))
+        zonder = 0
         for b in berichten:
             d = _datum(b)
             if not d or not (b.get("message_id") or b.get("uid")):
+                zonder += 1
                 continue  # zonder datum of zonder sleutel kan ik het niet volgen (resultaattoets K5)
             regel = regel_voor(regels, adres, b.get("van"))
-            soort, waarom = trieer(b, eigen, bekend, regel)
+            soort, waarom = trieer(b, eigen, bekend, regel, opl)
+            waarom = met_relaylabel(waarom, b.get("van"))
             ond = schoon(b.get("onderwerp"))
             wacht = werkdagen_tussen(d, nu)
             opvolging, door, wanneer, naar = "geen", "", "", ""
@@ -577,7 +650,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                          "message_id": (b.get("message_id") or "")[:250], "opvolging": opvolging,
                          "antwoord_door": door[:120], "antwoord_ts": wanneer, "antwoord_naar": naar[:120],
                          "stap": stap(soort, opvolging, door, wanneer, naar), "dringend": 1 if dringend else 0,
-                         "werkdagen": wacht, "regel": regel, "auto_opruimen": ""})
+                         "werkdagen": wacht, "regel": regel, "auto_opruimen": "", **_bijlagenrij(b)})
             if d >= nu - timedelta(days=1):
                 tel[soort] += 1
                 if soort in ("hoog", "midden", "actie"):
@@ -588,6 +661,8 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                                   "afdeling": cfg.get("afdeling", ""), "thema": ond[:90], "project": "", "prive": 0,
                                   "zekerheid": "middel", "waarom": f"{soort}; {waarom}", "archief": "", "link": "",
                                   "opgenomen_door": adres, "bron": "mail"})
+        if zonder:  # niet stil: dan zegt de wachtenpagina nooit "postvak gelezen, 0 nieuwe mails" (Codex-toets 2, T-0120)
+            ag.log("inbox", "bron", f"{adres}: {zonder} berichten zonder leesbare datum of sleutel, niet gevolgd")
     # Een open punt ouder dan mijn venster: komt er nog een antwoord, dan sluit het ook (ontwerptoets 19-10-2026, Codex O4).
     # Een open punt binnen mijn venster dat ik niet meer zie terwijl ik het postvak volledig las, is verplaatst of
     # verwijderd: dan 'verdwenen', zichtbaar bij Afgesloten met Toch open (resultaattoets 19-10-2026, K4, 2-1).
@@ -696,6 +771,203 @@ def rommel_kandidaten(alle, eigen=(), bekend=frozenset(), veilig=frozenset()):
 
 def kort_waarom(w):
     return (w or "")[:200]
+
+
+# Apple "Hide My Email" (MAIL-5, overleg 01-11-2026, X5 2-1): de echte afzender staat gecodeerd in het relay-adres. De wacht
+# ziet een onbekende; alleen een label in waarom, de afzender nooit overschreven en niet ontcijferd.
+APPLE_RELAY = ("privaterelay.appleid.com",)
+RELAY_LABEL = "via Apple Hide My Email"
+
+
+def met_relaylabel(waarom, van):
+    """waarom met het label erachter als het bericht via Apple Hide My Email kwam; zo kort dat het label nooit wegvalt."""
+    if not zelfde_domein(_domein((van or "").lower()), APPLE_RELAY):
+        return waarom
+    return f"{(waarom or '')[:200 - len(RELAY_LABEL) - 2]}; {RELAY_LABEL}" if waarom else RELAY_LABEL
+
+
+# Bijlagen zichtbaar, alleen als metadata (VOL-9, T-0120): per bericht het aantal bijlagen, de soort (de extensie, anders
+# het subtype) en de grootte, uit de BODYSTRUCTURE die de server geeft. Alleen lezend: readonly-select en FETCH (UID
+# BODYSTRUCTURE); dat zet geen \Seen (alleen BODY[] zonder PEEK doet dat) en haalt niets binnen. Nooit de bestandsnaam:
+# die kan een klant of een project noemen. Een logo in de handtekening (een afbeelding met een Content-ID) is geen bijlage.
+SOORT_VAN_SUBTYPE = {"rfc822": "eml", "octet-stream": "bestand"}
+
+
+def _antwoorden(data):
+    """De FETCH-antwoorden van imaplib als hele regels: een literal komt als (kop, inhoud), de rest van de regel erna."""
+    uit, bezig = [], False
+    for el in data or []:
+        if isinstance(el, tuple):
+            stuk = (el[0] or b"") + (el[1] or b"")
+            if bezig:
+                uit[-1] += stuk
+            else:
+                uit.append(stuk)
+            bezig = True
+        elif isinstance(el, bytes):
+            if bezig:
+                uit[-1] += el
+            else:
+                uit.append(el)
+            bezig = False
+    return uit
+
+
+def _lijst(buf):
+    """Een IMAP-antwoord als geneste lijsten: strings en atomen als bytes, NIL als None. Een literal {n} is n bytes."""
+    top = []
+    stapel, i, n = [top], 0, len(buf)
+    while i < n:
+        c = buf[i:i + 1]
+        if c in (b" ", b"\r", b"\n", b"\t"):
+            i += 1
+        elif c == b"(":
+            nieuw = []
+            stapel[-1].append(nieuw)
+            stapel.append(nieuw)
+            i += 1
+        elif c == b")":
+            if len(stapel) > 1:
+                stapel.pop()
+            i += 1
+        elif c == b'"':
+            j, stuk = i + 1, bytearray()
+            while j < n and buf[j:j + 1] != b'"':
+                if buf[j:j + 1] == b"\\" and j + 1 < n:
+                    j += 1
+                stuk += buf[j:j + 1]
+                j += 1
+            stapel[-1].append(bytes(stuk))
+            i = j + 1
+        elif c == b"{":
+            j = buf.index(b"}", i)
+            lengte = int(buf[i + 1:j])
+            stapel[-1].append(buf[j + 1:j + 1 + lengte])
+            i = j + 1 + lengte
+        else:
+            j = i
+            while j < n and buf[j:j + 1] not in (b" ", b"(", b")", b"\r", b"\n"):
+                j += 1
+            atoom = buf[i:j]
+            stapel[-1].append(None if atoom.upper() == b"NIL" else atoom)
+            i = j
+    return top
+
+
+def _uid_en_structuur(regel):
+    """(uid, bodystructuur als geneste lijst) uit een regel '5 (UID 12 BODYSTRUCTURE (...))'; (None, None) als het er niet is."""
+    lst = next((x for x in _lijst(regel) if isinstance(x, list)), [])
+    uid = bs = None
+    for k, v in zip(lst[::2], lst[1::2]):
+        k = k.upper() if isinstance(k, bytes) else b""
+        if k == b"UID":
+            uid = int(v)
+        elif k == b"BODYSTRUCTURE":
+            bs = v
+    return uid, bs
+
+
+def _txt(x):
+    return x.decode("utf-8", "replace") if isinstance(x, bytes) else ""
+
+
+def _paren(lst):
+    """Een IMAP-parameterlijst ("name" "x.pdf" ...) als dict met kleine sleutels."""
+    lst = lst if isinstance(lst, list) else []
+    return {_txt(k).lower(): _txt(v) for k, v in zip(lst[::2], lst[1::2])}
+
+
+def _bestandsnaam(params):
+    """De naam (ook RFC 2231 in delen en een encoded-word), alleen om de extensie te kennen; nooit bewaard."""
+    for sleutel in ("filename", "name"):
+        delen = [v for k, v in sorted(params.items()) if k == sleutel or k.startswith(sleutel + "*")]
+        if delen:
+            naam = "".join(delen)
+            try:
+                return str(make_header(decode_header(naam)))
+            except Exception:  # noqa: BLE001
+                return naam
+    return ""
+
+
+def bijlagen_uit_structuur(deel, uit=None):
+    """De bijlagen in een BODYSTRUCTURE: [{'soort': 'pdf', 'bytes': 120000}, ...]. De grootte is die van het bestand
+    (base64 telt ongeveer 4/3), de soort de extensie van de naam, anders het subtype. Een doorgestuurd bericht telt als een
+    bijlage; wat erin zit niet."""
+    uit = [] if uit is None else uit
+    if not isinstance(deel, list) or not deel:
+        return uit
+    if isinstance(deel[0], list):  # multipart: eerst de delen, dan het subtype en de uitbreidingen
+        for d in deel:
+            if not isinstance(d, list):
+                break
+            bijlagen_uit_structuur(d, uit)
+        return uit
+    soort, sub = _txt(deel[0]).lower(), _txt(deel[1] if len(deel) > 1 else None).lower()
+    params = _paren(deel[2] if len(deel) > 2 else None)
+    cid = deel[3] if len(deel) > 3 else None
+    codering = _txt(deel[5] if len(deel) > 5 else None).lower()
+    try:
+        grootte = int(deel[6]) if len(deel) > 6 else 0
+    except (TypeError, ValueError):
+        grootte = 0
+    # na de vaste velden: text heeft nog het aantal regels, message/rfc822 envelope, body en regels; dan md5, dispositie
+    begin = 8 if soort == "text" else 10 if (soort, sub) == ("message", "rfc822") else 7
+    dsp = deel[begin + 1] if len(deel) > begin + 1 else None
+    dsp_soort = _txt(dsp[0]).lower() if isinstance(dsp, list) and dsp else ""
+    naam = _bestandsnaam(_paren(dsp[1]) if isinstance(dsp, list) and len(dsp) > 1 else {}) or _bestandsnaam(params)
+    # een meegestuurd bericht telt altijd, ook zonder dispositie of naam (Codex-toets 1, T-0120)
+    if dsp_soort == "attachment" or (soort, sub) == ("message", "rfc822") or (naam and not (soort == "image" and cid)):
+        ext = naam.rsplit(".", 1)[-1].lower() if "." in naam else ""
+        if not re.fullmatch(r"[a-z0-9]{1,8}", ext):
+            ext = SOORT_VAN_SUBTYPE.get(sub) or re.sub(r"[^a-z0-9-]", "", sub)[:12] or "bestand"
+        uit.append({"soort": ext, "bytes": grootte * 3 // 4 if codering == "base64" else grootte})
+    return uit
+
+
+def bijlagen_lezen(mb, berichten, nu, ag=None):
+    """Zet b['bijlagen'] (een lijst van {'soort', 'bytes'}) bij de berichten van de laatste BIJLAGEN_DAGEN dagen, uit hun
+    BODYSTRUCTURE: een sessie per postvak, readonly-select per map, FETCH (UID BODYSTRUCTURE) per 200. Een kopie in een
+    bestand (hotmail) heeft geen bodystructuur. Wat niet lukt, blijft zonder (onbekend, nooit nul) en staat in het logboek
+    als onvolledig, niet als bron- of leesfout: de wacht las het postvak wel."""
+    if not mb or mb.get("bron"):
+        return
+    grens = nu - timedelta(days=BIJLAGEN_DAGEN)
+    per_map = {}
+    for b in berichten:
+        d = _datum(b)
+        if d and d >= grens and b.get("map_") and str(b.get("uid") or "").isdigit():
+            per_map.setdefault(b["map_"], {})[int(b["uid"])] = b
+    if not per_map:
+        return
+    _, imapbron = _postbus()
+    try:
+        with imapbron._Sessie(mb) as M:
+            for m, op_uid in per_map.items():
+                imapbron._selecteer(M, m)
+                uids = sorted(op_uid)
+                for i in range(0, len(uids), 200):
+                    ok, data = M.uid("FETCH", ",".join(str(u) for u in uids[i:i + 200]), "(UID BODYSTRUCTURE)")
+                    if ok != "OK":
+                        raise ValueError(f"{m}: BODYSTRUCTURE niet gegeven")
+                    for regel in _antwoorden(data):
+                        try:
+                            uid, bs = _uid_en_structuur(regel)
+                        except (ValueError, IndexError):
+                            continue
+                        if uid in op_uid and isinstance(bs, list):
+                            op_uid[uid]["bijlagen"] = bijlagen_uit_structuur(bs)
+    except Exception as e:  # noqa: BLE001
+        if ag:
+            ag.log("bijlagen", "onvolledig", f"{mb.get('adres')}: bijlagen niet gelezen ({type(e).__name__})")
+
+
+def _bijlagenrij(b):
+    """De velden voor /api/mail: het aantal en de soort en grootte, of None als het onbekend is."""
+    lijst = b.get("bijlagen")
+    if not isinstance(lijst, list):
+        return {"bijlagen": None, "bijlagen_info": None}
+    return {"bijlagen": len(lijst), "bijlagen_info": lijst[:20]}
 
 
 class _Droog:
@@ -809,6 +1081,19 @@ def sorteerregels_van(adres):
     except (OSError, ValueError):
         return None
     return os.path.join(REGELMAP, naam) if naam else None
+
+
+# De gedeelde [oplichting]-lijst: regels_hinvest.txt, waaruit maak_regels.py de andere regelbestanden maakt (MAIL-1).
+OPLICHTING_BASIS = os.path.join(REGELMAP, "regels_hinvest.txt")
+
+
+def oplichting_regels(adres):
+    """De [oplichting]-lijst voor dit postvak (sorteren.laad_regels): die van zijn sorteerregels, anders de gedeelde
+    (hotmail heeft geen sorteerregels). None als het bestand niet leesbaar is."""
+    try:
+        return _sorteren().laad_regels(sorteerregels_van(adres) or OPLICHTING_BASIS)
+    except (OSError, ValueError):
+        return None
 
 
 def gmailnaam(mb, mapnaam):

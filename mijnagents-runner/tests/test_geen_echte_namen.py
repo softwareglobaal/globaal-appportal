@@ -21,7 +21,7 @@ import sys
 HIER = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HIER))
 
-# Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf.
+# Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf; sinds T-0120 ook de testbestanden van de mail.
 BESTANDEN = (
     "mijnagents-runner/tests/test_bode_regie.py",
     "mijnagents-runner/tests/test_bord_export_prive.py",
@@ -36,6 +36,8 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_hotmail_server.py",
     "mijnagents-runner/tests/test_keten.py",
     "mijnagents-runner/tests/test_mehdi_agent.py",
+    "mijnagents-runner/tests/test_postvak.py",          # T-0120 groep mail, sinds 01-11-2026
+    "mijnagents-runner/mailregels/test_sorteren.py",
     "mijnagents-runner/tests/test_plaud_wacht.py",
     "mijnagents-runner/tests/test_privegrens.py",
     "mijnagents-runner/tests/test_regisseur.py",
@@ -51,6 +53,9 @@ BESTANDEN = (
     "mijnagents-runner/tests/fixtures/claude_stream_proef.jsonl",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "mijnagents/test_gesprekken_api.py",
+    "mijnagents/test_mail.py",                          # T-0120 groep mail, sinds 01-11-2026
+    "mijnagents/test_wachten_dag.py",
+    "dagboek/test_dagboek.py",
 )
 
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige
@@ -76,6 +81,14 @@ VERBODEN = frozenset({
     "884e4492accb5d278b2a2039936f2714df5d4177cfea730cec2ad622a9d2e200",
     "a795ab67a0a69ae51e3df396832e4746b1757f029d2431f86caf07674e90741b",
     "b3bfac5c26330023bc5ab0e5befc33ba975dee4508347f8da262c310ef6303f5",   # klantnaam, 22-10-2026
+})
+
+# T-0120 (Codex-toets 2): de voornaam van nog een collega, alleen voor de testbestanden van de mail. Andere testbestanden
+# (van andere groepen) dragen die naam nog als proefgegeven; zijn die schoon, dan gaat deze hash naar VERBODEN.
+MAIL_BESTANDEN = ("mijnagents-runner/tests/test_postvak.py", "mijnagents-runner/mailregels/test_sorteren.py",
+                  "mijnagents/test_mail.py", "mijnagents/test_wachten_dag.py", "dagboek/test_dagboek.py")
+MAIL_VERBODEN = frozenset({
+    "62332e46621ef8cab1d6038f6a498e8e7e825502782a8576db305a1a57638237",
 })
 
 WOORD = re.compile(r"(?:[^\W_]|[@.\-])+")
@@ -136,6 +149,13 @@ def test_de_grendel_vangt_een_woord_in_elke_vorm():
     for tekst in ("Proefpersoon Zeta", "zetaproefje", "niemand@kantoor.test", "iemand@kantoor.testen"):
         assert not treffers(tekst, proef), tekst
     assert treffers("eerste regel\ntweede met Zetaproef", proef) == [(2, _hash("zetaproef")[:12])]
+
+
+def test_geen_collega_in_de_mailtests():
+    assert set(MAIL_BESTANDEN) <= set(BESTANDEN) and len(MAIL_VERBODEN) == 1
+    gevonden = [(p, nr, h) for p in MAIL_BESTANDEN
+                for nr, h in treffers(open(os.path.join(REPO, p), encoding="utf-8").read(), VERBODEN | MAIL_VERBODEN)]
+    assert not gevonden, f"echte namen in de mailtests (bestand, regel, begin van de hash): {gevonden}"
 
 
 def test_geen_echte_namen_in_de_testbestanden():

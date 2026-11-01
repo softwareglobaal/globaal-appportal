@@ -60,12 +60,17 @@ TRANSACTIE = re.compile(r"order|bestel|factu|invoice|payment|betaal|betaling|ver
                         r"wachtwoord|password|ticket|offerte|quote|re:|fw:", re.I)
 
 
+# Een aanvraag (offerte, plaatsbezoek, barsten en scheuren) gaat nooit als oplichting naar Opgeruimd door de naam alleen;
+# dezelfde toets gebruiken de mailwachten (postvak.nepmail) en het uitschrijven (T-0120, Codex-toets 2).
+AANVRAAG_ONDERWERP = re.compile(r"aanvraag|barst|scheur|plaatsbezoek", re.I)
+
+
 def _plat(s):
     return unicodedata.normalize("NFKC", s or "").lower()
 
 
 def laad_regels(pad):
-    exact, domein, suffix, oplichting, eigen = {}, {}, [], [], []
+    exact, domein, suffix, oplichting, eigen, lijstdienst = {}, {}, [], [], [], []
     archief = {"dagen": None, "map": None}
     sectie = None
     for regel in open(pad, encoding="utf-8"):
@@ -77,8 +82,9 @@ def laad_regels(pad):
             continue
         if sectie == "oplichting":
             naam, _, domeinen = regel.partition("=")
-            if naam.strip().lower() == "eigen":
-                eigen.extend(d.strip().lower() for d in domeinen.split(",") if d.strip())
+            if naam.strip().lower() in ("eigen", "lijstdienst"):
+                (eigen if naam.strip().lower() == "eigen" else lijstdienst).extend(
+                    d.strip().lower() for d in domeinen.split(",") if d.strip())
                 continue
             oplichting.append((_plat(naam.strip()), [d.strip().lower() for d in domeinen.split(",") if d.strip()]))
         elif sectie == "archief":
@@ -93,7 +99,8 @@ def laad_regels(pad):
             else:
                 exact[r] = sectie
     archief["dagen"] = int(archief["dagen"]) if archief.get("dagen") else None
-    return {"exact": exact, "domein": domein, "suffix": suffix, "oplichting": oplichting, "eigen": eigen, "archief": archief}
+    return {"exact": exact, "domein": domein, "suffix": suffix, "oplichting": oplichting, "eigen": eigen,
+            "lijstdienst": lijstdienst, "archief": archief}
 
 
 def is_oplichting(naam, adres, regels):
@@ -102,6 +109,8 @@ def is_oplichting(naam, adres, regels):
     dom = adres_p.split("@")[-1]
     if any(dom == d or dom.endswith("." + d) for d in regels["eigen"]):
         return False  # eigen domeinen zijn nooit oplichting
+    if any(dom == d or dom.endswith("." + d) for d in regels.get("lijstdienst", [])):
+        return False  # een mailinglijst (Google Groups) stuurt door wat een lid schreef, onder zijn naam
     for merk, echt in regels["oplichting"]:
         # aan het begin van een woord; korte merken (ING, CM, KBO) ook aan het einde, anders raakt "ING" Kingsberry
         pat = r"(?<![a-z0-9])" + re.escape(merk) + (r"(?![a-z0-9])" if len(merk) <= 3 else "")
@@ -116,7 +125,7 @@ def bestemming(rij, regels, nieuwe_reclame, archief_grens):
     adres, naam = rij["addr"], rij["name"]
     if not adres or "@" not in adres:
         return OPGERUIMD, "geen afzender"
-    if is_oplichting(naam, adres, regels):
+    if is_oplichting(naam, adres, regels) and not AANVRAAG_ONDERWERP.search(rij.get("subject") or ""):
         return OPGERUIMD, "oplichting"
     if adres in regels["exact"]:
         return regels["exact"][adres], "adres"
@@ -126,7 +135,8 @@ def bestemming(rij, regels, nieuwe_reclame, archief_grens):
     for suf, m in regels["suffix"]:
         if adres.endswith(suf) or adres.endswith("@" + suf[1:]):
             return m, "domein"
-    if nieuwe_reclame and rij["unsub"] and not TRANSACTIE.search(rij["subject"] or ""):
+    if (nieuwe_reclame and rij["unsub"] and not TRANSACTIE.search(rij["subject"] or "")
+            and not AANVRAAG_ONDERWERP.search(rij["subject"] or "")):  # een aanvraag is nooit reclame (Codex-toets 3)
         return OPGERUIMD, "nieuwe reclame"
     if archief_grens and rij["datum"] and rij["datum"] < archief_grens:
         return regels["archief"]["map"].replace("{jaar}", str(rij["datum"].year)), "archief"

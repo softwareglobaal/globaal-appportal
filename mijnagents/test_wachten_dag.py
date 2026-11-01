@@ -13,6 +13,9 @@
 - W12 (T-0120 DB-8): een Zoom- of Plaud-rij met prive=1 en afdeling onbekend of leeg is ook privé (privegrens.py):
   alleen 'privégesprek, N min'. Tot 01-11-2026 toonde de pagina daar naam en onderwerp;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
+- W12 (MAIL-6, T-0120): een mail toont of ze opgevolgd is en waar ze heen ging (Opgeruimd, een sorteermap, de map
+  waarin ze gelezen werd); een mailwacht die rondes deed zonder leesprobleem en 0 mails kreeg, zegt 'postvak
+  gelezen, 0 nieuwe mails'; met een leesprobleem in het werkverslag blijft het 'draaide, niets binnen'.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -72,6 +75,17 @@ con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,af
             "'zoom','x')")
 con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,prive,bron,ts) "
             "VALUES('plaud:w12','2026-10-29','17:00',8,'Verborgen Persoon','Verborgen onderwerp',1,'plaud','x')")
+for uniek, wacht, soort, opv, besluit, mp, naar, opg in (
+        ("m2", "mail-hinv", "hoog", "open", "", "INBOX", "INBOX.Opgeruimd", 1),
+        ("m3", "mail-hinv", "melding", "geen", "", "INBOX.Zoom", "", 0),
+        ("m4", "mail-hinv", "midden", "open", "afgehandeld", "INBOX", "INBOX.Bank en verzekering", 0),
+        ("m5", "mail-hinv", "midden", "beantwoord", "", "INBOX", "", 0)):
+    con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,opvolging,besluit,"
+                "naar,opgeruimd) VALUES(?,?,'proef@h-invest.be',?,'2026-10-31T09:00:00+00:00','2026-10-31','p@voorbeeld.test',"
+                "'Proef',?,?,'x',?,?,?,?)", (uniek, wacht, mp, f"Onderwerp {uniek}", soort, opv, besluit, naar, opg))
+for wacht, stap in (("mail-melo", "ronde"), ("mail-info-harc", "ronde"), ("mail-info-harc", "bron")):
+    con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES(?,'dag 2026-10-31',?,'laatste 24 u: hoog 0',"
+                "'2026-10-31T12:00:00+00:00')", (wacht, stap))
 con.commit()
 con.close()
 
@@ -119,6 +133,17 @@ for wacht in ("zoom-wacht", "plaud-wacht"):
           len(it) == 1 and it[0]["wie"] == "privégesprek" and it[0]["wat"].endswith(" min")
           and "Verborgen" not in str(it), it)
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
+
+hi = {x["wat"].split(" · ")[0]: x["wat"] for x in w["mail-hinv"]["items"]}
+check("W12 opgevolgd en waarheen", "op te volgen" in hi["Onderwerp m2"] and "naar Opgeruimd" in hi["Onderwerp m2"], hi)
+check("W12 gelezen in een andere map", hi["Onderwerp m3"].endswith("in Zoom") and "op te volgen" not in hi["Onderwerp m3"], hi)
+check("W12 besluit van Mehdi gaat voor", "afgehandeld" in hi["Onderwerp m4"] and "op te volgen" not in hi["Onderwerp m4"]
+      and "naar Bank en verzekering" in hi["Onderwerp m4"], hi)
+check("W12 beantwoord", "beantwoord" in hi["Onderwerp m5"], hi)
+check("W12 postvak gelezen, 0 nieuwe", w["mail-melo"]["oordeel"] == "postvak gelezen, 0 nieuwe mails"
+      and w["mail-melo"]["kleur"] == "oranje", w["mail-melo"]["oordeel"])
+check("W12 leesprobleem: geen bewering", w["mail-info-harc"]["oordeel"] == "draaide, niets binnen", w["mail-info-harc"]["oordeel"])
+check("W12 andere wachten ongewijzigd", w["belwacht"]["oordeel"] == "draaide, niets binnen")
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

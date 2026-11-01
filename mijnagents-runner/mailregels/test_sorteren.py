@@ -104,7 +104,12 @@ def test_oplichting():
     assert not sorteren.is_oplichting("KBC Bank & Verzekering", "info-kbc@mail-kbc.be", r)
     assert not sorteren.is_oplichting("Kingsberry", "ellen@kingsberry.be", r), "ING mag Kingsberry niet raken"
     assert not sorteren.is_oplichting("Microsoft Outlook", "info@h-invest.be", r), "eigen domein is nooit oplichting"
-    assert not sorteren.is_oplichting("Shaniel (via Google Drive)", "x@gmail.com", r)
+    assert not sorteren.is_oplichting("Proefcollega (via Google Drive)", "x@gmail.com", r)
+    # T-0120: een aanvraag gaat nooit als oplichting naar Opgeruimd; een Google-groep is nooit oplichting
+    assert sorteren.bestemming(rij("proefklant@gmail.com", "ISABEL proef", "Aanvraag plaatsbezoek scheuren"), r, False, None) \
+        == (None, "blijft")
+    assert sorteren.bestemming(rij("x@gmail.com", "ISABEL", "Uw certificaat verloopt"), r, False, None)[1] == "oplichting"
+    assert not sorteren.is_oplichting("'KBC nieuws' via Groep", "groep@googlegroups.com", r)
     print("  ok  oplichting: merknaam op vreemd domein, homoglyfen, geen valse treffers")
 
 

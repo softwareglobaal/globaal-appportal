@@ -941,6 +941,18 @@ def _werkdagen_sinds(ts, vandaag=None):
     return n
 
 
+def _mail_bijlagen(r):
+    """(aantal, json) uit een rij van een wacht (VOL-9): alleen soort en grootte, nooit een bestandsnaam of iets anders;
+    (None, None) als de wacht de bijlagen niet las."""
+    n, info = r.get("bijlagen"), r.get("bijlagen_info")
+    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        return None, None
+    lijst = [{"soort": re.sub(r"[^a-z0-9-]", "", str(x.get("soort") or "").lower())[:12] or "bestand",
+              "bytes": x["bytes"] if isinstance(x.get("bytes"), int) and x["bytes"] >= 0 else 0}
+             for x in (info if isinstance(info, list) else []) if isinstance(x, dict)][:20]
+    return min(n, 999), json.dumps(lijst)
+
+
 def _mail_tabellen(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS mailbericht (
@@ -981,7 +993,9 @@ def _mail_tabellen(conn):
                      ("dringend", "INTEGER DEFAULT 0"), ("besluit", "TEXT DEFAULT ''"), ("besluit_door", "TEXT DEFAULT ''"),
                      ("besluit_ts", "TEXT DEFAULT ''"), ("auto_opruimen", "TEXT DEFAULT ''"), ("terug", "INTEGER DEFAULT 0"),
              ("klaarzet_id", "INTEGER"),
-             ("gezien", "TEXT DEFAULT ''"))   # wanneer het bord het bericht voor het eerst kreeg (20-10-2026, /api/mail/stand)
+             ("gezien", "TEXT DEFAULT ''"),   # wanneer het bord het bericht voor het eerst kreeg (20-10-2026, /api/mail/stand)
+             # VOL-9 (T-0120): het aantal bijlagen en per bijlage soort en grootte (JSON); NULL is onbekend, nooit nul
+             ("bijlagen", "INTEGER"), ("bijlagen_info", "TEXT"))
     if any(k not in kol for k, _ in nieuw):
         # Twee gunicorn-werkers kunnen dit tegelijk zien: onder een slot, en daarna de kolommen opnieuw lezen
         # (resultaattoets 19-10-2026, C4).
@@ -1101,14 +1115,18 @@ def api_mail():
                 antw = [vorig["antwoord_door"], vorig["antwoord_ts"], vorig["antwoord_naar"], vorig["stap"]]
         conn.execute(
             "INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,domein,onderwerp,soort,waarom,mailinglijst,"
-            "beantwoord,ts,message_id,opvolging,antwoord_door,antwoord_ts,antwoord_naar,stap,dringend,auto_opruimen,gezien) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET soort=excluded.soort, "
+            "beantwoord,ts,message_id,opvolging,antwoord_door,antwoord_ts,antwoord_naar,stap,dringend,auto_opruimen,gezien,"
+            "bijlagen,bijlagen_info) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(uniek) DO UPDATE SET soort=excluded.soort, "
             "waarom=excluded.waarom, beantwoord=excluded.beantwoord, mailinglijst=excluded.mailinglijst, "
             "van_naam=excluded.van_naam, map=excluded.map, ts=excluded.ts, "
             "message_id=CASE WHEN excluded.message_id<>'' THEN excluded.message_id ELSE mailbericht.message_id END, "
             "opvolging=COALESCE(excluded.opvolging, mailbericht.opvolging), "
             "antwoord_door=excluded.antwoord_door, antwoord_ts=excluded.antwoord_ts, antwoord_naar=excluded.antwoord_naar, "
             "stap=excluded.stap, dringend=excluded.dringend, "
+            # een ronde die de bijlagen niet las (oudere mail, hotmail, een leesfout), laat staan wat er stond (VOL-9)
+            "bijlagen=COALESCE(excluded.bijlagen, mailbericht.bijlagen), "
+            "bijlagen_info=COALESCE(excluded.bijlagen_info, mailbericht.bijlagen_info), "
             # verplaatst en teruggezet zijn gebeurd; een ronde die het bericht later nog ziet, verandert dat niet
             "auto_opruimen=CASE WHEN mailbericht.auto_opruimen IN ('verplaatst', 'teruggezet') AND excluded.auto_opruimen<>'verplaatst' "
             "THEN mailbericht.auto_opruimen ELSE excluded.auto_opruimen END",
@@ -1116,7 +1134,8 @@ def api_mail():
              r["datum"][:40], dag, van, (r.get("van_naam") or "")[:120], van.rsplit("@", 1)[-1] if "@" in van else "",
              (r.get("onderwerp") or "")[:300], soort, (r.get("waarom") or "")[:200],
              1 if lijst else 0, 1 if (r.get("beantwoord") or opv in ("beantwoord", "doorgezet")) else 0, nu(),
-             (r.get("message_id") or "")[:250], opv, *antw, 1 if r.get("dringend") else 0, (r.get("auto_opruimen") or "")[:20], nu()))
+             (r.get("message_id") or "")[:250], opv, *antw, 1 if r.get("dringend") else 0, (r.get("auto_opruimen") or "")[:20], nu(),
+             *_mail_bijlagen(r)))
         n += 1
     for u in p.get("opgeruimd") or []:
         conn.execute("UPDATE mailbericht SET opgeruimd=1 WHERE uniek=?", (str(u)[:250],))

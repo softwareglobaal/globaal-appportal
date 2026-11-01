@@ -104,6 +104,8 @@ check("D12 bronnen: alle vijftien met de stand van de dag", r.status_code == 200
 check("D12 bronnen zonder groep 403", C.get("/bronnen", headers={"X-authentik-groups": "x"}).status_code == 403)
 check("D12 overzicht wijst naar bronnen", "alle bronnen" in C.get("/", headers=MET).get_data(as_text=True))
 check("D07 geen gedachtestreepje (bronnen)", "—" not in html and "–" not in html)
+check("D12 bronnen: postvakken zonder wacht als niet bewaakt (VOL-10)", "niet bewaakt: light@ en standaard@" in html
+      and "boekhouding@" in html)
 md = open(os.path.join(PROEF, "2026-10-22.md"), encoding="utf-8").read().replace("\n## Over deze vaststelling",
     "\n## Eigen werk en gezondheid\n\n- Wispr Flow: 19 dictaten, 2599 woorden, 15 min ingesproken\n"
     "- websites: 4 bezoeken op 3 sites; meest: monday.com (2)\n"
@@ -216,6 +218,19 @@ check("D14 wacht, bord onbereikbaar: zin", "Het bord antwoordt niet" in html)
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 geen datum 404", C.get("/wachten?dag=gisteren", headers=MET).status_code == 404)
 check("D07 geen gedachtestreepje (wachten)", "—" not in html and "–" not in html)
+# MAIL-6 (T-0120): een mailwacht die het postvak las en niets kreeg, zegt dat; een andere lege wacht blijft "niets binnengekomen"
+GELEZEN = json.loads(json.dumps(WACHTEN))
+GELEZEN["vakken"][0]["wachten"].append({"naam": "mail-melo", "label": "De Mailwacht Proef", "kleur": "oranje",
+                                        "oordeel": "postvak gelezen, 0 nieuwe mails", "aantal": 0, "rondes": 14, "gedekt": None,
+                                        "leesfout": "", "logfout": "", "noden": [], "status": None, "fouten": [], "items": [],
+                                        "log": [{"tijd": "21:05", "stap": "ronde", "tekst": "laatste 24 u: hoog 0", "fout": False}]})
+A._cache.clear()
+A.haal_wachten = lambda dag: json.loads(json.dumps(GELEZEN))
+html = C.get("/wachten/mail-melo?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D15 mailwacht: postvak gelezen, 0 nieuwe mails", "Postvak gelezen, 0 nieuwe mails op deze dag." in html
+      and "Niets binnengekomen" not in html, html[-2500:])
+html = C.get("/wachten", headers=MET).get_data(as_text=True)
+check("D15 tegel zegt postvak gelezen", "postvak gelezen, 0 nieuwe mails" in html)
 
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)

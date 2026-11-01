@@ -5,13 +5,14 @@
 # serverroute van de hotmail-koppen (driehoeksoverleg 3-0): test_hotmail_server.py.
 # Sinds 01-11-2026: een concept als antwoord op een lange keten (gevouwen References-kop): test_imapbron_koppen.py.
 # Sinds 01-11-2026 ook de doorstuuragent (test_agent.py), die sinds de meerdere regels van 08-09-2026 stuk was en nergens draaide.
+# Sinds VOL-10 (T-0120) ook dagboek/app.py: test_postvak.py houdt de postvakken zonder wacht gelijk met /bronnen.
 name: mail-grendels
 
 on:
   push:
     paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
-            "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
+            "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py", "dagboek/app.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", "post/test_imapbron_koppen.py",
             "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
@@ -19,7 +20,7 @@ on:
   pull_request:
     paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
-            "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
+            "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py", "dagboek/app.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
             "post/imapbron.py", "post/test_imapbron_koppen.py",
             "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
@@ -36,6 +37,7 @@ jobs:
       - run: python3 -m pip install -r mijnagents/requirements.txt
       - run: python3 -m pip install PyYAML==6.0.2   # post/config.py, voor test_agent.py
       - run: python3 mijnagents-runner/tests/test_postvak.py
+      - run: python3 mijnagents-runner/tests/test_geen_echte_namen.py   # de mailtests staan erin sinds T-0120
       - run: python3 mijnagents-runner/tests/test_hotmail_server.py
       - run: python3 mijnagents-runner/mailregels/test_sorteren.py
       - run: cd mijnagents && python3 test_mail.py

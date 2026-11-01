@@ -392,9 +392,9 @@ c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<oud
 check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
       and "noden" in stand["wachten"]["mail-mch"])
 
-# --- delen met Angela en Shaniel (Mehdi, 20-10-2026; gekozen: kijken en mee afhandelen): de groep mail opent /mail en
+# --- delen met twee collega's (Mehdi, 20-10-2026; gekozen: kijken en mee afhandelen): de groep mail opent /mail en
 # klikt mee, met de eigen naam erbij; de rest van het bord blijft dicht
-MAILGROEP = {"X-authentik-groups": "mail", "X-authentik-username": "angela"}
+MAILGROEP = {"X-authentik-groups": "mail", "X-authentik-username": "proefcollega"}
 check("de groep mail ziet het maildashboard", c.get("/mail", headers=MAILGROEP).status_code == 200)
 r = c.get("/", headers=MAILGROEP)
 check("de groep mail ziet de rest van het bord niet: naar /mail", r.status_code == 302 and r.headers["Location"].endswith("/mail"),
@@ -411,12 +411,12 @@ c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<
 c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "weg"})
 _r = rij("mch@h-architects.be:<klant@x>")
 _regels = [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]]
-check("Helemaal weg: het punt is ruis, door wie klikte", (_r["besluit"], _r["besluit_door"]) == ("ruis", "angela"), _r)
+check("Helemaal weg: het punt is ruis, door wie klikte", (_r["besluit"], _r["besluit_door"]) == ("ruis", "proefcollega"), _r)
 check("Helemaal weg: de afzender staat op uitschrijven in dat postvak",
       ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") in _regels, _regels)
 _html = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
-check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helemaal weg door angela)",
-      "Teruggezet door angela" in _html and "Helemaal weg door angela" in _html)
+check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helemaal weg door proefcollega)",
+      "Teruggezet door proefcollega" in _html and "Helemaal weg door proefcollega" in _html)
 check("Op te volgen heeft de knop Helemaal weg", ">Helemaal weg</button>" in _html.split('id="opvolgen"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
@@ -438,9 +438,9 @@ check("Terugzetten na Helemaal weg haalt ook de regel weg",
       [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]])
 c.post("/mail/regel", headers=MAILGROEP, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "uitschrijven"})
 _g = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
-check("een klik op de afzender staat in de geschiedenis van zijn berichten", "afzender op Helemaal weg (uitschrijven en opruimen) door angela" in _g)
+check("een klik op de afzender staat in de geschiedenis van zijn berichten", "afzender op Helemaal weg (uitschrijven en opruimen) door proefcollega" in _g)
 _gesch = _g.split("Gewone vraag van een klant")[1].split("</details>")[0]
-check("de geschiedenis staat op tijd: binnengekomen eerst", _gesch.find("binnengekomen") < _gesch.find("door angela"), _gesch[:400])
+check("de geschiedenis staat op tijd: binnengekomen eerst", _gesch.find("binnengekomen") < _gesch.find("door proefcollega"), _gesch[:400])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
 check("Helemaal weg is terug te draaien bij Jouw regels",
@@ -452,6 +452,28 @@ check("het bord toont die knop niet aan anderen", 'href="/mail"' not in c.get("/
 check("werkdagen tellen het weekend niet (vrijdag tot maandag is een werkdag)",
       A._werkdagen_sinds("2026-09-25T10:00:00+02:00", date(2026, 9, 28)) == 1)
 check("een onleesbare datum geeft geen fout", A._werkdagen_sinds("", date(2026, 9, 28)) is None)
+
+# VOL-9 (T-0120): bijlagen alleen als metadata (aantal, soort, grootte), nooit de naam van het bestand. Een ronde die de
+# bijlagen niet las (None of zonder veld), laat staan wat er stond; onbekend blijft onbekend, nooit nul.
+import json  # noqa: E402
+b9 = bericht("<bijlage9@proef>", "midden", "klant@voorbeeld.test", onderwerp="Plannen", bijlagen=2,
+             bijlagen_info=[{"soort": "pdf", "bytes": 120000},
+                            {"soort": "dwg", "bytes": 300000, "naam": "Geheim proefplan.dwg"}, "rommel"])
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [b9]})
+x = rij(b9["uniek"])
+check("VOL-9 aantal en soort bewaard", x["bijlagen"] == 2 and json.loads(x["bijlagen_info"]) ==
+      [{"soort": "pdf", "bytes": 120000}, {"soort": "dwg", "bytes": 300000}], (x["bijlagen"], x["bijlagen_info"]))
+check("VOL-9 nooit een bestandsnaam", "Geheim" not in str(x["bijlagen_info"]) and "naam" not in str(x["bijlagen_info"]))
+zonder = {k: v for k, v in b9.items() if k not in ("bijlagen", "bijlagen_info")}
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [zonder]})
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [dict(b9, bijlagen=None, bijlagen_info=None)]})
+x = rij(b9["uniek"])
+check("VOL-9 een ronde zonder bijlagen laat ze staan", x["bijlagen"] == 2 and "pdf" in (x["bijlagen_info"] or ""), x["bijlagen"])
+b0 = bericht("<geen9@proef>", "melding", "info@voorbeeld.test", onderwerp="Zonder bijlage", bijlagen=0, bijlagen_info=[])
+bo = bericht("<onbekend9@proef>", "melding", "info@voorbeeld.test", onderwerp="Onbekend")
+c.post("/api/mail", headers=K, json={"wacht": "mail-mch", "rijen": [b0, bo]})
+check("VOL-9 nul is nul, onbekend is onbekend", rij(b0["uniek"])["bijlagen"] == 0 and rij(b0["uniek"])["bijlagen_info"] == "[]"
+      and rij(bo["uniek"])["bijlagen"] is None and rij(bo["uniek"])["bijlagen_info"] is None)
 
 print(f"{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

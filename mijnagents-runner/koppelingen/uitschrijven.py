@@ -26,6 +26,8 @@ Wanneer (ontwerptoets 19/20-10-2026, elke regel heeft een test in tests/test_pos
   - een keer per afzender en knop (C5): na een antwoord (aanvaard of geweigerd) nooit meer; een fout zonder antwoord,
     of een poging die stopte tussen POST en logboek, mag na 24 uur opnieuw, hoogstens drie keer (K5);
   - hoogstens per_ronde pogingen per wacht per ronde; geen doorverwijzing gevolgd; tijdslimiet 10 seconden.
+  - nooit uit een map die alleen gelezen wordt (mailwachten.json, 'alleen_lezen'; VOL-3, 01-11-2026).
+  - nooit bij nepmail (postvak.nepmail), ook niet na Helemaal weg (T-0120, MAIL-1).
 Resultaattoets 20-10-2026 (run 20261020-001828, 3-0 of 2-0-1), daarom ook:
   - de geslaagde handtekening is dezelfde die de knop dekt: domein, selector en het begin van b= uit Authentication-Results
     horen bij precies een DKIM-Signature, en geen enkel ander resultaat met die sleutel faalde (X1); Gmail schrijft
@@ -363,7 +365,8 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
             return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
         if regel in ("belangrijk", "houden"):
             return None, f"regel {regel} van Mehdi"
-        if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG):
+        if (ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG)
+                or postvak._sorteren().AANVRAAG_ONDERWERP.search(onderwerp)):  # ook "Aanvraag: barsten" (Codex-toets 2)
             return None, "antwoord, doorgestuurd of aanvraag"
         knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
         reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)
@@ -544,9 +547,16 @@ def koppen_lezen(mb, mappen, sinds):
 
 def mappen_voor(adres, mb, inst):
     """De gewone mappen van de wacht, plus de mappen waar de sortering reclame zet (mailwachten.json, uitschrijven.
-    extra_mappen; bij Gmail als label). Die lees ik alleen hiervoor, niet voor de opvolging (C1, G2, K3)."""
-    return list(dict.fromkeys(postvak.mappen_van(adres) + [postvak.gmailnaam(mb, m) if m.startswith("INBOX.") else m
-                                                          for m in inst["extra_mappen"]]))
+    extra_mappen; bij Gmail als label). Die lees ik alleen hiervoor, niet voor de opvolging (C1, G2, K3). Nooit een map
+    die alleen gelezen wordt (mailwachten.json, 'alleen_lezen': Zoom en bpost bij info@h-invest.be, VOL-3)."""
+    alleen = _alleen_lezen(adres, mb)
+    return [m for m in dict.fromkeys(postvak.mappen_van(adres) + [postvak.gmailnaam(mb, m) if m.startswith("INBOX.") else m
+                                                                 for m in inst["extra_mappen"]]) if m.lower() not in alleen]
+
+
+def _alleen_lezen(adres, mb):
+    """De mappen die alleen gelezen worden, in kleine letters, ook in de Gmail-vorm."""
+    return {x.lower() for m in postvak.alleen_lezen_van(adres) for x in (m, postvak.gmailnaam(mb, m))}
 
 
 def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=None):
@@ -564,13 +574,26 @@ def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=
         if not mb or mb.get("bron"):
             tel("postvak zonder uitschrijfkoppen (hotmail van de Mac)")
             continue
+        alleen = _alleen_lezen(adres, mb)
         berichten = lezen(mb, mappen_voor(adres, mb, inst), sinds)
+        opl = postvak.oplichting_regels(adres)  # nepmail is verdacht en wordt nooit uitgeschreven (MAIL-1)
+        if opl is None:  # zonder de lijst herken ik nepmail niet: dan deze ronde niemand (Codex-toets 3)
+            tel("oplichtingslijst niet leesbaar: niemand uitschrijven")
+            continue
         per_van = {}
         for b in berichten:
             per_van.setdefault(b["van"], []).append(b)
         for b in berichten:
+            if (b.get("map") or "").lower() in alleen:
+                tel("map die alleen gelezen wordt")
+                continue
             regel = postvak.regel_voor(regels, adres, b["van"])
-            soort, _waarom = postvak.trieer(b, eigen, bekend, regel)
+            soort, _waarom = postvak.trieer(b, eigen, bekend, regel, opl)
+            # Ook bij Helemaal weg, ruis of opruimen (die gaan in trieer voor de nepmailtoets): de knop van nepmail
+            # bevestigt het adres bij de afzender; opruimen gebeurt wel (Codex-toets 1, T-0120)
+            if postvak.nepmail(b, eigen, bekend, opl):
+                tel("lijkt nepmail: nooit uitschrijven")
+                continue
             url, reden = beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerend(per_van[b["van"]], nu))
             if not url:
                 tel(reden)
