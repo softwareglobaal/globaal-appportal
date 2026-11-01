@@ -42,7 +42,10 @@ nooit tekst. Ik lees alleen wat het wegschreef, en wis het na het lezen.
 5. Per dag die voorbij was toen de kopie gemaakt werd, die zelf berichten of
    oproepen toont en waarna de databank nog iets nieuws kreeg, een dekkingsrij. Zo
    weet De Dagbundelaar welke dagen ik echt gelezen heb. Een dag zonder dekking is
-   onbekend, nooit nul.
+   onbekend, nooit nul. Begint de oproepgeschiedenis op de Mac later dan de kopie
+   (62 dagen), dan krijgt een dag tot en met die van de oudste oproep geen
+   dekkingsrij: de berichten staan er, de oproepen van die dag zijn onbekend
+   (WA-2, 01-11-2026).
 6. Alle rijen zijn privé. Ik lees ze meteen terug op het bord. Een rij die de
    databank niet meer toont, bijvoorbeeld een gewist gesprek, markeer ik als
    vervallen; komt ze terug, dan telt ze weer.

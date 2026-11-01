@@ -45,6 +45,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 APPLE = datetime(2001, 1, 1, tzinfo=timezone.utc)      # Core Data telt seconden sinds 1-1-2001 (UTC)
 VENSTER = 14                                            # zoals de nachtronde van De Dagbundelaar
 INHAAL = 60                                             # na een lange slaap leest een ronde tot zoveel dagen terug (P7)
+KOPIE_DAGEN = 62                                        # het venster van de helper (macgesprekken_kopie.c, VENSTER_DAGEN)
 KOPIE = Path.home() / "Library/Caches/mijnagents/mac-gesprekken"
 STAAT = Path.home() / "Library/Application Support/mijnagents"
 HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon",
@@ -304,9 +305,10 @@ def whatsapp_rijen(pad, dagenlijst):
     for gebeurtenis, jid in lees(pad, SQL_WA_DEELNEMERS):
         if jid:
             deelnemers[gebeurtenis].append(str(jid))
-    samen, begin_van = {}, {}
+    samen, begin_van, oudste = {}, {}, None
     for pk, ident, t, duur, inkomend, gemist, video, beller, groep in lees(pad, SQL_WA_OPROEPEN):
         moment = tijd(t)
+        oudste = moment if oudste is None else min(oudste, moment)     # WA-2: waar de oproepgeschiedenis begint
         if van <= apple(moment) < tot:
             aanwezig.add(dag_van(moment))
         ident = re.sub(r"[^A-Za-z0-9-]", "", str(ident or "")) or f"pk{pk}"
@@ -341,7 +343,7 @@ def whatsapp_rijen(pad, dagenlijst):
             thema += ", gemist" if x["inkomend"] == 1 else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek"
         rijen.append(_rij(f"whatsapp-oproep:{sleutel}", dag_van(x["begin"]), start_van(x["begin"]), minuten(x["duur"]),
                           persoon, thema, "whatsapp", "" if x["duur"] > 0 else GEMIST))
-    return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig}
+    return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "oudste_oproep": oudste}
 
 
 def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
@@ -430,13 +432,27 @@ def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig}
 
 
-def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig):
+def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig, niet_tot=None):
     """F5 (contract met dagbundelaar.kanaal_van_dag) en Codex P4: een dag is gelezen als hij voorbij was toen de kopie
     gemaakt werd, de bron die dag zelf gegevens toont, en daarna nog iets nieuws kreeg. Een dag zonder enig bericht of
-    enige oproep blijft dus onbekend, nooit nul: een Mac die sliep of een WhatsApp die niet draaide, toont niets."""
+    enige oproep blijft dus onbekend, nooit nul: een Mac die sliep of een WhatsApp die niet draaide, toont niets.
+    niet_tot (WA-2): een dag tot en met die dag is niet gelezen, want een deel van de bron begint pas dan."""
     vandaag = dag_van(gekopieerd)
     return [_rij(f"dekking:{kanaal}:{d}", d, "", 0, "", "gelezen", "dekking", DEKKING) for d in dagenlijst
-            if d < vandaag and d in aanwezig and nieuwste is not None and nieuwste >= daggrens(volgende(d))]
+            if d < vandaag and d in aanwezig and nieuwste is not None and nieuwste >= daggrens(volgende(d))
+            and (niet_tot is None or d > niet_tot)]
+
+
+def oproepen_vanaf(oudste, gekopieerd):
+    """WA-2: de dag waarop de oproepgeschiedenis van WhatsApp op de Mac begint, of None als ze het hele venster van de
+    helper (KOPIE_DAGEN) dekt. De berichten gaan er verder terug dan de oproepen (gemeten 01-11-2026: oproepen pas vanaf
+    14-10 17:23): een dag tot en met die van de oudste oproep zou anders 'gelezen, 0 oproepen' heten, een valse nul.
+    Zonder een enkele oproep in de kopie is het begin onbekend: dan is geen dag voor vandaag gedekt."""
+    if oudste is None:
+        return dag_van(gekopieerd)
+    if oudste - (gekopieerd - timedelta(days=KOPIE_DAGEN)) <= timedelta(days=1):
+        return None
+    return dag_van(oudste)
 
 
 def samenvatting(rijen, dag):

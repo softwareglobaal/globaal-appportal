@@ -42,7 +42,8 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
         finally:
             M.wis(kopie)
         ag.prive(M.maskerwoorden(rijen))
-        rijen += M.dekking(KANAAL, dagen, gekopieerd, info["nieuwste"], info["aanwezig"])
+        oproepen_vanaf = M.oproepen_vanaf(info["oudste_oproep"], gekopieerd)       # WA-2: geen valse nul oproepen
+        rijen += M.dekking(KANAAL, dagen, gekopieerd, info["nieuwste"], info["aanwezig"], oproepen_vanaf)
         vervallen = M.schrijf_en_lees_terug(KANAAL, rijen, dagen[0], dagen[-1], bord.call, terug)
     except M.MacFout as e:
         r.nood(e.nood, wie=e.wie)
@@ -60,8 +61,10 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
     r.detail = (f"privé; {len(dagen)} dagen gelezen ({dagen[0]} tot {dagen[-1]}); nieuwste bericht "
                 f"{M.uur_van(nieuwste) if nieuwste else 'geen'} op {M.dag_van(nieuwste) if nieuwste else '-'}; "
                 f"gisteren {s['berichten']} berichten in {s['gesprekken']} gesprekken, {s['oproepen']} oproepen, "
-                f"{s['minuten']} min; dekking tot {max(gedekt) if gedekt else 'geen'}; {len(rijen)} rijen, "
-                f"{vervallen} vervallen; ronde-id:{ronde_id}")
+                f"{s['minuten']} min; dekking tot {max(gedekt) if gedekt else 'geen'}"
+                + (" (geen oproep op de Mac: oproepen onbekend)" if info["oudste_oproep"] is None else
+                   f" (oproepen op de Mac pas vanaf {oproepen_vanaf})" if oproepen_vanaf and oproepen_vanaf >= dagen[0] else "")
+                + f"; {len(rijen)} rijen, {vervallen} vervallen; ronde-id:{ronde_id}")
     return max(gedekt) if gedekt else None
 
 
@@ -74,7 +77,7 @@ def droog():
     nu = datetime.now(timezone.utc)
     dagen = M.dagen(nu)
     rijen, info = M.whatsapp_rijen(kopie, dagen)
-    rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"])
+    rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"], M.oproepen_vanaf(info["oudste_oproep"], nu))
     for dag in dagen:
         s = M.samenvatting(rijen, dag)
         gedekt = any(x["uniek"] == f"dekking:{KANAAL}:{dag}" for x in rijen)
