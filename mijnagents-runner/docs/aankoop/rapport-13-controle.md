@@ -1,0 +1,5 @@
+**klaar met kanttekeningen.** Ja, dit mag live als proef. Draai de MOVA-vraag één keer; Mehdi controleert het voorstel via de bronlink.  
+Voor Claude en Shaniel: **1. Hoog, opgelost:** mijn tegenproef geeft met handleidingbewijs `ja`, maar met een derde gelezen pagina voor dezelfde modelcode en “basisstation 50 Hz” `onbekend` en geen beste aanbod. **2. Hoog, geen nieuwe fout:** de nieuwe regel kan `ja` alleen afwaarderen. **Laag:** een vergelijkingspagina kan ook 50 Hz van een ander model meetellen; toets later per modelregel. Zie [aanbod.py](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:478).  
+Gedaan: alleen gelezen; niets gewijzigd of gepusht.  
+Nagekeken: diff, eigen tegenproeven en 182 geslaagde tests.  
+Open: kijk na de proef of de filter geldige aanbiedingen weglaat.
