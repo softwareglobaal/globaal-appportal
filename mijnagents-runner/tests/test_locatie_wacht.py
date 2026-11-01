@@ -23,6 +23,10 @@ sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import locatie_wacht as L  # noqa: E402
 
+# Nooit de echte datamap van de wacht: de uurcontrole onthoudt daar haar dag (LOC-6), het dagboek zijn stand.
+L.MAP = tempfile.mkdtemp()
+L.STAND = os.path.join(L.MAP, "stand.json")
+
 WERF = (50.7000, 4.6000)
 ELDERS = (50.7300, 4.6400)
 BRUSSEL = ZoneInfo("Europe/Brussels")
@@ -391,6 +395,36 @@ class Bord:
 
     def log_verstuur(self):
         pass
+
+
+class LogBord(Bord):
+    def __init__(self):
+        super().__init__()
+        self.logs = []
+
+    def log(self, onderwerp, stap, tekst, detail=""):
+        self.logs.append((onderwerp, stap, tekst))
+
+
+def test_de_eerste_geslaagde_controle_van_de_dag_laat_een_bronregel():
+    """LOC-6 (01-11-2026): bij goed nieuws schreef de uurcontrole niets en zei het werkverslag van vandaag "geen
+    ronde". Nu een bronregel bij de eerste geslaagde controle van de dag, niet elk uur. De uren zijn die van de
+    werkwijze (07 tot 22): de cron raakt beide UTC-uren, de klokgrendel in controle() laat 06 en 23 vallen."""
+    echt = {k: getattr(L, k) for k in ("ag", "nu", "haal", "taak_melden", "MAP")}
+    L.ag, L.taak_melden, L.MAP = LogBord(), (lambda *a, **k: None), tempfile.mkdtemp()
+    L.haal = lambda pad: {"bronnen": [{"status": "actief", "label": "Tracker in de auto", "toestand": "geparkeerd"}],
+                          "alarmen": [], "taken": []}
+    try:
+        for d, u in ((5, 6), (5, 7), (5, 8), (5, 22), (5, 23), (6, 7)):
+            L.nu = lambda d=d, u=u: datetime(2026, 10, d, u, 5, tzinfo=BRUSSEL)
+            L.controle()
+        assert [h[0] for h in L.ag.hart] == ["waakt"] * 4, L.ag.hart
+        bron = [x for x in L.ag.logs if x[1] == "bron"]
+        assert [x[0] for x in bron] == ["controle 2026-10-05", "controle 2026-10-06"], L.ag.logs
+        assert "Tracker in de auto: geparkeerd" in bron[0][2], bron
+    finally:
+        for k, v in echt.items():
+            setattr(L, k, v)
 
 
 def test_geparkeerd_geeft_geen_alarm_en_de_telefoon_nooit():

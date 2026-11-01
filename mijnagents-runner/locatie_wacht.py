@@ -23,7 +23,7 @@ Elke avond om 21:30 Belgische tijd (cron met --om 21:30, de klokgrendel) of met 
   3. klaarzetten voor Mehdi (nooit voor een afdeling), werkverslag op het bord.
 Elk uur van 07 tot 22 (--controle): de bronstatus. Alarm alleen als de tracker wegvalt
 zonder 'motor uit'; geparkeerd staan is geen storing; de telefoon en de draagbare tracker
-geven nooit alarm.
+geven nooit alarm. De eerste geslaagde controle van de dag laat een bronregel in het werkverslag.
 Met --droog: het dagboek samenstellen en tonen, zonder weg te schrijven of het bord te raken.
 Leest alleen. Verwijdert niets uit het logboek.
 """
@@ -560,6 +560,28 @@ def controle():
     else:
         ag.hartslag("waakt", taak="tracker in het oog", detail=stand)
         taak_melden("controle", True, stand)
+        # LOC-6: een bronregel bij de eerste geslaagde controle van de dag; zonder die regel zei het werkverslag van
+        # vandaag "geen ronde". Niet elk uur: dat is ruis.
+        if eerste_controle_van(dag):
+            ag.log(f"controle {dag}", "bron", f"uurcontrole gelukt: {stand}")
+            ag.log_verstuur()
+
+
+def eerste_controle_van(dag):
+    """Is dit de eerste geslaagde controle van deze dag? Onthouden in MAP/.controle: een bestand met een punt gaat niet
+    mee naar Dropbox privé (dropbox_prive.spiegel_map). Kan het niet onthouden, dan liever een regel te veel."""
+    pad = os.path.join(MAP, ".controle")
+    try:
+        if open(pad, encoding="utf-8").read().strip() == dag:
+            return False
+    except OSError:
+        pass
+    try:
+        os.makedirs(MAP, exist_ok=True)
+        open(pad, "w", encoding="utf-8").write(dag + "\n")
+    except OSError:
+        pass
+    return True
 
 
 def main():
