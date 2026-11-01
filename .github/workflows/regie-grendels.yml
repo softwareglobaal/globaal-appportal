@@ -56,6 +56,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_eigen_werk_gezondheid.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
       - run: python3 mijnagents-runner/tests/test_weekoverzicht.py
+      - run: python3 mijnagents-runner/tests/test_archivaris_actiepunten.py
       - run: python3 mijnagents-runner/tests/test_keten.py
       - run: python3 mijnagents-runner/tests/test_regisseur.py
       - run: python3 mijnagents-runner/tests/test_bode_regie.py

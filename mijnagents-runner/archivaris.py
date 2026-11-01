@@ -198,14 +198,15 @@ def weekoverzicht(week):
         a = d.get("archivaris")
         if not a or a.get("week") != week:
             continue
-        rijen.append((a["datum"], a["start"], os.path.basename(os.path.dirname(gj)), a))
+        # T-0095: een oud record zonder zekerheid (of label) gaf KeyError en liet 101 rondes uitvallen; lezen met .get
+        rijen.append((a.get("datum", ""), a.get("start", ""), os.path.basename(os.path.dirname(gj)), a))
     rijen.sort()
     regels = [f"# Labels {week}: gesprekken volgens De Archivaris", "",
               "Label op inhoud, getoetst aan agenda en locatie. Correcties: werkwijze van De Archivaris op het bord, sectie Correcties van Mehdi.", "",
               "| datum | uur | map | label | afdeling onderwerp | wie, in welke rol | zekerheid | agenda | doelmap (nog niet actief) |", "|---|---|---|---|---|---|---|---|---|"]
     for datum, start, naam, a in rijen:
-        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a['label']}** | {a.get('afdeling_onderwerp', '')} | {a.get('deelnemers_rol', '')[:70]} | {a['zekerheid']} | {a.get('agenda_toets', '')[:50]} | {a.get('doelmap', '')} |")
-    tel = Counter(a["label"] for *_, a in rijen)
+        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a.get('label', '')}** | {a.get('afdeling_onderwerp', '')} | {a.get('deelnemers_rol', '')[:70]} | {a.get('zekerheid', '')} | {a.get('agenda_toets', '')[:50]} | {a.get('doelmap', '')} |")
+    tel = Counter(a.get("label", "") for *_, a in rijen)
     tel_afd = Counter(a.get("afdeling_onderwerp", "") for *_, a in rijen)
     regels += ["", "## Telling per label", "", "| label | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel.most_common()]
     regels += ["", "## Telling per afdeling van het onderwerp", "", "| afdeling | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel_afd.most_common()] + [""]
@@ -241,7 +242,7 @@ def _ronde(r, van, tot, vandaag):
         lijst = afspraken(van, tot)
         projecten = projectadressen.index()
         gesprekken = [dict(r) for r in db().execute("select * from gesprek_log where bron in ('fathom','plaud') and datum between ? and ? order by datum, start", (van, tot))]
-        gelabeld = overgeslagen = tokens = 0
+        gelabeld = overgeslagen = tokens = ongeldig = 0
         twijfel, tel, weken = [], Counter(), set()
         for g in gesprekken:
             map_ = g.get("archief") or ""
@@ -273,6 +274,12 @@ def _ronde(r, van, tot, vandaag):
             else:
                 uit, t_ = label_met_model(g, transcript_van(map_), a, loc, project, regels_mehdi)
                 tokens += t_
+            if uit.get("label") not in LABELS or uit.get("zekerheid") not in ("hoog", "middel", "laag"):
+                # T-0095: eerst controleren, dan bewaren; anders kwam een record zonder zekerheid in gesprek.json
+                ongeldig += 1
+                ag.log(f"{g['datum']} {g['start']}", "fout", f"modelantwoord zonder geldig label of zekerheid: niet bewaard "
+                       f"(label {str(uit.get('label'))[:30]!r}, zekerheid {str(uit.get('zekerheid'))[:10]!r})")
+                continue
             week = datetime.fromisoformat(g["datum"]).strftime("%G-W%V")
             d["archivaris"] = {**uit, "doelmap": DOEL.get(uit["label"], ""), "datum": g["datum"], "start": g["start"], "week": week,
                                "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "locatie_context": loc_context,
@@ -290,7 +297,7 @@ def _ronde(r, van, tot, vandaag):
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"Archivaris: {len(twijfel)} gesprek(ken) waar ik twijfel",
                           "uniek": f"archivaris-twijfel:{vandaag}:{len(twijfel)}",
                           "inhoud": "Antwoord met één regel per gesprek onder 'Correcties van Mehdi' in mijn werkwijze: `- datum uur naam = label`.\n" + "\n".join("- " + t for t in twijfel)}])
-        ag.log(f"{van} tot {tot}", "schrijf", f"{gelabeld} gesprekken gelabeld, {overgeslagen} al gelabeld of zonder archief, {len(twijfel)} twijfel; weekoverzicht {n_week} rijen; {tokens} tokens",
+        ag.log(f"{van} tot {tot}", "schrijf", f"{gelabeld} gesprekken gelabeld, {overgeslagen} al gelabeld of zonder archief, {ongeldig} ongeldig antwoord, {len(twijfel)} twijfel; weekoverzicht {n_week} rijen; {tokens} tokens",
                "\n".join(f"{k}: {v}" for k, v in tel.most_common()))
         if not os.environ.get("ANTHROPIC_API_KEY"):
             r.nood("Geen ANTHROPIC_API_KEY in de omgeving: ik kan niet labelen", wie="claude-code")
