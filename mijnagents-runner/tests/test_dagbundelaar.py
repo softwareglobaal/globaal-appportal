@@ -573,6 +573,51 @@ def test_nachtketen_in_het_beheerde_blok():
         assert "keten.py buiten het blok" in str(e), e
 
 
+class GroteBak(NepBord):
+    """Een bord zoals het echte: hoogstens n (500) items per lezing, nieuwste eerst, en terugbladeren met tot_id."""
+
+    def call(self, pad, payload=None, method=None):
+        if pad.startswith("/api/klaarzet?") and "soort=zoom" not in pad:
+            self.gelezen.append(pad)
+            q = dict(x.split("=", 1) for x in pad.split("?", 1)[1].split("&"))
+            lijst = sorted((it for it in self.alle if "tot_id" not in q or it["id"] < int(q["tot_id"])),
+                           key=lambda it: it["id"], reverse=True)
+            return {"items": [dict(it) for it in lijst[:min(int(q.get("n", 100)), 500)]]}
+        return super().call(pad, payload, method)
+
+
+def test_db7_ochtendronde_bladert_terug():
+    """DB-7 (T-0120): het bord geeft hoogstens 500 items per lezing. Een afspraak die De Agendawacht dagen vooraf
+    klaarzette, viel buiten de laatste 500 (gemeten: 19-10 12 afspraken gemist). Nu bladert de ochtendronde terug met
+    tot_id, tot een item dat meer dan twee weken voor de dag gemaakt werd: de afspraak staat in de bundel en gaat op
+    opgepakt."""
+    afspraak = dict(item(900, "agenda-wacht", "h-architects", "afspraak", "2026-10-20 10:00 werfbezoek 2531", sleutel="2531",
+                         inhoud={"datum": DAG, "start": f"{DAG}T10:00:00+02:00"}, uniek="agenda:werk:a5"), ts="2026-10-15T07:00:00")
+    oud = dict(item(1, "agenda-wacht", "h-architects", "afspraak", "2026-10-20 08:00 te oud", sleutel="2531",
+                    inhoud={"datum": DAG}, uniek="agenda:werk:a1"), ts="2026-09-01T07:00:00")
+    # nieuwste eerst: 700 en 600 nieuwere items, de afspraak, 500 items van voor de grens, en een heel oude afspraak
+    bak = [dict(item(2000 + i, "mail-mch", "mehdi", "mail", f"mail {i}", sleutel="2026-10-21"), ts="2026-10-21T08:00:00")
+           for i in range(700)]
+    bak += [dict(item(1000 + i, "mail-mch", "mehdi", "mail", f"mail {i}", sleutel="2026-10-16"), ts="2026-10-16T08:00:00")
+            for i in range(600)]
+    bak += [dict(item(300 + i, "mail-mch", "mehdi", "mail", f"oude mail {i}", sleutel="2026-09-20"), ts="2026-09-20T08:00:00")
+            for i in range(500)]
+    nb = bundelen(DAG, GroteBak(bak + [afspraak, oud]))
+    bundel = next(b for b in nb.bundels if b["uniek"] == f"bundel:{DAG}:2531")
+    assert afspraak["titel"] in bundel["inhoud"] and 900 in nb.opgepakt, (bundel, nb.opgepakt)
+    lezingen = [p for p in nb.gelezen if p.startswith("/api/klaarzet?status=alle")]
+    assert len(lezingen) == 3 and "tot_id=" in lezingen[1], lezingen
+    assert oud["titel"] not in bundel["inhoud"] and 1 not in nb.opgepakt, "voor de grens leest ze niet verder"
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert not [t for t in noden if "klaarzetbak" in t], noden
+    # na 40 bladzijden nog niet aan de grens: een nood, geen stille gaten
+    vol = [dict(item(30000 - i, "mail-mch", "mehdi", "mail", "m", sleutel="2026-10-21"), ts="2026-10-21T08:00:00")
+           for i in range(40 * 500 + 1)]
+    nb = bundelen(DAG, GroteBak(vol))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert [t for t in noden if t.startswith("Ochtendronde las de klaarzetbak niet tot de grens")], noden
+
+
 def test_db2_geen_vaste_plaudmelding():
     """DB-2 (T-0120): tot 01-11-2026 zette elke ochtendronde zonder meting de nood 'Plaud-opnames komen pas als de
     Plaud-routine op claude.ai draait' (wie mehdi). Die zei niets over de echte stand; De Plaudwacht meldt die zelf. Een
