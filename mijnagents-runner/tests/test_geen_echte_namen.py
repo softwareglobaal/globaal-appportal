@@ -50,7 +50,9 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_zoom_wacht.py",
     "mijnagents-runner/tests/fixtures/claude_stream_proef.jsonl",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
+    "dagboek/test_wacht_pagina.py",
     "mijnagents/test_gesprekken_api.py",
+    "mijnagents/test_wachten_agenda.py",
 )
 
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige
