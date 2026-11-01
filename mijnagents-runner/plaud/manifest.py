@@ -4,7 +4,7 @@
 Het archief met audio blijft op de Mac (Dropbox, `Data uit Mehdi/Plaud`); één archief, geen tweede
 op de VM. De VM krijgt alleen dit manifest en per opname transcript.json (zie plaud_invoer_push.sh).
 
-    <archief>/00 manifest.json = {"meta": {contract, versie, gemaakt, aantal, toestanden, conflicten},
+    <archief>/00 manifest.json = {"meta": {contract, versie, gemaakt, aantal, toestanden, kort_wachtend, conflicten},
                                   "opnames": [<contract van één opname> + {"toestand": ..., "map": ...}]}
 
 Elke opname staat erin volgens het contract (contract.py), met haar echte toestand uit archief.toestand.
@@ -23,6 +23,17 @@ import archief  # noqa: E402
 import contract  # noqa: E402
 
 NAAM = "00 manifest.json"
+# PLAUD-9 (T-0120): een wachtende opname korter dan dit telt ook apart, als 'kort, na te kijken' (47 van de 87 wachtende
+# in oktober). Ze blijft in de wachtteller: drie pogingen bewijzen niet dat er nooit een transcript komt (Codex).
+KORT_MINUTEN = 1
+
+
+def _minuten(c):
+    """De duur in minuten; onbekend telt nooit als kort."""
+    try:
+        return float(c.get("duur_minuten"))
+    except (TypeError, ValueError):
+        return float("inf")
 
 
 def bouw(doel):
@@ -71,9 +82,11 @@ def bouw(doel):
                 c.update(toestand="conflict", herstel="id staat in meer dan één map: " + " | ".join(p.name for p in mappen),
                          mappen=[p.name for p in mappen])
         tellers["conflict"] = tellers.get("conflict", 0) + 1
+    kort = sum(1 for c in opnames if c.get("toestand") == "wacht_op_transcript" and _minuten(c) < KORT_MINUTEN)
     m = {"meta": {"contract": contract.CONTRACT, "versie": contract.VERSIE,
                   "gemaakt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "aantal": len(opnames),
-                  "toestanden": tellers, "conflicten": {pid: [p.name for p in ps] for pid, ps in conflicten.items()}},
+                  "toestanden": tellers, "kort_wachtend": kort,
+                  "conflicten": {pid: [p.name for p in ps] for pid, ps in conflicten.items()}},
          "opnames": opnames}
     archief.schrijf_json(doel / NAAM, m)
     return m["meta"]

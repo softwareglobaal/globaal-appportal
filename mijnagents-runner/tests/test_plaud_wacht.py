@@ -78,6 +78,7 @@ class Wereld:
         self.herkend = []              # (plaud_id, context, lengte transcript)
         self.deals = []
         P.INVOER, P.STAAT, P.INBOX = str(self.invoer), str(self.staat), "/inbox"
+        P.GEMELD = str(self.staat) + "-gemeld.json"   # PLAUD-8: per Wereld een eigen geheugen van gemelde zoektaken
         P.bord.call = self.call
         P.bord.klaargezet_voor = lambda voor, n=100, **k: list(self.taken)
         P.bord.opgepakt = self.pak
@@ -778,6 +779,276 @@ def test_verouderde_invoer_en_aanmeldfout_worden_gemeld():
     assert not any("stil" in n.lower() for n in noden)
 
 
+def onvolledige_opname(w, pid, start_at):
+    """Een map met transcript maar zonder audio, zoals de ruwe Opus van Plaud op 15-10 tot 22-10 (geen OggS-kop)."""
+    def haler(url, max_bytes, timeout):
+        return gzip.compress(json.dumps(OPENING).encode()) if "transcript" in url else b"\xb8" * 80 * 50
+    r = bouw_map.bouw({"id": pid, "name": "proef zonder audio", "start_at": start_at, "duration": 20 * 60000,
+                       "presigned_url": "https://proef/audio", "transcript_link": "https://proef/transcript"},
+                      w.archief, haler=haler)
+    assert r["status"] == "onvolledig", r
+
+
+def ronde_met_detail(w):
+    r = types.SimpleNamespace(noden=[], detail="", bronnen=[])
+    r.nood = lambda tekst, wie="mehdi": r.noden.append((tekst, wie))
+    r.bron = lambda naam, inhoud: r.bronnen.append(naam)
+    code, tellers = P.ronde(r)
+    return code, tellers, r
+
+
+def test_plaud5_deels_en_onvolledige_mappen_geven_een_nood_met_het_aantal_in_het_detail():
+    """PLAUD-5 (T-0120): van 28-10 tot 01-11 stond de Mac elk uur op 'deels' (foutcode 4) met 5 onvolledige mappen, en
+    De Plaudwacht meldde niets: toezicht keek alleen naar authfout en bronfout. Nu één nood voor claude-code, zonder
+    teller in de tekst (N10); het aantal staat in het detail van de ronde."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    for i in range(5):
+        onvolledige_opname(w, "of_" + str(i + 4) * 32, f"2026-10-1{i + 5}T10:00:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "deels", "tellers": {"mislukt": 5}}))
+    w.push()
+    _, tel, r = ronde_met_detail(w)
+    mac = [(t, wie) for t, wie in r.noden if "deels" in t]
+    assert len(mac) == 1 and mac[0][1] == "claude-code", r.noden
+    assert not mac[0][0][:1].isdigit() and "5" not in mac[0][0], "N10: het aantal hoort in het detail, niet in de nood"
+    assert tel["onvolledig_archief"] == 5 and "5 onvolledig in het archief" in r.detail, (tel, r.detail)
+    # alleen onvolledige mappen, ook als de laatste ronde van de Mac 'ok' zegt: ook een nood
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "ok"}))
+    w.push()
+    _, _, r = ronde_met_detail(w)
+    assert len([t for t, _ in r.noden if "deels" in t]) == 1, r.noden
+
+
+def test_plaud5_deels_zonder_onvolledige_mappen_geeft_ook_de_nood():
+    """Codex-toets 1: 'deels' alleen (bv. een detailvraag die faalde), zonder onvolledige map, is ook een nood."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "deels", "tellers": {"mislukt": 1}}))
+    w.push()
+    _, tel, r = ronde_met_detail(w)
+    assert tel["onvolledig_archief"] == 0 and [wie for t, wie in r.noden if "deels" in t] == ["claude-code"], r.noden
+    assert "Mac: deels" in r.detail and "onvolledig in het archief" not in r.detail, r.detail
+
+
+def test_plaud5_status_ok_zonder_onvolledige_mappen_geeft_geen_nood():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "ok"}))
+    w.push()
+    code, tel, r = ronde_met_detail(w)
+    assert code == P.OK and not r.noden and tel["onvolledig_archief"] == 0, (code, r.noden)
+    assert "onvolledig" not in r.detail, r.detail
+
+
+def test_plaud8_zelfde_zoektaakuitkomst_staat_een_keer_in_het_werkverslag():
+    """PLAUD-8 (T-0120): op 29-10 stonden 384 van de 408 regels in het werkverslag van De Plaudwacht er omdat elke ronde
+    dezelfde 16 zoektaakbevindingen opnieuw schreef. Een bevinding komt er nu alleen bij een andere uitkomst."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(601, datum="2026-10-09", bezoekmap=f"{HA}/2531 Fictiva/_00. Communication/2026-10-09 bezoek klant - werfbezoek")]
+    for _ in range(3):
+        w.ronde()
+    regels = [t for s, t in w.logs if s == "bevinding" and t.startswith("niet_gevonden")]
+    assert len(regels) == 1, regels
+    # een andere uitkomst (de opname van die dag komt binnen) staat er wel bij, en wordt geleverd zoals voordien
+    w.opname(ID2, "10-09 Werfbezoek 2531 Fictiva", "2026-10-09T09:05:00")
+    w.push()
+    w.ronde()
+    assert len([t for s, t in w.logs if s == "bevinding" and t.startswith("gevonden")]) == 1, w.logs
+    assert w.opgepakt == [601], w.opgepakt
+
+
+def test_plaud8_barsten_en_scheuren_zoektaak_geeft_dezelfde_uitkomst():
+    """VOL-18: alleen het werkverslag verandert. Een zoektaak van de keten barsten en scheuren (TKN, eigen doelmap) geeft
+    bij elke beoordeling dezelfde uitkomst en wordt geleverd zoals in test_tkn_plaudwordt_uit_zoektaak_in_submap_geleverd."""
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak()]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "[UNAB-KB] BS 3999 Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "3999"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    m = P.manifest.lees(P.INVOER)
+    opnames = [(o, None) for o in m["opnames"]]
+    st_obj = P.staat.Staat(P.STAAT)
+    items = P.klaarzet_items()
+    eerste = P.zoektaken_beoordelen(w.taken, opnames, st_obj, items)
+    tweede = P.zoektaken_beoordelen(w.taken, opnames, st_obj, items)
+    assert eerste == tweede and eerste[1][0]["uitkomst"] == "gevonden", (eerste, tweede)
+    assert len([t for s, t in w.logs if s == "bevinding" and t.startswith("gevonden")]) == 1, w.logs
+    code, _, _ = w.ronde()
+    doel = f"{TKN_PLAUD}/{TKN_NAAM}"
+    assert code == P.OK and w.uploads == [doel] and w.opgepakt == [701], (code, w.uploads, w.opgepakt)
+
+
+def test_plaud12_harc_zonder_passende_deal_geeft_een_bevinding_met_de_reden():
+    """PLAUD-12 (T-0120): in oktober mochten 7 HARC-opnames zakelijk gekopieerd worden, maar er kwam geen enkele
+    dossierkopie en het werkverslag zei niet waarom. Een kopie vraagt precies één open Pipedrive-deal met dat nummer."""
+    w = Wereld()
+    w.deals = [{"id": 778, "titel": "2532 Andere", "nummer": "2532"}]     # 2531 heeft geen open deal (gewonnen, gesloten)
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]                                              # de zoektaak bevestigt 2531: kopie toegestaan
+    w.ronde()
+    assert w.opgepakt == [101], "de bezoekmap krijgt het transcript zoals voordien"
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: geen open Pipedrive-deal met nummer 2531"], w.logs
+    w.ronde()                  # de geleverde taak valt weg: een nieuwe beoordeling, met dezelfde reden
+    w.ronde()                  # niets veranderd: geen nieuwe regel
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert set(reden) == {"geen dossierkopie: geen open Pipedrive-deal met nummer 2531"} and len(reden) <= 2, reden
+    n = len(reden)
+    w.ronde()
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == n, "niet elke ronde opnieuw"
+    assert not [p for p in w.uploads if p.startswith("/Sales/")], w.uploads
+    # twee open deals met hetzelfde nummer: een andere reden, met de deal-ids
+    w2 = Wereld()
+    w2.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}, {"id": 779, "titel": "2531 Fictiva bis", "nummer": "2531"}]
+    w2.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w2.push()
+    w2.ronde()
+    reden = [t for s, t in w2.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: meer dan één open Pipedrive-deal met nummer 2531 (777, 779)"], w2.logs
+    # met precies één passende deal: de kopie, en geen reden
+    w3 = Wereld()
+    w3.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w3.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w3.push()
+    w3.ronde()
+    assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")] and any(p.startswith("/Sales/") for p in w3.uploads)
+    assert P.reden_zonder_dossierkopie({"kopie_toegestaan": False, "firma": "HARC", "projectnummer": "2531", "zekerheid": "laag",
+                                        "conflict": True}, {}, [{"id": 777}], [{"id": 777}], {"id": 777}, "tekst") \
+        == "de beslissing staat geen zakelijke kopie toe (zekerheid laag, conflict)"
+    assert P.reden_zonder_dossierkopie({"firma": "UNAB", "projectnummer": "3999"}, {"afdeling": "unabo"}, None, [], None, "t") is None
+
+
+def test_plaud12_pipedrive_niet_gelezen_en_geen_projectnummer_in_een_echte_ronde():
+    """Codex-toets 1: ook als de beslissing zelf geen kopie toestaat (Pipedrive niet gelezen maakt het bewijs onvolledig,
+    dossier.beslis) of er geen nummer is, staat de reden in het werkverslag. De kopieregel zelf blijft gelijk."""
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.pipedrive_fout = True
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.ronde()
+    w.ronde()
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: Pipedrive niet gelezen"], w.logs
+    assert not [p for p in w.uploads if p.startswith("/Sales/")], "zonder Pipedrive geen kopie, zoals voordien"
+    w2 = Wereld()
+    w2.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w2.opname(ID1, "10-08 Vergadering kantoor", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
+    w2.push()
+    w2.ronde()
+    reden = [t for s, t in w2.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: geen projectnummer"], w2.logs
+    # een privé-opname krijgt geen regel met een nummer of reden (BAS-01)
+    w3 = Wereld()
+    w3.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w3.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w3.herkenning[ID1] = {"personen": ["vriend"], "hoofdpersoon": "vriend", "bedrijf": "", "afdeling": "prive",
+                          "thema": "privé", "project": "", "prive": True, "zekerheid": "hoog", "waarom": "proef"}
+    w3.push()
+    w3.ronde()
+    assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")], w3.logs
+
+
+def test_plaud12_een_al_verwerkte_opname_krijgt_de_reden_een_keer_zonder_modelvraag():
+    """Codex-toets 2: de 7 HARC-opnames van oktober waren al verwerkt; na de uitrol stopte verwerk ze als 'ongewijzigd'
+    vóór de reden. Nu krijgt zo'n opname de reden één keer, uit haar staat, zonder nieuwe modelvraag."""
+    w = Wereld()
+    w.deals = [{"id": 778, "titel": "2532 Andere", "nummer": "2532"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]
+    w.ronde()
+    w.ronde()                                   # de geleverde taak valt weg: de laatste beoordeling
+    # zoals een staat van voor PLAUD-12: geen bewaarde reden
+    pad = w.staat / f"{ID1}.json"
+    st = json.loads(pad.read_text())
+    st.pop("zonder_kopie", None)
+    pad.write_text(json.dumps(st))
+    w.logs.clear()
+    herkend = len(w.herkend)
+    code, tel, _ = w.ronde()
+    assert tel["ongewijzigd"] == 1 and len(w.herkend) == herkend, (tel, w.herkend)
+    assert [t for s, t in w.logs if t.startswith("geen dossierkopie")] == \
+        ["geen dossierkopie: geen open Pipedrive-deal met nummer 2531"], w.logs
+    w.ronde()
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == 1, "één keer, niet elke ronde"
+
+
+def test_plaud12_een_mislukte_dossierkopie_krijgt_haar_fout_als_reden_een_keer():
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    P.bronnen.zoek_salesmap = lambda naam="", nummer="": None            # geen salesmap: de kopie faalt
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.ronde()
+    w.ronde()
+    reden = [t for s, t in w.logs if t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: de kopie mislukte (RuntimeError: geen salesmap voor dit dossier)"], w.logs
+    # de salesmap komt er: de kopie lukt en de reden valt weg, zonder nieuwe regel
+    P.bronnen.zoek_salesmap = lambda naam="", nummer="": f"/Sales/{nummer} klant" if nummer else None
+    w.ronde()
+    assert any(p.startswith("/Sales/") for p in w.uploads), w.uploads
+    assert json.loads((w.staat / f"{ID1}.json").read_text()).get("zonder_kopie") is None
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == 1
+
+
+def test_plaud12_een_geleverde_kopie_geeft_geen_reden_als_de_deal_daarna_sluit():
+    """Codex-toets 3: de kopie is geleverd, daarna sluit de deal (niet meer bij de open deals). De nieuwe beslissing heeft
+    geen deal, maar de kopie staat er al (staat.plan bewaart wat gedaan is): geen 'geen dossierkopie'."""
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]
+    w.ronde()
+    assert any(p.startswith("/Sales/") for p in w.uploads), w.uploads
+    w.deals = []                                          # de deal is gewonnen of gesloten
+    w.ronde()
+    w.ronde()
+    assert not [t for s, t in w.logs if t.startswith("geen dossierkopie")], w.logs
+    assert P.reden_uit_staat({"opdrachten": [{"soort": "dossierkopie", "gedaan": True}]}, {"afdeling": "h-architects"},
+                             {"firma": "HARC", "projectnummer": "2531", "kopie_toegestaan": True}, [], "tekst") is None
+
+
+def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
+    """VOL-18: een opname van de keten barsten en scheuren (UNAB) krijgt geen reden erbij en wordt geleverd als voordien."""
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak()]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "[UNAB-KB] BS 3999 Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "3999"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    code, _, _ = w.ronde()
+    assert code == P.OK and w.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w.opgepakt == [701], (code, w.uploads)
+    assert not [t for s, t in w.logs if t.startswith("geen dossierkopie")], w.logs
+
+
+def test_plaud9_korte_wachtende_staan_apart_en_blijven_in_de_wachtteller():
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00", transcript=False)
+    w.opname(ID2, "10-09 kort", "2026-10-09T09:05:00", minuten=0.1, transcript=False)
+    w.push()
+    _, tel, _ = w.ronde()
+    assert tel["wacht_op_transcript_archief"] == 2 and tel["kort_wachtend_archief"] == 1, tel
+    m = json.loads((w.invoer / "00 manifest.json").read_text())
+    del m["meta"]["kort_wachtend"]                                  # een manifest van voor PLAUD-9
+    (w.invoer / "00 manifest.json").write_text(json.dumps(m))
+    _, tel, _ = w.ronde()
+    assert tel["kort_wachtend_archief"] == "onbekend", tel
+
+
 def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     sys.path.insert(0, os.path.join(HIER, "planning"))
     import plaud_cron_zetten as Z
@@ -798,6 +1069,80 @@ def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     assert "\nhaal plaud " not in sync, "de oude VM-map Plaud gaat niet meer naar het archief op de Mac (één archief)"
     push = open(os.path.join(HIER, "plaud", "plaud_invoer_push.sh"), encoding="utf-8").read()
     assert "--delete" not in push.replace("nooit --delete", "") and "--include='transcript.json'" in push and "--exclude='*'" in push
+
+
+def test_plaud13_launchd_alleen_uit_een_checkout_op_main_en_zonder_paden_van_een_toestel():
+    """PLAUD-13 (T-0120): de laptoptaak draaide uit ~/dev/globaal-appportal op een featuretak, met een vast pad naar een
+    thuismap in de plist. Het script zet de taak nu alleen vanuit een checkout op main en vult de checkout en $HOME zelf
+    in. Proef in een tijdelijke repo en thuismap, met een nagebootste launchctl en plutil: niets op de echte Mac."""
+    import plistlib
+    import subprocess
+    zsh = shutil.which("zsh")
+    if not zsh:
+        print("   (overgeslagen: geen zsh op deze machine)")
+        return
+    bron = Path(HIER) / "planning" / "mac"
+    plist_tekst = (bron / "be.globaal.plaud.ophalen.plist").read_text(encoding="utf-8")
+    assert "/Users/" not in plist_tekst and "__REPO__/mijnagents-runner/plaud/plaud_invoer_push.sh" in plist_tekst
+    tmp = Path(tempfile.mkdtemp(prefix="plaud-launchd-"))
+    repo, thuis, nep = tmp / "repo", tmp / "thuis", tmp / "bin"
+    (repo / "mijnagents-runner" / "planning" / "mac").mkdir(parents=True)
+    thuis.mkdir()
+    nep.mkdir()
+    for naam in ("plaud_launchd_zetten.sh", "be.globaal.plaud.ophalen.plist"):
+        shutil.copy2(bron / naam, repo / "mijnagents-runner" / "planning" / "mac" / naam)
+    # de uurtaak zelf, met nagebootste ophaler en manifest: nooit de echte Plaud-API of de VM
+    (repo / "mijnagents-runner" / "plaud").mkdir()
+    shutil.copy2(Path(HIER) / "plaud" / "plaud_invoer_push.sh", repo / "mijnagents-runner" / "plaud" / "plaud_invoer_push.sh")
+    (repo / "mijnagents-runner" / "plaud" / "plaud_haal_alles.py").write_text(
+        "import os, pathlib\npathlib.Path(os.environ['PROEF_MERK']).write_text('gedraaid')\n")
+    (repo / "mijnagents-runner" / "plaud" / "manifest.py").write_text("")
+    oproepen = tmp / "oproepen.txt"
+    for naam in ("launchctl", "plutil"):
+        (nep / naam).write_text(f"#!/bin/sh\necho {naam} \"$@\" >> '{oproepen}'\n")
+        (nep / naam).chmod(0o755)
+    git = ["git", "-C", str(repo), "-c", "user.name=proef", "-c", "user.email=proef@example.invalid"]
+    subprocess.run(git[:3] + ["init", "-q", "-b", "proef-tak"], check=True)
+    subprocess.run(git + ["add", "."], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "proef"], check=True)
+    omgeving = dict(os.environ, HOME=str(thuis), PATH=f"{nep}:{os.environ['PATH']}")
+    script = str(repo / "mijnagents-runner" / "planning" / "mac" / "plaud_launchd_zetten.sh")
+    doel = thuis / "Library" / "LaunchAgents" / "be.globaal.plaud.ophalen.plist"
+    r = subprocess.run([zsh, script], env=omgeving, capture_output=True, text=True)
+    assert r.returncode != 0 and "main" in r.stderr and not doel.exists() and not oproepen.exists(), (r.returncode, r.stderr)
+    subprocess.run(git + ["checkout", "-q", "-b", "main"], check=True)
+    r = subprocess.run([zsh, script], env=omgeving, capture_output=True, text=True)
+    assert r.returncode == 0, (r.returncode, r.stderr)
+    with open(doel, "rb") as f:
+        gezet = plistlib.load(f)
+    echte_repo = subprocess.run(git[:3] + ["rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    assert gezet["ProgramArguments"][1] == f"{echte_repo}/mijnagents-runner/plaud/plaud_invoer_push.sh", gezet
+    assert gezet["StandardOutPath"] == f"{thuis}/Library/Logs/plaud-ophalen.out", gezet
+    assert "launchctl bootstrap" in oproepen.read_text(), oproepen.read_text()
+    # Codex-toets 2: daarna van tak wisselen en de geïnstalleerde uurtaak starten: ze weigert, zonder op te halen
+    archief_map, vm_map, merk = tmp / "archief", tmp / "vm", tmp / "gedraaid"
+    archief_map.mkdir()
+    vm_map.mkdir()
+    (thuis / "Library" / "Logs").mkdir(parents=True)
+    uur = dict(omgeving, PLAUD_DOEL=str(archief_map), PLAUD_VM=str(vm_map), PROEF_MERK=str(merk))
+    subprocess.run(git + ["checkout", "-q", "-b", "andere-tak"], check=True)
+    r = subprocess.run([zsh, gezet["ProgramArguments"][1]], env=uur, capture_output=True, text=True)
+    log = (thuis / "Library" / "Logs" / "plaud-ophalen.log").read_text()
+    assert r.returncode == 8 and "niet op main" in log and not merk.exists(), (r.returncode, log)
+    if shutil.which("rsync"):
+        subprocess.run(git + ["checkout", "-q", "main"], check=True)
+        r = subprocess.run([zsh, gezet["ProgramArguments"][1]], env=uur, capture_output=True, text=True)
+        assert r.returncode == 0 and merk.exists(), (r.returncode, r.stderr,
+                                                     (thuis / "Library" / "Logs" / "plaud-ophalen.log").read_text())
+    shutil.rmtree(tmp)
+
+
+def test_plaud14_de_handleiding_van_de_routine_zegt_bovenaan_dat_ze_vervallen_is():
+    """PLAUD-14 (T-0120): T-0080 stuurde naar 'Plaud-routine instellen (voor Mehdi).md', maar die routine is sinds 12-10
+    vervangen door de ophaler op de Mac en kan geen transcript maken dat Plaud niet heeft."""
+    pad = os.path.join(HIER, "docs", "Plaud-routine instellen (voor Mehdi).md")
+    kop = "\n".join(open(pad, encoding="utf-8").read().splitlines()[:6])
+    assert "Vervallen sinds 12-10-2026" in kop and "plaud_haal_alles.py" in kop, kop
 
 
 def test_bron_houdt_de_grenzen():

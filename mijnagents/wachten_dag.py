@@ -6,6 +6,7 @@ wie of wat, kort), de rondes van die dag uit het werkverslag, en of er een fout 
 staat als "niets binnen", nooit als nul. Nooit de tekst van een bericht: de wachten bewaren die ook niet.
 """
 import json
+import os
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -63,6 +64,89 @@ def uur(waarde):
 def kort(tekst, n=KORT):
     t = re.sub(r"\s+", " ", str(tekst or "")).strip()
     return t if len(t) <= n else t[: n - 1].rstrip() + "…"
+
+
+# De slotregel van een ronde in het werkverslag (De Plaudwacht: ag.log("Plaud", "bron", "ronde: ...")); PLAUD-8.
+RONDE_REGEL = "ronde:"
+
+
+# PLAUD-7 (T-0120): De Plaudwacht zet alleen een opname met transcript in de gesprekkentabel; de opnames zonder transcript
+# waren hier onzichtbaar (oktober: 6), en of de audio er was, stond nergens (oktober: 5 zonder). Het bord heeft
+# mijnagents-data op /data; daar zet de Mac het manifest (plaud/plaud_invoer_push.sh). Alleen tijd, duur en toestand,
+# nooit de naam in Plaud of een pad. Een eigen naam voor de variabele: PLAUD_INVOER van de runner is een pad op de VM.
+PLAUD_INVOER = os.environ.get("WACHTEN_PLAUD_INVOER", "/data/plaud-invoer")
+PLAUD_KORT_MINUTEN = 1                          # zoals KORT_MINUTEN in plaud/manifest.py (PLAUD-9)
+
+
+def _duur(minuten):
+    try:
+        m = float(minuten)
+    except (TypeError, ValueError):
+        return "duur onbekend"
+    return f"{round(m * 60)} s" if m < 1 else f"{int(m)} min"
+
+
+def _kort_wachtend(o):
+    try:
+        return o.get("toestand") == "wacht_op_transcript" and float(o.get("duur_minuten")) < PLAUD_KORT_MINUTEN
+    except (TypeError, ValueError):
+        return False
+
+
+def lees_plaud(conn, dag):
+    """(items, stand) van De Plaudwacht uit het manifest van de Mac. items: de opnames van die dag zonder rij in de
+    gesprekkentabel; een opname met een rij staat er al, met de privéregel (is_prive_gesprek). stand: de telling van die
+    dag, of None als het manifest niet te lezen is (onbekend, nooit 0).
+
+    Contract voor een link (VOL-19: één route achter Authentik, de weergave doet de groep pagina): het Dagboek vraagt het
+    bord om het transcript van plaud:<id>, en het bord leest /data/plaud-invoer/<archief.map>/transcript.json. Nooit bij
+    een privégesprek, nooit een Dropboxpad of gedeelde link. De audio staat alleen op de Mac: geen audiolink, wel de
+    telling zonder_audio."""
+    try:
+        with open(os.path.join(PLAUD_INVOER, "00 manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        opnames = [o for o in m["opnames"] if isinstance(o, dict) and str(o.get("start_brussel") or "")[:10] == dag]
+        gemaakt = str((m.get("meta") or {}).get("gemaakt") or "")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return [], None
+    # Codex-toets 1: een manifest van voor die dag kent die dag niet; dat is onbekend, geen nul. Van tijdens de dag
+    # (vandaag) is de telling nog niet af: na_de_dag zegt het.
+    van, tot = (datetime.fromisoformat(x) for x in grenzen(dag))
+    try:
+        gemaakt_t = datetime.fromisoformat(gemaakt.replace("Z", "+00:00"))
+        gemaakt_t = gemaakt_t if gemaakt_t.tzinfo else gemaakt_t.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return [], None
+    if gemaakt_t < van:
+        return [], None
+    unieken = [f"plaud:{o.get('plaud_id')}" for o in opnames]
+    in_tabel = {r["uniek"] for r in conn.execute(
+        f"SELECT uniek FROM gesprek_log WHERE bron='plaud' AND uniek IN ({','.join('?' * len(unieken))})", unieken)} \
+        if unieken else set()
+    items = []
+    for o in opnames:
+        if f"plaud:{o.get('plaud_id')}" in in_tabel:
+            continue
+        toestand = o.get("toestand")
+        zonder_audio = (o.get("audio") or {}).get("staat") == "ontbreekt"
+        if toestand == "wacht_op_transcript":
+            wat = "kort, na te kijken" if _kort_wachtend(o) else "wacht op transcript"
+        elif toestand == "onvolledig":
+            wat = "onvolledig, audio ontbreekt" if zonder_audio else "onvolledig"
+        elif toestand == "compleet":
+            wat = "transcript binnen, nog niet verwerkt"
+        elif toestand == "conflict":
+            wat = "staat in meer dan één map, Mehdi kiest"
+        else:
+            wat = str(toestand or "toestand onbekend")
+        items.append(_item(uur(o.get("start_brussel")), "Plaud-opname", f"{_duur(o.get('duur_minuten'))}, {wat}"))
+    stand = {"opnames": len(opnames), "in_tabel": len(in_tabel),
+             "wacht_op_transcript": sum(1 for o in opnames if o.get("toestand") == "wacht_op_transcript"),
+             "kort": sum(1 for o in opnames if _kort_wachtend(o)),
+             "onvolledig": sum(1 for o in opnames if o.get("toestand") == "onvolledig"),
+             "zonder_audio": sum(1 for o in opnames if (o.get("audio") or {}).get("staat") == "ontbreekt"),
+             "manifest_van": gemaakt, "na_de_dag": gemaakt_t >= tot}
+    return items, stand
 
 
 def _json(tekst):
@@ -252,6 +336,21 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
         log = lees_log(conn, wacht, van, tot)
     except Exception as e:  # noqa: BLE001
         log, logfout = [], f"werkverslag niet gelezen ({type(e).__name__})"
+    # PLAUD-8 (T-0120): 'rondes' is het aantal regels in het werkverslag (zo toont de pagina het: '408 regels'), niet het
+    # aantal rondes (29-10 bij De Plaudwacht 24). rondes_geteld telt de slotregels 'ronde:'; een wacht die er geen
+    # schrijft, heeft geen meetbare rondes: None, nooit 0.
+    try:
+        rondes_geteld = conn.execute("SELECT COUNT(*) FROM logboek WHERE naam=? AND ts>=? AND ts<? AND tekst LIKE ?",
+                                     (wacht, van, tot, RONDE_REGEL + "%")).fetchone()[0] or None
+    except Exception:  # noqa: BLE001  dan onbekend; het werkverslag zelf staat hierboven al apart
+        rondes_geteld = None
+    plaud = None
+    if wacht == "plaud-wacht" and not leesfout:
+        try:
+            extra, plaud = lees_plaud(conn, dag)
+            items += extra
+        except Exception as e:  # noqa: BLE001  zoals hierboven: de rest van de pagina blijft staan
+            leesfout = f"niet gelezen ({type(e).__name__})"
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
     st = dict(status) if status else None
@@ -281,7 +380,10 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
             "log": log[(blad - 1) * MAX_LOG:blad * MAX_LOG], "log_blad": blad, "log_bladen": bladen,
             "gedekt": gedekt, "leesfout": leesfout, "logfout": logfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
-                                            "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
+                                            "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")},
+            "rondes_geteld": rondes_geteld,
+            # PLAUD-7: bij De Plaudwacht de opnames van die dag volgens het manifest, of None (onbekend)
+            **({"plaud": plaud} if wacht == "plaud-wacht" else {})}
 
 
 def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):

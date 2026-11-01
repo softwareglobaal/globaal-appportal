@@ -53,6 +53,8 @@ DATA = os.path.expanduser(os.environ.get("MIJNAGENTS_DATA", "~/appportal/mijnage
 INVOER = os.environ.get("PLAUD_INVOER", os.path.join(DATA, "plaud-invoer"))
 STAAT = os.environ.get("PLAUD_STAAT", os.path.join(DATA, "plaud-staat"))
 INBOX = os.environ.get("PLAUD_INBOX", "/Work All/000 AI Opzet/Mehdi Agents/Plaud inbox")
+# PLAUD-8: de laatst gemelde bevinding per open zoektaak; niet in STAAT, want daar is elk .json-bestand een opname
+GEMELD = os.environ.get("PLAUD_GEMELD", os.path.join(DATA, "plaud-zoektaken-gemeld.json"))
 # Opnames van vóór deze dag worden niet opnieuw herkend en gepubliceerd (geen volledige herverwerking);
 # voor zoektaken blijven ze vindbaar.
 SINDS = os.environ.get("PLAUD_WACHT_SINDS", "2026-10-01")
@@ -218,8 +220,12 @@ def eigen_bewijs(o, uitingen, tekst, items):
 
 
 def zoektaken_beoordelen(taken, opnames, st_obj, items):
-    """(per plaud_id: [taak], uitkomsten). opnames: [(contract, romp)]. Een ongeldige taak levert niets op."""
+    """(per plaud_id: [taak], uitkomsten). opnames: [(contract, romp)]. Een ongeldige taak levert niets op.
+
+    PLAUD-8 (T-0120): een bevinding komt alleen in het werkverslag als ze anders is dan de vorige keer (GEMELD). Op 29-10
+    waren 384 van de 408 regels elk uur dezelfde 16 zoektaakbevindingen. De uitkomsten zelf veranderen niet."""
     per_id, uitkomsten = {}, []
+    gemeld, nu_gemeld = archief.lees_json(GEMELD) or {}, {}
     contracten = [o for o, _ in opnames]
     beslissingen = {o["plaud_id"]: (st_obj.lees(o["plaud_id"]).get("beslissing") or {}) for o in contracten}
     dagen = {zoektaak.inhoud_van(t).get("datum") for t in taken}
@@ -237,9 +243,17 @@ def zoektaken_beoordelen(taken, opnames, st_obj, items):
         r = zoektaak.beoordeel(t, contracten, beslissingen, bewijs)
         r["taak"] = t.get("id")
         uitkomsten.append(r)
-        ag.log(f"taak {t.get('id')}", "bevinding", f"{r['uitkomst']}: {r['reden']}" + (f" ({', '.join(r['kandidaten'])})" if r.get("kandidaten") else ""))
+        bevinding = f"{r['uitkomst']}: {r['reden']}" + (f" ({', '.join(r['kandidaten'])})" if r.get("kandidaten") else "")
+        nu_gemeld[str(t.get("id"))] = bevinding
+        if gemeld.get(str(t.get("id"))) != bevinding:
+            ag.log(f"taak {t.get('id')}", "bevinding", bevinding)
         if r["uitkomst"] in ("gevonden", "wacht_op_transcript"):
             per_id.setdefault(r["plaud_id"], []).append(t)
+    if nu_gemeld != gemeld:
+        try:
+            archief.schrijf_json(GEMELD, nu_gemeld)
+        except OSError as e:          # dan meld ik de volgende ronde opnieuw; de beoordeling zelf hangt er niet van af
+            ag.log("Plaud", "fout", f"gemelde zoektaken niet bewaard: {type(e).__name__}")
     return per_id, uitkomsten
 
 
@@ -399,6 +413,9 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
                              "bekend": [k for k in relevant if bekend and k in bekend],
                              "deals": sorted(str(d.get("id")) for d in (deals or []) if ("HARC", str(d.get("nummer"))) in relevant)})
     if st.get("vingerafdruk") == vinger and not staat.open_opdrachten(st):
+        # PLAUD-12, Codex-toets 2: ook een opname die al verwerkt was, krijgt één keer de reden, zonder modelvraag
+        if not is_prive(st.get("herkenning"), st.get("beslissing")):
+            meld_zonder_kopie(o, st, st_obj, reden_uit_staat(st, st.get("herkenning"), st.get("beslissing") or {}, deals, tekst))
         return {"uitkomst": "ongewijzigd", "fouten": 0}
     herk = st.get("herkenning") or {}
     if herk.get("model_vinger") != model_vinger:
@@ -412,7 +429,7 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
         st_obj.bewaar(pid, st)                 # een herstart vraagt het model niet opnieuw
     model = dossier.uit_tekst("model", herk.get("project") or "", "vergadertitel")
     b = dossier.beslis(bewijzen, herk, model, bekend=bekend)
-    deal = None
+    deal, passend = None, []
     if b["firma"] == "HARC" and b["projectnummer"] and deals:
         passend = [d for d in deals if str(d.get("nummer")) == b["projectnummer"]]
         deal = passend[0] if len(passend) == 1 else None
@@ -435,7 +452,56 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
            f"{herk.get('hoofdpersoon') or o.get('naam_in_plaud')} · dossier {b['dossier'] or 'geen'} ({b['zekerheid']})"
            + (" · conflict" if b["conflict"] else "") + f" · voor {b['voor']}"
            + f" · {gedaan} publicatie(s), {fouten} fout", "; ".join(b["redenen"]))
+    meld_zonder_kopie(o, st, st_obj, reden_uit_staat(st, herk, b, deals, tekst))
     return {"uitkomst": "gedaan", "fouten": fouten}
+
+
+def reden_uit_staat(st, herk, b, deals, tekst):
+    """PLAUD-12: de reden zonder dossierkopie voor één opname, uit haar staat: een geplande kopie die mislukte (met de
+    fout), anders reden_zonder_dossierkopie. Dezelfde keuze van de deal als in verwerk."""
+    kopie = [x for x in st.get("opdrachten", []) if x.get("soort") == "dossierkopie"]
+    if any(x.get("gedaan") for x in kopie):
+        return None            # Codex-toets 3: er staat al een kopie in het dossier (staat.plan bewaart wat gedaan is)
+    mislukt = [x for x in kopie if x.get("fout")]
+    if mislukt:
+        return f"de kopie mislukte ({mislukt[0]['fout'][:120]})"
+    passend = ([d for d in deals if str(d.get("nummer")) == b.get("projectnummer")]
+               if b.get("firma") == "HARC" and b.get("projectnummer") and deals else [])
+    return reden_zonder_dossierkopie(b, herk, deals, passend, passend[0] if len(passend) == 1 else None, tekst)
+
+
+def meld_zonder_kopie(o, st, st_obj, reden):
+    """Eén bevinding per nieuwe reden (in de staat als zonder_kopie), dus niet elke ronde; een opname die alsnog haar
+    kopie krijgt, verliest haar reden zonder regel."""
+    if st.get("zonder_kopie") == reden:
+        return
+    if reden:
+        ag.log(f"opname {o['start_brussel'][:16]}", "bevinding", f"geen dossierkopie: {reden}")
+    st["zonder_kopie"] = reden
+    st_obj.bewaar(o["plaud_id"], st)
+
+
+def reden_zonder_dossierkopie(b, herk, deals, passend, deal, tekst):
+    """PLAUD-12 (T-0120): waarom een opname van H-Architects geen dossierkopie krijgt, of None (er komt een kopie, of het
+    is geen H-A-opname). In oktober mochten 7 HARC-opnames gekopieerd worden en kwam er geen, zonder reden in het
+    werkverslag. Een kopie vraagt een beslissing die ze toestaat en precies één open Pipedrive-deal met dat nummer
+    (fathom_wacht.deals_index leest alleen open deals). De regel zelf verandert niet: dit zegt alleen waarom. De
+    aanroeper logt het alleen bij een nieuwe beslissing en nooit bij een privé-opname (BAS-01)."""
+    afdeling = str((herk or {}).get("afdeling") or "").strip().lower()
+    ha = b.get("firma") == "HARC" or (not b.get("firma") and afdeling == "h-architects")
+    if not ha or (b.get("kopie_toegestaan") and deal and tekst):
+        return None
+    if deals is None:
+        return "Pipedrive niet gelezen"
+    if not b.get("projectnummer"):
+        return "geen projectnummer"
+    if not passend:
+        return f"geen open Pipedrive-deal met nummer {b['projectnummer']}"
+    if len(passend) > 1:
+        return (f"meer dan één open Pipedrive-deal met nummer {b['projectnummer']} ("
+                + ", ".join(str(d.get("id")) for d in passend) + ")")
+    return (f"de beslissing staat geen zakelijke kopie toe (zekerheid {b.get('zekerheid')}"
+            + (", conflict" if b.get("conflict") else "") + ")")
 
 
 # ------------------------------------------------------------- toezicht ---
@@ -452,6 +518,11 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
         r.nood("Plaud-aanmelding ontbreekt of is geweigerd: Mehdi meldt één keer aan met plaud_login.py op de Mac", wie="mehdi")
     elif status.get("uitkomst") == "bronfout":
         r.nood("De Plaud-API was bij de laatste ophaling niet bereikbaar", wie="claude-code")
+    # PLAUD-5 (T-0120): van 28-10 tot 01-11 stond de Mac elk uur op 'deels' (foutcode 4) met vijf mappen zonder audio, en
+    # hier kwam geen melding. Het aantal staat in het detail van de ronde, niet in de nood (N10).
+    if status.get("uitkomst") == "deels" or int((m["meta"].get("toestanden") or {}).get("onvolledig") or 0) > 0:
+        r.nood("De Plaud-ophaling op de Mac liep deels mis of het archief heeft onvolledige opnames (audio of transcript "
+               "ontbreekt); zie 00 status.json en 00 manifest.json op de Mac", wie="claude-code")
     alle = st_obj.alle().values()
     if m["meta"].get("conflicten"):
         r.nood("Id-conflict in het Plaud-archief: een opname staat in meer dan één map; Mehdi kiest welke geldt "
@@ -468,7 +539,10 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
         r.nood("Een zoektaak voor De Plaudwacht heeft een ongeldige bezoekmap; er is niets geleverd", wie="claude-code")
     oudste = min((t.get("aangemaakt") or t.get("ts") or "" for t in taken), default="")
     toest = m["meta"].get("toestanden") or {}
+    # PLAUD-9 (T-0120): de korte wachtende (onder een minuut) apart, maar ook in de wachtteller; een ouder manifest
+    # zonder die telling geeft onbekend, nooit 0
     tellers.update(manifest=m["meta"]["aantal"], wacht_op_transcript_archief=toest.get("wacht_op_transcript", 0),
+                   kort_wachtend_archief=m["meta"].get("kort_wachtend", "onbekend"),
                    onvolledig_archief=toest.get("onvolledig", 0), open_zoektaken=len(taken), oudste_zoektaak=oudste[:10],
                    aanmelding_mac=status.get("uitkomst", "onbekend"), invoer_van=m["meta"]["gemaakt"][:16])
     return code
@@ -555,7 +629,9 @@ def ronde(r):
         ag.log("Plaud", "bevinding", "herkenningsbudget van deze ronde op; de rest volgt in de volgende rondes")
     ag.log("Plaud", "bron", "ronde: " + ", ".join(f"{k} {v}" for k, v in tellers.items()))
     r.detail = (f"{tellers['gedaan']} verwerkt, {tellers['wacht_op_transcript']} wachten op transcript, "
-                f"{tellers.get('open_zoektaken', 0)} open zoektaken, invoer van {tellers.get('invoer_van', 'nooit')}")
+                f"{tellers.get('open_zoektaken', 0)} open zoektaken, invoer van {tellers.get('invoer_van', 'nooit')}"
+                + (f", {tellers['onvolledig_archief']} onvolledig in het archief" if tellers.get("onvolledig_archief") else "")
+                + (", Mac: deels" if tellers.get("aanmelding_mac") == "deels" else ""))
     return code, tellers
 
 

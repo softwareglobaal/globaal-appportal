@@ -380,10 +380,13 @@ def main():
             if NACHT and not DAG_GEGEVEN:
                 inhaal = inhaaldagen(nu, dagen)
                 if inhaal:
+                    vooraf = gespreksvingers(min(inhaal), max(inhaal)) if INHAAL_GESPREKKEN else {}   # PLAUD-10
                     delen.append("ingehaald: " + vastleggen(r, inhaal, zoom_gelezen=zoom_gelezen))
                     gedaan = lees_json(INHAALSTAAT)
                     gedaan.update({d: nu.isoformat() for d in inhaal})
                     _schrijf(INHAALSTAAT, json.dumps(gedaan, indent=1, sort_keys=True))
+                    if INHAAL_GESPREKKEN:
+                        vingers_bewaren(inhaal, vooraf)
             vastgesteld = True
         except Exception as e:  # noqa: BLE001
             if NACHT:
@@ -537,8 +540,8 @@ def ontvangst():
 
 def inhaaldagen(nu, venster):
     """Codex P7 en W1: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
-    dekkingsrij schreef of vervallen verklaarde na de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
-    hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
+    dekkingsrij schreef of vervallen verklaarde na de laatste vaststelling of inhaalbeurt van die dag; met INHAAL_GESPREKKEN
+    ook een dag met gewijzigde Plaud- of Fathom-rijen (PLAUD-10). Nieuwste eerst, hoogstens INHAAL_PER_NACHT, oplopend."""
     oudste = date.fromisoformat(min(venster))
     vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
     if vroegste >= oudste:
@@ -566,7 +569,58 @@ def inhaaldagen(nu, venster):
         vorige = [v for v in (tijd((staat.get(x["datum"]) or {}).get("ts")), tijd(gedaan.get(x["datum"]))) if v]
         if nieuw is not None and (not vorige or nieuw > max(vorige)):
             uit.append(x["datum"])
-    return sorted(uit[:INHAAL_PER_NACHT])
+    if INHAAL_GESPREKKEN:
+        # PLAUD-10: een dag met een bewaarde vingerafdruk alleen als die anders is, ook als er geen rij meer is (een rij
+        # die van dag veranderde, Codex-toets 2); een dag zonder, als een rij nieuwer is dan zijn laatste vaststelling of
+        # inhaal. Is ze dat niet, dan zag die vaststelling deze rijen: hun vingerafdruk wordt het vertrekpunt.
+        van, tot = vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()
+        bekend, vingers, vertrek = lees_json(INHAALVINGERS), gespreksvingers(van, tot), {}
+        for d in sorted(set(vingers) | {d for d in bekend if van <= d <= tot}):
+            vinger, laatst = vingers.get(d, (GEEN_RIJEN, ""))
+            if d in bekend:
+                anders = bekend[d] != vinger
+            else:
+                vorige = [v for v in (tijd((staat.get(d) or {}).get("ts")), tijd(gedaan.get(d))) if v]
+                nieuw = tijd(laatst)
+                anders = nieuw is not None and (not vorige or nieuw > max(vorige))
+                if not anders and vorige:
+                    vertrek[d] = vinger
+            if anders:
+                uit.append(d)
+        if vertrek:
+            _schrijf(INHAALVINGERS, json.dumps({**bekend, **vertrek}, indent=1, sort_keys=True))
+    return sorted(sorted(set(uit), reverse=True)[:INHAAL_PER_NACHT])
+
+
+# PLAUD-10 (T-0120): de 7 Plaud-opnames van 13-10 en 14-10 kwamen op 28-10 in de gesprekkentabel, na de laatste
+# vaststelling van hun dag en buiten het nachtvenster, en inhaaldagen keek alleen naar dekkingsrijen. Met de vlag aan telt
+# ook een gewijzigde rij van Plaud of Fathom, op inhoud: de upsert van het bord zet ts bij elke herschrijving, ook zonder
+# verschil (De Fathomwacht schrijft elke ronde haar venster opnieuw). Standaard uit (overleg X7): aan zet ze de inhaal van
+# oude dagen in gang, met nieuwe dagbestanden die naar Dropbox gaan. Aanzetten met een eigen commit na Mehdi's ja op X7.
+INHAAL_GESPREKKEN = False
+INHAALVINGERS = os.path.join(DATA, "dagvaststelling-inhaal-gesprekken.json")   # per dag de vingerafdruk
+GEEN_RIJEN = "geen"                                                            # de vingerafdruk van een dag zonder rij
+
+
+def gespreksvingers(van, tot):
+    """{dag: (vingerafdruk, nieuwste ts)} van de Plaud- en Fathom-rijen, met de velden die vastleggen leest."""
+    velden = ("uniek", "start", "minuten", "personen", "afdeling", "thema", "prive", "bron", "dubbel_van")
+    per, laatst = defaultdict(list), {}
+    for x in bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
+                          "COALESCE(dubbel_van, '') AS dubbel_van, ts FROM gesprek_log WHERE bron IN ('plaud', 'fathom') "
+                          "AND datum BETWEEN ? AND ?", (van, tot)):
+        per[x["datum"]].append([str(x.get(k) if x.get(k) is not None else "") for k in velden])
+        laatst[x["datum"]] = max(laatst.get(x["datum"], ""), str(x.get("ts") or ""))
+    return {d: (hashlib.sha256(json.dumps(sorted(v), ensure_ascii=False).encode()).hexdigest()[:16], laatst[d])
+            for d, v in per.items()}
+
+
+def vingers_bewaren(dagen, vooraf):
+    """Na een geslaagde inhaal: de vingerafdruk van elke ingehaalde dag, van voor het vastleggen (vooraf); een dag zonder
+    Plaud- of Fathom-rij krijgt GEEN_RIJEN, zodat een rij die er later bijkomt of wegging, opvalt."""
+    bekend = lees_json(INHAALVINGERS)
+    bekend.update({d: vooraf[d][0] if d in vooraf else GEEN_RIJEN for d in dagen})
+    _schrijf(INHAALVINGERS, json.dumps(bekend, indent=1, sort_keys=True))
 
 
 def gedekte_dagen(rijen):

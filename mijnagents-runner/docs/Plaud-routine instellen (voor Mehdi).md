@@ -1,5 +1,10 @@
 # Plaud-routine instellen (voor Mehdi)
 
+> **Vervallen sinds 12-10-2026.** Niet meer instellen. De Mac haalt de opnames zelf op uit de Plaud-API
+> (`plaud/plaud_haal_alles.py`, launchd `be.globaal.plaud.ophalen`) en De Plaudwacht leest dat archief. Deze
+> routine las dezelfde transcripten bij Plaud en kan er geen maken die Plaud niet heeft. Wacht een opname op een
+> transcript, dan is de weg Transcribe in de Plaud-app (PLAUD-1). Hieronder de oude tekst, alleen als geschiedenis.
+
 Klaargezet door Shaniel, 10-09-2026. Tien minuten werk, één keer.
 
 De routine haalt twee keer per dag je Plaud-opnames op en zet de transcripten

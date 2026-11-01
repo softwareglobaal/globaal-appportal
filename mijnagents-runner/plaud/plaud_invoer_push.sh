@@ -17,6 +17,10 @@ VM="${PLAUD_VM:-globaal:appportal/mijnagents-data/plaud-invoer}"
 LOG="$HOME/Library/Logs/plaud-ophalen.log"
 
 [ -d "$DOEL" ] || { echo "$(date '+%F %T') archief ontbreekt: $DOEL" >> "$LOG"; exit 1; }
+# PLAUD-13 (T-0120): alleen uit een checkout op main, ook na de installatie. Zet iemand die checkout op een andere tak,
+# dan draaide de Mac elk uur die tak; nu stopt de ronde hier, en meldt De Plaudwacht binnen drie uur dat de invoer oud is.
+TAK="$(git -C "$HIER" rev-parse --abbrev-ref HEAD 2>/dev/null || echo onbekend)"
+[ "$TAK" = "main" ] || { echo "$(date '+%F %T') niet gedraaid: de checkout staat op tak $TAK, niet op main" >> "$LOG"; exit 8; }
 
 /usr/bin/python3 "$HIER/plaud_haal_alles.py" >> "$LOG" 2>&1
 OPHALEN=$?
