@@ -24,6 +24,8 @@ git log --oneline -1
 cd mijnagents-runner
 PY=~/agents/.venv/bin/python
 $PY -c "import pypdf" || { echo "STOP: pypdf ontbreekt in ~/agents/.venv (nodig voor De Offertevergelijker)"; exit 1; }
+# Het adres van de zetel van beide firma's in kern, uit de KBO, alleen waar het leeg is (01-11-2026): zonder werkt Bouw niet
+$PY -m bouw.kern_adres --schrijf
 KOPIE=$(mktemp -d /tmp/bouw-uitrol.XXXXXX)
 trap 'rm -rf "$KOPIE"' EXIT
 cp -a . "$KOPIE/mijnagents-runner"
