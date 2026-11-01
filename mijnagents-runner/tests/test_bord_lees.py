@@ -547,11 +547,12 @@ def herkenning(personen, thema, prive=False, afdeling="regie", waarom="proef", h
             "afdeling": afdeling, "thema": thema, "project": "", "prive": prive, "zekerheid": "hoog", "waarom": waarom}
 
 
-def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None, samenvattingen=None, dekking=None):
+def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None, samenvattingen=None, dekking=None, deals=None):
     """Een ronde van De Fathomwacht op deze nabootsing, zonder netwerk en zonder taalmodel: elk gesprek staat al in het
     archief met zijn herkenning, dus herkent de ronde niets opnieuw. gesprekken: [(g, herkenning)]; nu: de klok van de
     ronde; dagen: FATHOM_WACHT_DAGEN; samenvattingen: de nagebootste aanvulvraag van FATHOM-1 (standaard: niets);
-    dekking: de nagebootste bekende_dekking van FATHOM-4 (standaard: onbekend, dan schrijft de ronde geen dekking). Geeft
+    dekking: de nagebootste bekende_dekking van FATHOM-4 (standaard: onbekend, dan schrijft de ronde geen dekking);
+    deals: de deals uit Pipedrive (standaard geen). Geeft
     (wat naar het bord ging, per pad een lijst; de schermregels; de gevraagde sinds)."""
     fw = _fathom_wacht()
     import nummerlezer  # noqa: PLC0415
@@ -584,7 +585,7 @@ def fathom_ronde(nb, gesprekken, archief=None, nu=None, dagen=None, samenvatting
     fw.fathom.beschikbaar, fw.fathom.gesprekken, fw.fathom.sleutels = (lambda: True), haal, (lambda: ["proef"])
     oud["samenvattingen"], fw.fathom.samenvattingen = fw.fathom.samenvattingen, (samenvattingen or (lambda sinds, tot=None: []))
     oud["dekking"], fw.bekende_dekking = fw.bekende_dekking, (dekking or (lambda eerste, laatste: None))
-    fw.deals_index = lambda: []
+    fw.deals_index = lambda: list(deals or [])
     fw.dropbox_prive.spiegel_map = lambda lokaal, extern: {"verstuurd": 0, "fout": "", "rest": 0}
     fw.dropbox_prive.nood = lambda wie="mehdi", wat="": []
     scherm = io.StringIO()

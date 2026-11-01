@@ -76,10 +76,10 @@ def _haal(sleutel, pad, params=None, pogingen=None):
             wacht *= 2
 
 
-def _alle(sinds_iso, vlaggen, pauze, pogingen=None, tot=None):
-    """Alle pagina's van /meetings over alle sleutels. tot: een tijdstip (time.monotonic) waarna geen nieuwe pagina meer
-    gevraagd wordt; dan een TimeoutError, want een half antwoord is geen volledig antwoord."""
-    uit = []
+def _per_item(sinds_iso, vlaggen, pauze, pogingen=None, tot=None):
+    """Elk gesprek van /meetings over alle sleutels, pagina voor pagina, zodat wie leest het vorige al verwerkte. tot:
+    een tijdstip (time.monotonic) waarna geen nieuwe pagina meer gevraagd wordt; dan een TimeoutError, want een half
+    antwoord is geen volledig antwoord. Een pagina die al liep, gaat nog door (met pogingen herkansingen)."""
     for s in sleutels():
         cursor = None
         while True:
@@ -89,13 +89,16 @@ def _alle(sinds_iso, vlaggen, pauze, pogingen=None, tot=None):
             if cursor:
                 params["cursor"] = cursor
             d = _haal(s, "/meetings", params) if pogingen is None else _haal(s, "/meetings", params, pogingen=pogingen)
-            uit += d.get("items") or d.get("meetings") or []
+            yield from d.get("items") or d.get("meetings") or []
             cursor = d.get("next_cursor")
             if not cursor:
                 break
             if pauze:
                 time.sleep(PAUZE)
-    return uit
+
+
+def _alle(sinds_iso, vlaggen, pauze):
+    return list(_per_item(sinds_iso, vlaggen, pauze))
 
 
 def gesprekken(sinds_iso, met_transcript=False):
@@ -107,9 +110,10 @@ def samenvattingen(sinds_iso, tot=None):
     """FATHOM-1 en ANGEL-8 (overleg T-0120, X9): alle gesprekken sinds een ISO-tijdstip met de samenvatting en de
     actiepunten van Fathom (include_summary en include_action_items staan standaard uit), zonder transcript. Een aparte
     vraag, niet bij die met transcript: zo'n pagina was al 600 kB en brak af (29-10-2026). Gemeten 01-11-2026: met de
-    twee vlaggen 18 van 18 samenvattingen, zonder 0. Met AANVUL_POGINGEN per pagina en de tijdsgrens tot."""
-    return _alle(sinds_iso, {"include_transcript": "false", "include_summary": "true", "include_action_items": "true"},
-                 True, pogingen=AANVUL_POGINGEN, tot=tot)
+    twee vlaggen 18 van 18 samenvattingen, zonder 0. Met AANVUL_POGINGEN per pagina en de tijdsgrens tot. Geeft de
+    gesprekken een voor een (een generator): wat binnen was voor de grens, is dan al verwerkt (Codex T-0120, toets 2)."""
+    return _per_item(sinds_iso, {"include_transcript": "false", "include_summary": "true", "include_action_items": "true"},
+                     True, pogingen=AANVUL_POGINGEN, tot=tot)
 
 
 # --------------------------------------------- samenvatting en actiepunten in de archiefmap (FATHOM-1) ---

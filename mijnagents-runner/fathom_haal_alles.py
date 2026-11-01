@@ -103,6 +103,10 @@ def bewaar(g, map_, oud_pad):
             herk = json.load(open(os.path.join(oud_pad, "gesprek.json"))).get("herkenning")
         except (OSError, ValueError):
             herk = None
+    if not herk or herk.get("prive") or str(herk.get("afdeling") or "").strip().lower() in ("prive", "privé"):
+        # FATHOM-3 en FATHOM-7 (T-0120): zonder herkenning (privé bij twijfel) of bij een privégesprek geen deellink in
+        # het archief, die opent zonder aanmelden; zoals De Fathomwacht alleen de gewone link
+        g = {k: v for k, v in g.items() if k != "share_url"}
     ruw, tekst = transcript_regels(g)
     start, eind = belgisch(g.get("recording_start_time")), belgisch(g.get("recording_end_time"))
     duur = round((eind - start).total_seconds() / 60) if start and eind else 0

@@ -129,7 +129,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   (`fathom.video/calls/...`) vraagt wél een login; die gebruik ik niet om te delen.
   In de gesprekkentabel zet ik de deellink alleen bij een werkgesprek (voor 'open in
   Fathom' op de wachtenpagina); een privégesprek krijgt de gewone link, en een
-  klaarzet-item ook (sinds T-0120).
+  klaarzet-item ook. Een nieuw privégesprek bewaart de deellink ook niet in het
+  archief: daar staat alleen de gewone link (sinds T-0120).
 
 ## Wat ik nooit doe
 

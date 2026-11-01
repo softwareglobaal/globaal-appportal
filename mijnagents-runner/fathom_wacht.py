@@ -239,6 +239,11 @@ def is_prive(herk, besl=None):
 
 
 def bewaar(g, tekst, herkenning):
+    if is_prive(herkenning):
+        # FATHOM-3 (Codex T-0120, toets 2): de deellink opent zonder aanmelden en het archief gaat naar Dropbox; een
+        # privégesprek bewaart alleen de gewone link (transcript.md, gesprek.json, video.md, .webloc). De dossierbeslissing
+        # noemt een gesprek alleen privé op grond van de herkenning, dus is_prive(herkenning) is hier de hele regel.
+        g = {k: v for k, v in g.items() if k != "share_url"}
     map_ = os.path.join(ARCHIEF, archiefmap(g))
     gj = os.path.join(map_, "gesprek.json")
     if os.path.exists(gj):
@@ -496,7 +501,9 @@ def _ronde(r):
                 deal = None                 # een deal die niet bij het beslist dossier hoort, krijgt geen kopie
             rij = {"uniek": f"fathom:{gid}", "datum": start[:10], "start": start[11:16], "minuten": duur,
                    "personen": ", ".join(herk.get("personen") or []), "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""),
-                   "thema": herk.get("thema", ""), "project": herk.get("project", "") or (deal["titel"] if deal else ""),
+                   # Codex T-0120 (FATHOM-7): een privérij krijgt de titel van een deal niet als project; ook zonder
+                   # herkenning, waar de deal anders het enige onderwerp is dat in de tabel komt
+                   "thema": herk.get("thema", ""), "project": herk.get("project", "") or (deal["titel"] if deal and not prive else ""),
                    "prive": prive, "zekerheid": herk.get("zekerheid", ""), "waarom": herk.get("waarom", ""), "archief": map_,
                    "link": fathom_link(g, prive), "opgenomen_door": (g.get("recorded_by") or {}).get("name", ""),
                    "bron": "fathom"}   # Z13: expliciet, niet de stille standaard van het bord

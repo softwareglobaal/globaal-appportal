@@ -43,5 +43,6 @@ de rij: `prive = 1` of afdeling `prive`/`privé` betekent bij Fathom privé. Lee
 ## De link naar Fathom
 
 Kolom `link` van de rij: bij een werkgesprek de deellink (`share_url`, opent zonder aanmelden), anders de gewone link
-(`fathom.video/calls/...`, vraagt aanmelden); een privégesprek krijgt nooit de deellink. Zet hem niet in een bestand
-in Dropbox: de link gaat via een route achter Authentik (VOL-19).
+(`fathom.video/calls/...`, vraagt aanmelden); een privégesprek krijgt nooit de deellink, ook niet in zijn archiefmap
+(sinds T-0120; oudere mappen blijven zoals ze zijn). Zet de link niet in een bestand in Dropbox: hij gaat via een
+route achter Authentik (VOL-19).

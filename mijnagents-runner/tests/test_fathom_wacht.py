@@ -72,6 +72,58 @@ def _nep_haal(F, paginas):
     return haal, gevraagd
 
 
+def test_fathom7_herkenning_null_met_deal_en_deellink_blijft_privé():
+    """Codex T-0120, toets 2: ook als een deal past (e-mail van een deelnemer) en Fathom een deellink geeft, draagt de
+    rij van een gesprek zonder herkenning geen projecttitel en geen deellink, en het item geen naam of onderwerp."""
+    deal = {"id": 5, "nummer": "2699", "titel": "2699 Proefwoning Zonnedak", "mails": {"klant@proef.test"}, "delen": set()}
+    g = dict(gesprek(7151, "2026-10-20T07:10:00Z", "2026-10-20T07:41:00Z", titel="Overleg"),
+             share_url="https://fathom.video/share/deel7151", calendar_invitees=[{"name": "Klant", "email": "klant@proef.test"}])
+    nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+    gezet, scherm, _ = fathom_ronde(nb, [(g, None)], deals=[deal])
+    rij = gezet["/api/gesprekken"][0]["rijen"][0]
+    assert rij["prive"] is True and rij["project"] == "" and rij["link"] == "https://fathom.video/calls/7151", rij
+    werk, _, _ = fathom_ronde(BordNabootsing(werkwijze=WW_FATHOM, open_noden=[]), [(g, herkenning(["Jan Proef"], "Proef"))],
+                              deals=[deal])
+    assert werk["/api/gesprekken"][0]["rijen"][0]["project"] == deal["titel"], "de proef past echt op de deal"
+    naar_bord = json.dumps(gezet, ensure_ascii=False) + scherm
+    assert "Zonnedak" not in naar_bord and "deel7151" not in naar_bord, naar_bord[:600]
+
+
+def test_fathom3_privé_archief_bewaart_geen_deellink():
+    """Codex T-0120, toets 2: een nieuw privégesprek bewaart de deellink (die opent zonder aanmelden) in geen enkel
+    archiefbestand: niet in transcript.md, gesprek.json, video.md of de .webloc; alleen de gewone link. Een werkgesprek
+    houdt ze. Bestaande mappen blijven zoals ze zijn (nooit overschrijven)."""
+    fw = _fathom_wacht()
+    archief, oud = tempfile.mkdtemp(prefix="fathom-data-"), (fw.ARCHIEF, fw._INDEX)
+    fw.ARCHIEF, fw._INDEX = archief, None
+    try:
+        uit = {}
+        for rid, herk in ((7161, {"prive": True, "afdeling": "prive"}), (7162, {"prive": False, "afdeling": "prive"}),
+                          (7163, {"prive": False, "afdeling": "regie"})):
+            g = dict(gesprek(rid, "2026-10-22T08:00:00Z", "2026-10-22T08:20:00Z", titel=f"Proef {rid}"),
+                     share_url=f"https://fathom.video/share/deel{rid}")
+            map_, nieuw = fw.bewaar(g, "tekst", herk)
+            assert nieuw, rid
+            uit[rid] = "".join(open(os.path.join(map_, n), "rb").read().decode("utf-8", "replace") for n in os.listdir(map_))
+    finally:
+        fw.ARCHIEF, fw._INDEX = oud
+    for rid in (7161, 7162):
+        assert f"deel{rid}" not in uit[rid] and f"https://fathom.video/calls/{rid}" in uit[rid], uit[rid][:800]
+    assert "deel7163" in uit[7163], "een werkgesprek houdt de deellink in het archief"
+    sys.path.insert(0, os.path.dirname(HIER))
+    import fathom_haal_alles as H  # noqa: PLC0415
+    for rid, oud_pad in ((7164, ""), (7165, "werk")):
+        map_ = tempfile.mkdtemp(prefix="fathom-map-")
+        if oud_pad:
+            oud_pad = tempfile.mkdtemp(prefix="fathom-oud-")
+            with open(os.path.join(oud_pad, "gesprek.json"), "w", encoding="utf-8") as f:
+                json.dump({"recording_id": rid, "herkenning": {"prive": False, "afdeling": "regie"}}, f)
+        H.bewaar(dict(gesprek(rid, "2026-10-22T08:00:00Z", "2026-10-22T08:20:00Z"), share_url=f"https://fathom.video/share/deel{rid}"),
+                 map_, oud_pad)
+        alles = "".join(open(os.path.join(map_, n), "rb").read().decode("utf-8", "replace") for n in os.listdir(map_))
+        assert (f"deel{rid}" in alles) == bool(oud_pad), (rid, alles[:600])
+
+
 def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcript():
     """FATHOM-1 (overleg X1, K4): een aparte vraag met include_summary en include_action_items, zonder transcript, over
     elke sleutel en elke pagina. De gewone vraag met transcript blijft zoals ze was (pagina's van 600 kB braken al af)."""
@@ -82,7 +134,7 @@ def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcrip
     F._haal, gevraagd = _nep_haal(F, paginas)
     F.sleutels, F.time.sleep = (lambda: ["s1", "s2"]), (lambda s: None)
     try:
-        uit = F.samenvattingen("2026-10-01T00:00:00Z")
+        uit = list(F.samenvattingen("2026-10-01T00:00:00Z"))
         assert [g["recording_id"] for g in uit] == [1, 2, 3], uit
         assert len(gevraagd) == 3 and all(pad == "/meetings" for _, pad, _ in gevraagd), gevraagd
         for _, _, p in gevraagd:
@@ -92,7 +144,7 @@ def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcrip
         assert all(p["pogingen"] == F.AANVUL_POGINGEN for _, _, p in gevraagd), "minder herkansingen voor de aanvulvraag"
         F._haal, gevraagd = _nep_haal(F, paginas)
         try:
-            F.samenvattingen("2026-10-01T00:00:00Z", tot=F.time.monotonic() - 1)
+            list(F.samenvattingen("2026-10-01T00:00:00Z", tot=F.time.monotonic() - 1))
             assert False, "over de tijdsgrens hoort een TimeoutError"
         except TimeoutError:
             assert gevraagd == [], "over de tijdsgrens geen nieuwe pagina"
@@ -102,6 +154,40 @@ def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcrip
                    and p["pogingen"] is None for _, _, p in gevraagd), f"de vraag met transcript krijgt er niets bij: {gevraagd}"
     finally:
         F._haal, F.sleutels, F.time.sleep = echt
+
+
+def test_fathom1_trage_pagina_voor_de_grens_houdt_wat_al_binnen_is():
+    """Codex T-0120, toets 2: een pagina die vlak voor de tijdsgrens begint en erover loopt, wordt nog verwerkt; de
+    volgende pagina wordt niet meer gevraagd. Wat al binnen was, staat in het archief: de TimeoutError gooit niets weg."""
+    F, fw = _koppeling(), _fathom_wacht()
+    klok = [1000.0]
+    paginas = {"s1": [{"items": [{"recording_id": 7801, "default_summary": SAMENVATTING, "action_items": []}],
+                       "next_cursor": "c2"}, {"items": [{"recording_id": 7802, "default_summary": SAMENVATTING}]}]}
+    haal_echt, gevraagd = _nep_haal(F, paginas)
+
+    def traag(sleutel, pad, params=None, pogingen=None):
+        klok[0] += fw.AANVUL_SECONDEN + 50          # deze pagina duurt langer dan de hele grens
+        return haal_echt(sleutel, pad, params, pogingen)
+    archief = tempfile.mkdtemp(prefix="fathom-data-")
+    for rid in (7801, 7802):
+        os.makedirs(os.path.join(archief, f"map {rid}"))
+        with open(os.path.join(archief, f"map {rid}", "gesprek.json"), "w", encoding="utf-8") as f:
+            json.dump({"recording_id": rid}, f)
+    echt = (F._haal, F.sleutels, F.time.sleep, F.time.monotonic, fw.time.monotonic, fw.ARCHIEF, fw._INDEX)
+    F._haal, F.sleutels, F.time.sleep = traag, (lambda: ["s1"]), (lambda s: None)
+    F.time.monotonic = fw.time.monotonic = lambda: klok[0]
+    fw.ARCHIEF, fw._INDEX = archief, None
+    try:
+        try:
+            fw.aanvullen("2026-10-01T00:00:00Z")
+            assert False, "over de grens hoort een TimeoutError"
+        except TimeoutError:
+            pass
+    finally:
+        F._haal, F.sleutels, F.time.sleep, F.time.monotonic, fw.time.monotonic, fw.ARCHIEF, fw._INDEX = echt
+    assert len(gevraagd) == 1, f"na de grens geen nieuwe pagina: {gevraagd}"
+    assert {"samenvatting.md", "actiepunten.json"} <= set(os.listdir(os.path.join(archief, "map 7801")))
+    assert os.listdir(os.path.join(archief, "map 7802")) == ["gesprek.json"]
 
 
 def test_angel8_samenvatting_is_markdown_geen_python_dict():
