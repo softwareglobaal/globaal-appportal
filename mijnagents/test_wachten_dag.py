@@ -10,6 +10,8 @@
 - W08: wat op een andere dag binnenkwam, telt niet mee;
 - W11: een gesprek met afdeling prive (RZ3-01) toont alleen 'privégesprek, N min', zonder naam of onderwerp;
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
+- W12 (TEL-4, WA-7): een gemiste oproep (buiten:gemist) heet 'telt niet als gesprek', nooit 'dubbel'; een vervallen
+  rij 'niet meer in de bron'; alleen een echte dubbel blijft 'dubbel, telt niet';
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -105,6 +107,27 @@ check("W11 privégesprek zonder naam of onderwerp", fa["aantal"] == 1 and fa["it
       and fa["items"][0]["wat"] == "10 min" and "Geheim" not in str(fa["items"]), fa["items"])
 check("W11 whatsapp prive=1 zonder afdeling houdt de naam", wa["items"][0]["wie"] == "Sara")
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
+
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, start, thema, dubbel, afdeling in (
+        ("telefoon:A-1", "08:00", "telefoon, inkomend, gemist", "buiten:gemist", ""),
+        ("telefoon:B-2", "08:30", "telefoon, uitgaand, niet beantwoord", "buiten:gemist", ""),
+        ("telefoon:C-3", "09:00", "telefoon, inkomend", "buiten:vervallen", ""),
+        ("telefoon:D-4", "09:30", "telefoon, inkomend", "telefoon:A-1", ""),
+        ("telefoon:E-5", "10:00", "telefoon, inkomend, gemist", "buiten:gemist", "prive")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,dubbel_van,ts) "
+                "VALUES(?,'2026-10-29',?,0,'Proef Beller',?,?,1,'telefoon',?,'x')", (uniek, start, thema, afdeling, dubbel))
+con.commit()
+con.close()
+d29 = C.get("/api/wachten/dag?dag=2026-10-29", headers=K).get_json()
+bel = {x["naam"]: x for v in d29["vakken"] for x in v["wachten"]}["belwacht"]
+wat = [i["wat"] for i in bel["items"]]
+check("W12 gemist is geen dubbel", wat[0] == "telefoon, inkomend, gemist, telt niet als gesprek"
+      and wat[1] == "telefoon, uitgaand, niet beantwoord, telt niet als gesprek", wat)
+check("W12 vervallen en echte dubbel", wat[2] == "telefoon, inkomend, niet meer in de bron"
+      and wat[3] == "telefoon, inkomend, dubbel, telt niet", wat)
+check("W12 privé gemist zonder naam", bel["items"][4]["wie"] == "privégesprek"
+      and wat[4] == "gemist, telt niet als gesprek", bel["items"][4])
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

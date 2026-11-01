@@ -82,6 +82,20 @@ def is_prive_gesprek(r):
     return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
 
 
+def dubbel_tekst(dubbel_van, thema=""):
+    """TEL-4 (WA-7): wat dubbel_van zegt, in woorden. Een gemiste of niet beantwoorde oproep (buiten:gemist) is geen
+    dubbel: hij telt niet als gesprek. Een rij die de bron niet meer toont, is vervallen. Alleen een verwijzing naar een
+    andere rij is een echte dubbel."""
+    d = str(dubbel_van or "")
+    if not d:
+        return ""
+    if d == "buiten:gemist":
+        return ("" if re.search(r"gemist|niet beantwoord", str(thema or "")) else "gemist, ") + "telt niet als gesprek"
+    if d == "buiten:vervallen":
+        return "niet meer in de bron"
+    return "dubbel, telt niet"
+
+
 def lees_gesprekken(conn, bron, dag):
     rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
                          "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
@@ -95,11 +109,11 @@ def lees_gesprekken(conn, bron, dag):
         if is_prive_gesprek(r):
             # RZ2-01: van een privégesprek alleen "privégesprek, N min", zonder naam of onderwerp.
             wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "",
-                                        "dubbel, telt niet" if r["dubbel_van"] else "") if x)
+                                        dubbel_tekst(r["dubbel_van"])) if x)
             items.append(_item(uur(r["start"]), "privégesprek", wat))
             continue
         wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "", kort(r["thema"], 100),
-                                    "dubbel, telt niet" if r["dubbel_van"] else "") if x)
+                                    dubbel_tekst(r["dubbel_van"], r["thema"])) if x)
         items.append(_item(uur(r["start"]), r["personen"] or "onbekend", wat))
     return items, gedekt
 
