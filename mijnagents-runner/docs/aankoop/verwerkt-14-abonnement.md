@@ -72,3 +72,22 @@ Tests: 233 prijstests groen.
   abonnementsproef en de MOVA-vraag pas als Mehdi bevestigt dat Usage credits uitstaan (claude.ai, Settings > Usage).
 - Punt 3: de abonnementsproef zegt alleen nog "werkt" als ze een limietmelding zag met `overageStatus` anders dan
   `allowed`; zonder melding faalt ze met uitleg.
+
+## Na de uitrol: meting van de bouwsessie (01-11-2026)
+
+- **Gemeten door de bouwsessie** (Claude Code 2.1.302, alleen `CLAUDE_CODE_OAUTH_TOKEN`, lege configuratiemap):
+  `claude auth status --json` toont met een token uit setup-token geen `subscriptionType`, alleen `loggedIn`,
+  `authMethod: "oauth_token"` en `apiProvider`. `voor_de_start()` zou dus altijd weigeren.
+- **Aanpassing in `voor_de_start()`:**
+  - de controle eist nu `authMethod == "oauth_token"`, aanbieder `firstParty` en geen `apiKeySource`;
+  - een getoond abonnementstype moet persoonlijk zijn;
+  - zonder type geldt een Team- of Enterprise-account als gevonden zodra er centrale instellingen zijn.
+- **Controle op centrale instellingen:** die gebeurt na `auth status` en opnieuw bij het init-bericht van `claude -p`,
+  voor de eerste aanvraag (`centraal_ingesteld`).
+- **Eén aanmeldscript:** het eigen script `scripts/claude-abonnement-naar-vm.sh` is weg. De bouwsessie bouwde
+  `mijnagents-runner/mac/abonnement_aanmelden.command`:
+  - het schrijft hetzelfde tokenbestand, zonder plakken;
+  - het toetst zonder modelaanvraag;
+  - het geldt voor alle agents op het abonnement.
+- **Afwijking van X5:** dat script neemt `setup-token` kort op in een tijdelijk bestand (0600, daarna overschreven en
+  gewist) om plakken te vermijden. Mehdi wil niets plakken. Het nakijken van dat script hoort bij de bouwsessie.

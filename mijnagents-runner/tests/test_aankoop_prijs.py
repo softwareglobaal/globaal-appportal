@@ -375,9 +375,12 @@ if args[:2] == ["auth", "status"]:
     # Geen modelaanvraag: alleen het account (Codex controle 16); centrale instellingen komen in de configuratiemap.
     if spec.get("centraal"):
         json.dump(spec["centraal"], open(os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "remote-settings.json"), "w"))
+    # Zoals gemeten met een token uit setup-token: geen subscriptionType (bouwsessie, 01-11-2026).
     print(json.dumps(spec.get("auth", {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty",
-                                       "subscriptionType": "max"})))
+                                       "analyticsDisabled": False})))
     sys.exit(0)
+if spec.get("centraal_bij_start"):
+    json.dump(spec["centraal_bij_start"], open(os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "remote-settings.json"), "w"))
 json.dump(args, open("args.json", "w"))
 json.dump(dict(os.environ), open("env.json", "w"))
 open("invoer.txt", "w").write("" if spec.get("lees_niet") else sys.stdin.read())
@@ -566,16 +569,26 @@ begin = time.monotonic()
 uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, aan]))
 check("staan Usage credits aan, dan stopt de vraag meteen: een volgende aanvraag kan geld kosten (Codex 16, punt 2)",
       isinstance(uit, O.GeenAbonnement) and "Usage credits" in str(uit) and time.monotonic() - begin < 10, str(uit))
-for naam, spec_extra, woord in (("Team-account", {"auth": {"loggedIn": True, "apiProvider": "firstParty", "subscriptionType": "team"}},
-                                 "persoonlijk"),
-                                ("onbekend abonnement", {"auth": {"loggedIn": True, "apiProvider": "firstParty"}}, "persoonlijk"),
-                                ("niet aangemeld", {"auth": {"loggedIn": False, "apiProvider": "firstParty"}}, "niet aanvaard"),
-                                ("andere aanbieder", {"auth": {"loggedIn": True, "apiProvider": "bedrock", "subscriptionType": "max"}},
+OAUTH = {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"}
+for naam, spec_extra, woord in (("Team-account", {"auth": dict(OAUTH, subscriptionType="team")}, "persoonlijk"),
+                                ("API-sleutel volgens auth status", {"auth": dict(OAUTH, authMethod="api_key")}, "niet aanvaard"),
+                                ("een sleutelbron naast het token", {"auth": dict(OAUTH, apiKeySource="ANTHROPIC_API_KEY")},
                                  "niet aanvaard"),
+                                ("niet aangemeld", {"auth": dict(OAUTH, loggedIn=False)}, "niet aanvaard"),
+                                ("andere aanbieder", {"auth": dict(OAUTH, apiProvider="bedrock")}, "niet aanvaard"),
                                 ("centrale instellingen", {"centraal": {"env": {"ANTHROPIC_AUTH_TOKEN": "x"}}}, "centrale")):
     uit, args, _, _, _ = nep_vraag(dict(GEWOON, **spec_extra))
     check(f"{naam}: claude -p start niet, er gaat geen aanvraag naar het model (Codex 16, punt 1)",
           isinstance(uit, O.GeenAbonnement) and woord in str(uit) and args is None, str(uit))
+uit, _, _, _, _ = nep_vraag(dict(GEWOON, auth=dict(OAUTH, subscriptionType="max")))
+check("een persoonlijk abonnementstype dat wel getoond wordt, mag", isinstance(uit, dict) and uit["abonnement"] == "max")
+uit, _, _, _, _ = nep_vraag(GEWOON)
+check("een setup-token zonder abonnementstype mag (gemeten: auth status toont het niet)", isinstance(uit, dict)
+      and uit["stop"] == "klaar" and uit["abonnement"] == "oauth_token", str(uit)[:200])
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT], centraal_bij_start={"env": {"ANTHROPIC_AUTH_TOKEN": "x"}}))
+check("centrale instellingen die claude -p bij de start ophaalt, stoppen de vraag bij het init-bericht",
+      isinstance(uit, O.GeenAbonnement) and "centrale" in str(uit) and time.monotonic() - begin < 10, str(uit))
 beheer = tempfile.mkdtemp(prefix="beheer-")
 open(os.path.join(beheer, "managed-settings.json"), "w").write("{}")
 oud_beheerd, O.BEHEERD = O.BEHEERD, (beheer,)
@@ -623,12 +636,13 @@ uit_meld = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed",
 json.dump({"regels": [INIT, uit_meld, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef zegt 'werkt' bij bron none, extra verbruik uit en een gewoon einde (X7)",
-      gelukt and "werkt via het abonnement max" in melding and "disabled" in melding, melding)
+      gelukt and "werkt via het abonnement oauth_token" in melding and "disabled" in melding, melding)
 json.dump({"regels": [INIT, aan, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef faalt zolang Usage credits aanstaan, met wat Mehdi moet doen", not gelukt
       and "Settings > Usage" in melding, melding)
-json.dump({"regels": [INIT], "auth": {"loggedIn": True, "apiProvider": "firstParty", "subscriptionType": "enterprise"}},
+json.dump({"regels": [INIT], "auth": {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty",
+                                      "subscriptionType": "enterprise"}},
           open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef weigert een Enterprise-account voor elke modelaanvraag", not gelukt and "persoonlijk" in melding)

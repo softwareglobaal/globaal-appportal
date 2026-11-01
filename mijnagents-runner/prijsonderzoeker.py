@@ -17,7 +17,8 @@ Met de hand op de VM: ~/agents/.venv/bin/python prijsonderzoeker.py --vraag "...
 heeft pypdf voor handleidingen in PDF).
 
 Werkt met Mehdi's Claude-abonnement via claude -p, nooit met de API (overleg 14, 01-11-2026): geen API-kost. Het token
-staat in ~/.config/prijsonderzoeker/claude-token (rechten 600); zetten met scripts/claude-abonnement-naar-vm.sh.
+staat in ~/.config/prijsonderzoeker/claude-token (rechten 600), het bestand dat ook de bouwagents lezen; zetten met
+mijnagents-runner/mac/abonnement_aanmelden.command (dubbelklikken, aanmelden, niets plakken).
 """
 import argparse
 import hashlib

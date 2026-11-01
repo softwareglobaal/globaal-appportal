@@ -293,18 +293,27 @@ def voor_de_start(token, werkmap):
     except (subprocess.TimeoutExpired, OSError, ValueError) as e:
         raise GeenAbonnement(f"claude auth status niet leesbaar ({type(e).__name__})") from e
     soort = str(status.get("subscriptionType") or "").lower()
-    if not status.get("loggedIn") or status.get("apiProvider") != "firstParty":
-        raise GeenAbonnement("het abonnementstoken wordt niet aanvaard (claude auth status)")
-    if soort not in PERSOONLIJK:
-        raise GeenAbonnement(f"geen persoonlijk abonnement (soort {soort or 'onbekend'}); niet gestart")
-    try:
-        with open(os.path.join(werkmap, "claude-config", "remote-settings.json"), encoding="utf-8") as f:
-            centraal = json.load(f)
-    except (OSError, ValueError):
-        centraal = {}
-    if centraal:
+    if (not status.get("loggedIn") or status.get("apiProvider") != "firstParty" or status.get("apiKeySource")
+            or status.get("authMethod") != "oauth_token"):
+        raise GeenAbonnement(f"het abonnementstoken wordt niet aanvaard (claude auth status: {status.get('authMethod')})")
+    # Met een token uit setup-token toont auth status geen abonnementstype (gemeten 01-11-2026 door de bouwsessie,
+    # Claude Code 2.1.302: alleen loggedIn, authMethod oauth_token, apiProvider). Staat het type er wel, dan moet het
+    # persoonlijk zijn; een Team- of Enterprise-account herkennen we anders aan centrale instellingen, hier en bij de
+    # start van claude -p (verwerk_regel, init).
+    if soort and soort not in PERSOONLIJK:
+        raise GeenAbonnement(f"geen persoonlijk abonnement (soort {soort}); niet gestart")
+    if centraal_ingesteld(os.path.join(werkmap, "claude-config")):
         raise GeenAbonnement("het account krijgt centrale instellingen; niet gestart")
-    return soort
+    return soort or "oauth_token"
+
+
+def centraal_ingesteld(config):
+    """Heeft Claude Code centrale instellingen van een organisatie opgehaald in deze configuratiemap?"""
+    try:
+        with open(os.path.join(config, "remote-settings.json"), encoding="utf-8") as f:
+            return bool(json.load(f))
+    except (OSError, ValueError):
+        return False
 
 
 def opdrachtregel(werkmap, systeem, model=None):
@@ -335,6 +344,7 @@ class _Stand:
         self.limiet = False
         self.extra_verbruik = None          # overageStatus uit de stream, voor het werkverslag
         self.soort = None                   # het abonnement volgens claude auth status
+        self.config = None                  # de eigen configuratiemap van claude -p
 
 
 def verwerk_regel(st, d):
@@ -344,6 +354,8 @@ def verwerk_regel(st, d):
         st.bron, st.model = d.get("apiKeySource"), d.get("model")
         if st.bron != "none":
             return "bron"                 # een API-sleutel of iets anders dan het abonnement (K1)
+        if st.config and centraal_ingesteld(st.config):
+            return "centraal"             # centrale instellingen van een organisatie: stoppen voor de eerste aanvraag
     elif soort == "rate_limit_event":
         info = d.get("rate_limit_info") or {}
         st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
@@ -465,6 +477,7 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     st = _Stand()
     try:
         st.soort = voor_de_start(token, werkmap)
+        st.config = os.path.join(werkmap, "claude-config")
         reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token, werkmap), werkmap, gebruiker, deadline, st)
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)
@@ -477,6 +490,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         raise GeenAbonnement("Claude Code startte extra betaald verbruik bovenop het abonnement; meteen gestopt")
     if reden == "extra_aan":
         raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
+    if reden == "centraal":
+        raise GeenAbonnement("het account krijgt centrale instellingen van een organisatie; meteen gestopt")
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
         raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
@@ -505,8 +520,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
 
 
 def proef_abonnement(token=None, wacht=120):
-    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Voor scripts/claude-abonnement-naar-vm.sh
-    en na een uitrol (overleg 14, X7): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
+    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Pas te draaien als Mehdi bevestigde dat
+    Usage credits uitstaan, na het aanmelden en na een uitrol (overleg 14, X7; Codex controle 17): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
     try:
         token = token or lees_token()
     except GeenAbonnement as e:

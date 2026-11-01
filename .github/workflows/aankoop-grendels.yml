@@ -7,11 +7,11 @@ on:
   push:
     paths: ["mijnagents-runner/aankoop/**", "mijnagents-runner/prijsonderzoeker.py", "mijnagents-runner/werkwijze/prijsonderzoeker.md",
             "mijnagents-runner/tests/test_aankoop_*.py", "mijnagents-runner/tests/fixtures/claude_stream_*.jsonl",
-            "scripts/claude-abonnement-naar-vm.sh", ".github/workflows/aankoop-grendels.yml"]
+            ".github/workflows/aankoop-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/aankoop/**", "mijnagents-runner/prijsonderzoeker.py", "mijnagents-runner/werkwijze/prijsonderzoeker.md",
             "mijnagents-runner/tests/test_aankoop_*.py", "mijnagents-runner/tests/fixtures/claude_stream_*.jsonl",
-            "scripts/claude-abonnement-naar-vm.sh", ".github/workflows/aankoop-grendels.yml"]
+            ".github/workflows/aankoop-grendels.yml"]
 
 jobs:
   grendels:
@@ -22,4 +22,3 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 mijnagents-runner/tests/test_aankoop_prijs.py
-      - run: bash -n scripts/claude-abonnement-naar-vm.sh
