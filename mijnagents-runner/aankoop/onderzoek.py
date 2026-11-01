@@ -542,6 +542,8 @@ def proef_abonnement(token=None, wacht=120):
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
-    return True, (f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, "
-                  f"extra verbruik: {st.extra_verbruik or 'niet gemeld'})")
+    if st.extra_verbruik is None:
+        # Zonder limietmelding is niet na te gaan of Usage credits uitstaan: dan nooit "werkt" (Codex controle 17, 3).
+        return False, "geen limietmelding van het abonnement: niet na te gaan of Usage credits uitstaan"
+    return True, f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
 

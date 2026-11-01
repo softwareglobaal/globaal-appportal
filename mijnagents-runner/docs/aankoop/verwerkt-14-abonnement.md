@@ -64,3 +64,11 @@ Tests: 225 prijstests groen op de laptop en de VM, sleutelbron 46. Echte korte p
 3. De abonnementsproef doet dezelfde controles en zegt wat Mehdi moet doen.
 
 Tests: 233 prijstests groen.
+
+## Verwerking Codex-controle 17 (uitrol zonder token: ja)
+
+- Punt 1 (centrale instellingen): opgelost volgens Codex.
+- Punt 2 (eerste aanvraag als de limiet al op is): sluit alleen Mehdi's accountinstelling af. Daarom draaien de
+  abonnementsproef en de MOVA-vraag pas als Mehdi bevestigt dat Usage credits uitstaan (claude.ai, Settings > Usage).
+- Punt 3: de abonnementsproef zegt alleen nog "werkt" als ze een limietmelding zag met `overageStatus` anders dan
+  `allowed`; zonder melding faalt ze met uitleg.

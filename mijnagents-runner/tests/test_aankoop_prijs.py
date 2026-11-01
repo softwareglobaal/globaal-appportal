@@ -616,8 +616,14 @@ except O.GeenAbonnement:
 check("een API-sleutel in dat bestand telt nooit als token", not api_aanvaard)
 json.dump({"regels": [INIT, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
-check("de abonnementsproef zegt 'werkt' bij bron none en een gewoon einde (X7)", gelukt and "werkt via het abonnement max" in melding,
+check("zonder limietmelding zegt de proef nooit 'werkt' (Codex controle 17, punt 3)", not gelukt and "Usage credits" in melding,
       melding)
+uit_meld = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
+            "overageStatus": "disabled", "unifiedWindows": {"five_hour": {"utilization": 0.1, "status": "allowed"}}}}
+json.dump({"regels": [INIT, uit_meld, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("de abonnementsproef zegt 'werkt' bij bron none, extra verbruik uit en een gewoon einde (X7)",
+      gelukt and "werkt via het abonnement max" in melding and "disabled" in melding, melding)
 json.dump({"regels": [INIT, aan, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef faalt zolang Usage credits aanstaan, met wat Mehdi moet doen", not gelukt
