@@ -204,8 +204,8 @@ def schoon(naam):
 
 
 def nummer_sleutel(nummer):
-    """Een telefoonnummer als sleutel: de laatste negen cijfers van het internationale nummer (+32 475 ..., 0475 ...
-    en 475 ... zijn hetzelfde nummer). Zo kiest ook de helper de contacten (NORM in macgesprekken_kopie.c)."""
+    """Een telefoonnummer als korte sleutel: de laatste negen cijfers van het internationale nummer (+32 475 ...,
+    0475 ... en 475 ... zijn hetzelfde nummer). Voor namen telt het volle nummer (nummer_vol)."""
     tekst = str(nummer or "").strip()
     cijfers = re.sub(r"\D", "", tekst)
     if cijfers.startswith("00"):
@@ -215,6 +215,20 @@ def nummer_sleutel(nummer):
     return cijfers[-9:] if len(cijfers) >= 9 else cijfers
 
 
+def nummer_vol(nummer):
+    """Het volle internationale nummer als sleutel (Codex 01-11): +31 470 ... en +32 470 ... met dezelfde laatste negen
+    cijfers zijn twee nummers. Zoals INTL in macgesprekken_kopie.c, waarmee de helper de contacten kiest: (0) weg, 00
+    vooraan weg, een 0 vooraan wordt 32, zonder landnummer (hoogstens negen cijfers) ook 32. Leeg onder zes cijfers."""
+    cijfers = re.sub(r"\D", "", str(nummer or "").replace("(0)", ""))
+    if len(cijfers) < 6:
+        return ""
+    if cijfers.startswith("00"):
+        return cijfers[2:]
+    if cijfers.startswith("0"):
+        return "32" + cijfers[1:]
+    return "32" + cijfers if len(cijfers) <= 9 else cijfers
+
+
 def nummer_van_jid(jid):
     """Het nummer in een klassiek WhatsApp-adres (32475...@s.whatsapp.net); een LID-adres draagt geen nummer."""
     m = re.fullmatch(r"(\d{6,15})@s\.whatsapp\.net", str(jid or ""))
@@ -222,8 +236,9 @@ def nummer_van_jid(jid):
 
 
 class Adresboek:
-    """Het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2): naam per WhatsApp-adres, LID en nummer. Bij
-    twee contacten met hetzelfde adres wint het oudste (Z_PK), zodat een naam niet van ronde tot ronde wisselt."""
+    """Het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2) en, sinds 01-11-2026, voor de nummers die WhatsApp
+    niet kent het adresboek van Contacts (TEL-9): naam per WhatsApp-adres, LID en vol nummer (nummer_vol). Bij twee
+    contacten met hetzelfde adres wint het oudste (Z_PK), zodat een naam niet van ronde tot ronde wisselt."""
 
     def __init__(self, rijen=()):
         self.jid, self.nummer = {}, {}
@@ -234,16 +249,16 @@ class Adresboek:
             for j in (wa, lid):
                 if j:
                     self.jid.setdefault(str(j), naam)
-            sleutel = nummer_sleutel(nummer)
-            if len(sleutel) >= 6:
+            sleutel = nummer_vol(nummer)
+            if sleutel:
                 self.nummer.setdefault(sleutel, naam)
 
     def bij_jid(self, jid):
         return self.jid.get(str(jid or ""), "")
 
     def bij_nummer(self, nummer):
-        sleutel = nummer_sleutel(nummer)
-        return self.nummer.get(sleutel, "") if len(sleutel) >= 6 else ""
+        sleutel = nummer_vol(nummer)
+        return self.nummer.get(sleutel, "") if sleutel else ""
 
 
 def maskerwoorden(rijen):

@@ -306,6 +306,17 @@ def test_nummer_sleutel():
         assert M.nummer_sleutel(vorm) == "470000001", vorm
 
 
+def test_nummer_vol_kent_het_land():
+    """Codex 01-11: een naam hoort bij het volle nummer; +31 en +32 met dezelfde laatste negen cijfers zijn twee
+    nummers. Elke Belgische vorm geeft hetzelfde volle nummer, ook met (0) of een spatie die geen spatie is."""
+    for vorm in ("+32 470 00 00 01", "0470000001", "470000001", "0032470000001", "+32-470-00.00.01",
+                 "+32 (0)470 00 00 01", "0470/00.00.01", "0470\u00a000\u00a000\u00a001"):
+        assert M.nummer_vol(vorm) == "32470000001", vorm
+    assert M.nummer_vol("+31 470 00 00 01") == "31470000001" and M.nummer_vol("8850") == ""
+    boek = M.Adresboek([("Jan Proef", "", "", "+32470000001")])
+    assert boek.bij_nummer("0470 00 00 01") == "Jan Proef" and boek.bij_nummer("+31470000001") == ""
+
+
 # --------------------------------------------------------------------------------------------- dekking ---
 def test_dekking_alleen_met_gegevens_tijdens_de_dag():
     gekopieerd = bxl(2026, 10, 24, 9, 0)
@@ -724,12 +735,12 @@ def test_werkwijzen_hebben_grenzen():
 
 
 # ----------------------------------------------------------------------------------- de helper zelf ---
-def _bouw_helper(map_):
+def _bouw_helper(map_, *extra):
     """De testbouw leest onder map_/thuis. map_ zonder symlink (op macOS is /var een symlink): de helper weigert er een."""
     if sys.platform != "darwin" or not shutil.which("cc"):
         return None
     uit = os.path.join(map_, "kopie")
-    r = subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", f'-DBASIS_TEST="{map_}/thuis"', "-o", uit,
+    r = subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", f'-DBASIS_TEST="{map_}/thuis"', *extra, "-o", uit,
                         str(HELPER_C), "-lsqlite3"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     return uit
@@ -1240,14 +1251,20 @@ def test_vol11_tel9_helper_leest_het_adresboek_van_contacts():
         thuis = os.path.join(map_, "thuis")
         _bron_wa(thuis, met_wal=False).close()
         _oproepen(thuis, ["0470000001", "+32 470 00 00 05", "+32470000006", "+32470000007", "+32470000008",
-                          "+31470000009"])
+                          "+31470000009", "+31470000011", "+32470000012"])
+        # Codex 01-11 (toets 2): ook een WhatsApp-contact met dezelfde laatste negen cijfers in een ander land blijft weg
+        wa = sqlite3.connect(Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ContactsV2.sqlite"))
+        wa.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(6, 'Wa Ander Land Proef', NULL, NULL, '+32 470 00 00 11', 'S')")
+        wa.commit()
+        wa.close()
         boek = Path(thuis, "Library/Application Support/AddressBook")
         _adresboek(boek / "AddressBook-v22.abcddb", [
             (1, "Lies", "Proef", None, "GEHEIME NOTITIE", ["0470/00.00.05"]),
             (2, "Ver", "Weg Proef", None, None, ["+32470000099"]),
             (3, "Andere Naam", "Proef", None, None, ["+32 470 00 00 01"]),
             # Codex 01-11: dezelfde laatste negen cijfers in een ander land is een ander nummer
-            (4, "Verkeerd Land", "Proef", None, None, ["+32 470 00 00 09"])])
+            (4, "Verkeerd Land", "Proef", None, None, ["+32 470 00 00 09"]),
+            (5, "Haakjes", "Proef", None, None, ["+32 (0)470 00 00 12"])])
         _adresboek(boek / "Sources" / "0A1B2C3D-0000-4000-8000-00000000AAAA" / "AddressBook-v22.abcddb", [
             (1, None, None, "Proef Firma BV", None, ["0032 470 00 00 06"]),
             (2, "Nbsp", "Proef", None, None, ["0470\u00a000\u00a000\u00a008"])])
@@ -1258,11 +1275,12 @@ def test_vol11_tel9_helper_leest_het_adresboek_van_contacts():
         assert set(status["bronnen"].values()) == {"ok"}, status
         ruw = uit.read_bytes()
         for geheim in (b"GEHEIME NOTITIE", b"Weg Proef", b"Andere Naam", b"Bijnaam", b"Mobile", b"470000099",
-                       b"Verkeerd Land", b"32 470 00 00 09"):
+                       b"Verkeerd Land", b"32 470 00 00 09", b"Wa Ander Land", b"32 470 00 00 11"):
             assert geheim not in ruw, geheim
         rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
         namen = [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])]
-        assert namen == ["Kees Proef", "Lies Proef", "Proef Firma BV", "+32470000007", "Nbsp Proef", "+31470000009"], namen
+        assert namen == ["Kees Proef", "Lies Proef", "Proef Firma BV", "+32470000007", "Nbsp Proef", "+31470000009",
+                         "+31470000011", "Haakjes Proef"], namen
         con = sqlite3.connect(uit)
         tabellen = {r[0]: [k[1] for k in con.execute(f"PRAGMA table_info({r[0]})")]
                     for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
@@ -1448,6 +1466,35 @@ def test_vol11_yt1_web1_helper_set_browser():
             os.chmod(safari, 0o700)
 
 
+def test_vol11_tijdgrens_ook_tijdens_het_kopieren():
+    """Codex 01-11 (toets 2): de tijdgrens van de extra bronnen geldt ook midden in het kopieren (en in een vraag),
+    niet alleen voor een nieuwe databank. Een trage schijf (testbouw: <bron>.traag, een seconde per megabyte) met een
+    grens van een seconde: de set stopt na enkele seconden met fout, en een vroegere grens zou pas na vijf seconden
+    ingrijpen."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_, "-DEXTRA_BUDGET=1")
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        chrome = thuis / "Library/Application Support/Google/Chrome"
+        for profiel in ("A", "B"):
+            con = _chrome(chrome / profiel / "History", [(time.time() - 60, "https://monday.com/", "x", 1)])
+            con.execute("CREATE TABLE vulsel(x)")
+            con.execute("INSERT INTO vulsel VALUES(?)", (b"0" * (5 << 20),))
+            con.commit()
+            con.close()
+        (chrome / "A" / "History.traag").write_text("")
+        t0 = time.time()
+        status, _, doel = _vraag(helper, str(thuis), "browser")
+        duur = time.time() - t0
+        rest = [n for n in os.listdir(doel) if n.startswith(".bron")]
+    assert status["uitkomst"] == "ok" and status["extra"]["Chrome"] == "fout", status
+    assert duur < 4.5 and not rest, (duur, rest)
+
+
 def test_vol11_site_en_video_zoals_de_wachten():
     """De helper rekent site() en video() zoals browser_wacht.site en youtube_wacht.video: dezelfde uitkomst op een
     rij adressen (een adres zonder site komt niet in de uitvoer)."""
@@ -1566,6 +1613,28 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
             assert not post and hart[-1][0] == "fout" and any("Geen browsergeschiedenis" in n["tekst"]
                                                              for n in hart[-1][1]), hart[-1]
     assert M.HELPER["browser"] == "be.globaal.mijnagents.kopie-browser"
+
+
+def test_uitrol_echte_plists_zonder_vaste_thuismap():
+    """Codex 01-11 (toets 2): elke plist die de uitrol plaatst (ALLE in uitrol_mac_gesprekken.sh), zonder vaste
+    gebruikersmap: na de vervanging van @THUIS@ door een andere thuismap (zoals de uitrol doet) een geldige plist waarvan
+    elk pad onder die thuismap of onder /Library ligt."""
+    import plistlib
+    script = (RUNNER / "mac" / "uitrol_mac_gesprekken.sh").read_text(encoding="utf-8")
+    labels = []
+    for naam in ("HELPERTAKEN", "WACHTEN", "LOSSE_WACHTEN"):
+        labels += re.findall(r"be\.globaal\.mijnagents\.[a-z-]+", re.search(rf"^{naam}=\(([^)]*)\)", script, re.M).group(1))
+    assert len(labels) == 9 and "be.globaal.mijnagents.kopie-browser" in labels, labels
+    for label in labels:
+        tekst = (RUNNER / "mac" / f"{label}.plist").read_text(encoding="utf-8")
+        assert "/Users/" not in tekst and "@THUIS@" in tekst, label
+        r = subprocess.run(["zsh", "-c", 'inhoud=$(<"$1"); print -r -- "${inhoud//@THUIS@/$HOME}"', "_",
+                            str(RUNNER / "mac" / f"{label}.plist")], capture_output=True, text=True,
+                           env={**os.environ, "HOME": "/Users/ander proef"}, check=True)
+        p = plistlib.loads(r.stdout.encode())
+        assert p["Label"] == label, label
+        paden = p["ProgramArguments"] + [p.get("StandardOutPath", ""), p.get("StandardErrorPath", "")]
+        assert all(x.startswith(("/Users/ander proef/", "/Library/")) for x in paden if x.startswith("/")), paden
 
 
 def test_tel7_echte_codesign_geeft_de_cdhash():

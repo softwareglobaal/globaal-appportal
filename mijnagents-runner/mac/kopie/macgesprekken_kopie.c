@@ -40,13 +40,11 @@
 #define VENSTER_DAGEN 62
 #define APPLE_EPOCH 978307200.0   /* 1-1-2001 in Unix-tijd: Core Data telt van daar */
 #define WA "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/"
-#define NORM(x) "substr(replace(replace(replace(replace(replace(replace(" x \
-    ", '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), -9)"
-/* TEL-9 (Codex 01-11): voor Contacts het volle internationale nummer, niet de laatste negen cijfers: anders kan een
-   contact met hetzelfde nummer in een ander land meekomen. Zoals mac_gesprekken.nummer_sleutel: 00 vooraan weg, een 0
-   vooraan wordt 32; zonder landnummer (hoogstens negen cijfers) ook 32. */
-#define CIJFERS(x) "replace(replace(replace(replace(replace(replace(replace(replace(" x \
-    ", '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '/', ''), char(160), '')"
+/* Codex 01-11: contacten (WhatsApp en Contacts) op het volle internationale nummer, niet op de laatste negen cijfers:
+   anders kan een contact met hetzelfde nummer in een ander land meekomen. Zoals mac_gesprekken.nummer_vol: (0) weg,
+   00 vooraan weg, een 0 vooraan wordt 32; zonder landnummer (hoogstens negen cijfers) ook 32. */
+#define CIJFERS(x) "replace(replace(replace(replace(replace(replace(replace(replace(replace(" x \
+    ", '(0)', ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '/', ''), char(160), '')"
 #define INTL(x) "(CASE WHEN " CIJFERS(x) " LIKE '00%%' THEN substr(" CIJFERS(x) ", 3) WHEN " CIJFERS(x) \
     " LIKE '0%%' THEN '32' || substr(" CIJFERS(x) ", 2) WHEN length(" CIJFERS(x) ") <= 9 THEN '32' || " \
     CIJFERS(x) " ELSE " CIJFERS(x) " END)"
@@ -122,13 +120,11 @@ static const char TELEFOON_VRAGEN[] =
     "CREATE TABLE ZCALLRECORD AS SELECT ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, "
     "  ZSERVICE_PROVIDER FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
     "  AND ZSERVICE_PROVIDER IN ('com.apple.Telephony', 'com.apple.FaceTime');"
-    "CREATE TEMP TABLE nummers AS SELECT DISTINCT " NORM("ZADDRESS") " AS n FROM main.ZCALLRECORD "
+    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("ZADDRESS") " AS n FROM main.ZCALLRECORD "
     "  WHERE length(ZADDRESS) >= 6;"
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
-    "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
-    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("ZADDRESS") " AS n FROM main.ZCALLRECORD "
-    "  WHERE length(ZADDRESS) >= 6;"
+    "  AND " INTL("ZPHONENUMBER") " IN (SELECT n FROM temp.volnummers);"
     "CREATE TABLE ANDERE_APPS AS SELECT ZDATE FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
     "  AND COALESCE(ZSERVICE_PROVIDER, '') NOT IN ('com.apple.Telephony', 'com.apple.FaceTime');"
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD "
@@ -148,13 +144,11 @@ static const char SMS_VRAGEN[] =
     "  FROM berichten.chat WHERE ROWID IN (SELECT gesprek FROM main.BERICHT);"
     "CREATE TABLE DEELNEMER AS SELECT j.chat_id AS gesprek, h.id AS adres FROM berichten.chat_handle_join j "
     "  JOIN berichten.handle h ON h.ROWID = j.handle_id WHERE j.chat_id IN (SELECT pk FROM main.GESPREK);"
-    "CREATE TEMP TABLE nummers AS SELECT DISTINCT " NORM("adres") " AS n FROM main.DEELNEMER "
+    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("adres") " AS n FROM main.DEELNEMER "
     "  WHERE length(adres) >= 6 AND instr(adres, '@') = 0;"
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
-    "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
-    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("adres") " AS n FROM main.DEELNEMER "
-    "  WHERE length(adres) >= 6 AND instr(adres, '@') = 0;"
+    "  AND " INTL("ZPHONENUMBER") " IN (SELECT n FROM temp.volnummers);"
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(" SMS_TIJD ") FROM berichten.message m "
     "  WHERE COALESCE(m.item_type, 0) = 0) AS waarde;";
 
@@ -162,7 +156,6 @@ static const char SMS_VRAGEN[] =
    nummer van het venster (temp.volnummers, het volle nummer) dat WhatsApp nog niet bij naam kent. Dezelfde tabel en
    kolommen als de contacten van WhatsApp; Z_PK ligt boven die van WhatsApp (:pk), zodat mac_gesprekken.Adresboek eerst
    WhatsApp en dan het oudste contact neemt. Een naam is voornaam en familienaam, anders de firma van de kaart. */
-#define CNORM(x) NORM("replace(replace(" x ", '/', ''), char(160), '')")
 static const char ADRESBOEK_VRAAG[] =
     "INSERT INTO main.ZWAADDRESSBOOKCONTACT (Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER) "
     "SELECT :pk + pk, naam, NULL, NULL, nummer FROM (SELECT r.Z_PK AS pk, p.ZFULLNUMBER AS nummer, "
@@ -170,7 +163,7 @@ static const char ADRESBOEK_VRAAG[] =
     "  NULLIF(trim(r.ZORGANIZATION), '')) AS naam "
     "  FROM extra.ZABCDPHONENUMBER p JOIN extra.ZABCDRECORD r ON r.Z_PK = p.ZOWNER) "
     "WHERE naam IS NOT NULL AND " INTL("nummer") " IN (SELECT n FROM temp.volnummers) "
-    "  AND " CNORM("nummer") " NOT IN (SELECT " NORM("ZPHONENUMBER") " FROM main.ZWAADDRESSBOOKCONTACT "
+    "  AND " INTL("nummer") " NOT IN (SELECT " INTL("ZPHONENUMBER") " FROM main.ZWAADDRESSBOOKCONTACT "
     "  WHERE ZPHONENUMBER IS NOT NULL) ORDER BY pk";
 
 /* YT-1 en WEB-1: de geschiedenis van de browsers. Van elk bezoek alleen het tijdstip (Unix-seconden) en de naam van de
@@ -596,15 +589,30 @@ static int extra_paden(const char *home, const Extra *x, char paden[][PATH_MAX])
     return n;
 }
 
+/* Codex 01-11: de tijdgrens van de extra bronnen (extra_lezen zet ze). Ook tijdens het kopieren en tijdens een vraag:
+   na de grens stopt het kopieren en breekt de voortgangsfunctie de vraag af (fout). */
+static time_t extra_grens;
+
+static int voorbij(void *ongebruikt) {
+    (void)ongebruikt;
+    return time(NULL) > extra_grens;
+}
+
 /* Kopieer het open bestand bron (gecontroleerd: geen symlink, gewoon bestand) als naam in dirfd: nieuw (O_EXCL,
-   O_NOFOLLOW, 0600). Geeft 1 als alles er staat. */
-static int kopieer(int bron, int dirfd, const char *naam) {
+   O_NOFOLLOW, 0600). Geeft 1 als alles er staat, 0 bij een fout of na de tijdgrens. traag: alleen de testbouw, een
+   trage schijf nadoen. */
+static int kopieer(int bron, int dirfd, const char *naam, int traag) {
     unlinkat(dirfd, naam, 0);
     int fd = openat(dirfd, naam, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0) return 0;
     static unsigned char buf[1 << 20];
     int goed = 1;
     for (;;) {
+        if (voorbij(NULL)) {
+            goed = 0;
+            break;
+        }
+        if (traag) sleep(1);
         ssize_t r = read(bron, buf, sizeof buf);
         if (r < 0 && errno == EINTR) continue;
         if (r < 0) goed = 0;
@@ -640,15 +648,21 @@ static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const cha
         close(bron);
         return "fout";
     }
-    int met_wal = 0, goed = 1;
+    int met_wal = 0, goed = 1, traag = 0;
+#ifdef BASIS_TEST
+    /* Alleen de testbouw: <bron>.traag naast de databank doet een trage schijf na (de tijdgrens van Codex 01-11). */
+    char traagpad[PATH_MAX + 8];
+    snprintf(traagpad, sizeof traagpad, "%s/%s.traag", home, pad);
+    traag = access(traagpad, F_OK) == 0;
+#endif
     if (x->kopie) {
         kopie_weg(dirfd);
-        goed = kopieer(bron, dirfd, ".bron.sqlite");
+        goed = kopieer(bron, dirfd, ".bron.sqlite", traag);
         snprintf(wal, sizeof wal, "%s-wal", pad);
         int w = goed ? open_onder(home, wal, 0) : -1;
         if (w >= 0) {
             met_wal = 1;
-            goed = kopieer(w, dirfd, ".bron.sqlite-wal");
+            goed = kopieer(w, dirfd, ".bron.sqlite-wal", traag);
             close(w);
         } else if (goed && errno != ENOENT) {
             goed = 0;
@@ -685,7 +699,9 @@ static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const cha
                     if ((i = sqlite3_bind_parameter_index(stmt, ":browser")) > 0)
                         sqlite3_bind_text(stmt, i, x->naam, -1, SQLITE_STATIC);
                     sqlite3_exec(db, "SAVEPOINT extra", NULL, NULL, NULL);
+                    sqlite3_progress_handler(db, 1000, voorbij, NULL);   /* na de tijdgrens: SQLITE_INTERRUPT */
                     rc = sqlite3_step(stmt) == SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
+                    sqlite3_progress_handler(db, 0, NULL, NULL);
                     sqlite3_finalize(stmt);
                     sqlite3_exec(db, rc == SQLITE_OK ? "RELEASE extra" : "ROLLBACK TO extra; RELEASE extra", NULL,
                                  NULL, NULL);
@@ -724,15 +740,18 @@ static void noteer(sqlite3 *db, const Set *set, const char *naam, const char *u,
 }
 
 /* Codex 01-11: een extra bron mag de set niet ophouden. De runner wacht hoogstens 120 seconden op de hele kopie: per
-   databank hoogstens EXTRA_WACHT_MS op een slot, en na EXTRA_BUDGET seconden geen nieuwe extra databank meer (fout). */
+   databank hoogstens EXTRA_WACHT_MS op een slot, en na EXTRA_BUDGET seconden stopt elke extra databank (fout), ook
+   midden in het kopieren of in een vraag. De testbouw mag een kortere grens meegeven (-DEXTRA_BUDGET=...). */
 #define EXTRA_WACHT_MS 2000
+#ifndef EXTRA_BUDGET
 #define EXTRA_BUDGET 45
+#endif
 static size_t extra_lezen(sqlite3 *db, const char *home, int dirfd, const char *privemap, const Set *set, double begin,
                           const char *namen[MAX_EXTRA], const char *uitkomsten[MAX_EXTRA], int *ok, int *geweigerd) {
     static char paden[MAX_PROFIELEN][PATH_MAX];
     size_t n = 0;
     sqlite3_int64 k = 0;
-    time_t start = time(NULL);
+    extra_grens = time(NULL) + EXTRA_BUDGET;
     *ok = *geweigerd = 0;
     sqlite3_busy_timeout(db, EXTRA_WACHT_MS);
     for (size_t i = 0; i < set->extra_aantal; i++) {
@@ -747,7 +766,7 @@ static size_t extra_lezen(sqlite3 *db, const char *home, int dirfd, const char *
         int aantal = extra_paden(home, x, paden);
         if (aantal < 0) noteer(db, set, x->naam, uit_errno(errno), uitkomst, ok, geweigerd);
         for (int p = 0; p < aantal; p++) {
-            const char *u = time(NULL) - start > EXTRA_BUDGET ? "fout" :
+            const char *u = voorbij(NULL) ? "fout" :
                             extra_een(db, home, dirfd, privemap, x, paden[p], begin, ++k * 1000000000LL);
             if (strcmp(u, "ontbreekt") != 0)   /* een profiel zonder databank telt niet */
                 noteer(db, set, x->naam, u, uitkomst, ok, geweigerd);
@@ -861,7 +880,7 @@ int main(int argc, char *argv[]) {
                 snprintf(sql, sizeof sql, "DETACH %s", set->bronnen[i].schema);
                 sqlite3_exec(db, sql, NULL, NULL, NULL);
             }
-            /* VOL-11: de extra bronnen, een voor een (temp.nummers bestaat nog); geen enkele gelezen en wel een
+            /* VOL-11: de extra bronnen, een voor een (temp.volnummers bestaat nog); geen enkele gelezen en wel een
                weigering, bij een set zonder vaste bronnen: dan heeft de helper geen toegang */
             char privemap[PATH_MAX];
             int ok = 0, geweigerd = 0;
