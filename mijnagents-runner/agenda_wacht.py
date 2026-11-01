@@ -6400,8 +6400,11 @@ def rooster_maken(items, archief, vandaag, noden, tok=None):
                                          ritten=items + archief, noden=noden)
             weg += ROOSTER_ONZEKER
     if weg:
-        noden.append({"tekst": f"{weg} oproep(en) vielen weg: de agenda was niet volledig te lezen en de afspraak kon niet "
+        # N10, Codex NA50: het aantal hoort in het werkverslag, niet in de noodtekst; met het aantal vooraan was elke
+        # ronde een andere nood, en sinds de gedeelde ronde haalde r.nood het getal weg en kreeg de oude nood een tweeling
+        noden.append({"tekst": "Oproepen vielen weg: de agenda was niet volledig te lezen en de afspraak kon niet "
                                "nagekeken worden (verzet, geschrapt of onleesbaar); kijk ze zelf na", "wie": "mehdi"})
+        ag.log(f"dag {vandaag}", "bevinding", f"{weg} oproep(en) vielen weg: agenda niet volledig te lezen")
     return sorted(rooster, key=lambda r: r["tijd"])
 
 

@@ -506,6 +506,7 @@ begin = next(i for i, n in enumerate(ronde.body) if isinstance(n, ast.Assign)
                      for t in n.targets))
 staart = ast.fix_missing_locations(ast.Module(body=ronde.body[begin:], type_ignores=[]))
 volgorde = []
+hartslagen = []
 
 
 class Rondeverslag:
@@ -520,6 +521,7 @@ class Rondeverslag:
 
     def hartslag(self, status, *args, **kwargs):
         volgorde.append(("hartslag", status))
+        hartslagen.append(dict(kwargs, status=status))
 
     def werkwijze(self, taak="", noden=()):
         return "# Proef\n\nRegel."
@@ -580,6 +582,20 @@ resultaat = veilig(lambda: in_de_ronde(foutpad))
 check("foutpad verstuurt de foutlog", isinstance(resultaat, RuntimeError)
       and [x[0] for x in volgorde][-3:] == ["log", "verstuur", "hartslag"] and volgorde[-1] == ("hartslag", "fout"),
       f"{resultaat} {volgorde}")
+
+# F8 op de echte staart (Codex NA52, ronde 12): een dagronde stuurt haar noden zonder te sluiten (sluiten=False, op het
+# bord nood_sluiten false), een volledige ronde stuurt de gezaghebbende lijst; een nood die al open stond, gaat gewoon mee.
+_open = {"tekst": "Buitenafspraken zonder reistijd, reden: rit zonder afspraak", "wie": "mehdi"}
+for _dag, _sluiten in ((None, True), ("2026-10-27", False)):
+    volgorde.clear()
+    hartslagen.clear()
+    dummy.update({"DAG_ARG": _dag, "noden": [dict(_open)]})
+    resultaat = veilig(lambda: in_de_ronde(staart))
+    _h = hartslagen[-1] if hartslagen else {}
+    check(f"F8: {'een dagronde sluit niets' if _dag else 'de volledige ronde stuurt haar eigen lijst'} (echte staart)",
+          resultaat is None and _h.get("status") == "waakt" and _h.get("sluiten") is _sluiten and _h.get("nood") == [_open],
+          f"{resultaat} {_h}")
+dummy.update({"DAG_ARG": None, "noden": []})
 
 print(f"H1-1: {ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

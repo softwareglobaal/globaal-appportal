@@ -151,6 +151,33 @@ def _ronde_kennis(draad, naam):
     return k[-1]
 
 
+# ------------------------------------------------------------------------------------------------ De ronde zelf ---
+def test_na49_stopsignaal_bij_het_afsluiten_blijft_niet_op_actief():
+    """Codex NA49 (ronde 12): de ronde ving bij het afsluiten alleen Exception op. Kwam een SIGTERM (als SystemExit) of
+    Ctrl-C binnen terwijl ze de kennis of het werkverslag verstuurde, dan ging de eindhartslag niet uit en bleef de agent
+    op actief staan (N11). Voor De Fathomwacht ving haar eigen finally dat voordien op. Nu: fout, en het signaal gaat door
+    (de exitcode van een time-out blijft 143)."""
+    for onderbreking in (SystemExit(143), KeyboardInterrupt()):
+        draad = Draad(open_noden=[{"naam": "proef", "tekst": "Oude nood", "wie": "mehdi"}])
+        ag = bord.Agent("proef")
+
+        def stop(*a, **k):
+            raise onderbreking
+
+        ag.kennis = stop
+        with op_het_bord(draad):
+            try:
+                with ag.ronde("proef") as r:
+                    r.nood("Nieuwe nood", wie="claude-code")
+                doorgegaan = None
+            except BaseException as e:  # noqa: BLE001
+                doorgegaan = e
+        assert doorgegaan is onderbreking, f"het signaal hoort door te gaan: {doorgegaan!r}"
+        laatste = draad.statussen("proef")[-1]
+        assert laatste["status"] == "fout" and type(onderbreking).__name__ in laatste["detail"], draad.statussen("proef")
+        assert [n["tekst"] for n in laatste["nood"]] == ["Oude nood", "Nieuwe nood"], laatste
+
+
 # ------------------------------------------------------------------------------------------- De Contractmaker ---
 import contracten_agent as CA  # noqa: E402
 
@@ -437,6 +464,25 @@ def test_agendawacht_hoofdronde_gaat_door_de_ronde_en_terugkijken_niet():
         except bord.RondeGestopt:
             gestopt = True
     assert gestopt and not gedaan, "de terugkijkstand werkte zonder regelboek"
+
+
+def test_na50_weggevallen_oproepen_zijn_elke_ronde_dezelfde_nood():
+    """Codex NA50 (ronde 12): de nood over weggevallen oproepen begon met het aantal ("2 oproep(en) vielen weg"). Elke
+    ronde was zo een andere nood (N10), en sinds de gedeelde ronde haalde r.nood het getal weg, zodat een open nood met
+    getal een tweeling kreeg. Nu draagt de tekst geen aantal; dat staat in het werkverslag."""
+    import agenda_wacht as AW  # noqa: PLC0415
+    teksten = []
+    for weg in (1, 3):
+        noden = []
+        with vervangen((AW, "afspraken", lambda v, t: (_ for _ in ()).throw(OSError("503"))),
+                       (AW, "belrooster", lambda items, vandaag: [{"tijd": "2026-11-02T08:00", "sleutel": "k:a:1"}]),
+                       (AW, "_nakijken", lambda regels, tok=None, ritten=(), noden=None, _w=weg: ([], _w))):
+            AW.ONGELEZEN.clear()
+            with redirect_stdout(io.StringIO()):
+                AW.rooster_maken([], [], "2026-11-02", noden)
+        teksten.append([n["tekst"] for n in noden if "vielen weg" in n["tekst"]])
+    assert teksten[0] and teksten[0] == teksten[1], teksten
+    assert not re.match(r"^\d", teksten[0][0]), teksten[0][0]
 
 
 if __name__ == "__main__":

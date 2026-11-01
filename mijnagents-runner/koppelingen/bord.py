@@ -438,17 +438,24 @@ class Ronde:
             self._bronnen.setdefault("collega's op het bord", collega_tekst(self.collegas))
 
     def __exit__(self, soort, fout, spoor):
+        onderbreking = None
         try:
             self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")
             self.agent.log_verstuur()
         except Exception as e:  # noqa: BLE001  Codex NA45: de laatste hartslag gaat altijd uit (N11)
             print(f"kennis of werkverslag niet verstuurd: {type(e).__name__}: {e}", file=sys.stderr)
+        except BaseException as e:
+            # Codex NA49 (01-11-2026): een SIGTERM (als SystemExit) of Ctrl-C tijdens het afsluiten sloeg de
+            # eindhartslag over, en dan bleef de agent op actief staan. Nu fout, en daarna gaat het signaal door.
+            onderbreking = fout = e
         if fout is not None:
             # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
             # die ze niet meer kon nakijken.
             self.agent.hartslag("fout", taak=self.taak,
                                 detail=f"{type(fout).__name__}: {str(fout)[:180]}",
                                 nood=self.agent.noden_bij_breuk(self._noden))
+            if onderbreking is not None:
+                raise onderbreking
             return False
         self.agent.hartslag("klaar" if not self._noden else "waakt",
                             taak=self.taak, detail=self.detail, nood=self._noden, sluiten=not self.noden_onbekend)

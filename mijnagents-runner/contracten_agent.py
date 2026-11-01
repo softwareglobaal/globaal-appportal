@@ -1062,7 +1062,9 @@ def _ronde(r):
         werk = mcp.call("dashboard_document", sleutel="werkinstructie")
         werkinstructie = werk.get("markdown", "") if isinstance(werk, dict) else str(werk)
         versie = werk.get("versie", "") if isinstance(werk, dict) else ""
-        # Wat ik weet, op het bord: de letterlijke Werkinstructie van deze ronde, naast de werkwijze.
+        # De Werkinstructie van deze ronde gaat als bron mee in de kennis, naast de werkwijze: naam met versie, lengte en
+        # vingerafdruk, zoals elke bron van de ronde (N4). Tot 01-11-2026 stond hier de hele tekst als kennis; die staat
+        # op contracten.globaal.be, de kennis is geen kopie (Codex NA51, bewust zo gelaten).
         r.bron(f"contracten.globaal.be, tabblad Werkinstructie AI {versie}".strip(), werkinstructie)
         deals = deals_in_startfase()
         if ALLEEN:
