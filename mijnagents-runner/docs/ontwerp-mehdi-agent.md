@@ -33,8 +33,10 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
 
 1. Grenzen uit de werkwijze (N2); zonder grenzen geen werk.
 2. De bundel lezen. Geen bundel van de laatste drie dagen: nood, niets klaargezet (onbekend is niet leeg).
-3. Moment bepalen op de Brusselse klok: de eerste ronde tussen 07:00 en 12:00 is de ochtend, de eerste vanaf 19:00 de
-   avond, de rest tussendoor. Tussendoor zonder nieuwe bundel en zonder nieuw bericht van Mehdi: geen aanroep van Claude.
+3. Moment bepalen op de Brusselse klok: de eerste ronde tussen 07:00 en 12:00 is de ochtend, de eerste vanaf 16:00 de
+   avond (de ronde van 16:20, zodat het avondoverzicht in de avondbundel van De Bode van 17:00 zit; ANGEL-4 van
+   T-0120), de rest tussendoor. Tussendoor zonder nieuwe bundel en zonder nieuw bericht van Mehdi: geen aanroep van
+   Claude, wel een regel "overgeslagen" in het werkverslag (ANGEL-10).
 4. Claude (`claude-opus-5-5`, effort medium, gestructureerd antwoord met een strikt JSON-schema, server-side fallback
    zoals `weekconsolidatie.py`) krijgt de werkwijze van het bord letterlijk (N12), de collega's op het bord (N14), de
    gedeelde lessen (N13), en als invoer de bundel, de open taken met hun nummer, de onlangs afgeronde taken, wat Mehdi

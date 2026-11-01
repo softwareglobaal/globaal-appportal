@@ -34,6 +34,7 @@ import mehdi_agent as M  # noqa: E402
 WERKWIJZE = os.path.join(RUNNER, "werkwijze", "mehdi-agent.md")
 OCHTEND_UTC = datetime(2026, 10, 31, 6, 20, tzinfo=timezone.utc)      # 07:20 in Brussel (wintertijd)
 MIDDAG_UTC = datetime(2026, 10, 31, 12, 20, tzinfo=timezone.utc)      # 13:20
+NAMIDDAG_UTC = datetime(2026, 10, 31, 15, 20, tzinfo=timezone.utc)    # 16:20
 AVOND_UTC = datetime(2026, 10, 31, 18, 20, tzinfo=timezone.utc)       # 19:20
 GISTEREN = "2026-10-30"
 
@@ -324,6 +325,28 @@ def test_ochtend_en_avond_een_keer_per_dag_op_de_brusselse_klok():
     assert M.aan_de_beurt(OCHTEND_UTC) and not M.aan_de_beurt(datetime(2026, 10, 31, 5, 20, tzinfo=timezone.utc))
     assert M.aan_de_beurt(datetime(2026, 7, 1, 5, 20, tzinfo=timezone.utc))       # zomertijd: 07:20 in Brussel
     assert M.dagen_terug(datetime(2026, 10, 31, 23, 30, tzinfo=timezone.utc)) == ["2026-11-01", "2026-10-31", "2026-10-30"]
+
+
+def test_avondoverzicht_klaar_voor_de_avondbundel_van_de_bode():
+    """ANGEL-4 (T-0120): De Bode bundelt het avondbericht vanaf 17:00 (bode.py, AVOND_VANAF). Het avondoverzicht van de
+    ronde van 19:20 kwam daardoor pas de volgende dag mee. Nu is de ronde van 16:20 de avond."""
+    import ast
+    bode = ast.parse(open(os.path.join(RUNNER, "bode.py"), encoding="utf-8").read())
+    (vanaf,) = [ast.literal_eval(n.value) for n in bode.body if isinstance(n, ast.Assign)
+                and [getattr(t, "id", "") for t in n.targets] == ["AVOND_VANAF"]]
+    eerste = min(u for u in M.UREN if u >= M.AVOND)
+    assert (eerste, 20) < tuple(vanaf), (eerste, vanaf)          # de cron draait op :20
+    assert M.moment(NAMIDDAG_UTC, {}) == "avond"
+    assert M.moment(AVOND_UTC, {"avond": "2026-10-31"}) == "tussendoor"
+    assert M.moment(MIDDAG_UTC, {}) == "tussendoor"
+    ww = open(WERKWIJZE, encoding="utf-8").read()
+    assert "na 19:00" not in ww and "vanaf 16:00" in ww
+    o = Omgeving()
+    try:
+        _, staat = o.ronde(nu=NAMIDDAG_UTC, uit=antwoord([], overzicht="Vandaag bleef een oproep liggen.", tip="Bel na."))
+        assert o.bord["mehdi-agent:avond:2026-10-31"]["titel"] == "Avondoverzicht 31-10" and staat["avond"] == "2026-10-31"
+    finally:
+        o.weg()
 
 
 def test_ochtend_geeft_plan_en_avond_een_tip():

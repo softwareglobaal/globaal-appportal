@@ -75,7 +75,8 @@ OUD_DAGEN = 14          # een open taak die zo lang niet bijgewerkt werd, verval
 MAX_AFGEROND = 100
 MAX_GELEERD = 30
 OCHTEND = (7, 12)       # de eerste ronde tussen 07:00 en 12:00 (Brussel) is de ochtend
-AVOND = 19              # de eerste ronde vanaf 19:00 is de avond
+AVOND = 16              # de eerste ronde vanaf 16:00 is de avond: zo zit het avondoverzicht in de avondbundel
+                        # van De Bode om 17:00 (bode.py, AVOND_VANAF; ANGEL-4)
 VOOR = ("mehdi", "collega", "agent")
 PRIORITEIT = ("hoog", "normaal", "laag")
 STATUS = ("open", "gedaan", "vervallen")
