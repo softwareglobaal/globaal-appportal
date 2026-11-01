@@ -2,7 +2,8 @@
 """De Communicatiebundelaar (Privé · Communicatie): legt de kanalen naast elkaar.
 
 Per Brusselse dag en per persoon: hoe vaak, hoe lang en langs welk kanaal Mehdi contact had, uit de gesprekkentabel
-(`gesprek_log`) die De Zoomwacht, De Fathomwacht, De Plaudwacht en de mailwachten vullen. Tot 26-10-2026 draaide ik als
+(`gesprek_log`) die De Zoomwacht, De Fathomwacht, De Plaudwacht en de mailwachten vullen, en sinds T-0120 CB-1 ook De
+WhatsApp-wacht, De Belwacht, De Sms-wacht en De Xelionwacht (privé, alleen aantallen). Tot 26-10-2026 draaide ik als
 skelet en las niemand de uitvoer van De Zoomwacht (driehoeksoverleg Zoomwacht 2, X4/X5). Ontwerp en keuzes van Mehdi:
 docs/codex/communicatie-bundelaar-ontwerp-v1.md.
 
@@ -40,9 +41,16 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 VENSTER_DAGEN = 7    # de dagen die ik elke ronde opnieuw bundel; een item dat nog niet opgepakt is, volgt de bron
 BEKEND_DAGEN = 90    # hoe ver terug iemand uit een gesprek telt als bekend persoon voor mail (keuze 1 van Mehdi)
 
-# Kanaal uit het voorvoegsel van uniek (keuze 3 van Mehdi). zoom:chat: voor zoom:, het langste voorvoegsel wint.
-KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("plaud:", "ter plaatse"), ("mail:", "mail"))
-MET_DUUR = ("video", "ter plaatse")   # chat en mail hebben geen duur: weggelaten, nooit 0
+# Kanaal uit het voorvoegsel van uniek (keuze 3 van Mehdi). zoom:chat: voor zoom:, het langste voorvoegsel wint. CB-1
+# (T-0120): de kanalen van de Mac en Xelion, zoals De WhatsApp-wacht, De Belwacht, De Sms-wacht en De Xelionwacht ze
+# schrijven (mac_gesprekken.py). Hun rijen zijn privé: alleen een aantal en een duur per kanaal (tot de keuze CB-2).
+KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("plaud:", "ter plaatse"), ("mail:", "mail"),
+           ("whatsapp-oproep:", "whatsapp-oproep"), ("whatsapp:", "whatsapp"), ("telefoon:", "telefoon"), ("sms:", "sms"),
+           ("xelion:", "xelion"))
+MAC_CHATS = ("whatsapp:", "sms:")   # een groep van de Mac heet 'groep: naam' in personen
+MAC_KANALEN = ("whatsapp", "whatsapp-oproep", "telefoon", "sms", "xelion")
+# chat, sms en mail hebben geen duur: weggelaten, nooit 0
+MET_DUUR = ("video", "ter plaatse", "whatsapp-oproep", "telefoon", "xelion")
 
 # Alleen deze kolommen; thema, waarom, link, archief en project zijn inhoud en lees ik nooit.
 # De hele tabel, zonder datumgrens: privé geldt over een gesprek en over iemand heen, ook als een dubbel van de nacht
@@ -57,11 +65,18 @@ MEHDI = ("mehdi", "mehdi chegini")   # zoals de bronnen hem schrijven, naast zij
 ONBEKEND = re.compile(r"^(speaker|spreker|deelnemer|externe?|onbekend|unknown)\b", re.I)
 
 
-def kanaal(uniek):
+def is_groep(personen):
+    """CB-1: een groep van de Mac ('groep: naam', of 'groep' bij een groepsoproep zonder naam) is nooit een persoon."""
+    p = str(personen or "").strip()
+    return p == "groep" or p.startswith("groep:")
+
+
+def kanaal(uniek, personen=""):
     """Een Zoom-chat zonder adres in de sleutel (zoom:chat:<sleutel>:<dag>) is een kanaal met meer mensen: de naam in
-    personen is dan de kanaalnaam, geen mens (Codex CB06). Die heet groepschat en is alleen een aantal."""
+    personen is dan de kanaalnaam, geen mens (Codex CB06). Die heet groepschat en is alleen een aantal. Zo ook een groep
+    in WhatsApp of sms (CB-1)."""
     uniek = uniek or ""
-    if uniek.startswith("zoom:chat:") and "@" not in uniek:
+    if (uniek.startswith("zoom:chat:") and "@" not in uniek) or (uniek.startswith(MAC_CHATS) and is_groep(personen)):
         return "groepschat"
     for voor, k in KANALEN:
         if uniek.startswith(voor):
@@ -173,7 +188,7 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
         if dubbel.startswith("buiten:"):
             opgevallen["telt_niet"] += in_dagen   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
-        k = kanaal(r.get("uniek"))
+        k = kanaal(r.get("uniek"), r.get("personen"))
         prive = prive_groep(r)
         if k != "mail":
             # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
@@ -205,8 +220,8 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
         if prive:
             _tel(d["prive_per_kanaal"], k, minuten)   # alleen een aantal: geen naam, ook niet van de andere deelnemers
             continue
-        if k in ("groepschat", "overig"):
-            continue   # de naam is die van een kanaal of onbekend van soort: alleen het aantal in kanalen
+        if k in ("groepschat", "overig") or (k in MAC_KANALEN and is_groep(r.get("personen"))):
+            continue   # de naam is die van een kanaal, een groep of onbekend van soort: alleen het aantal in kanalen
         gezien = set()
         for n in namen(r.get("personen")):
             soort, wie = p.persoon(n)

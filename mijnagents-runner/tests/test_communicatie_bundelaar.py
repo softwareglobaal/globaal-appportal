@@ -191,7 +191,7 @@ def test_bekend_voor_mail_alleen_uit_de_laatste_negentig_dagen():
 def test_prive_via_onbekend_kanaal_maakt_geen_bekende():
     """Controle 5: een privérij van een onbekend kanaal sluit de naam ook uit voor mail."""
     rijen = [rij("fathom:80", "Mehdi, Proefgeheim Sigma", 20, datum="2026-10-10"),
-             rij("whatsapp:81", "Proefgeheim Sigma", 0, prive=1, datum="2026-10-11"),
+             rij("fax:81", "Proefgeheim Sigma", 0, prive=1, datum="2026-10-11"),
              rij("mail:<t1@voorbeeld.test>", "Proefgeheim Sigma")]
     _, gezet, dagen, _ = ronde(rijen=rijen)
     assert "Sigma" not in json.dumps(gezet) and dagen[DAG]["overige_mail"] == 1
@@ -268,7 +268,7 @@ def test_kern_onleesbaar_nood_en_niets_klaargezet():
 
 
 def test_onbekend_kanaal_nood_zonder_getal():
-    r, _, dagen, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("whatsapp:1", "Klant Omega")])
+    r, _, dagen, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("fax:1", "Klant Omega")])
     teksten = [t for t, _ in r.noden]
     assert teksten == ["Rij met een onbekend kanaal in de gesprekkentabel"], teksten
     assert not any(ch.isdigit() for t in teksten for ch in t), "N10: geen getal in een nood"
@@ -296,6 +296,42 @@ def test_groepschat_alleen_aantal():
     d = dagen[DAG]
     assert d["personen"] == [] and d["kanalen"] == {"groepschat": 1, "mail": 1}
     assert d["overige_mail"] == 1, "een kanaalnaam maakt een mailafzender niet bekend"
+
+
+def test_cb1_mac_kanalen_eigen_kanaal_en_prive_geteld():
+    """CB-1: WhatsApp, WhatsApp-oproep, telefoon, sms en Xelion zijn een eigen kanaal, geen onbekend kanaal en geen nood.
+    Oproepen dragen minuten; een Mac-groep ('groep: ...') is groepschat, nooit een persoon. De Mac-rijen zijn privé:
+    alleen een aantal en een duur per kanaal, nooit een naam (tot de keuze CB-2)."""
+    rijen = [rij("whatsapp:0a1b:2026-10-25", "Lien Proef", 0, prive=1),
+             rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0, prive=1),
+             rij("whatsapp-oproep:OPROEP1-814352400", "Lien Proef", 7, prive=1),
+             rij("whatsapp-oproep:OPROEP2-814356000", "Lien Proef", 0, prive=1),      # niet gemist, duur onbekend
+             rij("whatsapp-oproep:OPROEP3-814359600", "Lien Proef", 0, prive=1, dubbel_van="buiten:gemist"),
+             rij("telefoon:U1-1000", "Lien Proef", 4, prive=1),
+             rij("sms:0e3f:2026-10-25", "groep: Proefgroep Rho", 0, prive=1),
+             rij("sms:0e4f:2026-10-25", "+32470000099", 0, prive=1),
+             rij("xelion:X1", "Klant Omega", 12, prive=1),
+             rij("dekking:whatsapp:2026-10-25", "", 0, prive=1, dubbel_van="buiten:dekking")]
+    r, gezet, dagen, _ = ronde(rijen=rijen)
+    d = dagen[DAG]
+    assert r.noden == [], r.noden
+    assert d["kanalen"] == {"groepschat": 2, "sms": 1, "telefoon": 1, "whatsapp": 1, "whatsapp-oproep": 2, "xelion": 1}, \
+        d["kanalen"]
+    pk = d["prive_per_kanaal"]
+    assert pk["whatsapp-oproep"] == {"aantal": 2, "minuten": 7, "zonder_duur": 1}, pk
+    assert pk["telefoon"] == {"aantal": 1, "minuten": 4} and pk["xelion"] == {"aantal": 1, "minuten": 12}, pk
+    assert pk["whatsapp"] == {"aantal": 1} and pk["groepschat"] == {"aantal": 2} and pk["sms"] == {"aantal": 1}, pk
+    assert d["personen"] == [] and d["contacten"] == 8, d
+    for naam in ("Lien", "Werfgroep", "Proefgroep", "Omega", "32470000099"):
+        assert naam not in json.dumps(gezet) and naam not in r.detail, naam
+    # Een groep is nooit een persoon, ook niet als een Mac-rij ooit niet privé zou zijn (keuze CB-2)
+    _, _, dagen, _ = ronde(rijen=[rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0),
+                                  rij("whatsapp-oproep:G1-1", "groep: Werfgroep Proef", 5),
+                                  rij("whatsapp-oproep:G2-2", "groep", 3)])
+    assert dagen[DAG]["personen"] == [] and dagen[DAG]["kanalen"] == {"groepschat": 1, "whatsapp-oproep": 2}, dagen[DAG]
+    assert C.kanaal("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef") == "groepschat"
+    assert C.kanaal("whatsapp:0a1b:2026-10-25", "Lien Proef") == "whatsapp" and C.kanaal("fax:1") is None
+    assert C.kanaal("zoom:chat:kanaal-proef-123:2026-10-25") == "groepschat", "Zoom zoals het was"
 
 
 def test_vreemde_met_voornaam_van_collega_is_geen_collega():
