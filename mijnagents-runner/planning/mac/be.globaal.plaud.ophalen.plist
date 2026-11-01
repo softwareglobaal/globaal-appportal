@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Plaud op de Mac (verbeteropdracht v1.0, 12-10-2026): elk uur op :05 ophalen uit de Plaud-API, het
-     manifest maken en de invoer naar de VM zetten. Installeren: planning/mac/plaud_launchd_zetten.sh -->
+     manifest maken en de invoer naar de VM zetten. Installeren: planning/mac/plaud_launchd_zetten.sh, vanuit een
+     checkout op main; dat script vult de checkout en de thuismap in (PLAUD-13, T-0120). -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>be.globaal.plaud.ophalen</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/zsh</string>
-    <string>/Users/mehdichegini/dev/globaal-appportal/mijnagents-runner/plaud/plaud_invoer_push.sh</string>
+    <string>__REPO__/mijnagents-runner/plaud/plaud_invoer_push.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict><key>Minute</key><integer>5</integer></dict>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/plaud-ophalen.out</string>
-  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/plaud-ophalen.err</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/plaud-ophalen.out</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/plaud-ophalen.err</string>
 </dict>
 </plist>

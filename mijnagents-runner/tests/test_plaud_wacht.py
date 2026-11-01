@@ -966,6 +966,51 @@ def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     assert "--delete" not in push.replace("nooit --delete", "") and "--include='transcript.json'" in push and "--exclude='*'" in push
 
 
+def test_plaud13_launchd_alleen_uit_een_checkout_op_main_en_zonder_paden_van_een_toestel():
+    """PLAUD-13 (T-0120): de laptoptaak draaide uit ~/dev/globaal-appportal op een featuretak, met een vast pad naar een
+    thuismap in de plist. Het script zet de taak nu alleen vanuit een checkout op main en vult de checkout en $HOME zelf
+    in. Proef in een tijdelijke repo en thuismap, met een nagebootste launchctl en plutil: niets op de echte Mac."""
+    import plistlib
+    import subprocess
+    zsh = shutil.which("zsh")
+    if not zsh:
+        print("   (overgeslagen: geen zsh op deze machine)")
+        return
+    bron = Path(HIER) / "planning" / "mac"
+    plist_tekst = (bron / "be.globaal.plaud.ophalen.plist").read_text(encoding="utf-8")
+    assert "/Users/" not in plist_tekst and "__REPO__/mijnagents-runner/plaud/plaud_invoer_push.sh" in plist_tekst
+    tmp = Path(tempfile.mkdtemp(prefix="plaud-launchd-"))
+    repo, thuis, nep = tmp / "repo", tmp / "thuis", tmp / "bin"
+    (repo / "mijnagents-runner" / "planning" / "mac").mkdir(parents=True)
+    thuis.mkdir()
+    nep.mkdir()
+    for naam in ("plaud_launchd_zetten.sh", "be.globaal.plaud.ophalen.plist"):
+        shutil.copy2(bron / naam, repo / "mijnagents-runner" / "planning" / "mac" / naam)
+    oproepen = tmp / "oproepen.txt"
+    for naam in ("launchctl", "plutil"):
+        (nep / naam).write_text(f"#!/bin/sh\necho {naam} \"$@\" >> '{oproepen}'\n")
+        (nep / naam).chmod(0o755)
+    git = ["git", "-C", str(repo), "-c", "user.name=proef", "-c", "user.email=proef@example.invalid"]
+    subprocess.run(git[:3] + ["init", "-q", "-b", "proef-tak"], check=True)
+    subprocess.run(git + ["add", "."], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "proef"], check=True)
+    omgeving = dict(os.environ, HOME=str(thuis), PATH=f"{nep}:{os.environ['PATH']}")
+    script = str(repo / "mijnagents-runner" / "planning" / "mac" / "plaud_launchd_zetten.sh")
+    doel = thuis / "Library" / "LaunchAgents" / "be.globaal.plaud.ophalen.plist"
+    r = subprocess.run([zsh, script], env=omgeving, capture_output=True, text=True)
+    assert r.returncode != 0 and "main" in r.stderr and not doel.exists() and not oproepen.exists(), (r.returncode, r.stderr)
+    subprocess.run(git + ["checkout", "-q", "-b", "main"], check=True)
+    r = subprocess.run([zsh, script], env=omgeving, capture_output=True, text=True)
+    assert r.returncode == 0, (r.returncode, r.stderr)
+    with open(doel, "rb") as f:
+        gezet = plistlib.load(f)
+    echte_repo = subprocess.run(git[:3] + ["rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    assert gezet["ProgramArguments"][1] == f"{echte_repo}/mijnagents-runner/plaud/plaud_invoer_push.sh", gezet
+    assert gezet["StandardOutPath"] == f"{thuis}/Library/Logs/plaud-ophalen.out", gezet
+    assert "launchctl bootstrap" in oproepen.read_text(), oproepen.read_text()
+    shutil.rmtree(tmp)
+
+
 def test_bron_houdt_de_grenzen():
     bron = open(os.path.join(HIER, "plaud_wacht.py"), encoding="utf-8").read()
     assert "client_modified" not in bron.split('"""', 2)[2], "nooit de wijzigingsdatum als opnametijd"
