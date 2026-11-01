@@ -1210,6 +1210,8 @@ _vs = V.vergelijkingsverslag({"firma": S.HB}, "lot 06", [("A", {}, "a"), ("B", {
                              F.vergelijk([{"letter": "A", "lees": F.lees(["Offerte" + VUL2 + "\nTotaal excl. btw 10.000,00\n"])},
                                           {"letter": "B", "lees": F.lees(["Technische fiche EPDM" + VUL2])}], date(2026, 11, 1)),
                              None, {}, "2026-11-01", True, 2)
+check("controle live 01-11: met een offerte zegt het verslag dat er niets per post te vergelijken is",
+      "minder dan twee leesbare offertes" in _vs and "niet betrouwbaar" not in _vs)
 check("het verslag telt fiches apart, ook de overgeslagen", "1 offertes gelezen" in _vs and "3 documenten die geen offerte zijn" in _vs,
       _vs.splitlines()[0])
 _echt_paginas = F.paginas
