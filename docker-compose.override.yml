@@ -1236,7 +1236,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./mijnagents-data/dagboek:/dagboek:ro
+    # De pagina Wachten (01-11-2026) vraagt het bord over het interne netwerk, alleen lezend, met het token van het bord
+    # (AGENTS_TOKEN uit mijnagents-data/.env, zoals app-werfverslag).
+    env_file:
+      - path: ./mijnagents-data/.env
+        required: false
     environment:
+      MIJNAGENTS_URL: http://app-mijnagents:3022
       PORT: "3150"
       BASE_DOMAIN: ${BASE_DOMAIN:-globaal.be}
       DAGBOEK_GROUPS: ${DAGBOEK_GROUPS:-locatie}

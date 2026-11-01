@@ -43,5 +43,8 @@ RUN python3 test_felix.py
 RUN python3 test_klaargezet_pagina.py
 # Grendel op de groep Dagbundelaar: elke agent van het dagboek op één plek, niets dubbel. Zie test_dagbundelaar_groep.py.
 RUN python3 test_dagbundelaar_groep.py
+# Grendel op /api/wachten/dag: per wacht van de groep Dagbundelaar wat er op een dag binnenkwam, met de juiste kleur.
+# Zie test_wachten_dag.py.
+RUN python3 test_wachten_dag.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

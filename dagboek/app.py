@@ -397,6 +397,71 @@ def bronnen_pagina():
     return render_template("bronnen.html", rijen=rijen, d=d)
 
 
+# Per wacht wat er binnenkwam (Mehdi, 01-11-2026: "ik wil dat ik alle wachten hier zie, zodat ik weet per wacht wat
+# binnengekomen is en dat ik het kan controleren"). Het bord (app-mijnagents) heeft de databank; het Dagboek vraagt het
+# over het interne netwerk met het token van het bord, alleen lezend. Voorlopig alleen de laatste dagen (WACHT_DAGEN).
+BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/")
+BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
+WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "2"))
+KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
+
+
+def haal_wachten(dag):
+    """Per wacht wat er binnenkwam, of None als het bord niet antwoordt. Een minuut bewaard."""
+    pad = f"/api/wachten/dag?dag={dag}"
+    bewaard = _cache.get(pad)
+    if bewaard and time.monotonic() - bewaard[0] < 60:
+        return bewaard[1]
+    try:
+        req = urllib.request.Request(BORD + pad, headers={"X-Agents-Token": BORD_TOKEN})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+    except Exception:  # noqa: BLE001  het bord onbereikbaar: de pagina zegt dat, nooit een lege dag
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("vakken"), list):
+        return None
+    _cache[pad] = (time.monotonic(), d)
+    return d
+
+
+def locatie_items(dag):
+    """De Locatiewacht schrijft haar dag in het Locatie-dashboard, niet op het bord: haar plekken en ritten als items."""
+    lb = haal_locatie(f"/api/dagboek/{dag}")
+    lb = lb if isinstance(lb, dict) and lb.get("datum") == dag else None
+    ritten = verplaatsingen(lb)
+    if ritten is None:
+        return None
+    return [{"tijd": r["van"], "wie": r["soort"], "wat": f"{r['wat']} ({r['van']} tot {r['tot']}, {r['duur']})",
+             "fout": False} for r in ritten if r["soort"] != "gat"]
+
+
+@app.route("/wachten")
+def wachten_pagina():
+    if not mag():
+        abort(403)
+    eerste = vandaag() - timedelta(days=WACHT_DAGEN - 1)
+    dagen = [(eerste + timedelta(days=i)) for i in range(WACHT_DAGEN)]
+    dag = request.args.get("dag") or vandaag().isoformat()
+    try:
+        d = date.fromisoformat(dag)
+    except ValueError:
+        abort(404)
+    gegevens = haal_wachten(dag)
+    if gegevens:
+        for vak in gegevens["vakken"]:
+            for w in vak.get("wachten") or []:
+                if w.get("naam") == "locatie-wacht" and not w.get("items"):
+                    li = locatie_items(dag)
+                    if li:
+                        w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
+                                 kleur="groen" if w.get("kleur") != "rood" else "rood")
+        alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
+        gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
+        gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
+    keuze = [{"dag": x.isoformat(), "naam": dagnaam(x, True), "actief": x == d} for x in dagen]
+    return render_template("wachten.html", g=gegevens, naam=dagnaam(d), keuze=keuze, uitleg=KLEUR_UITLEG)
+
+
 @app.route("/healthz")
 def healthz():
     return {"ok": True, "map": os.path.isdir(MAP)}

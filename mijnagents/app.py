@@ -2050,6 +2050,21 @@ def _bron_uit_tekst(tekst):
     return _bron_dag_cellen(e)
 
 
+@app.route("/api/wachten/dag")
+def api_wachten_dag():
+    """Per wacht van de groep Dagbundelaar wat er op een dag binnenkwam (Mehdi, 01-11-2026), voor het Dagboek. Alleen
+    lezen, met het token van het bord (het Dagboek vraagt het over het interne netwerk)."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    import wachten_dag as WD  # noqa: PLC0415
+    dag = request.args.get("dag") or ""
+    try:
+        datetime.strptime(dag, "%Y-%m-%d")
+    except ValueError:
+        abort(400)
+    return jsonify(WD.dag(db(), dag, DAGBUNDELAAR_AGENTS, DAGBUNDELAAR_VAKKEN, DAGBUNDELAAR_BOVEN))
+
+
 @app.route("/bronnen")
 def bronnen_pagina():
     if not mag_beslissen():

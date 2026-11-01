@@ -6,7 +6,7 @@
 > Dit is de enige takenlijst. Wat hier niet staat, is niet afgesproken.
 
 Plaats: repo globaal-appportal, `mijnagents-runner/docs/dagbundelaar/WIE-DOET-WAT.md`.
-Laatst bijgewerkt: 01-11-2026 16:30 door Claude 1.
+Laatst bijgewerkt: 01-11-2026 16:40 door Claude 2.
 
 ## Wie is wie
 
@@ -39,11 +39,14 @@ Laatst bijgewerkt: 01-11-2026 16:30 door Claude 1.
 | 10 | Claude 2 | De Agendawacht: meldingen over titels en adressen van afspraken wegwerken. | geen | open |
 | 11 | Claude 2 | Na taak 1: op het bord nakijken dat alle wachten van de laptop groen staan. | geen | wacht op taak 1 |
 | 12 | Claude 2 | Vanaf 08-11: nakijken of oproepen dubbel tellen (Xelion en iPhone). | geen | later |
+| 13 | Mehdi | Ja of nee: de pagina Wachten in het Dagboek live zetten (per wacht wat binnenkwam, 31-10 en 01-11). Afbeelding in `naslag/afbeeldingen/wachten-per-dag.png`. | geen | open |
+| 14 | Claude 2 | Na de ja van taak 13: bord en Dagboek opnieuw bouwen op de server, de pagina nakijken met Mehdi en verbeteren. | `dagboek/README.md` | wacht op taak 13 |
 
 ## Gedaan (laatste dagen)
 
 | Wanneer | Wie | Wat |
 |---|---|---|
+| 01-11 | Claude 2 | Pagina Wachten gebouwd (Dagboek, `/wachten`): per wacht het aantal items, de items en fouten, voor vandaag en gisteren. Getest, nog niet live. |
 | 01-11 | Claude 2 | Server live: Sms-wacht, Belwacht Xelion, YouTube-wacht op het bord; Xelion draait elk uur. |
 | 01-11 | Claude 2 | Ai Angel zet geen taak meer voor werk dat een agent vanzelf doet. |
 | 31-10 | Claude 2 | Ai Angel live (7, 10, 13, 16, 19 en 22 uur). Alle Dagbundelaar-agents in één groep op het bord. |

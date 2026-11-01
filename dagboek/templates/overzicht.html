@@ -1,7 +1,8 @@
 {% extends "basis.html" %}
 {% block inhoud %}
 <header><h1>Dagboek</h1><span class="zacht klein">Wat je elke dag deed, uit De Dagbundelaar. Laatste {{ aantal }} dagen. Klik op een dag.</span>
-  <a href="{{ url_for('bronnen_pagina') }}">alle bronnen</a></header>
+  <a href="{{ url_for('bronnen_pagina') }}">alle bronnen</a>
+  <a href="{{ url_for('wachten_pagina') }}">wat de wachten kregen</a></header>
 <main>
   {% for d in dagen %}
     {% if d['tegels'] %}

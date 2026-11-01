@@ -119,5 +119,38 @@ check("D13 bronnen Wispr, websites, YouTube, gezondheid", "4 bezoeken op 3 sites
 check("D07 geen gedachtestreepje (eigen)", "\u2014" not in html and "\u2013" not in html)
 check("healthz", C.get("/healthz").get_json().get("ok") is True)
 
+# D14: de pagina Wachten (Mehdi, 01-11-2026): per wacht wat binnenkwam, uit het bord over het interne netwerk.
+check("D14 wachten zonder groep 403", C.get("/wachten", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
+A._cache.clear()
+A.haal_wachten = lambda dag: None
+html = C.get("/wachten", headers=MET).get_data(as_text=True)
+check("D14 bord onbereikbaar: zin, geen lege dag", "Het bord antwoordt niet" in html, html[-1500:])
+WACHTEN = {"dag": "2026-10-31", "items": 2, "telling": {}, "vakken": [
+    {"vak": "Communicatie", "wachten": [
+        {"naam": "whatsapp-wacht", "label": "De WhatsApp-wacht", "kleur": "groen", "oordeel": "binnen", "aantal": 2,
+         "rondes": 3, "gedekt": True, "leesfout": "", "noden": [], "fouten": [], "status": {"laatste": "21:37"},
+         "items": [{"tijd": "09:15", "wie": "Sara Proef", "wat": "3 berichten", "fout": False},
+                   {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False}],
+         "log": [{"tijd": "21:37", "stap": "bron", "tekst": "2 gesprekken", "fout": False}]},
+        {"naam": "sms-wacht", "label": "De Sms-wacht", "kleur": "rood", "oordeel": "fout", "aantal": 0, "rondes": 1,
+         "gedekt": None, "leesfout": "", "noden": ["Full Disk Access ontbreekt"], "status": None,
+         "fouten": [{"tijd": "11:00", "stap": "fout", "tekst": "kopie niet leesbaar", "fout": True}], "items": [],
+         "log": [{"tijd": "11:00", "stap": "fout", "tekst": "kopie niet leesbaar", "fout": True}]},
+        {"naam": "locatie-wacht", "label": "De Locatiewacht", "kleur": "grijs", "oordeel": "niets binnen, geen ronde",
+         "aantal": 0, "rondes": 0, "gedekt": None, "leesfout": "", "noden": [], "status": None, "fouten": [],
+         "items": [], "log": []}]}]}
+A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
+A.haal_locatie = lambda pad: None
+r = C.get("/wachten?dag=2026-10-31", headers=MET)
+html = r.get_data(as_text=True)
+check("D14 wachten laadt", r.status_code == 200, r.status_code)
+check("D14 items per wacht", "De WhatsApp-wacht" in html and "Sara Proef" in html and "09:15" in html, html[-3000:])
+check("D14 fout zichtbaar en open", "kopie niet leesbaar" in html and "Full Disk Access ontbreekt" in html
+      and "<details class=\"kaart wacht\" open>" in html)
+check("D14 lege wacht zegt het", "Niets binnengekomen op deze dag." in html)
+check("D14 telling", "1</span> fout" in html and "2</span> items binnen" in html, html[:3000])
+check("D14 geen datum 404", C.get("/wachten?dag=gisteren", headers=MET).status_code == 404)
+check("D07 geen gedachtestreepje (wachten)", "—" not in html and "–" not in html)
+
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
