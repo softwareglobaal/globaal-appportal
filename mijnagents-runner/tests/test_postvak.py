@@ -756,6 +756,29 @@ def test_mch_antwoordt_ook_vanuit_andere_postvakken():
     assert {"info@h-architects.be", "info@h-invest.be"} <= set(cfg["mail-mch"]["antwoord_vanuit"])
 
 
+def test_postvakken_zonder_wacht_staan_in_de_lijst_en_in_het_dagboek():
+    """VOL-10 (T-0120): light@, standaard@ en boekhouding@ worden alleen gelezen voor hun verzonden post (antwoord_vanuit),
+    maar 'zonder_wacht' was leeg en het Dagboek noemde ze nergens. Elk postvak dat de server leest zonder dat een wacht zijn
+    binnenkomende post leest, staat nu in 'zonder_wacht', met de keuze die bij Mehdi ligt (MAIL-7, werkstand). Zo'n postvak
+    geeft geen nood meer bij elke ronde van De Mailregisseur: de vraag staat al in de werkstand. /bronnen in het Dagboek
+    noemt ze als niet bewaakt (dagboek/app.py, BRONNEN)."""
+    import mail_regisseur as M
+    cfg = postvak.wachten()
+    wachten = [c for c in cfg.values() if isinstance(c, dict) and "postvakken" in c]
+    bewaakt = {a for c in wachten for a in c["postvakken"]}
+    alleen_verzonden = {a for c in wachten for a in c.get("antwoord_vanuit") or []} - bewaakt
+    zonder = cfg["zonder_wacht"]
+    assert {z["postvak"] for z in zonder} == alleen_verzonden == {
+        "light@h-architects.be", "standaard@h-architects.be", "boekhouding@h-invest.be"}
+    assert all(z.get("waarom") and z.get("keuze") for z in zonder), zonder
+    assert M.zonder_wacht_melden(cfg) == [], "de keuze ligt in de werkstand: geen nood bij elke ronde"
+    assert M.zonder_wacht_melden({"zonder_wacht": [{"postvak": "nieuw@voorbeeld.test"}]}) == ["nieuw@voorbeeld.test"], \
+        "een nieuw postvak zonder wacht en zonder keuze wordt wel gemeld"
+    bron = open(os.path.join(os.path.dirname(HIER), "dagboek", "app.py"), encoding="utf-8").read()
+    mail = next(r for r in bron[bron.index("BRONNEN = ("):].split("\n    (") if r.startswith('"Mail"'))
+    assert "niet bewaakt" in mail and all(z["postvak"].split("@")[0] + "@" in mail for z in zonder), mail
+
+
 def test_de_mailregisseur_leest_dezelfde_lijst():
     """De Mailregisseur telt wat het bord als open geeft; het 08:00-bericht noemt hetzelfde getal; een oproep houdt zijn
     oude sleutel; bellen alleen op een vast moment; een oproep voor mail die niet meer openstaat, gaat weg."""

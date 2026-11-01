@@ -126,6 +126,12 @@ def punten(open_punten, cfg):
     return uit
 
 
+def zonder_wacht_melden(cfg):
+    """De postvakken zonder mailwacht die ik als nood meld (mailwachten.json, 'zonder_wacht'). Een postvak met een 'keuze'
+    ligt al bij Mehdi in de werkstand (VOL-10, MAIL-7): dat meld ik niet bij elke ronde opnieuw."""
+    return [z["postvak"] for z in cfg.get("zonder_wacht", []) if isinstance(z, dict) and z.get("postvak") and not z.get("keuze")]
+
+
 def lees_open(cfg):
     """De open punten van het bord, de enige telling (een bron, 19-10-2026)."""
     antw = bord.call("/api/mail/open")
@@ -328,7 +334,7 @@ def main():
                 bord.opgepakt(it["id"], f"{NAAM}: niet meer open, niet bellen")
         except Exception as e:  # noqa: BLE001
             ag.log("oproepen", "fout", f"oude oproepen niet nagekeken: {type(e).__name__}: {str(e)[:120]}")
-        zonder = [z["postvak"] for z in cfg.get("zonder_wacht", [])]
+        zonder = zonder_wacht_melden(cfg)
         if zonder:
             r.nood("Postvakken zonder mailwacht: " + ", ".join(zonder) + ". Wat nodig is staat in werkwijze/mailwachten.json",
                    wie="mehdi")

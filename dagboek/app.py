@@ -290,7 +290,8 @@ BRONNEN = (
     ("Zoom", "Zoom-account (server)", "2 keer per dag", "gesprekken met wie en hoe lang, aantal chats"),
     ("Fathom", "Fathom-account (server)", "elk uur", "gesprekken met wie en hoe lang"),
     ("Plaud", "Plaud-account (server)", "elk uur", "opnames met wie en hoe lang"),
-    ("Mail", "5 postvakken: mch, info H-Architects, H-Invest, Melodie, hotmail (server)", "elk uur 07-21",
+    ("Mail", "5 postvakken: mch, info H-Architects, H-Invest, Melodie, hotmail (server); niet bewaakt: light@ en "
+     "standaard@ H-Architects, boekhouding@ H-Invest (alleen hun verzonden post)", "elk uur 07-21",
      "aantal binnen en verzonden, nooit de tekst"),
     ("WhatsApp", "WhatsApp op je laptop", "elk uur als de laptop wakker is",
      "berichten en oproepen per persoon, nooit de tekst"),

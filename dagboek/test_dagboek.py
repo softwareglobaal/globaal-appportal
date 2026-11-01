@@ -104,6 +104,8 @@ check("D12 bronnen: alle vijftien met de stand van de dag", r.status_code == 200
 check("D12 bronnen zonder groep 403", C.get("/bronnen", headers={"X-authentik-groups": "x"}).status_code == 403)
 check("D12 overzicht wijst naar bronnen", "alle bronnen" in C.get("/", headers=MET).get_data(as_text=True))
 check("D07 geen gedachtestreepje (bronnen)", "—" not in html and "–" not in html)
+check("D12 bronnen: postvakken zonder wacht als niet bewaakt (VOL-10)", "niet bewaakt: light@ en standaard@" in html
+      and "boekhouding@" in html)
 md = open(os.path.join(PROEF, "2026-10-22.md"), encoding="utf-8").read().replace("\n## Over deze vaststelling",
     "\n## Eigen werk en gezondheid\n\n- Wispr Flow: 19 dictaten, 2599 woorden, 15 min ingesproken\n"
     "- websites: 4 bezoeken op 3 sites; meest: monday.com (2)\n"
