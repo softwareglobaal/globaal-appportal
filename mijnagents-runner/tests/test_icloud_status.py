@@ -209,6 +209,13 @@ class ICloudStatus(unittest.TestCase):
         _, _, logs = self.fake_run([], inhoud=data, taak_id=13)
         self.assertEqual([r["stap"] for r in self.logregels(logs)], ["melding"])
 
+    def test_foto1_gedeeltelijk_met_onbesliste_foto_blijft_een_eigen_fout(self):
+        # Codex 3: met een onbesliste foto erbij koos de wacht de wachtreden en gaf exit 0 bij een mislukte levering.
+        code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede"), self.foto("geen_gps", lat=None)], geleverd=1)
+        self.assertEqual(code, 1)
+        self.assertIn("fotolevering_gedeeltelijk", self.statussen[-1][1]["detail"])
+        self.assertEqual([r["stap"] for r in self.logregels(logs)][-1], "fout")
+
     def test_foto1_gedeeltelijke_levering_is_fout_en_exit_1(self):
         code, _, logs = self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
         regels = self.logregels(logs)
@@ -518,7 +525,7 @@ class ICloudStatus(unittest.TestCase):
         rijen = [  # pk, uuid, scherm, importedby, analyse, mensvlag, gezichten (grootte, verborgen)
             (1, "werf", 0, 1, 12, 0, [(0.04, 0)]), (2, "portret", 0, 1, 12, 0, [(0.31, 0)]), (3, "groep", 0, 2, 12, 1, []),
             (4, "scherm", 1, 1, 12, 0, []), (5, "app", 0, 8, 12, 0, []), (6, "nieuw", 0, 1, 0, 0, []),
-            (7, "verborgen", 0, 1, 12, 0, [(0.5, 1)])]
+            (7, "verborgen", 0, 1, 12, 0, [(0.5, 1)]), (8, "kleine-gezichten", 0, 1, 12, 0, [(0.03, 0), (0.04, 0), (0.02, 0)])]
         for pk, uid, scherm, door, analyse, vlag, gezichten in rijen:
             con.execute("INSERT INTO ZASSET VALUES (?, ?, 'X.HEIC', ?, 50, 4, 0, 0, ?)", (pk, uid, t + pk, scherm))
             con.execute("INSERT INTO ZADDITIONALASSETATTRIBUTES VALUES (?, 'IMG.HEIC', ?, ?, ?)", (pk, door, analyse, vlag))
@@ -526,10 +533,36 @@ class ICloudStatus(unittest.TestCase):
                 con.execute("INSERT INTO ZDETECTEDFACE VALUES (?, ?, ?)", (pk, grootte, verborgen))
         con.commit()
         con.close()
-        uit = {f["uuid"]: (f["scherm"], f["app"], f["mensen"]) for f in m.fotos_van("2026-10-14")}
-        self.assertEqual(uit, {"werf": (False, False, False), "portret": (False, False, True), "groep": (False, False, True),
-                               "scherm": (True, False, False), "app": (False, True, False), "nieuw": (False, False, None),
-                               "verborgen": (False, False, False)})
+        uit = {f["uuid"]: (f["scherm"], f["app"], f["mensen"], f["gezicht"]) for f in m.fotos_van("2026-10-14")}
+        # Codex 3: een klein gezicht is geen 'mensen' voor de indeling, maar wel een gezicht: dan nooit een voorvertoning.
+        self.assertEqual(uit, {"werf": (False, False, False, True), "portret": (False, False, True, True),
+                               "groep": (False, False, True, True), "scherm": (True, False, False, False),
+                               "app": (False, True, False, False), "nieuw": (False, False, None, None),
+                               "verborgen": (False, False, False, False), "kleine-gezichten": (False, False, False, True)})
+
+    def test_foto8_tijd_is_die_van_brussel_ook_op_een_mac_elders(self):
+        # Codex 3: de tijd per foto kwam uit de tijdzone van de Mac; een Mac in Suriname zette een privéfoto zo bij een
+        # Brusselse werkafspraak.
+        import time
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER)")
+        con.execute("INSERT INTO ZASSET VALUES (1, 'uuid', 'UUID.HEIC', ?, 50, 4, 0, 0)", (t,))
+        con.commit()
+        con.close()
+        oud = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Paramaribo"
+            time.tzset()
+            self.assertEqual(m.fotos_van("2026-10-14")[0]["tijd"], "11:30")
+        finally:
+            if oud is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = oud
+            time.tzset()
 
     def nep_avond(self, vandaag, fotos_per_dag, gelezen=(), afspraken=lambda dag: [], nog=0):
         """Een avondronde tegen een nep-bord: klaarzet op uniek zoals mijnagents/app.py, /api/fotometadata per dag."""
@@ -630,6 +663,10 @@ class ICloudStatus(unittest.TestCase):
         dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
         self.assertEqual(dagen, [("2026-10-04", True), ("2026-10-05", True)])
         self.assertIn("inhalen overgeslagen", melding)
+        # Codex 3: een antwoord zonder lijst is geen 'niets gelezen' (anders werd een gedane dag als ingehaald overschreven)
+        m.bord_lees = lambda pad: {"fout": "fictief"}
+        dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
+        self.assertEqual((dagen, "inhalen overgeslagen" in melding), ([("2026-10-04", True), ("2026-10-05", True)], True))
 
     def test_foto5_voorvertoning_alleen_van_een_werkfoto_zonder_mensen(self):
         # T-0120 FOTO-5: de Mac maakt alleen de voorvertoningen die de indeling vraagt, kijkt zelf de vlaggen na en opent
@@ -639,8 +676,9 @@ class ICloudStatus(unittest.TestCase):
         m.LIB = str(bib / "originals")
         uid = lambda n: f"aaaaaaa{n}-0000-4000-8000-000000000000"
         rij = lambda n, **k: dict({"uuid": uid(n), "bestand": f"{uid(n)}.HEIC", "video": False, "scherm": False, "app": False,
-                                   "mensen": False}, **k)
-        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6), rij(8, scherm=None)]
+                                   "mensen": False, "gezicht": False}, **k)
+        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6), rij(8, scherm=None),
+                 rij(9, gezicht=True)]
         afgeleid = bib / "resources/derivatives/a" / f"{uid(1)}_1_105_c.jpeg"
         afgeleid.parent.mkdir(parents=True)
         afgeleid.write_bytes(b"fictieve afgeleide")
@@ -650,7 +688,7 @@ class ICloudStatus(unittest.TestCase):
             origineel.write_bytes(b"fictief origineel")
         m.fotos_van = lambda dag: [dict(f) for f in fotos]
         m.bord_lees = lambda pad: {"items": [{"van": "icloud-wacht", "soort": "fotoindeling", "inhoud": json.dumps(
-            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 9)]})}]}
+            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 10)]})}]}
         geopend, gepost = [], []
 
         def sips(cmd, **kw):
@@ -660,7 +698,7 @@ class ICloudStatus(unittest.TestCase):
         m.bord = lambda pad, data: gepost.append((pad, data)) or {"ok": True}
         with patch.object(m.subprocess, "run", sips):
             uit = m.voorvertoningen()
-        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 5, "fouten": []})
+        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 6, "fouten": []})
         self.assertEqual(geopend, [afgeleid.name, f"{uid(6)}.HEIC"])
         self.assertEqual([(p, d["id"]) for p, d in gepost], [("/api/fotovoorbeeld", uid(1)), ("/api/fotovoorbeeld", uid(6))])
         self.assertTrue(base64.b64decode(gepost[0][1]["jpeg"]).startswith(b"\xff\xd8\xff"))

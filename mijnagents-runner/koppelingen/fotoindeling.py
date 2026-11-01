@@ -268,8 +268,9 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
         return groepen[sleutel]
 
     def zet(g, f, t):
-        # Een voorvertoning alleen als Photos zeker is: geen mensen, geen schermafbeelding, geen app-foto (Codex 2).
-        zeker = f.get("mensen") is False and f.get("scherm") is False and f.get("app") is False
+        # Zeker alleen als Photos het weet: geen mensen, geen gezicht (ook geen klein), geen schermafbeelding, geen app-foto
+        # (Codex 2 en 3). Alleen zo'n foto staat met id en tijd in de indeling en mag een voorvertoning krijgen.
+        zeker = all(f.get(k) is False for k in ("mensen", "gezicht", "scherm", "app"))
         g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")), "mensen": f.get("mensen"),
                            "zeker": zeker})
 
@@ -340,15 +341,16 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
                 g["auto_min"] = int(minuten) or None
     uit = []
     for g in sorted(groepen.values(), key=lambda g: (g["soort"] != "zeker", g["sleutel"])):
-        # Een foto met mensen telt bij het project, maar zonder id, tijd of beeld (Codex 1); de tijden komen van de rest.
-        zonder_mensen = sorted((x for x in g["fotos"] if not x["mensen"]), key=lambda x: x["t"])
-        tijden = [x["t"] for x in zonder_mensen]
+        # Een foto met mensen, of waarvan Photos een vlag niet kent, telt bij het project, maar zonder id, tijd of beeld
+        # (Codex 1 en 3): mensen apart (met_mensen), onbekend apart (onbekend). De tijden komen van de rest.
+        getoond = sorted((x for x in g["fotos"] if x["zeker"]), key=lambda x: x["t"])
+        tijden = [x["t"] for x in getoond]
         g.update(van=_uur(min(tijden)) if tijden else "", tot=_uur(max(tijden)) if tijden else "", aantal=len(g["fotos"]),
-                 met_mensen=sum(1 for x in g["fotos"] if x["mensen"]), zonder_plaats=sum(1 for x in g["fotos"] if not x["gps"]),
-                 video=sum(1 for x in g["fotos"] if x["video"]))
+                 met_mensen=sum(1 for x in g["fotos"] if x["mensen"]),
+                 onbekend=sum(1 for x in g["fotos"] if not x["zeker"] and not x["mensen"]),
+                 zonder_plaats=sum(1 for x in g["fotos"] if not x["gps"]), video=sum(1 for x in g["fotos"] if x["video"]))
         g["fotos"] = [{"id": x["id"], "tijd": _uur(x["t"]),
-                       "voorbeeld": g["soort"] == "zeker" and x["gps"] and not x["video"] and x["zeker"]}
-                      for x in zonder_mensen]
+                       "voorbeeld": g["soort"] == "zeker" and x["gps"] and not x["video"]} for x in getoond]
         uit.append(g)
     return {"datum": dag, "versie": VERSIE, "werf": [g for g in uit if g["soort"] == "zeker"],
             "kandidaat": [g for g in uit if g["soort"] == "kandidaat"], "telling": telling, "totaal": len(fotos)}
@@ -359,10 +361,13 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
 def _groeptitel(dag, g):
     project = " ".join(x for x in (g["firma"], g["nummer"], g["naam"]) if x)
     if g["soort"] == "kandidaat":
-        return f"{dag} {g['van']}-{g['tot']}: kandidaat {project}: {g['aantal']} foto's bij de projectplek, nog niet bevestigd"
+        tijd = f" {g['van']}-{g['tot']}" if g["van"] else ""
+        return f"{dag}{tijd}: kandidaat {project}: {g['aantal']} foto's bij de projectplek, nog niet bevestigd"
     delen = [f"{g['aantal']} werkfoto's"]
     if g["met_mensen"]:
         delen.append(f"{g['met_mensen']} met mensen (niet getoond)")
+    if g.get("onbekend"):
+        delen.append(f"{g['onbekend']} met een onbekende vlag van Photos (niet getoond)")
     if g["zonder_plaats"]:
         delen.append(f"{g['zonder_plaats']} zonder plaats")
     a = g["anker"]
@@ -370,7 +375,8 @@ def _groeptitel(dag, g):
              else f"auto bij project {a['aankomst']}-{a['vertrek']}")
     if g["auto_min"]:
         anker += f" (auto stond er {g['auto_min']} min)"
-    return f"{dag} {g['van']}-{g['tot']}: {project}: {', '.join(delen)}, {anker}"
+    tijd = f" {g['van']}-{g['tot']}" if g["van"] else ""
+    return f"{dag}{tijd}: {project}: {', '.join(delen)}, {anker}"
 
 
 def bord_items(ind, nodig, oude_sleutels=()):
@@ -384,7 +390,8 @@ def bord_items(ind, nodig, oude_sleutels=()):
         items.append({"van": NAAM, "voor": "mehdi", "soort": "foto", "sleutel": dag, "uniek": uniek, "titel": _groeptitel(dag, g),
                       "inhoud": {"datum": dag, "soort": g["soort"], "firma": g["firma"], "nummer": g["nummer"], "naam": g["naam"],
                                  "aantal": g["aantal"], "van": g["van"], "tot": g["tot"], "anker": g["anker"],
-                                 "auto_min": g["auto_min"], "met_mensen": g["met_mensen"], "zonder_plaats": g["zonder_plaats"],
+                                 "auto_min": g["auto_min"], "met_mensen": g["met_mensen"], "onbekend": g["onbekend"],
+                                 "zonder_plaats": g["zonder_plaats"],
                                  "link": g["link"], "bezoek": g.get("bezoek"), "pagina": f"/fotos/{dag}"}})
     for uniek in sorted(set(oude_sleutels) - set(sleutels)):
         items.append({"van": NAAM, "voor": "mehdi", "soort": "foto", "sleutel": dag, "uniek": uniek,

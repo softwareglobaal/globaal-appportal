@@ -76,7 +76,7 @@ def schone_fotos(lijst):
         gps = all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in (lat, lon))
         uit.append({"id": f["id"], "utc": f["utc"][:40], "lat": float(lat) if gps else None, "lon": float(lon) if gps else None,
                     "video": f.get("video") is True, "scherm": _vlag(f.get("scherm")), "app": _vlag(f.get("app")),
-                    "mensen": _vlag(f.get("mensen"))})
+                    "mensen": _vlag(f.get("mensen")), "gezicht": _vlag(f.get("gezicht"))})
     return uit
 
 

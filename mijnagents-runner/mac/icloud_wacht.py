@@ -118,8 +118,9 @@ def _kolommen(con, tabel):
 
 def fotos_van(dag):
     """De foto's en video's van een Brusselse dag uit Photos.sqlite, alleen lezend (mode=ro). T-0120 FOTO-4: ook de vlaggen
-    die Photos zelf zet, nooit het beeld: scherm (schermafbeelding), app (bewaard uit een app, ZIMPORTEDBY 3 of 8) en
-    mensen (een gezicht van minstens MENSEN_GEZICHT van het beeld, of Photos' vlag 'mensen in beeld'). mensen is None
+    die Photos zelf zet, nooit het beeld: scherm (schermafbeelding), app (bewaard uit een app, ZIMPORTEDBY 3 of 8),
+    mensen (een gezicht van minstens MENSEN_GEZICHT van het beeld, of Photos' vlag 'mensen in beeld') en gezicht (er staat
+    een zichtbaar gezicht op, hoe klein ook: dan nooit een voorvertoning). De tijd is die van Brussel. mensen is None
     zolang Photos de gezichten niet analyseerde: onbekend, nooit 'geen mensen'. Een kolom die deze versie van Photos niet
     heeft, geeft None (oudere schema's blijven werken)."""
     d0 = datetime.fromisoformat(dag).replace(tzinfo=ZoneInfo("Europe/Brussels"))
@@ -132,10 +133,11 @@ def fotos_van(dag):
 
         def kol(bron, naam, alias):
             return f"{alias}.{naam}" if naam in bron and (alias == "a" or join) else "NULL"
-        gezicht = "NULL"
+        gezicht = "NULL, NULL"
         if {"ZASSETFORFACE", "ZSIZE"} <= df and "Z_PK" in za:
-            gezicht = ("(SELECT MAX(f.ZSIZE) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK"
-                       + (" AND COALESCE(f.ZHIDDEN, 0) = 0)" if "ZHIDDEN" in df else ")"))
+            zichtbaar = " AND COALESCE(f.ZHIDDEN, 0) = 0" if "ZHIDDEN" in df else ""
+            gezicht = (f"(SELECT MAX(f.ZSIZE) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK{zichtbaar}), "
+                       f"(SELECT COUNT(*) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK{zichtbaar})")
         velden = ["a.ZUUID", "a.ZFILENAME", "a.ZDATECREATED", "a.ZLATITUDE", "a.ZLONGITUDE", "a.ZKIND",
                   kol(aa, "ZORIGINALFILENAME", "aa"), kol(za, "ZISDETECTEDSCREENSHOT", "a"), kol(aa, "ZIMPORTEDBY", "aa"),
                   kol(aa, "ZFACEANALYSISVERSION", "aa"), kol(aa, "ZHASPEOPLESCENEMIDORGREATERCONFIDENCE", "aa"), gezicht]
@@ -147,7 +149,7 @@ def fotos_van(dag):
     finally:
         con.close()
     uit = []
-    for uuid, naam, t, lat, lon, kind, origineel, scherm, door, analyse, mensvlag, gezicht in rijen:
+    for uuid, naam, t, lat, lon, kind, origineel, scherm, door, analyse, mensvlag, gezicht, gezichten in rijen:
         gps = lat is not None and lon is not None and lat > -180 and lon > -180
         schermnaam = re.match(r"(?i)^(?:screenshot|screen shot|schermafbeelding)(?:[\s_.-]|$)", os.path.basename(str(origineel or "")))
         if (gezicht is not None and gezicht >= MENSEN_GEZICHT) or mensvlag == 1:
@@ -157,11 +159,13 @@ def fotos_van(dag):
         else:
             mensen = None
         uit.append({"uuid": uuid, "bestand": naam, "origineel": origineel,
-                    "tijd": datetime.fromtimestamp(t + APPLE_EPOCH).strftime("%H:%M"),
+                    "tijd": datetime.fromtimestamp(t + APPLE_EPOCH, ZoneInfo("Europe/Brussels")).strftime("%H:%M"),
                     "vastgelegd_utc": datetime.fromtimestamp(t + APPLE_EPOCH, timezone.utc).isoformat(),
                     "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1,
                     "scherm": True if scherm == 1 or schermnaam else (None if scherm is None else False),
-                    "app": None if door is None else door in APP_IMPORT, "mensen": mensen})
+                    "app": None if door is None else door in APP_IMPORT, "mensen": mensen,
+                    # Voor een voorvertoning telt elk zichtbaar gezicht, ook een klein (Codex 3); onbekend zolang niet geanalyseerd.
+                    "gezicht": True if (gezichten or 0) > 0 or mensvlag == 1 else (False if analyse else None)})
     return uit
 
 
@@ -912,7 +916,9 @@ def taken():
         regels.append({"naam": NAAM, "onderwerp": "fotoaanvoer", "stap": "schrijf",
                        "tekst": f"{n} van {len(binnen)} geselecteerde foto's geleverd; {onbeslist} onbeslist"})
         if not volledig:
+            # Codex 3: een levering die niet alle geselecteerde foto's gaf, is een eigen fout, ook met onbesliste foto's erbij.
             blokkeer(it, ("omzetting_mislukt" if tkn and any(f.get("export_fout") == "omzetting_mislukt" for f in binnen)
+                          else "fotolevering_gedeeltelijk" if n != len(binnen)
                           else "fotoselectie_onbeslist" if onbeslist and not tkn else "fotolevering_gedeeltelijk"))
             continue
         if tkn and not stabiel:
@@ -1026,8 +1032,10 @@ def gelezen_dagen(eerste, laatste):
     63-mijnagents); het werkverslag (/api/logboek/<naam>) is van hieruit niet leesbaar. Een dag die de oude versie las
     (alleen een bronregel, zonder vlaggen), wordt zo één keer opnieuw gelezen: alleen metadata. Een fout gaat naar de beller."""
     d = bord_lees("/api/klaarzet?" + urllib.parse.urlencode({"voor": "fotoindeling", "soort": "fotometadata", "status": "alle", "n": 500}))
+    if not isinstance(d, dict) or not isinstance(d.get("items"), list):
+        raise ValueError("geen lijst van het bord")       # Codex 3: anders werd elke dag ongelezen en 'gedaan' overschreven
     uit = {}
-    for it in d.get("items") or []:
+    for it in d["items"]:
         dag = str(it.get("sleutel") or "")
         if it.get("van") != NAAM or not eerste.isoformat() <= dag <= laatste.isoformat():
             continue
@@ -1131,8 +1139,8 @@ def voorvertoningen():
             if uit["verstuurd"] + len(uit["fouten"]) >= VOORBEELD_PER_RONDE:
                 return uit
             f = hier.get(fid)
-            if (not f or f.get("mensen") is not False or f.get("video") or f.get("scherm") is not False
-                    or f.get("app") is not False):
+            if (not f or f.get("mensen") is not False or f.get("gezicht") is not False or f.get("video")
+                    or f.get("scherm") is not False or f.get("app") is not False):
                 uit["niet_toegelaten"] += 1
                 continue
             bron = beeld_lokaal(f)
@@ -1158,7 +1166,8 @@ def metadata_bericht(dag, fotos):
     (mijnagents/fotowacht.py, mijnagents-data/fotometadata/<dag>.json), niet in zijn databank en niet in Dropbox."""
     return {"dag": dag, "versie": 1, "aantal": len(fotos),
             "fotos": [{"id": f["uuid"], "utc": f["vastgelegd_utc"], "lat": f["lat"], "lon": f["lon"], "video": bool(f.get("video")),
-                       "scherm": f.get("scherm"), "app": f.get("app"), "mensen": f.get("mensen")} for f in fotos]}
+                       "scherm": f.get("scherm"), "app": f.get("app"), "mensen": f.get("mensen"),
+                       "gezicht": f.get("gezicht")} for f in fotos]}
 
 
 def merkteken(dag, fotos, export):

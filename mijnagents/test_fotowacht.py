@@ -84,7 +84,8 @@ check("V06 het bestand ontstaat meteen met 0600, ook zonder umask",
 pad = os.path.join(MAP, "fotometadata", f"{DAG}.json")
 check("V06 metadata aanvaard", r.status_code == 200 and r.get_json()["aantal"] == 2, r.status_code)
 d = json.load(open(pad, encoding="utf-8"))
-check("V06 alleen de velden van de indeling", [sorted(x) for x in d["fotos"]] == [["app", "id", "lat", "lon", "mensen", "scherm", "utc", "video"]] * 2)
+check("V06 alleen de velden van de indeling",
+      [sorted(x) for x in d["fotos"]] == [["app", "gezicht", "id", "lat", "lon", "mensen", "scherm", "utc", "video"]] * 2)
 check("V06 een vlag die geen ja of nee is, wordt onbekend", d["fotos"][1]["scherm"] is None and d["fotos"][0]["mensen"] is False)
 check("V06 bestand alleen voor de gebruiker", oct(os.stat(pad).st_mode & 0o777) == "0o600")
 con = sqlite3.connect(os.environ["AGENTS_DB"])

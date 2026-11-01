@@ -28,9 +28,9 @@ PRIVE = (50.3000, 4.3000)          # een verzonnen plek ver van elk project
 DERDE = (50.4000, 4.4000)          # het adres van een afspraak van een tweede firma (geen projectplek)
 
 
-def foto(fid, uur, lat=None, lon=None, mensen=False, scherm=False, app=False, video=False, dag="2026-10-29"):
+def foto(fid, uur, lat=None, lon=None, mensen=False, scherm=False, app=False, video=False, dag="2026-10-29", gezicht=None):
     return {"id": fid, "utc": f"{dag}T{uur}:00+01:00", "lat": lat, "lon": lon, "video": video, "scherm": scherm,
-            "app": app, "mensen": mensen}
+            "app": app, "mensen": mensen, "gezicht": bool(mensen) if gezicht is None and mensen is not None else gezicht}
 
 
 def bij(plek, meter=40):
@@ -100,7 +100,7 @@ class Regels(unittest.TestCase):
                  foto("film", "10:30", *a, video=True)]
         ind = FI.indeel("2026-10-29", fotos, [P1], [afspraak("HARC", "9001", "2026-10-29", "10:00", "11:00", (P1["lat"], P1["lon"]))], [])
         g = ind["werf"][0]
-        self.assertEqual((g["aantal"], g["met_mensen"], g["video"], g["van"], g["tot"]), (4, 1, 1, "10:15", "10:30"))
+        self.assertEqual((g["aantal"], g["met_mensen"], g["onbekend"], g["video"], g["van"], g["tot"]), (4, 1, 1, 1, "10:15", "10:30"))
         self.assertEqual([f["id"] for f in g["fotos"] if f["voorbeeld"]], ["w1"])
         self.assertNotIn("mens", [f["id"] for f in g["fotos"]])
         self.assertNotIn("10:50", json.dumps(ind))
@@ -108,10 +108,15 @@ class Regels(unittest.TestCase):
     def test_onbekende_vlag_geeft_nooit_een_voorvertoning(self):
         # Codex 2: een onbekende scherm- of appvlag telde als 'nee'.
         a = bij((P1["lat"], P1["lon"]))
-        fotos = [foto("zeker", "10:10", *a), foto("scherm-onbekend", "10:15", *a, scherm=None), foto("app-onbekend", "10:20", *a, app=None)]
+        fotos = [foto("zeker", "10:10", *a), foto("scherm-onbekend", "10:15", *a, scherm=None), foto("app-onbekend", "10:20", *a, app=None),
+                 foto("klein-gezicht", "10:25", *a, gezicht=True), foto("gezicht-onbekend", "10:30", *a, gezicht=None, mensen=None)]
         ind = FI.indeel("2026-10-29", fotos, [P1], [afspraak("HARC", "9001", "2026-10-29", "10:00", "11:00", (P1["lat"], P1["lon"]))], [])
-        self.assertEqual([(f["id"], f["voorbeeld"]) for f in ind["werf"][0]["fotos"]],
-                         [("zeker", True), ("scherm-onbekend", False), ("app-onbekend", False)])
+        g = ind["werf"][0]
+        # Codex 3: onbekend en een klein gezicht apart: geteld, zonder id, tijd of voorvertoning
+        self.assertEqual([(f["id"], f["voorbeeld"]) for f in g["fotos"]], [("zeker", True)])
+        self.assertEqual((g["aantal"], g["onbekend"], g["met_mensen"], g["van"], g["tot"]), (5, 4, 0, "10:10", "10:10"))
+        for x in ("scherm-onbekend", "app-onbekend", "klein-gezicht", "10:25"):
+            self.assertNotIn(x, json.dumps(ind))
 
     def test_scherm_bij_een_project_is_geen_werk(self):
         a = bij((P1["lat"], P1["lon"]))
