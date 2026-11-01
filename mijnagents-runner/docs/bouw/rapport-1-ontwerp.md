@@ -231,23 +231,23 @@ Voor Mehdi:
 ---
 
 ### Techniek voor Claude en Shaniel
-1. Aangenomen X1 (3-0): [AGENTNORM.md:312-316](file:///Users/mehdichegini/dev/_bouwagents/AGENTNORM.md#L312-L316), [docs/bouw/opdracht-1-ontwerp.md:19-24](file:///Users/mehdichegini/dev/_bouwagents/docs/bouw/opdracht-1-ontwerp.md#L19-L24) - Stop direct zonder geldige HARC/HARM; twee runners, geen vier agents.
-2. Aangenomen X2 (3-0): [aankoop/onderzoek.py:82-112](file:///Users/mehdichegini/dev/_bouwagents/aankoop/onderzoek.py#L82-L112), [organisatie.py:55-61](file:///Users/mehdichegini/dev/_bouwagents/organisatie.py#L55-L61), [pipedrive.py:21-27](file:///Users/mehdichegini/dev/_bouwagents/pipedrive.py#L21-L27) - Zoek eerst intern, dan web met KBO/inhoudingsplicht-bewijs; val terug op "niet gecontroleerd".
-3. Aangenomen X3 (3-0): [bouw/scheiding.py:50-71](file:///Users/mehdichegini/dev/_bouwagents/bouw/scheiding.py#L50-L71) - Vaste afzenders uit kern, model schrijft alleen werkomschrijving, blokkeer kruisvermeldingen.
-4. Aangenomen X4 (3-0): [bronnen.py:198-207](file:///Users/mehdichegini/dev/_bouwagents/bronnen.py#L198-L207), [docs/bouw/opdracht-1-ontwerp.md:56-59](file:///Users/mehdichegini/dev/_bouwagents/docs/bouw/opdracht-1-ontwerp.md#L56-L59) - Lokale pypdf-extractie, rekenkundige toets, anonimiseer de andere firma als "Inschrijver B".
+1. Aangenomen X1 (3-0): [AGENTNORM.md:312-316](file://AGENTNORM.md#L312-L316), [docs/bouw/opdracht-1-ontwerp.md:19-24](file://docs/bouw/opdracht-1-ontwerp.md#L19-L24) - Stop direct zonder geldige HARC/HARM; twee runners, geen vier agents.
+2. Aangenomen X2 (3-0): [aankoop/onderzoek.py:82-112](file://aankoop/onderzoek.py#L82-L112), [organisatie.py:55-61](file://organisatie.py#L55-L61), [pipedrive.py:21-27](file://pipedrive.py#L21-L27) - Zoek eerst intern, dan web met KBO/inhoudingsplicht-bewijs; val terug op "niet gecontroleerd".
+3. Aangenomen X3 (3-0): [bouw/scheiding.py:50-71](file://bouw/scheiding.py#L50-L71) - Vaste afzenders uit kern, model schrijft alleen werkomschrijving, blokkeer kruisvermeldingen.
+4. Aangenomen X4 (3-0): [bronnen.py:198-207](file://bronnen.py#L198-L207), [docs/bouw/opdracht-1-ontwerp.md:56-59](file://docs/bouw/opdracht-1-ontwerp.md#L56-L59) - Lokale pypdf-extractie, rekenkundige toets, anonimiseer de andere firma als "Inschrijver B".
 5. Naar Mehdi (grens) X5 (3-0): Geen externe AI-verwerking van offertes zonder expliciete goedkeuring van Mehdi.
-6. Aangenomen X6 (3-0): [docs/bouw/opdracht-1-ontwerp.md:47-59](file:///Users/mehdichegini/dev/_bouwagents/docs/bouw/opdracht-1-ontwerp.md#L47-L59) - Blokkeer rekenfouten, scans en kruislekken via gouden tests (project 2145/2405).
-7. Aangenomen X7 (3-0): [regisseur.py:79-96](file:///Users/mehdichegini/dev/_bouwagents/regisseur.py#L79-L96), [AGENTNORM.md:352-383](file:///Users/mehdichegini/dev/_bouwagents/AGENTNORM.md#L352-L383) - Fase 1 vandaag uitrollen met Regisseur-koppeling en bordverslagen; Fase 2 later.
+6. Aangenomen X6 (3-0): [docs/bouw/opdracht-1-ontwerp.md:47-59](file://docs/bouw/opdracht-1-ontwerp.md#L47-L59) - Blokkeer rekenfouten, scans en kruislekken via gouden tests (project 2145/2405).
+7. Aangenomen X7 (3-0): [regisseur.py:79-96](file://regisseur.py#L79-L96), [AGENTNORM.md:352-383](file://AGENTNORM.md#L352-L383) - Fase 1 vandaag uitrollen met Regisseur-koppeling en bordverslagen; Fase 2 later.
 8. Afgewezen G1 (1-2): Afgewezen door meerderheid; geen actie vereist.
-9. Aangenomen G2 (3-0): [aankoop/onderzoek.py](file:///Users/mehdichegini/dev/_bouwagents/aankoop/onderzoek.py) - Eigen historiek eerst, webkandidaten uitsluitend tonen bij geverifieerde website en KBO.
-10. Aangenomen G3 (2-1): [bouw/scheiding.py](file:///Users/mehdichegini/dev/_bouwagents/bouw/scheiding.py) - Harde codefilter op concepten; blokkeer gedeelde adressen of kruisverwijzingen.
-11. Aangenomen G4 (2-1): [bronnen.py](file:///Users/mehdichegini/dev/_bouwagents/bronnen.py) - Objectieve vergelijking zonder nul-aannames en zonder gunningsvoorkeur.
-12. Aangenomen G5 (3-0): [aankoop/onderzoek.py](file:///Users/mehdichegini/dev/_bouwagents/aankoop/onderzoek.py) - Filter privégegevens van bouwheren voorafgaand aan zoekacties.
+9. Aangenomen G2 (3-0): [aankoop/onderzoek.py](file://aankoop/onderzoek.py) - Eigen historiek eerst, webkandidaten uitsluitend tonen bij geverifieerde website en KBO.
+10. Aangenomen G3 (2-1): [bouw/scheiding.py](file://bouw/scheiding.py) - Harde codefilter op concepten; blokkeer gedeelde adressen of kruisverwijzingen.
+11. Aangenomen G4 (2-1): [bronnen.py](file://bronnen.py) - Objectieve vergelijking zonder nul-aannames en zonder gunningsvoorkeur.
+12. Aangenomen G5 (3-0): [aankoop/onderzoek.py](file://aankoop/onderzoek.py) - Filter privégegevens van bouwheren voorafgaand aan zoekacties.
 13. Aangenomen G6 (3-0): Geautomatiseerde testsuite valideren op scheiding en rekenregels.
 14. Aangenomen G7 (2-1): V1 oplevering beperken tot bordverslag en Dropbox; geen live postvakintegratie.
 15. Naar Mehdi (grens) K1 (1-2): Wacht op Mehdi inzake verwijderen versus behouden/hernoemen `harmoniebouw`.
-16. Aangenomen K2 (3-0): [aankoop/onderzoek.py](file:///Users/mehdichegini/dev/_bouwagents/aankoop/onderzoek.py), [koppelingen/organisatie.py](file:///Users/mehdichegini/dev/_bouwagents/koppelingen/organisatie.py) - Grendel "alleen gelezen pagina's" toepassen met kern.firma.
-17. Aangenomen K3 (2-1): [bouw/scheiding.py](file:///Users/mehdichegini/dev/_bouwagents/bouw/scheiding.py) - Scheidingsgrendel direct voor wegschrijven en in elke test verankeren.
+16. Aangenomen K2 (3-0): [aankoop/onderzoek.py](file://aankoop/onderzoek.py), [koppelingen/organisatie.py](file://koppelingen/organisatie.py) - Grendel "alleen gelezen pagina's" toepassen met kern.firma.
+17. Aangenomen K3 (2-1): [bouw/scheiding.py](file://bouw/scheiding.py) - Scheidingsgrendel direct voor wegschrijven en in elke test verankeren.
 18. Afgewezen K4 (1-2): Afgewezen door meerderheid; geen actie vereist.
 19. Aangenomen K5 (2-1): Grenzen en gegevensvalidatie implementeren volgens ontwerpspecificatie.
 20. Aangenomen K6 (3-0): Integratietests uitvoeren conform AGENTNORM.
