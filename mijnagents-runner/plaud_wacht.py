@@ -426,10 +426,11 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
         st_obj.bewaar(pid, st)                 # een herstart vraagt het model niet opnieuw
     model = dossier.uit_tekst("model", herk.get("project") or "", "vergadertitel")
     b = dossier.beslis(bewijzen, herk, model, bekend=bekend)
-    deal = None
+    deal, passend = None, []
     if b["firma"] == "HARC" and b["projectnummer"] and deals:
         passend = [d for d in deals if str(d.get("nummer")) == b["projectnummer"]]
         deal = passend[0] if len(passend) == 1 else None
+    zonder_kopie = reden_zonder_dossierkopie(b, deals, passend)
     st["beslissing"] = b
     st["vingerafdruk"] = vinger
     staat.plan(st, opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort_van(tekst, o.get("naam_in_plaud") or "")))
@@ -449,7 +450,27 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
            f"{herk.get('hoofdpersoon') or o.get('naam_in_plaud')} · dossier {b['dossier'] or 'geen'} ({b['zekerheid']})"
            + (" · conflict" if b["conflict"] else "") + f" · voor {b['voor']}"
            + f" · {gedaan} publicatie(s), {fouten} fout", "; ".join(b["redenen"]))
+    if zonder_kopie:
+        ag.log(f"opname {o['start_brussel'][:16]}", "bevinding", f"geen dossierkopie: {zonder_kopie}")
     return {"uitkomst": "gedaan", "fouten": fouten}
+
+
+def reden_zonder_dossierkopie(b, deals, passend):
+    """PLAUD-12 (T-0120): waarom een HARC-opname die zakelijk gekopieerd mag worden, toch geen dossierkopie krijgt, of
+    None. In oktober 7 keer, zonder reden in het werkverslag. Een kopie vraagt precies één open Pipedrive-deal met dat
+    nummer (fathom_wacht.deals_index leest alleen open deals). Alleen bij een nieuwe beslissing, dus niet elke ronde."""
+    if not b.get("kopie_toegestaan") or b.get("firma") != "HARC":
+        return None
+    if deals is None:
+        return "Pipedrive niet gelezen"
+    if not b.get("projectnummer"):
+        return "geen projectnummer"
+    if not passend:
+        return f"geen open Pipedrive-deal met nummer {b['projectnummer']}"
+    if len(passend) > 1:
+        return (f"meer dan één open Pipedrive-deal met nummer {b['projectnummer']} ("
+                + ", ".join(str(d.get("id")) for d in passend) + ")")
+    return None
 
 
 # ------------------------------------------------------------- toezicht ---

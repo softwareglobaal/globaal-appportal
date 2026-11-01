@@ -874,6 +874,62 @@ def test_plaud8_barsten_en_scheuren_zoektaak_geeft_dezelfde_uitkomst():
     assert code == P.OK and w.uploads == [doel] and w.opgepakt == [701], (code, w.uploads, w.opgepakt)
 
 
+def test_plaud12_harc_zonder_passende_deal_geeft_een_bevinding_met_de_reden():
+    """PLAUD-12 (T-0120): in oktober mochten 7 HARC-opnames zakelijk gekopieerd worden, maar er kwam geen enkele
+    dossierkopie en het werkverslag zei niet waarom. Een kopie vraagt precies één open Pipedrive-deal met dat nummer."""
+    w = Wereld()
+    w.deals = [{"id": 778, "titel": "2532 Andere", "nummer": "2532"}]     # 2531 heeft geen open deal (gewonnen, gesloten)
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]                                              # de zoektaak bevestigt 2531: kopie toegestaan
+    w.ronde()
+    assert w.opgepakt == [101], "de bezoekmap krijgt het transcript zoals voordien"
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: geen open Pipedrive-deal met nummer 2531"], w.logs
+    w.ronde()                  # de geleverde taak valt weg: een nieuwe beoordeling, met dezelfde reden
+    w.ronde()                  # niets veranderd: geen nieuwe regel
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert set(reden) == {"geen dossierkopie: geen open Pipedrive-deal met nummer 2531"} and len(reden) <= 2, reden
+    n = len(reden)
+    w.ronde()
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == n, "niet elke ronde opnieuw"
+    assert not [p for p in w.uploads if p.startswith("/Sales/")], w.uploads
+    # twee open deals met hetzelfde nummer: een andere reden, met de deal-ids
+    w2 = Wereld()
+    w2.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}, {"id": 779, "titel": "2531 Fictiva bis", "nummer": "2531"}]
+    w2.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w2.push()
+    w2.ronde()
+    reden = [t for s, t in w2.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: meer dan één open Pipedrive-deal met nummer 2531 (777, 779)"], w2.logs
+    # met precies één passende deal: de kopie, en geen reden
+    w3 = Wereld()
+    w3.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w3.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w3.push()
+    w3.ronde()
+    assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")] and any(p.startswith("/Sales/") for p in w3.uploads)
+    assert P.reden_zonder_dossierkopie({"kopie_toegestaan": True, "firma": "HARC", "projectnummer": "2531"}, None, []) \
+        == "Pipedrive niet gelezen"
+
+
+def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
+    """VOL-18: een opname van de keten barsten en scheuren (UNAB) krijgt geen reden erbij en wordt geleverd als voordien."""
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak()]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "[UNAB-KB] BS 3999 Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "3999"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    code, _, _ = w.ronde()
+    assert code == P.OK and w.uploads == [f"{TKN_PLAUD}/{TKN_NAAM}"] and w.opgepakt == [701], (code, w.uploads)
+    assert not [t for s, t in w.logs if t.startswith("geen dossierkopie")], w.logs
+
+
 def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():
     sys.path.insert(0, os.path.join(HIER, "planning"))
     import plaud_cron_zetten as Z
