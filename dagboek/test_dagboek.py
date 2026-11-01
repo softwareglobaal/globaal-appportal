@@ -9,7 +9,8 @@ De Dagbundelaar ze schrijft (gemaakt met mijnagents-runner/koppelingen/dagvastst
 - D06: een onbekend getal wordt een vraagteken; een kapotte telling laat de pagina niet vallen;
 - D07: geen gedachtestreepje;
 - D30 (WISPR-3): een fout-hartslag van een vorige dag staat als tekst met zijn dag, niet als fout van vandaag;
-- D31 (LOC-1): de Locatiewacht toont haar plekken en ritten ook op een dag met een bord-item.
+- D31 (LOC-1): de Locatiewacht toont haar plekken en ritten ook op een dag met een bord-item;
+- D32 (LOC-2): een plek zonder naam en zonder adres is "onbekende plek", nooit een coördinaat.
 """
 import json
 import os
@@ -90,6 +91,13 @@ check("D08 plek met project", "project HARC 9004, Proefstraat 1" in html, html[-
 check("D08 thuis en rit met km", "<b>Thuis</b>" in html and "rit auto, 36,2 km" in html)
 check("D08 tracker in de auto", "waar de auto stond" in html)
 check("D08 tegel Onderweg op de dag", "72,3 km" in html and "3 plekken" in html)
+# D32 (LOC-2): een plek zonder naam en zonder adres toont geen coördinaten maar "onbekende plek"; met het adres uit de
+# verrijking van het Locatie-dashboard toont ze dat adres.
+naamloos = {"soort": "bezoek", "van": 1792652400, "tot": 1792653600, "minuten": 20, "lat": 50.71234, "lon": 4.61234}
+rij = A.verplaatsingen({"indeling": [naamloos]})
+check("D32 plek zonder naam: geen coördinaten", rij and rij[0]["wat"] == "onbekende plek" and "50.71" not in str(rij), rij)
+check("D32 plek met adres uit de verrijking", A.waar(dict(naamloos, adres="Proeflaan 3, 3999 Proefdorp"))
+      == "Proeflaan 3, 3999 Proefdorp")
 for ext in ("md", "json"):
     shutil.copy(os.path.join(PROEF, f"2026-10-22.{ext}"), os.path.join(MAP, gisteren[:4], f"{gisteren}.{ext}"))
 html = C.get("/", headers=MET).get_data(as_text=True)

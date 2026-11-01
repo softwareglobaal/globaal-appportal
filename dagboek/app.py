@@ -152,9 +152,8 @@ def waar(s):
     if h.get("plek") or s.get("plek"):
         return h.get("plek") or s.get("plek")
     if s.get("adres"):
-        return s["adres"]
-    if s.get("lat") is not None:
-        return f"{s['lat']:.4f}, {s['lon']:.4f}"
+        return s["adres"]           # straat en gemeente uit de adresverrijking van het Locatie-dashboard
+    # LOC-2: een coördinaat zegt Mehdi niets (vandaag is de plek pas na de verrijking van 21:30 bekend)
     return "onbekende plek"
 
 
