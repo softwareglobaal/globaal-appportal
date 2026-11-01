@@ -283,13 +283,14 @@ def veilige_naam(s):
 
 
 def groepeer(fotos):
-    """Groepen: opeenvolgende foto's binnen ~300 m en 45 minuten van elkaar."""
+    """Groepen: opeenvolgende foto's binnen ~300 m en 45 minuten van elkaar. T-0120 FOTO-7: opeenvolgende foto's zonder
+    GPS binnen 45 minuten vormen ook één groep (31-10: 17 foto's zonder plaats werden 17 losse items)."""
     groepen = []
     for f in fotos:
         g = groepen[-1] if groepen else None
-        if g and f["lat"] is not None and g["lat"] is not None:
+        if g and (f["lat"] is None) == (g["lat"] is None):
             dt = (datetime.strptime(f["tijd"], "%H:%M") - datetime.strptime(g["tot"], "%H:%M")).total_seconds() / 60
-            dicht = abs(f["lat"] - g["lat"]) < 0.003 and abs(f["lon"] - g["lon"]) < 0.004
+            dicht = f["lat"] is None or (abs(f["lat"] - g["lat"]) < 0.003 and abs(f["lon"] - g["lon"]) < 0.004)
             if dicht and 0 <= dt <= 45:
                 g["fotos"].append(f); g["tot"] = f["tijd"]; continue
         groepen.append({"van": f["tijd"], "tot": f["tijd"], "lat": f["lat"], "lon": f["lon"], "fotos": [f]})

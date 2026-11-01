@@ -330,6 +330,14 @@ class ICloudStatus(unittest.TestCase):
                 self.assertEqual(self.afgevinkt, [])
                 self.assertEqual(self.lezingen, [])
 
+    def test_foto7_fotos_zonder_gps_binnen_45_minuten_in_een_groep(self):
+        # T-0120 FOTO-7: een foto zonder GPS maakte altijd een eigen groep (31-10: 17 foto's zonder plaats, 17 items).
+        zonder = [{"tijd": t, "lat": None, "lon": None} for t in ("10:00", "10:02", "10:05", "10:07", "10:10")]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(zonder)], [5])
+        later = zonder + [{"tijd": "11:00", "lat": None, "lon": None}, {"tijd": "11:01", "lat": 50.0, "lon": 4.0},
+                          {"tijd": "11:02", "lat": None, "lon": None}]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(later)], [5, 1, 1, 1])
+
     def test_dubbel_lokaal_uur_bij_wintertijd_wordt_op_utc_gescheiden(self):
         m = self.module
         start, einde = m.taakvenster(self.inhoud(datum="2026-10-25", start="2026-10-25T02:15:00+02:00", einde="2026-10-25T02:45:00+02:00"))
