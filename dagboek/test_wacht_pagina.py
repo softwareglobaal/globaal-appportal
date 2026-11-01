@@ -4,6 +4,7 @@
   regel blijft tekst;
 - AG-9: een werkverslag met meer dan een blad toont de bladknoppen; ?blad=1 vraagt het bord om dat blad van deze wacht;
   zonder blad blijft de vraag aan het bord dezelfde als voordien;
+- CL-4: een weekend zonder ronde bij een werkdagwacht zegt 'geen ronde gepland', niet 'geen ronde' of 'kwam binnen'.
 
 Het bord is nagebootst (haal_wachten). Verzonnen voorbeelden, geen echte namen. Draait in de Docker-build.
 """
@@ -94,6 +95,18 @@ finally:
     A.urllib.request.urlopen = _oud
 check("AG-9 de vraag aan het bord draagt wacht en blad alleen als er een blad gevraagd is",
       pad == [A.BORD + "/api/wachten/dag?dag=2026-10-31&wacht=agenda-wacht&blad=2", A.BORD + "/api/wachten/dag?dag=2026-10-31"], pad)
+
+# --- CL-4
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(naam="calendly-wacht", label="De Calendlywacht", kleur="groen",
+                                                              oordeel="geen ronde gepland", aantal=0)))
+html = C.get("/wachten/calendly-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("CL-4 de kop zegt 'geen ronde gepland', niet 'kwam binnen'", "za 31 okt 2026: geen ronde gepland</h2>" in html
+      and "kwam binnen</h2>" not in html, html[-4000:-2500])
+check("CL-4 het werkverslag zegt waarom er geen ronde is", "deze wacht draait alleen op werkdagen" in html)
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(naam="calendly-wacht", label="De Calendlywacht", kleur="grijs",
+                                                              oordeel="niets binnen, geen ronde", aantal=0)))
+html = C.get("/wachten/calendly-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("CL-4 een gewone grijze dag blijft 'geen ronde'", "za 31 okt 2026: geen ronde</h2>" in html and "Geen ronde op deze dag." in html)
 
 print("wacht-pagina: alles ok" if not fout else f"wacht-pagina: {fout} fout(en)")
 sys.exit(1 if fout else 0)

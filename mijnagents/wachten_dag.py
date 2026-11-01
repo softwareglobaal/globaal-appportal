@@ -163,7 +163,15 @@ def lees_log(conn, wacht, van, tot):
              "fout": r["stap"] == "fout"} for r in rijen]
 
 
-def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None):
+def alleen_werkdagen(cadans):
+    """Of de cadans uit de tabel agent zegt dat de wacht alleen op werkdagen draait ('Elke werkdag 07:15'). Vrije tekst,
+    dus streng: 'werkdag' en geen woord dat op het weekend of op rondes door de dag wijst; De Agendawacht draait op
+    werkdagen, maar haar signaalwacht elke dag elke twaalf minuten (T-0120 CL-4)."""
+    c = str(cadans or "").casefold()
+    return "werkdag" in c and not re.search(r"weekend|zaterdag|zondag|elke dag|dagelijks|minuut|minuten|kwartier|\buur\b", c)
+
+
+def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=""):
     """blad: welk blad van het werkverslag (1 is het begin); zonder blad het laatste, zoals voordien de laatste MAX_LOG
     regels. Een blad buiten het bereik wordt het dichtstbijzijnde (T-0120 AG-9)."""
     van, tot = grenzen(dag)
@@ -193,6 +201,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None):
         oordeel, kleur = "binnen", "groen"
     elif log:
         oordeel, kleur = "draaide, niets binnen", "oranje"
+    elif alleen_werkdagen(cadans) and date.fromisoformat(dag).weekday() >= 5:
+        # T-0120 CL-4: in het weekend heeft een werkdagwacht geen ronde gepland; dat is het schema, geen grijs gat
+        oordeel, kleur = "geen ronde gepland", "groen"
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     bladen = max(1, -(-len(log) // MAX_LOG))
@@ -213,11 +224,15 @@ def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
     nood = {}
     for r in conn.execute("SELECT naam, tekst FROM nood WHERE open=1 ORDER BY id").fetchall():
         nood.setdefault(r["naam"], []).append(kort(r["tekst"], 200))
+    try:                                        # CL-4: de cadans uit de tabel agent; zonder tabel blijft grijs grijs
+        cadans = {r["naam"]: r["cadans"] or "" for r in conn.execute("SELECT naam, cadans FROM agent").fetchall()}
+    except Exception:  # noqa: BLE001
+        cadans = {}
     groepen = [("De Dagbundelaar en Ai Angel", tuple(boven))] + [(v, tuple(w)) for v, w in vakken]
     uit = []
     for vak, namen in groepen:
         uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()),
-                                                      blad=blad if n == wacht else None)
+                                                      blad=blad if n == wacht else None, cadans=cadans.get(n, ""))
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]
     return {"dag": dag_, "vakken": uit,

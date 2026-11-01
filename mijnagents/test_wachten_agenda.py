@@ -103,5 +103,22 @@ bx = wachten("2026-10-29", wacht="agenda-wacht", blad=1)
 check("AG-9 het blad geldt alleen voor de gevraagde wacht", bx["calendly-wacht"]["log_blad"] == 1
       and bx["calendly-wacht"]["log_bladen"] == 1)
 
+# --- CL-4
+za = wachten("2026-10-31")
+check("CL-4 zaterdag zonder ronde bij een werkdagwacht: geen ronde gepland, geen grijs",
+      za["calendly-wacht"]["oordeel"] == "geen ronde gepland" and za["calendly-wacht"]["kleur"] != "grijs", za["calendly-wacht"])
+vr = wachten("2026-10-30")
+check("CL-4 een werkdag zonder ronde blijft grijs", vr["calendly-wacht"]["kleur"] == "grijs"
+      and vr["calendly-wacht"]["oordeel"] == "niets binnen, geen ronde", vr["calendly-wacht"])
+zo = wachten("2026-11-01")
+check("CL-4 een weekend met een ronde telt gewoon", zo["calendly-wacht"]["oordeel"] == "draaide, niets binnen", zo["calendly-wacht"])
+check("CL-4 een wacht die ook in het weekend draait (signaalwacht elke 12 minuten), blijft grijs zonder ronde",
+      za["agenda-wacht"]["kleur"] == "grijs", za["agenda-wacht"])
+check("CL-4 een wacht zonder 'werkdag' in de cadans blijft grijs", za["zoom-wacht"]["kleur"] == "grijs")
+check("CL-4 de cadans wordt gelezen zoals hij op het bord staat",
+      WD.alleen_werkdagen("Elke werkdag 07:15") and WD.alleen_werkdagen("elke werkdag 07:40")
+      and not WD.alleen_werkdagen("elke dag 07:15") and not WD.alleen_werkdagen("werkdagen, ook in het weekend")
+      and not WD.alleen_werkdagen("werkdagen elk uur") and not WD.alleen_werkdagen(""))
+
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

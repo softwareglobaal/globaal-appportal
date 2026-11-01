@@ -15,7 +15,7 @@
       <div class="zacht">Daardoor weet het Dagboek nu niet wat deze wacht op {{ dagnaam_ }} kreeg. Dat is onbekend, niet leeg.</div></div>
   {% else %}
   <div class="kaart samen">
-    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
+    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ w['oordeel'] if w['oordeel'] == 'geen ronde gepland' else uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
       <div><span class="groot">{{ 'onbekend' if w['leesfout'] else w['aantal'] }}</span> items binnen</div>
       <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
@@ -67,7 +67,7 @@
       {% for r in w['log'] %}<tr{% if r['fout'] %} class="fout"{% endif %}><td class="tijd">{{ r['tijd'] }}</td><td class="zacht klein">{{ r['stap'] }}</td><td class="klein">{{ r['tekst'] }}</td></tr>{% endfor %}
     </table>
     {% else %}
-    <p class="leeg">Geen ronde op deze dag.</p>
+    <p class="leeg">{{ 'Geen ronde gepland op deze dag: deze wacht draait alleen op werkdagen.' if w['oordeel'] == 'geen ronde gepland' else 'Geen ronde op deze dag.' }}</p>
     {% endif %}
   </div>
   {% endif %}
