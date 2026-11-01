@@ -1000,6 +1000,24 @@ def test_plaud12_een_mislukte_dossierkopie_krijgt_haar_fout_als_reden_een_keer()
     assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == 1
 
 
+def test_plaud12_een_geleverde_kopie_geeft_geen_reden_als_de_deal_daarna_sluit():
+    """Codex-toets 3: de kopie is geleverd, daarna sluit de deal (niet meer bij de open deals). De nieuwe beslissing heeft
+    geen deal, maar de kopie staat er al (staat.plan bewaart wat gedaan is): geen 'geen dossierkopie'."""
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]
+    w.ronde()
+    assert any(p.startswith("/Sales/") for p in w.uploads), w.uploads
+    w.deals = []                                          # de deal is gewonnen of gesloten
+    w.ronde()
+    w.ronde()
+    assert not [t for s, t in w.logs if t.startswith("geen dossierkopie")], w.logs
+    assert P.reden_uit_staat({"opdrachten": [{"soort": "dossierkopie", "gedaan": True}]}, {"afdeling": "h-architects"},
+                             {"firma": "HARC", "projectnummer": "2531", "kopie_toegestaan": True}, [], "tekst") is None
+
+
 def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
     """VOL-18: een opname van de keten barsten en scheuren (UNAB) krijgt geen reden erbij en wordt geleverd als voordien."""
     w = Wereld()

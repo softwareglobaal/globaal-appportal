@@ -459,7 +459,10 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
 def reden_uit_staat(st, herk, b, deals, tekst):
     """PLAUD-12: de reden zonder dossierkopie voor één opname, uit haar staat: een geplande kopie die mislukte (met de
     fout), anders reden_zonder_dossierkopie. Dezelfde keuze van de deal als in verwerk."""
-    mislukt = [x for x in st.get("opdrachten", []) if x.get("soort") == "dossierkopie" and not x.get("gedaan") and x.get("fout")]
+    kopie = [x for x in st.get("opdrachten", []) if x.get("soort") == "dossierkopie"]
+    if any(x.get("gedaan") for x in kopie):
+        return None            # Codex-toets 3: er staat al een kopie in het dossier (staat.plan bewaart wat gedaan is)
+    mislukt = [x for x in kopie if x.get("fout")]
     if mislukt:
         return f"de kopie mislukte ({mislukt[0]['fout'][:120]})"
     passend = ([d for d in deals if str(d.get("nummer")) == b.get("projectnummer")]
