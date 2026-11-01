@@ -492,7 +492,9 @@ for naam, resultaat, patches in (("uitroep_vooraan", uitroep, uitroep_patches),
     omgeving_main = {"ag": SimpleNamespace(klaarzet=lambda x: signalen.extend(x)),
                     "nregels": regels if naam != "projectnummers_zetten" else [],
                     "pregels": regels if naam == "projectnummers_zetten" else [],
-                    "zregels": [], "vandaag": "2026-10-17", "dag_grens": None}
+                    "zregels": [], "vandaag": "2026-10-17", "dag_grens": None,
+                    # T-0120 AG-5: de regels van de dag samen; hier zonder staatbestand (nooit de echte datamap)
+                    "linksignaal_regels": lambda _dag, regels: list(regels), "LINKSIGNAAL_MAX": W.LINKSIGNAAL_MAX}
     doorgifte = veilig(lambda: exec(signaal_code, omgeving_main))
     check(f"A9: {naam} geeft VOORSTEL met reden in Mehdi's main-signaal",
           isinstance(resultaat, tuple) and len(regels) == 1 and not patches

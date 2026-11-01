@@ -6978,6 +6978,34 @@ def titel_uniek(reden, dag):
     return f"agenda-titel-{reden[:20]}-{hashlib.sha256(reden.encode()).hexdigest()[:8]}:{dag}"
 
 
+# T-0120 AG-5: het signaal 'Link doorsturen of titel nakijken' had een sleutel per rondedag (de dag van een dagronde):
+# 516 signalen in oktober, 57 op 29-10 alleen. Nu een signaal per dag; de regels van alle rondes van die dag staan hier.
+LINKSIGNAAL = os.path.expanduser("~/appportal/mijnagents-data/agenda-linksignaal.json")
+LINKSIGNAAL_MAX = 200                   # regels in het signaal; daarboven een slotregel met het aantal
+
+
+def linksignaal_regels(vandaag, nieuw):
+    """De regels van alle rondes van vandaag samen, elke regel een keer, in de volgorde van de eerste keer. Een nieuwe
+    dag begint leeg. Een onleesbaar of onschrijfbaar staatbestand is geen fout: dan staan alleen de regels van nu erin.
+    Geen sleutel op de inhoud: die gaf bij wisselende tekst weer een signaal per ronde (Codex, meting T-0120)."""
+    try:
+        with open(LINKSIGNAAL, encoding="utf-8") as f:
+            d = json.load(f)
+        oud = d.get("regels") if isinstance(d, dict) and d.get("dag") == vandaag else []
+    except (OSError, ValueError):
+        oud = []
+    regels = list(dict.fromkeys([r for r in (oud if isinstance(oud, list) else []) if isinstance(r, str)] + list(nieuw)))
+    try:
+        os.makedirs(os.path.dirname(LINKSIGNAAL), exist_ok=True)
+        tmp = f"{LINKSIGNAAL}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"dag": vandaag, "regels": regels}, f, ensure_ascii=False, indent=0)
+        os.replace(tmp, LINKSIGNAAL)
+    except OSError:
+        pass
+    return regels
+
+
 WEEKCONSOLIDATIE_MAP = os.path.expanduser("~/appportal/mijnagents-data/export/Agendawacht/weekconsolidatie")
 WEEKNOOD = {"tekst": "Weekoverzicht van de Agendawacht ontbreekt: de weekconsolidatie liep niet goed. Start een "
                      "Claude-sessie om ze te herstellen en opnieuw te draaien.", "wie": "mehdi"}
@@ -8013,10 +8041,14 @@ def _ronde(rd):
                "\n".join(nregels + zregels))
         voorstellen = [r for r in nregels + pregels if "VOORSTEL" in r]
         if zregels or voorstellen:
+            # T-0120 AG-5: een signaal per dag met de regels van alle rondes van die dag (linksignaal_regels)
+            lregels = linksignaal_regels(vandaag, zregels + voorstellen)
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
                           "titel": "Link doorsturen of titel nakijken",
-                          "uniek": f"agenda-zoom-titel:{vandaag}:{dag_grens or 'alle'}",
-                          "inhoud": "\n".join("- " + r for r in (zregels + voorstellen)[:30])}])
+                          "uniek": f"agenda-zoom-titel:{vandaag}",
+                          "inhoud": "\n".join(["- " + r for r in lregels[:LINKSIGNAAL_MAX]]
+                                              + ([f"- en nog {len(lregels) - LINKSIGNAAL_MAX} regel(s)"]
+                                                 if len(lregels) > LINKSIGNAAL_MAX else []))}])
         # eerst de gewone herinneringen, dan de ritten: zo heeft de vertrekmelding het laatste woord
         gezet, al, weg, fout_h = herinneringen_zetten(kort_items, dag_grens)
         niet_op_kaart = set()

@@ -4,9 +4,12 @@
 - AG-4: 'zonder adres' kent dezelfde adresbronnen als de reistijd (vaste plek, locatie.globaal.be, projectmap); een KO
   zonder nummer geeft alleen de nummermelding; een afspraak zonder adres staat in hoogstens een nood; een B&S-bezoek
   geeft dezelfde uitkomst als voordien;
+- AG-5: 'Link doorsturen of titel nakijken' is een signaal per dag, met de regels van alle rondes van die dag samen
+  (57 dagrondes op 29-10-2026 gaven 57 signalen); een nieuwe dag begint leeg; geen sleutel op de inhoud.
 
 Verzonnen voorbeelden, geen echte namen. Draaien: python3 mijnagents-runner/tests/test_agenda_meldingen.py
 """
+import ast
 import atexit
 import inspect
 import os
@@ -116,6 +119,55 @@ check("AG-4 de ronde meldt nummer, adres en reistijd via adres_noden, na de adre
       RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig, gevraagd))")
       > RONDE.index("adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, starts=gevraagd)")
       and "Buitenafspraken zonder reistijd, reden" not in RONDE and "Buitenafspraken zonder adres" not in RONDE)
+
+# --- AG-5: een signaal 'Link doorsturen of titel nakijken' per dag, de regels van alle rondes samen
+_boom = ast.parse(BRON)
+_romp = next(n for n in next(n for n in _boom.body if isinstance(n, ast.FunctionDef) and n.name == "_ronde").body
+             if isinstance(n, ast.Try))
+_link_if = next(n for n in _romp.body if isinstance(n, ast.If) and "zregels" in ast.unparse(n.test)
+                and "ag.klaarzet" in ast.unparse(n))
+_voorstellen = [n for n in _romp.body if isinstance(n, ast.Assign)
+                and any(isinstance(x, ast.Name) and x.id == "voorstellen" for x in n.targets)]
+LINK_CODE = compile(ast.fix_missing_locations(ast.Module(body=_voorstellen + [_link_if], type_ignores=[])), "agenda_wacht.py", "exec")
+check("AG-5 de staat van het linksignaal staat in de proefmap, nooit in de echte datamap",
+      W.LINKSIGNAAL.startswith(PROEF_HOME.name), W.LINKSIGNAAL)
+gezet = []
+NEP_AG = type("NepAg", (), {"klaarzet": staticmethod(lambda items: gezet.extend(items))})()
+
+
+def linkronde(dag, dag_grens, zregels, nregels=()):
+    exec(LINK_CODE, {"ag": NEP_AG, "zregels": list(zregels), "nregels": list(nregels), "pregels": [], "vandaag": dag,
+                     "dag_grens": dag_grens, "linksignaal_regels": W.linksignaal_regels,
+                     "LINKSIGNAAL_MAX": W.LINKSIGNAAL_MAX})
+
+
+# 57 dagrondes op een dag, elk voor een andere dag, met wisselende regels; plus de volle ronde
+for i in range(57):
+    linkronde("2026-10-29", f"2026-11-{(i % 28) + 1:02d}", [f"2026-11-{(i % 20) + 1:02d}T09:00 proefafspraak {i % 20}: link doorsturen"])
+linkronde("2026-10-29", None, [], ["2026-11-03T10:00 proef: VOORSTEL 'Mehdi: [HA-KO] proef' (reden)"])
+sleutels = {x["uniek"] for x in gezet}
+check("AG-5 57 dagrondes en de volle ronde geven een signaal (een sleutel per dag)",
+      sleutels == {"agenda-zoom-titel:2026-10-29"}, sleutels)
+laatste = gezet[-1]["inhoud"].split("\n")
+check("AG-5 het signaal draagt de regels van alle rondes van die dag, elke regel een keer",
+      len(laatste) == 21 and len(set(laatste)) == 21 and "VOORSTEL" in laatste[-1]
+      and laatste[0] == "- 2026-11-01T09:00 proefafspraak 0: link doorsturen", laatste[:3])
+gezet.clear()
+linkronde("2026-10-30", "2026-11-05", ["2026-11-05T09:00 andere proef: link doorsturen"])
+check("AG-5 een nieuwe dag begint leeg", gezet and gezet[-1]["uniek"] == "agenda-zoom-titel:2026-10-30"
+      and gezet[-1]["inhoud"] == "- 2026-11-05T09:00 andere proef: link doorsturen", gezet)
+gezet.clear()
+_veel = [f"2026-11-06T{u:02d}:{m:02d} proef {u}-{m}" for u in range(8, 20) for m in range(0, 60, 2)]
+linkronde("2026-10-31", "2026-11-06", _veel)
+_r = gezet[-1]["inhoud"].split("\n")
+check("AG-5 boven het maximum een slotregel met het aantal, geen afgekapte regel",
+      len(_r) == W.LINKSIGNAAL_MAX + 1 and _r[-1] == f"- en nog {len(_veel) - W.LINKSIGNAAL_MAX} regel(s)", _r[-2:])
+with open(W.LINKSIGNAAL, "w", encoding="utf-8") as _f:
+    _f.write("{kapot")
+gezet.clear()
+linkronde("2026-10-31", "2026-11-07", ["2026-11-07T09:00 proef na een kapot bestand"])
+check("AG-5 een onleesbaar staatbestand geeft geen fout, alleen de regels van nu",
+      gezet and gezet[-1]["inhoud"] == "- 2026-11-07T09:00 proef na een kapot bestand", gezet)
 
 print(f"agenda-meldingen: {ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
