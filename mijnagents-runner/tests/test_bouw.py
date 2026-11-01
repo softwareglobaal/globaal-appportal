@@ -1340,6 +1340,14 @@ _vs2 = V.vergelijkingsverslag({"firma": S.HB}, "40. POST", [("A", {}, "a.pdf")],
     None, {}, "2026-11-01", True, 0, [("A", "a-v1.pdf")])
 check("het verslag noemt een oudere versie, zonder letter", "1 oudere versies van dezelfde offerte tellen niet mee" in _vs2
       and "- Oudere versie van inschrijver A, telt niet mee: a-v1.pdf" in _vs2, _vs2.splitlines()[0])
+_tel, _oud = F.versies([{"naam": "Offerte 670010001 (Dak Een).pdf", "gewijzigd": "2026-03-01T10:00:00Z"},
+                        {"naam": "Offerte 670010001 - (tweede versie).pdf", "gewijzigd": "2026-02-20T10:00:00Z"}])
+check("de tweede versie volgens de naam telt, ook als Dropbox de eerste later bewaarde",
+      [b["naam"] for b in _tel] == ["Offerte 670010001 - (tweede versie).pdf"])
+_pp = F.per_post([{"onderwerp": "metselwerk", "posten": {"B": ["1"]}}, {"onderwerp": "ramen", "posten": {"B": ["1"]}}],
+                 {"B": {"1": 69800.0}})
+check("een post van een inschrijver telt in een onderdeel, niet in twee", _pp[0]["cellen"]["B"] == 69800.0
+      and _pp[1]["cellen"]["B"] is None, _pp)
 from bouw import proefbank as PB  # noqa: E402
 _o = PB.Opname(lambda *a, **k: {"gelezen": True})
 check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",

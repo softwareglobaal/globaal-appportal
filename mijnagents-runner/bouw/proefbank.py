@@ -341,9 +341,16 @@ def naloop(firma, project, lot):
         blz = F.paginas(bronnen.download(b["pad"]))
         print(f"== {b['naam']}: {len(blz) if blz else 'niet te openen'} blz, "
               f"{sum(len(x) for x in blz) if blz else 0} tekens, soort volgens de agent: {F.lees(blz)['soort']}")
-        for regel in "\n".join(blz or []).splitlines():
-            if woord.search(regel) and re.search(r"\d", regel):
+        regels = "\n".join(blz or []).splitlines()
+        rond = os.environ.get("NALOOP_ROND")      # bv. NALOOP_ROND=verlegd: drie regels rond elk treffer
+        for i, regel in enumerate(regels):
+            if rond and re.search(rond, regel, re.I):
+                print("   ---", " | ".join(r.strip()[:90] for r in regels[max(0, i - 2):i + 4]))
+            elif not rond and woord.search(regel) and re.search(r"\d", regel):
                 print("   ", regel.strip()[:140])
+        lees = F.lees(blz)
+        print(f"    agent leest: excl {lees.get('excl')}, incl {lees.get('incl')}, btw {lees.get('btw_tarief')}, "
+              f"verlegd {lees.get('verlegd')}, {'; '.join(lees.get('redenen') or [])[:160]}")
 
 
 if __name__ == "__main__":

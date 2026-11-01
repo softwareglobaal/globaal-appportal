@@ -456,16 +456,18 @@ def per_post(rijen_model, posten_per_letter):
     """De vergelijking per post uit de groepering van het model, nagerekend door de code. rijen_model:
     [{"onderwerp", "posten": {letter: [postnummers]}}]; posten_per_letter: {letter: {nr: totaal}} uit de extractie.
     Een lege lijst of een onbekend postnummer is "ontbreekt", nooit nul (X4)."""
-    uit = []
+    uit, gebruikt = [], set()
     for rij in rijen_model or []:
         cellen = {}
         for letter, posten in posten_per_letter.items():
             nrs = [str(n) for n in ((rij.get("posten") or {}).get(letter) or [])]
             bedragen = [posten.get(n) for n in nrs]
-            if not nrs or any(b is None for b in bedragen):
+            # Proefbank 02-11-2026: een post van een inschrijver stond in twee onderdelen en telde zo twee keer
+            if not nrs or any(b is None for b in bedragen) or any((letter, n) in gebruikt for n in nrs):
                 cellen[letter] = None
             else:
                 cellen[letter] = round(sum(bedragen), 2)
+                gebruikt.update((letter, n) for n in nrs)
         uit.append({"onderwerp": str(rij.get("onderwerp") or ""), "cellen": cellen})
     return uit
 
@@ -490,12 +492,25 @@ def offertenummers(naam):
     return {m.group(0).upper().replace("-", "_") for m in OFFERTENUMMER.finditer(kaal)}
 
 
+VERSIEWOORD = {"tweede": 2, "derde": 3, "vierde": 4, "vijfde": 5}
+
+
+def versie(naam):
+    """De versie volgens de bestandsnaam: getekend gaat voor, dan 'tweede versie', 'versie 3' of 'v2'; anders 1. De datum
+    van het bestand in Dropbox zegt niet altijd welke versie de laatste is (proefbank 02-11-2026)."""
+    laag = str(naam or "").rsplit("/", 1)[-1].lower()
+    m = re.search(r"\b(tweede|derde|vierde|vijfde)\s+versie\b", laag) or re.search(r"\b(?:versie\s*|v)(\d{1,2})\b", laag)
+    nr = (VERSIEWOORD.get(m.group(1)) or int(m.group(1))) if m else 1
+    return nr + (100 if re.search(r"\bgetekend\b|\bondertekend\b", laag) else 0)
+
+
 def versies(bestanden):
     """(tellen, oudere): bestanden die een offertenummer delen zijn versies van dezelfde offerte en alleen de nieuwste
     telt (proefbank 02-11-2026: versie 1 en 2 van een offerte stonden als twee inschrijvers naast elkaar).
     oudere: [(ouder bestand, het bestand dat telt)]."""
     tellen, oudere, nummer = [], [], {}
-    for b in sorted(bestanden, key=lambda b: (b.get("gewijzigd") or "", b["naam"].lower()), reverse=True):
+    for b in sorted(bestanden, key=lambda b: (versie(b["naam"]), b.get("gewijzigd") or "", b["naam"].lower()),
+                    reverse=True):
         nrs = offertenummers(b["naam"])
         nieuwer = next((nummer[n] for n in sorted(nrs) if n in nummer), None)
         if nieuwer is not None:
