@@ -148,6 +148,15 @@ def lees_log(conn, wacht, van, tot):
              "fout": r["stap"] == "fout"} for r in rijen]
 
 
+def _utc(ts):
+    """Een ts uit de databank als UTC-tekst zoals grenzen() ze geeft, om te vergelijken; onleesbaar is leeg."""
+    try:
+        x = datetime.fromisoformat(str(ts or "").replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return (x if x.tzinfo else x.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat()
+
+
 def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     van, tot = grenzen(dag)
     items, gedekt, leesfout, logfout = [], None, "", ""
@@ -167,9 +176,10 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
     st = dict(status) if status else None
-    # De hartslag is alleen de stand van nu: hij telt alleen mee voor vandaag.
+    # De hartslag is alleen de stand van nu: hij telt alleen mee voor vandaag, en alleen als hij van vandaag is
+    # (WISPR-3: de fout-hartslag van gisteren 22:45 maakte vandaag rood). De stand zelf blijft in "status" staan.
     status_fout = bool(st and dag == datetime.now(BRUSSEL).date().isoformat()
-                       and str(st.get("status")) in ("fout", "error"))
+                       and str(st.get("status")) in ("fout", "error") and van <= _utc(st.get("ts")) < tot)
     if leesfout or logfout or fouten or status_fout:
         oordeel, kleur = "fout", "rood"
     elif items:

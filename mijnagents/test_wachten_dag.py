@@ -10,7 +10,9 @@
 - W08: wat op een andere dag binnenkwam, telt niet mee;
 - W11: een gesprek met afdeling prive (RZ3-01) toont alleen 'privégesprek, N min', zonder naam of onderwerp;
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
-- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
+- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd;
+- W20 (WISPR-3): een fout-hartslag van gisteren maakt vandaag niet rood (de stand van nu blijft zichtbaar); een
+  fout-hartslag van vandaag wel.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -105,6 +107,24 @@ check("W11 privégesprek zonder naam of onderwerp", fa["aantal"] == 1 and fa["it
       and fa["items"][0]["wat"] == "10 min" and "Geheim" not in str(fa["items"]), fa["items"])
 check("W11 whatsapp prive=1 zonder afdeling houdt de naam", wa["items"][0]["wie"] == "Sara")
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
+
+# W20 (WISPR-3): 01-11-2026 stond de Wispr-wacht rood door de fout-hartslag van de serverwacht van 31-10 22:45.
+from datetime import datetime, timedelta, timezone  # noqa: E402
+nu_utc = datetime.now(timezone.utc)
+vandaag = nu_utc.astimezone(A.BRUSSEL).date()
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+gisteren_ts = datetime.combine(vandaag - timedelta(days=1), datetime.min.time(), timezone.utc).replace(hour=12).isoformat()
+con.execute("INSERT OR REPLACE INTO status(naam,status,taak,detail,ts) VALUES('wispr-wacht','fout','portaal','oud',?)",
+            (gisteren_ts,))
+con.execute("INSERT OR REPLACE INTO status(naam,status,taak,detail,ts) VALUES('youtube-wacht','fout','lezen','nu',?)",
+            (nu_utc.isoformat(),))
+con.commit()
+con.close()
+dv = C.get(f"/api/wachten/dag?dag={vandaag.isoformat()}", headers=K).get_json()
+wv = {x["naam"]: x for v in dv["vakken"] for x in v["wachten"]}
+check("W20 fout-hartslag van gisteren: vandaag niet rood", wv["wispr-wacht"]["kleur"] != "rood"
+      and wv["wispr-wacht"]["status"]["status"] == "fout", wv["wispr-wacht"])
+check("W20 fout-hartslag van vandaag: rood", wv["youtube-wacht"]["kleur"] == "rood", wv["youtube-wacht"])
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

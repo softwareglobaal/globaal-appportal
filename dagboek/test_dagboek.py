@@ -7,7 +7,8 @@ De Dagbundelaar ze schrijft (gemaakt met mijnagents-runner/koppelingen/dagvastst
 - D04: niet gepland toont met wie, via welk kanaal en hoe lang;
 - D05: het overzicht toont de tegels van een vastgestelde dag, en "Nog niet vastgesteld" voor een dag zonder bestand;
 - D06: een onbekend getal wordt een vraagteken; een kapotte telling laat de pagina niet vallen;
-- D07: geen gedachtestreepje.
+- D07: geen gedachtestreepje;
+- D30 (WISPR-3): een fout-hartslag van een vorige dag staat als tekst met zijn dag, niet als fout van vandaag.
 """
 import json
 import os
@@ -207,6 +208,16 @@ check("D14 tegel bij werkverslagfout toont de fout, niet het item", "kon niet le
 check("D14 dag buiten de vier dagen is 404", C.get("/wachten?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten/whatsapp-wacht?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten?dag=" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)
+# D30 (WISPR-3): een fout-hartslag van een vorige dag maakt vandaag niet meer rood (het bord), maar blijft als tekst
+# zichtbaar, met zijn dag erbij.
+OUD = json.loads(json.dumps(WACHTEN))
+OUD["dag"] = A.vandaag().isoformat()
+OUD["vakken"][0]["wachten"][2].update(status={"status": "fout", "detail": "portaal niet gelezen", "laatste": "23:45",
+                                              "laatste_ts": "2026-10-30T22:45:00+00:00"})
+A.haal_wachten = lambda dag: json.loads(json.dumps(OUD))
+html = C.get("/wachten?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
+check("D30 oude fout-hartslag: tekst met zijn dag", "stand van nu (sinds 30-10 23:45): fout: portaal niet gelezen" in html,
+      html[-2500:])
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)

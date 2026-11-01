@@ -475,10 +475,17 @@ def fouten_kort(fouten):
 
 
 def stand_fout(w, dag):
-    """Rood door de hartslag van nu (alleen vandaag) zonder fout in het werkverslag: dan is dit de reden."""
+    """Rood door de hartslag van nu (alleen vandaag) zonder fout in het werkverslag: dan is dit de reden. Is die hartslag
+    van een vorige dag, dan maakt het bord vandaag niet rood (WISPR-3); de tekst blijft, met de dag van de hartslag."""
     st = w.get("status") or {}
     if dag == vandaag().isoformat() and str(st.get("status")) in ("fout", "error"):
-        return "stand van nu: fout" + (": " + str(st["detail"]) if st.get("detail") else "")
+        sinds = ""
+        try:
+            t = datetime.fromisoformat(str(st.get("laatste_ts") or "").replace("Z", "+00:00")).astimezone(BRUSSEL)
+            sinds = f" (sinds {t:%d-%m %H:%M})" if t.date() != vandaag() else ""
+        except ValueError:
+            pass
+        return f"stand van nu{sinds}: fout" + (": " + str(st["detail"]) if st.get("detail") else "")
     return ""
 
 
