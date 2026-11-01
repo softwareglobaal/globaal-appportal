@@ -18,12 +18,36 @@ OCTOPUS_CODES = {S.HA: ("HA", "HARC"), S.HB: ("HB", "HARM")}
 STOPWOORDEN = {"binnen", "buiten", "werken", "werk", "nieuwe", "nieuw", "plaatsen", "plaatsing", "leveren", "levering",
                "voor", "met", "van", "een", "het", "de", "en", "of", "in", "op", "aan", "uitvoeren", "renovatie"}
 NIET_ZOEKEN = ("/0 archive/", "/_mag weg", "/nog te sorteren")
+# Alleen een treffer in een offerte- of onderaannemersmap zegt met wie de firma al werkte (gemeten 01-11-2026: "plat"
+# gaf Revit-bibliotheken, mails en "Platteau"); H-A: .../Quotes & Invoices/Offerte/<lot>, HB: 05. ONDERAANNEMER en
+# Offerte IN per post.
+OFFERTEMAP = re.compile(r"\b(?:offerte\w*|quotes?|onderaannem\w*|prijsaanbieding\w*|prijsvragen?)\b", re.I)
+UITGANG = ("", "en", "s", "e", "te", "ten")
 
 
 def zoekwoorden(werk, maximum=2):
     """De woorden van het werk waarop een mapnaam zou passen: de langste eerst, zonder stopwoorden."""
     woorden = [w for w in re.findall(r"[a-zà-ÿ]{4,}", S.normaal(werk).lower()) if w not in STOPWOORDEN]
     return sorted(dict.fromkeys(woorden), key=len, reverse=True)[:maximum]
+
+
+def woord_in(woord, naam):
+    """Staat het woord als heel woord in de naam (ook meervoud of een samenstelling met een vakwoord, platdak), en niet
+    als stuk van een ander woord (Platane, Plates, platform, Platteau)?"""
+    from .vakwoorden import _samengesteld
+    for t in re.findall(r"[a-z0-9à-ÿ]+", S.normaal(naam).lower()):
+        if any(t == woord + u for u in UITGANG):
+            return True
+        if t.startswith(woord) and len(t) - len(woord) >= 3 and _samengesteld(t[len(woord):]):
+            return True
+        if t.endswith(woord) and len(t) - len(woord) >= 3 and _samengesteld(t[:-len(woord)]):
+            return True
+    return False
+
+
+def in_offertemap(pad):
+    """Ligt dit pad onder een offerte- of onderaannemersmap (een bovenliggende map, niet de treffer zelf)?"""
+    return any(OFFERTEMAP.search(deel) for deel in pad.split("/")[:-1])
 
 
 MAX_PAGINAS = 20
@@ -54,8 +78,9 @@ def _dropbox_zoek(query, pad, rpc=None):
 
 
 def in_mappen(firma, werk, zoek=None, maximum=12):
-    """[{naam, pad, project}] uit de mappen van deze firma, met het werk in de naam. zoek(query, pad) is te vervangen
-    in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet als de zoekfunctie ze teruggeeft)."""
+    """[{naam, pad, project}] uit de offerte- en onderaannemersmappen van deze firma, met het werk als heel woord in de
+    naam. zoek(query, pad) is te vervangen in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet
+    als de zoekfunctie ze teruggeeft)."""
     zoek = zoek or _dropbox_zoek
     basis = BASIS[firma]
     gezien, uit = set(), Onvolledig()
@@ -69,6 +94,8 @@ def in_mappen(firma, werk, zoek=None, maximum=12):
             if not laag.startswith(basis.lower() + "/") or any(n in laag for n in NIET_ZOEKEN):
                 continue
             if laag.startswith(BASIS[S.andere(firma)].lower()) or S.schendingen(pad, firma):
+                continue
+            if not woord_in(woord, t.get("naam") or pad.rsplit("/", 1)[-1]) or not in_offertemap(pad):
                 continue
             ouder = pad.rsplit("/", 1)[0] if t.get("soort") == "file" else pad
             if ouder.lower() in gezien:
