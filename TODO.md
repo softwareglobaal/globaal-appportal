@@ -17,6 +17,10 @@
 - [ ] Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
       mij doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
       Werfverslagvoorbereider al doet; eerst een dag meten welke agents taken krijgen, dan de ontvangers een voor een.
+      Meting 01-11-2026 (ochtendronde): 9 open, 7 voor Mehdi, 0 voor een collega, 2 voor een agent, beide voor De
+      Werfverslagvoorbereider, die elk werfbezoek uit de agenda al vanzelf volgt. Dus eerst niets dubbel: de werkwijze
+      zegt sinds 01-11 dat Ai Angel geen taak zet voor werk dat een agent vanzelf doet. Echt doorgeven alleen voor werk
+      dat geen agent vanzelf oppakt (punt M10 van het driehoeksoverleg).
 - [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
       antwoord wacht, afspraken van morgen, zes keer per dag.
 - [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.
