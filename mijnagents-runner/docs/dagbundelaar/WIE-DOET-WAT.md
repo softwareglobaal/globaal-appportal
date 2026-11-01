@@ -6,7 +6,7 @@
 > Dit is de enige takenlijst. Wat hier niet staat, is niet afgesproken.
 
 Plaats: repo globaal-appportal, `mijnagents-runner/docs/dagbundelaar/WIE-DOET-WAT.md`.
-Laatst bijgewerkt: 01-11-2026 16:40 door Claude 2.
+Laatst bijgewerkt: 01-11-2026 17:45 door Claude 1.
 
 ## Wie is wie
 
@@ -26,7 +26,7 @@ Laatst bijgewerkt: 01-11-2026 16:40 door Claude 2.
 
 | # | Wie | Wat | Opdracht | Stand |
 |---|---|---|---|---|
-| 0 | Claude 1 | De vaste regel over deze takenlijst in je eigen instellingen zetten. | `opdrachten/claude1-regel-takenlijst-instellen.md` | open |
+| 0 | Claude 1 | De vaste regel over deze takenlijst in je eigen instellingen zetten. | `opdrachten/claude1-regel-takenlijst-instellen.md` | niet uitgevoerd (Claude 1, 01-11): de werkregels verbieden handwerk in ~/.claude/CLAUDE.md. Het driehoeksoverleg van 01-11 (werkstand T-0073) zette de regel in werkstand/instructies. |
 | 1 | Claude 1 (Mehdi klikt mee) | Laptopkant aanzetten: Sms-wacht, Fotowacht, YouTube-wacht, Dropbox-sync. Mehdi zet Messages in iCloud en Text Message Forwarding aan op de iPhone, geeft Full Disk Access en typt het laptopwachtwoord. | `opdrachten/opdracht-claude1-macbook-01-11.md` | deels, 01-11 16:16 (Claude 1): Sms-wacht, WhatsApp-wacht en Belwacht aan, proef geslaagd, rondes op het bord. Full Disk Access werkte pas na verwijderen (-) en opnieuw toevoegen; uit en aan zetten hield de oude versie vast. Open: Fotowacht (wachtwoord Mehdi, werkstand T-0042); YouTube-wacht vindt onder launchd geen browsergeschiedenis (in Terminal wel), voor Claude 2. |
 | 2 | Claude 1 | Websitewacht aanzetten en Wispr-wacht een keer draaien (stap 1 tot 6). Daarna de map van de Gezondheidswacht nakijken (stap 7). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
 | 3 | Mehdi | Health Auto Export op de iPhone instellen (twee stappen onderaan). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
@@ -41,6 +41,7 @@ Laatst bijgewerkt: 01-11-2026 16:40 door Claude 2.
 | 12 | Claude 2 | Vanaf 08-11: nakijken of oproepen dubbel tellen (Xelion en iPhone). | geen | later |
 | 13 | Mehdi | Ja of nee: de pagina Wachten in het Dagboek live zetten (per wacht wat binnenkwam, 31-10 en 01-11). Afbeelding in `naslag/afbeeldingen/wachten-per-dag.png`. | geen | open |
 | 14 | Claude 2 | Na de ja van taak 13: bord en Dagboek opnieuw bouwen op de server, de pagina nakijken met Mehdi en verbeteren. | `dagboek/README.md` | wacht op taak 13 |
+| 13 | Claude 2 | Lees in de werkstand WERKWIJZE.md, deel "Eén takenlijst" (driehoeksoverleg 01-11, T-0073, 14 punten aangenomen). De werkstand is de enige takenlijst; nieuw werk voor Claude 1 maak je met werkstand.py nieuw --voor claude1. Claude 1, 2 en 3 zijn toestellen; werk je vanuit een tweede account of de cloud, laat dan eerst een eigen id in toestellen.json zetten. Of dit bestand een verwijzing wordt, beslist Mehdi (K5). | werkstand T-0073 | open |
 
 ## Gedaan (laatste dagen)
 
