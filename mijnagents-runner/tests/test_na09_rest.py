@@ -236,6 +236,59 @@ def test_d1_werkverslag_in_hoogstens_een_poging():
         assert [r["tekst"] for r in draad.logregels()] == verwacht, (fout, draad.logregels())
 
 
+
+def test_na62_signaal_na_de_eerste_hartslag_blijft_niet_op_actief():
+    """Codex NA62 (ronde 16): de eerste hartslag ("actief") stond voor de bescherming van de startfase. Nam het bord ze aan
+    en kwam daarna, tijdens het antwoord, een signaal, dan volgde geen fouthartslag en bleef de agent op actief."""
+    for signaal in (SystemExit(143), KeyboardInterrupt()):
+        draad = Draad(open_noden=[])
+        draad.na_fouten["/agent-status"] = [signaal]
+        begonnen = []
+        with op_het_bord(draad):
+            try:
+                with bord.Agent("proef").ronde("proef"):
+                    begonnen.append(True)
+                doorgegaan = None
+            except BaseException as e:  # noqa: BLE001
+                doorgegaan = e
+        assert doorgegaan is signaal and not begonnen, (repr(doorgegaan), begonnen)
+        assert [s["status"] for s in draad.statussen("proef")] == ["actief", "fout"], draad.statussen("proef")
+
+
+def test_na63_werkverslag_los_voor_het_versturen():
+    """Codex NA63 (ronde 16): log_verstuur wiste de buffer pas na het versturen. Een signaal tussen versturen en wissen liet
+    aangenomen regels staan, en de ronde stuurde ze bij het afsluiten nog eens. Nu is de buffer leeg zodra het verzoek
+    vertrekt, en komt een regel hoogstens een keer aan, ook met een signaal tijdens het werk en een tweede tijdens het
+    verslag (dan gaat het signaal van het werk door)."""
+    ag = bord.Agent("proef")
+    tijdens = []
+    draad = Draad()
+    echt = draad.antwoord
+
+    def antwoord(pad, volledig, payload):
+        if pad == "/api/logboek":
+            tijdens.append(list(ag._log))
+        return echt(pad, volledig, payload)
+
+    draad.antwoord = antwoord
+    with op_het_bord(draad):
+        ag.log("proef", "bron", "een regel")
+        ag.log_verstuur()
+    assert tijdens == [[]], f"de buffer hoort leeg te zijn zodra het verzoek vertrekt: {tijdens}"
+    draad = Draad(open_noden=[])
+    draad.na_fouten["/api/logboek"] = [SystemExit(143)]
+    ag = bord.Agent("proef")
+    with op_het_bord(draad):
+        try:
+            with ag.ronde("proef"):
+                ag.log("proef", "bron", "een regel")
+                raise SystemExit(130)
+        except BaseException as e:  # noqa: BLE001
+            doorgegaan = e
+    assert isinstance(doorgegaan, SystemExit) and doorgegaan.code == 130, repr(doorgegaan)
+    assert [r["tekst"] for r in draad.logregels()] == ["een regel"], draad.logregels()
+    assert draad.statussen("proef")[-1]["status"] == "fout", draad.statussen("proef")
+
 def test_x5_signaal_tijdens_het_melden_van_een_breuk():
     """Overleg 13, X2 en X5 (na Codex NA61): een tweede signaal terwijl de ronde haar breuk meldt (het werkverslag of de
     noodlijst ophalen) hield de fouthartslag tegen, en dan bleef de agent op actief staan. Dat geldt bij een fout tijdens
