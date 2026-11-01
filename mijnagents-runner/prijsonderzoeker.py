@@ -13,6 +13,8 @@ aanbod zonder gelezen pagina, link, prijs of datum komt er nooit in.
 
 Leest het web, verandert niets: geen aankoop, geen bod, geen contact met een verkoper, geen account.
 --droog: zegt welke vragen klaarstaan en roept het model niet aan.
+Met de hand op de VM: ~/agents/.venv/bin/python prijsonderzoeker.py --vraag "..." (zoals De Regisseur; de gewone
+python3 heeft de anthropic-bibliotheek niet, 01-11-2026).
 """
 import argparse
 import hashlib
@@ -36,6 +38,7 @@ NAAM = "prijsonderzoeker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
 RONDE_SECONDEN = 480            # binnen de 600 s die De Regisseur op een ronde wacht
+MAX_DOLLAR = 2.0                # Mehdi gaf zijn ja bij ongeveer 2 dollar per vraag; meer is een nood (overleg 9, K5)
 MIN_SECONDEN_PER_VRAAG = 150    # minder tijd over: de vraag wacht op de volgende ronde
 # Niet 'verslag' of 'signaal': die stuurt De Bode vanzelf door. Het antwoord komt via De Regisseur (overleg X2).
 SOORT = "prijsverslag"
@@ -87,11 +90,15 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
         return 0
     vaste_eisen = A.eisen_uit_vraag(vraag)
     uit = O.onderzoek(vraag, r.werkwijze, vandaag.isoformat(), vaste_eisen, deadline)
-    ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} pagina's "
-                                 f"gelezen, {uit['tokens']} tokens (per beurt {uit.get('beurten')}), model {uit['model']}, "
-                                 f"einde {uit['stop']}")
+    geslaagd, mislukt = uit.get("leesbeurten", (len(uit["gelezen"]), 0))
+    ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {geslaagd} pagina's gelezen en "
+                                 f"{mislukt} niet leesbaar, {uit['tokens']} tokens, ongeveer {uit.get('kosten')} dollar, "
+                                 f"model {uit['model']}, einde {uit['stop']}", uit.get("tellers"))
     if uit["stop"] == "plafond":
         r.nood("Prijsvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
+    if (uit.get("kosten") or 0) > MAX_DOLLAR:
+        r.nood(f"Prijsvraag kostte ongeveer {uit['kosten']} dollar, meer dan de {MAX_DOLLAR:.0f} dollar waar Mehdi ja op "
+               "zei", wie="claude-code")
     g = uit["gegevens"]
     if g is None:
         ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
@@ -108,11 +115,15 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     g["eisen"] = eisen
     res = A.verwerk(gelezen, vandaag, koersen, eisen, paginas=uit["gelezen"])
     res["afgewezen"] = niet_gelezen + res["afgewezen"]
-    tekst = V.maak(vraag, g, res, koersdatum, vandaag.isoformat())
+    opgenomen = [x["url"] for x in res["goed"] + res["niet_compatibel"]]
+    gezien = O.alleen_gezien(g.get("niet_nagekeken") if isinstance(g.get("niet_nagekeken"), list) else [],
+                             uit.get("zoekresultaten") or {}, opgenomen)
+    tekst = V.maak(vraag, g, res, koersdatum, vandaag.isoformat(), gezien,
+                   {"tokens": uit["tokens"], "kosten": uit.get("kosten")})
     zet_klaar(vraag, V.titel(g, res), tekst, vandaag)
     ag.log("prijsvraag", "beslissing",
            f"vraag {va}: {len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
-           f"{len(res['afgewezen'])} afgewezen",
+           f"{len(gezien)} gezien maar niet nagekeken, {len(res['afgewezen'])} afgewezen",
            [{"url": x["aanbod"].get("url"), "redenen": x["redenen"]} for x in res["afgewezen"]])
     # Het verslag zelf noemt de vraag; het staat in het klaargezette item, niet in het logboek (Codex X3, ronde 2).
     ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi (soort {SOORT})")

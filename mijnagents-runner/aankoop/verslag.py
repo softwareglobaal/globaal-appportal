@@ -60,6 +60,14 @@ def _bewijsregel(a):
     return "\n".join(regels)
 
 
+def _gezien(x):
+    """Een regel uit "gezien, niet nagekeken": klikbare link, de prijs zoals ze in het zoekresultaat zelf stond
+    (onderzoek.alleen_gezien), en waarom de pagina niet nagekeken is (overleg 9, X4)."""
+    prijs = f"{x['prijs']} {x.get('munt') or 'EUR'} volgens het zoekresultaat"
+    reden = f"; {_kort(x['reden'], 100)}" if x.get("reden") else ""
+    return f"- [{_kort(x['titel'], 100)}]({x['url']}): {prijs}{reden}"
+
+
 def titel(gegevens, resultaat):
     """Korte titel voor het bord. Het verslag gaat als soort 'prijsverslag': De Bode stuurt het niet vanzelf door
     (overleg X2: het antwoord komt via De Regisseur in de chat, De Bode alleen op uitdrukkelijk verzoek)."""
@@ -77,8 +85,9 @@ def tegengehouden(soorten):
             "gaat naar de AI. Stel de vraag opnieuw zonder die gegevens (bijvoorbeeld alleen het land of de firma).")
 
 
-def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
-    """Het verslag als markdown."""
+def maak(vraag, gegevens, resultaat, koersdatum, gezien_op, niet_nagekeken=(), verbruik=None):
+    """Het verslag als markdown. niet_nagekeken: de rijen van onderzoek.alleen_gezien, nooit aanbevolen.
+    verbruik: {"tokens": ..., "kosten": ...} voor de controleregel onderaan (overleg 9, X3)."""
     g = gegevens or {}
     r = resultaat
     regels = []
@@ -115,11 +124,14 @@ def maak(vraag, gegevens, resultaat, koersdatum, gezien_op):
     regels += [_regel(a) for a in r.get("goed", [])] or ["- geen aanbod dat de controle doorstond"]
     if r.get("niet_compatibel"):
         regels += ["", "## Niet compatibel (nooit aanbevolen)"] + [_regel(a) for a in r["niet_compatibel"]]
+    if niet_nagekeken:
+        regels += ["", "## Gezien, niet nagekeken (nooit aanbevolen)"] + [_gezien(x) for x in niet_nagekeken]
     if g.get("niet_gevonden"):
         regels += ["", "## Niet gevonden"] + [f"- {x}" for x in g["niet_gevonden"]]
     afgewezen = r.get("afgewezen", [])
     regels += ["", f"Controle: {len(r.get('goed', [])) + len(r.get('niet_compatibel', []))} aanbiedingen doorstonden de "
                f"controle, {len(afgewezen)} afgewezen (zonder link, prijs of gelezen pagina; details in het werkverslag). "
                f"Prijzen gezien op {gezien_op}; omgerekend met de ECB-koersen van {koersdatum or 'onbekend'}. "
-               "Ik kocht, bood en contacteerde niets."]
+               + (f"Verbruik: {verbruik['tokens']} tokens, ongeveer {verbruik['kosten']} dollar. " if verbruik else "")
+               + "Ik kocht, bood en contacteerde niets."]
     return "\n".join(regels)
