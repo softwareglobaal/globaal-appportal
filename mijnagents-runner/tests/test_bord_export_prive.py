@@ -7,7 +7,9 @@ zette zijn volledige takenlijst klaar, met werknamen en concepten, en die ging v
   of inhoud;
 - E02: de export van een gewone agent verandert niet: zijn bestand is gelijk met of zonder een privé-agent ernaast;
 - E03: een privé-item van een privé-agent blijft '(privé)', zonder titel;
-- E04: de export wist niets: een oud bestand van de privé-agent buiten het venster blijft staan.
+- E04: de export wist niets: een oud bestand van de privé-agent buiten het venster blijft staan;
+- E05 (Codex, toets 1): ook een item met een eigen exportvorm (zoom-account, met delen en adviescodes uit de inhoud)
+  geeft van een privé-agent geen inhoud; hetzelfde item van een gewone agent blijft zoals het was.
 
 Geen netwerk: de databank is tijdelijk en komt uit init_db van mijnagents/app.py (export_db uit test_bord_lees.py).
 Alle namen en inhoud zijn verzonnen.
@@ -30,6 +32,11 @@ PRIVE_ITEM = {"van": "mehdi-agent", "voor": "mehdi", "soort": "taken", "titel": 
               "inhoud": {"prive": True}, "status": "klaar"}
 GEWOON = {"van": "agenda-wacht", "voor": "mehdi", "soort": "dagplan", "titel": "Dagplan proefdag",
           "inhoud": {"punten": ["Werfbezoek Proefstraat 1"]}, "verwijzing": "agenda proef", "status": "klaar"}
+
+
+ZOOM_ACCOUNT = {"soort": "zoom-account", "voor": "mehdi", "titel": "Zoom-account proef", "status": "klaar",
+                "inhoud": {"delen": {"beveiliging": "ok", "opnames": "onbekend: proef"},
+                           "adviezen": [{"code": "ZA-01"}]}, "verwijzing": "accountscan proef"}
 
 
 def met_agents(naam, prive):
@@ -86,6 +93,18 @@ def test_e04_export_wist_niets():
     finally:
         E.DB, E.DATA, E.UIT = oud
     assert open(oud_bestand, encoding="utf-8").read() == "oud bestand van voor de hernoeming\n"
+
+
+def test_e05_eigen_exportvorm_van_prive_agent_zonder_inhoud():
+    items = [dict(ZOOM_ACCOUNT, van="mehdi-agent"), dict(ZOOM_ACCOUNT, van="agenda-wacht")]
+    met = export(met_agents("e05a", 1), items, [])
+    zonder = export(met_agents("e05b", 0), items, [])
+    angel = klaargezet(met, "Ai Angel")
+    assert "zoom-account voor mehdi (klaar): Zoom-account proef" in angel, angel
+    for geheim in ("Delen", "Adviescodes", "ZA-01", "beveiliging", "accountscan"):
+        assert geheim not in angel, (geheim, angel)
+    gewoon = klaargezet(met, "Agendawacht")
+    assert gewoon == klaargezet(zonder, "Agendawacht") and "Adviescodes: ZA-01" in gewoon, gewoon
 
 
 if __name__ == "__main__":

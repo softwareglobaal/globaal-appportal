@@ -254,6 +254,13 @@ def main():
         for dag, items in dagen.items():
             uit = [f"# Klaargezet door {m} op {dag}", "", f"{len(items)} items.", ""]
             for it in items:
+                if prive_agent:
+                    # ANGEL-11 (T-0120): van een privé-agent, voor elke soort, geen verwijzing en geen inhoud, zoals bij een
+                    # privé-item; een privé-item blijft (privé). Tot 01-11-2026 ging de volledige takenlijst van Ai Angel,
+                    # met werknamen en concepten, naar Data uit Mehdi.
+                    titel = "(privé)" if is_prive(it["titel"], it["inhoud"]) else it["titel"]
+                    uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {titel}", ""]
+                    continue
                 if it["soort"] == "zoom-account":
                     try:
                         inhoud = json.loads(it["inhoud"] or "{}")
@@ -271,11 +278,6 @@ def main():
                     continue
                 if is_prive(it["titel"], it["inhoud"]):
                     uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): (privé)", ""]
-                    continue
-                if prive_agent:
-                    # ANGEL-11 (T-0120): van een privé-agent geen verwijzing en geen inhoud, zoals bij een privé-item. Tot
-                    # 01-11-2026 ging de volledige takenlijst van Ai Angel, met werknamen en concepten, naar Data uit Mehdi.
-                    uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}", ""]
                     continue
                 uit.append(f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}")
                 if it.get("verwijzing"):
