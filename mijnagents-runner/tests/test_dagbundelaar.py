@@ -695,10 +695,10 @@ def test_vol6_alleen_de_bronnen_van_de_dag():
     nb = bundelen(DAG, NepBord([wagen, WERK]))
     assert 1 not in nb.opgepakt and 3 in nb.opgepakt, nb.opgepakt
     # B&S: een taak van het Commandocentrum en een afspraak met dossier gaan zoals voor VOL-6 mee; een cc-taak blijft open
-    bs = [item(11, "commandocentrum", "andere-agent", "taak", "Gewone taak", sleutel="47035", inhoud={"datum": DAG},
+    bs = [item(11, "commandocentrum", "andere-agent", "taak", "Gewone taak", sleutel="49001", inhoud={"datum": DAG},
                uniek="zelfstandige-taak"),
-          item(12, "agenda-wacht", "tkn", "afspraak", "Fictief bezoek", sleutel="47035", inhoud={"datum": DAG}, uniek="afspraak:test"),
-          item(13, "commandocentrum", "tkn", "impuls", "Voorbereiding", sleutel="47035", inhoud={"datum": DAG},
+          item(12, "agenda-wacht", "tkn", "afspraak", "Fictief bezoek", sleutel="49001", inhoud={"datum": DAG}, uniek="afspraak:test"),
+          item(13, "commandocentrum", "tkn", "impuls", "Voorbereiding", sleutel="49001", inhoud={"datum": DAG},
                uniek="cc:afspraak:bs1:voorbereiding")]
     nb = bundelen(DAG, NepBord(bs))
     assert sorted(nb.opgepakt) == [11, 12], nb.opgepakt
