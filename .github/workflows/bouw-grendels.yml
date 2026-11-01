@@ -7,11 +7,13 @@ on:
     paths: ["mijnagents-runner/bouw/**", "mijnagents-runner/aannemerszoeker.py", "mijnagents-runner/offertevergelijker.py",
             "mijnagents-runner/werkwijze/aannemerszoeker.md", "mijnagents-runner/werkwijze/offertevergelijker.md",
             "mijnagents-runner/aankoop/**", "mijnagents-runner/regisseur.py", "mijnagents-runner/tests/test_bouw.py",
+            "mijnagents-runner/koppelingen/claude_abonnement.py", "mijnagents-runner/mac/abonnement_aanmelden.command",
             ".github/workflows/bouw-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/bouw/**", "mijnagents-runner/aannemerszoeker.py", "mijnagents-runner/offertevergelijker.py",
             "mijnagents-runner/werkwijze/aannemerszoeker.md", "mijnagents-runner/werkwijze/offertevergelijker.md",
             "mijnagents-runner/aankoop/**", "mijnagents-runner/regisseur.py", "mijnagents-runner/tests/test_bouw.py",
+            "mijnagents-runner/koppelingen/claude_abonnement.py", "mijnagents-runner/mac/abonnement_aanmelden.command",
             ".github/workflows/bouw-grendels.yml"]
 
 jobs:

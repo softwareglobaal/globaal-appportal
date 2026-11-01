@@ -6,8 +6,9 @@ Een vraag komt binnen als klaargezet item (voor: offertevergelijker, soort: vraa
     offertevergelijker.py --vraag "firma: HA; project: 2145; lot: 06"
 
 Per vraag: de vraag ontleden (zonder firma geen werk), de lotmap van die firma zoeken (bouw/mappen.py), de PDF's lokaal
-lezen met pypdf (bouw/offertes.py: een scan is "OCR nodig"), de totalen en voorwaarden vergelijken, en alleen met het
-ja van Mehdi (OFFERTE_NAAR_AI, overleg X5) ook per post via het model, op geredigeerde tekst. De inschrijvers heten
+lezen met pypdf en een scan met OCR (bouw/offertes.py), fiches en andere stukken zonder totaal weglaten, de totalen en
+voorwaarden vergelijken, en per post via Claude op het abonnement van Mehdi (OFFERTE_NAAR_AI, ja op X5 van 01-11-2026),
+op geredigeerde tekst. De inschrijvers heten
 A, B, C; de naam van de andere firma komt nooit in de vergelijking. Leest Dropbox, schrijft er niets in.
 
 Overleg 30-10-2026 (docs/bouw/rapport-1-ontwerp.md, verwerking in verwerkt-1-ontwerp.md).
@@ -24,6 +25,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, HIER)
 import bord  # noqa: E402
+import claude_abonnement  # noqa: E402
 from bouw import mappen as MP  # noqa: E402
 from bouw import offertes as F  # noqa: E402
 from bouw import scheiding as S  # noqa: E402
@@ -49,8 +51,8 @@ def laad_env(pad):
         pass
 
 
-# Eerst ~/appportal/.env, zoals De Prijsonderzoeker en De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026
-# een 401. setdefault: het eerste bestand met een waarde wint.
+# Instellingen uit ~/appportal/.env en ~/agents/.env (setdefault: het eerste bestand met een waarde wint). Claude draait
+# op het abonnement van Mehdi (koppelingen/claude_abonnement.py): een API-sleutel bereikt het model nooit.
 laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
 
@@ -122,8 +124,11 @@ def een_vraag(r, tekst, vandaag, deadline=None):
         zet_klaar(tekst, "Offertevergelijking: kies een lot", V.lotkeuze(v, lots), vandaag, firma)
         return 0
     naam = lotnaam(pad, firma)
-    bestanden = MP.offertebestanden(pad, bronnen.lijst)[:MAX_OFFERTES]
-    r.bron(f"lotmap {S.FIRMANAMEN[firma]}", f"{len(bestanden)} PDF's")
+    alle = MP.offertebestanden(pad, bronnen.lijst)
+    # Een fiche of brochure volgens de bestandsnaam neemt geen plaats van een offerte in (gemeten 01-11-2026)
+    bestanden = [b for b in alle if not F.fiche_naam(b["naam"])][:MAX_OFFERTES]
+    overgeslagen = sum(1 for b in alle if F.fiche_naam(b["naam"]))
+    r.bron(f"lotmap {S.FIRMANAMEN[firma]}", f"{len(bestanden)} PDF's, {overgeslagen} fiches volgens de naam overgeslagen")
     if not bestanden:
         zet_klaar(tekst, f"Offertes {naam}: geen PDF", f"**Niet vergeleken:** in {naam} staat geen offerte als PDF.",
                   vandaag, firma)
@@ -142,11 +147,19 @@ def een_vraag(r, tekst, vandaag, deadline=None):
             posten, post_redenen = F.keur_posten(gegevens, teksten, totalen)
             if any(posten.values()):
                 per_post = F.per_post((gegevens or {}).get("rijen"), {l: p for l, p in posten.items() if p})
+        except claude_abonnement.Fout as e:     # zonder Claude blijft de vergelijking van de totalen staan
+            ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {str(e)[:200]}")
+            if e.soort in ("aanmelden", "limiet"):
+                r.nood(claude_abonnement.AANMELDEN_NOOD if e.aanmelden else claude_abonnement.LIMIET_NOOD, wie="mehdi")
+            elif e.soort == "bron":
+                r.nood(claude_abonnement.BRON_NOOD, wie="claude-code")
+            elif e.soort is None:
+                r.nood("Offerteposten niet uitgelezen door Claude op het abonnement", wie="claude-code")
         except Exception as e:  # noqa: BLE001  zonder model blijft de vergelijking van de totalen staan
             ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {type(e).__name__}: {str(e)[:200]}")
             r.nood("Offerteposten niet uitgelezen door het model", wie="claude-code")
     inhoud = V.vergelijkingsverslag(v, naam, letters, uit, per_post, post_redenen, vandaag.isoformat(),
-                                    F.OFFERTE_NAAR_AI)
+                                    F.OFFERTE_NAAR_AI, overgeslagen)
     try:
         zet_klaar(tekst, V.vergelijkingstitel(v, naam), inhoud, vandaag, firma)
     except ValueError as e:

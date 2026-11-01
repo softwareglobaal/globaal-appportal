@@ -1,27 +1,52 @@
 """De offertes van een lot lezen en vergelijken, voor De Offertevergelijker (overleg 30-10-2026, X4 en X5).
 
-Lezen gebeurt lokaal: Dropbox (koppelingen/bronnen.py, alleen lezen) en pypdf. Een pagina zonder tekst maakt van die
-offerte een scan: "OCR nodig", ze telt niet mee (X4). Uit de tekst haalt de code wat zeker is: het totaal exclusief en
-inclusief btw, het btw-tarief, de datum, de geldigheid, en of het een raming is in plaats van een offerte.
+Lezen gebeurt lokaal: Dropbox (koppelingen/bronnen.py, alleen lezen) en pypdf. Een scan is "OCR nodig" en telt niet mee
+(X4). Of de VM een scan zelf met OCR leest (ocrmypdf en tesseract, Nederlands en Engels, niets gaat naar buiten),
+beslist Mehdi: tot zijn ja staat OCR_AAN op False. Uit de tekst haalt de code wat zeker is: het totaal exclusief en
+inclusief btw, het btw-tarief, de datum, de geldigheid, en of het een raming is in plaats van een offerte. Een
+technische fiche, brochure of ander document zonder totaal is geen offerte en telt niet mee.
 
-De vergelijking per post vraagt het taalmodel. Dat mag pas na een ja van Mehdi (X5): tot dan staat OFFERTE_NAAR_AI op
-False en vergelijkt de code alleen de totalen en de voorwaarden. Ook met het model gaat de tekst eerst door redigeer():
-geen naam, adres, mailadres, telefoon of rekeningnummer van de bouwheer naar buiten.
+De vergelijking per post vraagt Claude op het abonnement van Mehdi (koppelingen/claude_abonnement.py, nooit de
+API-sleutel). Dat mag sinds het ja van Mehdi op X5 (01-11-2026: "de ander punten ben ik akkoord"). De tekst gaat eerst
+door redigeer(): geen naam, adres, mailadres, telefoon of rekeningnummer van de bouwheer naar buiten.
 
 De inschrijvers heten Inschrijver A, B, C in de volgorde van de bestanden. Een offerte van de andere firma krijgt een
 letter zoals elke andere; haar naam komt nergens in de vergelijking (X4, harde regel van Mehdi).
 """
 import io
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 from datetime import date, datetime
 
 from aankoop import privacy as P
 
 from . import scheiding as S
 
-OFFERTE_NAAR_AI = False      # X5: pas True na een uitdrukkelijk ja van Mehdi, met zijn antwoord in de commit
+OFFERTE_NAAR_AI = True       # X5: ja van Mehdi op 01-11-2026 ("de ander punten ben ik akkoord"), via zijn abonnement
 MIN_TEKST_PER_BLZ = 20
 MAX_BLZ = 40
+OCR_AAN = False              # Mehdi beslist of een scan met OCR gelezen mag worden (werkwijze, Wat Mehdi beslist)
+OCR_BLZ = 12                 # een scan: hoogstens zoveel pagina's door OCR, binnen OCR_TIMEOUT seconden
+OCR_TIMEOUT = 120
+OCR_REDEN = "gelezen met OCR (scan): kijk de bedragen na in de PDF"
+# Een document dat geen offerte is: een fiche, brochure of ander stuk zonder totaal telt niet mee (gemeten 01-11-2026 op
+# lot 06 van 2145: technische fiches stonden als offerte in de vergelijking)
+FICHE = re.compile(r"technische\s+fiche|productfiche|fiche\s+technique|datasheet|data\s+sheet|technical\s+data|"
+                   r"prestatieverklaring|declaration\s+of\s+performance|\bdop\b|veiligheidsinformatieblad|"
+                   r"technische\s+(?:gegevens|kenmerken|eigenschappen)|brochure|catalogus|montagehandleiding|"
+                   r"plaatsingsvoorschrift|handleiding|garantiebewijs|attest|certificaat|keuringsverslag", re.I)
+FICHE_NAAM = re.compile(r"fiche|datasheet|\btds\b|\bdop\b|prestatieverklaring|brochure|catalog|handleiding|manual|"
+                        r"technisch|technical|attest|certifica", re.I)
+OFFERTEWOORD = re.compile(r"offerte|prijsofferte|prijsopgave|prijsaanbod|aanbieding|bestek|meetstaat|devis|"
+                          r"quotation|quote|inschrijving|kostprijs|eenheidsprijs", re.I)
+
+
+def fiche_naam(naam):
+    """Zegt de bestandsnaam dat het een fiche, brochure of attest is, en niet dat het een offerte is?"""
+    return bool(FICHE_NAAM.search(naam or "")) and not OFFERTEWOORD.search(naam or "")
 # Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
 BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
 EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|\bna\b.{0,20}korting|netto\s+tota|tota\w*\s+netto|"
@@ -189,6 +214,9 @@ def lees(tekst_paginas):
         if m and not uit["geldig_dagen"]:
             uit["geldig_dagen"] = int(m.group(1))
     uit["excl"], uit["incl"] = _eindtotaal(excl), _eindtotaal(incl)
+    if uit["excl"] is None and uit["incl"] is None and (FICHE.search(tekst) or not OFFERTEWOORD.search(tekst)):
+        return {"soort": "geen offerte", "redenen": ["geen offerte (technische fiche of ander document zonder totaal): "
+                                                     "telt niet mee"]}
     if len({b for _, b in excl}) > 1:
         uit["redenen"].append("meer dan een totaal exclusief btw; het eindtotaal genomen, kijk het na")
     return controleer(uit)
@@ -271,11 +299,34 @@ def letters(bestanden, firma):
     return uit
 
 
-def lees_bestanden(letters, download, deadline=None, klok=None):
+def ocr(data, timeout=OCR_TIMEOUT):
+    """De PDF met een tekstlaag van ocrmypdf (tesseract, Nederlands en Engels), alleen voor de pagina's zonder tekst en
+    hoogstens OCR_BLZ; None als ocrmypdf er niet is, faalt of te lang duurt."""
+    if not data or not shutil.which("ocrmypdf"):
+        return None
+    with tempfile.TemporaryDirectory(prefix="offerte-ocr-") as map_:
+        bron, doel = os.path.join(map_, "in.pdf"), os.path.join(map_, "uit.pdf")
+        with open(bron, "wb") as f:
+            f.write(data)
+        try:
+            p = subprocess.run(["ocrmypdf", "-q", "-l", "nld+eng", "--skip-text", "--output-type", "pdf", "-O", "0",
+                                "--jobs", "2", "--pages", f"1-{OCR_BLZ}", bron, doel],
+                               capture_output=True, timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if p.returncode or not os.path.exists(doel):
+            return None
+        with open(doel, "rb") as f:
+            return f.read()
+
+
+def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None):
     """([{letter, lees}], {letter: tekst}) voor de bestanden van een lot. Na de deadline wordt niets meer gedownload: die
-    offertes staan erbij als niet gelezen (Codex X11). download(pad) -> bytes; een fout maakt de offerte onleesbaar."""
+    offertes staan erbij als niet gelezen (Codex X11). download(pad) -> bytes; een fout maakt de offerte onleesbaar. Met
+    OCR_AAN gaat een scan door OCR (ocr_fn, standaard ocr()) als er nog tijd is; de bedragen zijn dan na te kijken."""
     import time
     klok = klok or time.monotonic
+    ocr_fn = ocr_fn or ocr
     gelezen, teksten = [], {}
     for letter, b, _ in letters:
         if deadline and klok() > deadline:
@@ -283,10 +334,18 @@ def lees_bestanden(letters, download, deadline=None, klok=None):
                                                        "redenen": ["niet gelezen: de tijd van de ronde was op"]}})
             continue
         try:
-            blz = paginas(download(b["pad"]))
+            data = download(b["pad"])
+            blz = paginas(data)
         except Exception:  # noqa: BLE001  een offerte die niet binnenkomt, telt niet mee en staat erbij
-            blz = None
-        gelezen.append({"letter": letter, "lees": lees(blz)})
+            data, blz = None, None
+        resultaat = lees(blz)
+        if OCR_AAN and resultaat["soort"] == "scan" and (not deadline or klok() + OCR_TIMEOUT < deadline):
+            blz_ocr = paginas(ocr_fn(data) or b"")
+            if blz_ocr and lees(blz_ocr)["soort"] != "scan":
+                blz, resultaat = blz_ocr, lees(blz_ocr)
+                resultaat.setdefault("redenen", []).append(OCR_REDEN)
+                resultaat["ocr"] = True
+        gelezen.append({"letter": letter, "lees": resultaat})
         if blz:
             teksten[letter] = "\n".join(blz)
     return gelezen, teksten
@@ -346,22 +405,20 @@ Regels: neem bedragen letterlijk over, verzin niets; een onderdeel dat een insch
 Opties en stelposten zet je met optie true. Geen advies over wie de opdracht krijgt."""
 
 
-def posten_uit_model(teksten, client=None, model=None):
-    """{letter: gegevens} en rijen uit het model, voor geredigeerde teksten {letter: tekst}. Alleen als
-    OFFERTE_NAAR_AI True is (X5); anders een fout, zodat niemand het per ongeluk aanroept."""
+def posten_uit_model(teksten, vraag=None, timeout=240):
+    """{letter: gegevens} en rijen van Claude op het abonnement, voor geredigeerde teksten {letter: tekst}. Alleen als
+    OFFERTE_NAAR_AI True is (X5); anders een fout, zodat niemand het per ongeluk aanroept. vraag is te vervangen in een
+    test (claude_abonnement.vraag); Claude krijgt geen gereedschap, alleen de tekst."""
     if not OFFERTE_NAAR_AI:
         raise PermissionError("offerte-inhoud naar de AI wacht op het ja van Mehdi (overleg X5)")
     from aankoop import onderzoek as O
-    if client is None:
-        from anthropic import Anthropic
-        client = Anthropic(max_retries=1)
+    if vraag is None:
+        import claude_abonnement
+        vraag = claude_abonnement.vraag
     stukken = "\n\n".join(f"=== INSCHRIJVER {l} ===\n{t[:60000]}" for l, t in sorted(teksten.items()))
-    resp = client.messages.create(model=model or O.MODEL, max_tokens=16000, output_config={"effort": "medium"},
-                                  system="Je haalt posten uit bouwoffertes en zet ze naast elkaar. Nederlands.\n\n"
-                                  + POSTEN_VORM,
-                                  messages=[{"role": "user", "content": stukken}])
-    tekst = "".join(O._veld(b, "text", "") for b in (O._veld(resp, "content", []) or []) if O._veld(b, "type") == "text")
-    return O.json_uit(tekst)
+    uit = vraag("Je haalt posten uit bouwoffertes en zet ze naast elkaar. Nederlands.\n\n" + POSTEN_VORM, stukken,
+                tools=(), timeout=timeout, max_beurten=2)
+    return O.json_uit(uit["tekst"])
 
 
 def bedrag_staat_in(waarde, tekst):

@@ -1,14 +1,16 @@
-"""Het zoekwerk van De Aannemerszoeker: firma's die een werk kunnen uitvoeren in een gebied, via het taalmodel met
-webzoeken en webpagina's lezen, en de controles die niet van het model afhangen.
+"""Het zoekwerk van De Aannemerszoeker: firma's die een werk kunnen uitvoeren in een gebied, via Claude op het
+abonnement van Mehdi (koppelingen/claude_abonnement.py: Claude Code met WebSearch en WebFetch, nooit de API-sleutel), en
+de controles die niet van het model afhangen.
 
 Naar buiten (het model en de zoekmachine) gaan alleen het werk, de gemeente en de straal, en of het om uitvoering voor
 een bouwheer of om onderaanneming gaat. Nooit de naam van de firma die zoekt, de bouwheer of het werfadres.
 
 Grendels in de code:
-  - een firma telt alleen als het model haar website in deze ronde echt las (aankoop.onderzoek.alleen_gelezen);
+  - een firma telt alleen als de code haar eigen pagina zelf las (lees_sites, bouw/webpagina.py): WebFetch geeft een
+    samenvatting, de code moet het citaat, het nummer en het contact letterlijk terugvinden;
   - een ondernemingsnummer moet de Belgische controle (modulo 97) halen, anders vervalt het;
-  - "actief in de KBO" alleen als een KBO-pagina met dat nummer in deze ronde gelezen is en "Actief" toont; de code leest
-    die pagina zelf (kbo_van_code), want web_fetch van het model opent de KBO niet (gemeten 01-11-2026);
+  - "actief in de KBO" alleen als de KBO-pagina met dat nummer "Actief" toont; de code leest die pagina zelf
+    (kbo_van_code);
   - de afstand rekent de code met Geopunt (koppelingen/adresregister.py); buiten de straal komt apart.
 """
 import math
@@ -20,14 +22,15 @@ from aankoop import onderzoek as O
 
 from . import scheiding as S
 
-MODEL = O.MODEL
-# Kostengrenzen per vraag, naar de meting van De Prijsonderzoeker op 30-10-2026 (4,27 miljoen tokens zonder paginagrens):
-# een grens per gelezen pagina, weinig zoek- en leesbeurten, en een tokenplafond tussen de beurten. Per kandidaat zijn
-# twee pagina's nodig (eigen site en KBO); een KBO-pagina is klein.
+# Grenzen per vraag (Mehdi 01-11-2026: op het abonnement, dus zonder geld per token, maar binnen zijn limieten): weinig
+# zoek- en leesbeurten, een vast aantal beurten voor Claude Code, en de code leest hoogstens PER_FIRMA pagina's per firma.
 MAX_ZOEKEN = 5
-MAX_LEZEN = 10
-MAX_PAGINA_TOKENS = 4000
-MAX_TOKENS = 300000
+MAX_LEZEN = 12
+MAX_BEURTEN = 25
+MAX_GEREEDSCHAP = 2 * (MAX_ZOEKEN + MAX_LEZEN)    # harde grens: daarboven stopt de code Claude Code (controle 17)
+PER_FIRMA = 4
+MAX_SITES = 10
+LEESTIJD = 90          # seconden die na het model overblijven voor de pagina's en de KBO
 KBO = "kbopub.economie.fgov.be"
 MIN_TEKST = 100
 
@@ -36,7 +39,9 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
   "vraag_kort": "het werk en het gebied in een zin",
   "aannames": ["wat je aannam omdat het niet in de vraag stond"],
   "firmas": [
-    {"naam": "naam zoals op de website", "url": "de pagina van de firma die je met web_fetch las",
+    {"naam": "naam zoals op de website", "url": "de pagina van de firma die je met WebFetch las",
+     "paginas": ["de andere pagina's van dezelfde site die je las: waar het werk staat, waar het ondernemingsnummer
+       en het contact staan"],
      "gemeente": "gemeente van de vestiging", "postcode": "1234", "adres": "straat en nummer, of null",
      "telefoon": "zoals op de site, of null", "email": "zoals op de site, of null",
      "ondernemingsnummer": "0123.456.789 zoals op de eigen site, of null",
@@ -49,7 +54,8 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
   "vervolgvraag": "een gebundelde vraag als iets beslissends ontbreekt, anders null"
 }
 Regels: geef alleen firma's waarvan je een eigen pagina (website, of hun pagina op een vakfederatie of gids) zelf met
-web_fetch las en waar het werk op staat. Verzin nooit een telefoonnummer, mailadres of ondernemingsnummer: null als je
+WebFetch las en waar het werk op staat. De code leest die pagina's daarna zelf en zoekt je citaat, het nummer en het
+contact er letterlijk in: kopieer ze dus woord voor woord. Verzin nooit een telefoonnummer, mailadres of ondernemingsnummer: null als je
 het niet zag. Zoek het ondernemingsnummer op de eigen site (voettekst, contactpagina, algemene voorwaarden); de code leest
 de KBO zelf, lees die dus niet.
 Geen bemiddelingsplatformen of offertesites als firma (zoals sites die je aanvraag doorverkopen)."""
@@ -94,8 +100,10 @@ def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", ke
     systeem = "\n\n".join(delen + [VORM])
     gebruiker = (f"Vandaag is {vandaag}. Gezocht: {wie}.\nWERK: {werk}\n" + (f"OMVANG: {omvang}\n" if omvang else "")
                  + f"GEBIED: {gemeente}, binnen ongeveer {straal_km} km.\n"
-                 "Zoek op het web en lees de pagina van elke firma met web_fetch voor je ze opneemt. Mik op vijf tot "
-                 "acht firma's, liefst dicht bij het gebied, en geef liever minder dan een firma waarover je twijfelt.")
+                 "Zoek op het web en lees de pagina van elke firma met WebFetch voor je ze opneemt. Mik op vijf tot "
+                 "acht firma's, liefst dicht bij het gebied, en geef liever minder dan een firma waarover je twijfelt. "
+                 f"Gebruik hoogstens {MAX_ZOEKEN} keer WebSearch en {MAX_LEZEN} keer WebFetch; lever daarna meteen het "
+                 "JSON-object.")
     return systeem, gebruiker
 
 
@@ -297,6 +305,16 @@ def kbo_zetel(nummer, gelezen):
     return None
 
 
+def eigen_paginas(f, gelezen):
+    """{url: tekst} van de pagina's die bij deze firma horen: wat de code voor haar las (f["_paginas"], lees_sites);
+    zonder die lijst alle gelezen pagina's (de functies hieronder houden dan alleen de eigen site over)."""
+    if not isinstance(gelezen, dict):
+        return {}
+    if isinstance(f.get("_paginas"), list):
+        return {u: gelezen[u] for u in f["_paginas"] if u in gelezen}
+    return gelezen
+
+
 def sleutel(f):
     """Om dubbels weg te halen: het ondernemingsnummer, anders het domein van de website."""
     if f.get("ondernemingsnummer"):
@@ -314,28 +332,34 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer, kbo=None):
     met_tekst = []
     for f in gelezen_firmas:     # Codex X6 (controle 2): een gelezen pagina zonder tekst bewijst niets
         url = O.schoon_url(f.get("url"))
+        eigen = eigen_paginas(f, gelezen)
         if host(url) == KBO:     # Codex X2 (controle 3): de KBO is geen eigen pagina van de firma
             afgewezen.append({"aanbod": f, "redenen": ["alleen een KBO-pagina, geen eigen pagina"]})
-        elif len((gelezen.get(url, "") if isinstance(gelezen, dict) else "").strip()) < MIN_TEKST:
+        elif sum(len((t or "").strip()) for t in eigen.values()) < MIN_TEKST:   # controle 17: over al haar pagina's
             afgewezen.append({"aanbod": f, "redenen": ["pagina zonder leesbare tekst"]})
         else:
             met_tekst.append(f)
-    gelezen_firmas = met_tekst
     uit = {"goed": [], "na_te_kijken": [], "buiten": [], "afgewezen": afgewezen}
-    gezien = set()
-    for f in gelezen_firmas:
+    kandidaten = []
+    for f in met_tekst:
+        eigen = eigen_paginas(f, gelezen)
         f["ondernemingsnummer"] = btw_geldig(f.get("ondernemingsnummer"))
         door_code = f["ondernemingsnummer"] in (kbo or {})      # Codex 15, punt 1: dan telt alleen wat de code las
         zelf = (kbo or {}).get(f["ondernemingsnummer"]) or {}
         f["kbo_actief"] = zelf.get("actief") if door_code else kbo_actief(f["ondernemingsnummer"], gelezen)
         # Codex X2 (controle 6): de site hoort bij de onderneming als het nummer op een gelezen pagina van die site
         # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
-        f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
-                             and naam_en_werk_op_site(f, gelezen))
-        contact_van_site(f, gelezen)
+        f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), eigen)
+                             and naam_en_werk_op_site(f, eigen))
+        contact_van_site(f, eigen)
         if f["kbo_actief"] is False:
             uit["afgewezen"].append({"aanbod": f, "redenen": ["stopgezet volgens de KBO"]})
             continue
+        kandidaten.append((f, zelf, door_code))
+    # Codex, controle 17: bij een dubbel (zelfde nummer of domein) blijft de best bewezen kandidaat, niet de eerste
+    kandidaten.sort(key=lambda k: (not k[0]["site_bewezen"], k[0]["kbo_actief"] is not True))
+    gezien = set()
+    for f, zelf, door_code in kandidaten:
         k = sleutel(f)
         if k in gezien:
             continue
@@ -366,45 +390,76 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer, kbo=None):
     return uit
 
 
-def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None, client=None, omvang="", kennis=""):
-    """Een zoekvraag uitvoeren. Geeft {gegevens, gelezen, tekst, tokens, zoekopdrachten, stop, model}, zoals
-    aankoop.onderzoek.onderzoek (dezelfde lus, met de plafonds van deze agent); gegevens is None als het model geen
-    leesbaar JSON-object gaf."""
-    deadline = deadline or time.monotonic() + 420
-    if client is None:
-        from anthropic import Anthropic
-        client = Anthropic(max_retries=1)
-    systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
-    assistent, teksten, tokens, stop, model, beurten = [], [], 0, None, MODEL, []
-    for _ in range(O.MAX_HERVATTEN):
-        rest_zoeken = MAX_ZOEKEN - O._gebruikt(assistent, "web_search")
-        rest_lezen = MAX_LEZEN - O._gebruikt(assistent, "web_fetch")
-        rest_tijd = deadline - time.monotonic()
-        if assistent and (tokens >= MAX_TOKENS or rest_tijd < 30 or (rest_zoeken < 1 and rest_lezen < 1)):
-            stop = "plafond"
-            break
-        tools = [{"type": O.ZOEK_TOOL, "name": "web_search", "max_uses": max(1, rest_zoeken)},
-                 {"type": O.LEES_TOOL, "name": "web_fetch", "max_uses": max(1, rest_lezen),
-                  "max_content_tokens": MAX_PAGINA_TOKENS}]
-        berichten = [{"role": "user", "content": gebruiker}] + ([{"role": "assistant", "content": assistent}] if assistent else [])
-        try:
-            resp = client.messages.create(model=model, max_tokens=16000, system=systeem, messages=berichten, tools=tools,
-                                          output_config={"effort": "medium"}, timeout=max(30.0, rest_tijd))
-        except Exception as e:  # noqa: BLE001  een onbekende modelnaam: een keer het reservemodel
-            if type(e).__name__ != "NotFoundError" or model == O.RESERVE_MODEL:
-                raise
-            model = O.RESERVE_MODEL
+def lees_sites(firmas, gehaald, haal, deadline=None, werkers=6):
+    """{schoon_url: tekst} van de pagina's die de code zelf las: per firma haar url, de pagina's die het model noemt en
+    wat het met WebFetch op dezelfde site opende, hoogstens PER_FIRMA per firma en MAX_SITES firma's. Een pagina die niet
+    antwoordt, ontbreekt; een oproep start alleen als ze voor de deadline klaar kan zijn. haal: url -> html."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import webpagina as WP
+    # De code haalt de url zoals het model ze gaf (een site zonder www. bestaat soms niet) en bewaart ze onder schoon_url
+    origineel = {}
+    for u in [x for f in firmas or [] if isinstance(f, dict)
+              for x in [f.get("url")] + (f.get("paginas") if isinstance(f.get("paginas"), list) else [])] + list(gehaald or []):
+        origineel.setdefault(O.schoon_url(u), str(u or "").strip())
+    gehaald = [O.schoon_url(u) for u in gehaald or []]
+    firmas = [f for f in firmas or [] if isinstance(f, dict)][:MAX_SITES]
+    # Codex, controle 17: delen firma's een site (een gids), dan krijgt elke firma alleen haar eigen pagina's en niets uit
+    # wat het model daar verder opende; elke pagina hoort bij hoogstens een firma (f["_paginas"]).
+    per_host = {}
+    for f in firmas:
+        per_host[host(O.schoon_url(f.get("url")))] = per_host.get(host(O.schoon_url(f.get("url"))), 0) + 1
+    lijst, gezien = [], set()
+    for f in firmas:
+        eigen = O.schoon_url(f.get("url"))
+        f["_paginas"] = []
+        if not eigen:
             continue
-        gebruik = O._veld(resp, "usage")
-        beurt = (O._veld(gebruik, "input_tokens", 0) or 0) + (O._veld(gebruik, "output_tokens", 0) or 0)
-        tokens += beurt
-        beurten.append(beurt)
-        blokken = list(O._veld(resp, "content", []) or [])
-        assistent += blokken
-        teksten = [O._veld(b, "text", "") for b in blokken if O._veld(b, "type") == "text"] or teksten
-        stop = O._veld(resp, "stop_reason")
-        if stop != "pause_turn":
-            break
-    tekst = "".join(teksten).strip()
-    return {"gegevens": O.json_uit(tekst), "gelezen": O.gelezen_paginas(assistent), "tekst": tekst, "tokens": tokens,
-            "zoekopdrachten": O._gebruikt(assistent, "web_search"), "stop": stop, "model": model, "beurten": beurten}
+        extra = [O.schoon_url(p) for p in (f.get("paginas") if isinstance(f.get("paginas"), list) else [])]
+        per = []
+        for u in [eigen] + extra + (gehaald if per_host[host(eigen)] == 1 else []):
+            if u and host(u) == host(eigen) and u not in per:
+                per.append(u)
+        for u in per[:PER_FIRMA]:
+            if u not in gezien:
+                gezien.add(u)
+                lijst.append(u)
+                f["_paginas"].append(u)
+
+    def een(u):
+        if deadline and time.monotonic() + WP.TIMEOUT > deadline:
+            return u, None
+        try:
+            return u, WP.tekst(haal(origineel.get(u) or u))
+        except (OSError, ValueError):
+            return u, None
+
+    with ThreadPoolExecutor(max_workers=werkers) as pool:
+        return {u: t for u, t in pool.map(een, lijst) if t}
+
+
+def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None, vraag=None, haal=None, omvang="",
+         kennis=""):
+    """Een zoekvraag uitvoeren via Claude op het abonnement. Geeft {gegevens, gelezen, tekst, tokens, zoekopdrachten,
+    leesbeurten, stop, model, beurten}; gegevens is None als het model geen leesbaar JSON-object gaf. gelezen is wat de
+    code zelf las (lees_sites), niet wat het model zegt. vraag en haal zijn te vervangen in een test."""
+    deadline = deadline or time.monotonic() + 420
+    if vraag is None:
+        import claude_abonnement
+        vraag = claude_abonnement.vraag
+    if haal is None:
+        from . import webpagina
+        haal = webpagina.haal
+    systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
+    rest = deadline - time.monotonic() - LEESTIJD
+    if rest < 60:          # Codex, controle 18: nooit voorbij de deadline van de ronde; de vraag wacht
+        import claude_abonnement
+        raise claude_abonnement.Fout(f"te weinig tijd in de ronde ({int(rest)} s)", "tijd")
+    uit = vraag(systeem, gebruiker, tools=("WebSearch", "WebFetch"), timeout=rest, max_beurten=MAX_BEURTEN,
+                max_gereedschap=MAX_GEREEDSCHAP)
+    gehaald = [str((inv or {}).get("url") or "") for naam, inv in uit["gereedschap"] if naam == "WebFetch"]
+    gegevens = O.json_uit(uit["tekst"])
+    gelezen = lees_sites((gegevens or {}).get("firmas"), gehaald, haal, deadline)
+    return {"gegevens": gegevens, "gelezen": gelezen, "tekst": uit["tekst"], "tokens": uit["tokens"],
+            "zoekopdrachten": sum(1 for naam, _ in uit["gereedschap"] if naam == "WebSearch"), "leesbeurten": len(gehaald),
+            "stop": uit["stop"], "model": uit["model"], "beurten": uit["beurten"]}

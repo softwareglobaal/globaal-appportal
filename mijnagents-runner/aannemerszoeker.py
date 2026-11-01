@@ -24,6 +24,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, HIER)
 import bord  # noqa: E402
+import claude_abonnement  # noqa: E402
 from bouw import eigen as E  # noqa: E402
 from bouw import mail as M  # noqa: E402
 from bouw import scheiding as S  # noqa: E402
@@ -36,7 +37,7 @@ NAAM = "aannemerszoeker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
 RONDE_SECONDEN = 480            # binnen de 600 s die De Regisseur op een ronde wacht
-MIN_SECONDEN_PER_VRAAG = 150
+MIN_SECONDEN_PER_VRAAG = 240    # eigen mappen (60 s), Claude (minstens 60 s) en de pagina's en de KBO (90 s)
 SOORT = "aannemersverslag"      # niet 'verslag' of 'signaal': die stuurt De Bode vanzelf door
 
 
@@ -51,8 +52,8 @@ def laad_env(pad):
         pass
 
 
-# Eerst ~/appportal/.env, zoals De Prijsonderzoeker en De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026
-# een 401. setdefault: het eerste bestand met een waarde wint.
+# Instellingen uit ~/appportal/.env en ~/agents/.env (setdefault: het eerste bestand met een waarde wint). Claude draait
+# op het abonnement van Mehdi (koppelingen/claude_abonnement.py): een API-sleutel bereikt het model nooit.
 laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
 
@@ -147,7 +148,7 @@ def een_vraag(r, tekst, vandaag, deadline):
         return 0
     gemeente = v["gemeente"] = officieel
     try:
-        eigen = E.in_mappen(firma, v["werk"])
+        eigen = E.in_mappen(firma, v["werk"], deadline=min(deadline, time.monotonic() + 60))
         r.bron(f"eigen mappen {S.FIRMANAMEN[firma]}", f"{len(eigen)} treffers onder {E.BASIS[firma]}")
     except Exception as e:  # noqa: BLE001  de eigen mappen zijn een aanvulling; het webzoeken gaat door
         eigen = []
@@ -157,11 +158,9 @@ def een_vraag(r, tekst, vandaag, deadline):
     kennis = Z.kennis_voor_model(bord.collega_tekst(r.collegas) if r.collegas else "", getattr(r, "lessen", []))
     uit = Z.zoek(r.werkwijze, v["werk"], gemeente, v["straal"], soort, vandaag.isoformat(), deadline,
                  omvang=v.get("omvang") or "", kennis=kennis)
-    ag.log("aannemersvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {len(uit['gelezen'])} "
-                                     f"pagina's gelezen, {uit['tokens']} tokens (per beurt {uit.get('beurten')}), model "
-                                     f"{uit['model']}, einde {uit['stop']}")
-    if uit["stop"] == "plafond":
-        r.nood("Aannemersvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
+    ag.log("aannemersvraag", "bron", f"vraag {va}: op het abonnement, {uit['zoekopdrachten']} zoekopdrachten, "
+                                     f"{uit['leesbeurten']} keer WebFetch, {len(uit['gelezen'])} pagina's door de code "
+                                     f"gelezen, {uit['tokens']} tokens in {uit['beurten']} beurten, model {uit['model']}")
     g = uit["gegevens"]
     if g is None:
         ag.log("aannemersvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
@@ -234,7 +233,17 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
         tekst = str(v.get("inhoud") or v.get("titel")).strip()
         try:
             klaar += een_vraag(r, tekst, vandaag, deadline)
-        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug (kosten)
+        except claude_abonnement.Fout as e:
+            ag.log("aannemersvraag", "fout", f"vraag {Q.vingerafdruk(tekst, vandaag)}: {str(e)[:300]}")
+            if e.wacht:     # de vraag blijft klaarstaan tot Claude weer kan, zonder extra verbruik (Codex, controle 18)
+                nood = {"aanmelden": (claude_abonnement.AANMELDEN_NOOD, "mehdi"),
+                        "limiet": (claude_abonnement.LIMIET_NOOD, "mehdi"),
+                        "bron": (claude_abonnement.BRON_NOOD, "claude-code")}.get(e.soort)
+                if nood:
+                    r.nood(nood[0], wie=nood[1])
+                break
+            r.nood("Aannemersvraag mislukt bij Claude op het abonnement", wie="claude-code")
+        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug
             ag.log("aannemersvraag", "fout", f"vraag {Q.vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Aannemersvraag mislukt bij het zoeken", wie="claude-code")
         gedaan += 1

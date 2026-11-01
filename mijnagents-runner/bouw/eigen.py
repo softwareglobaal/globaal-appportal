@@ -10,6 +10,7 @@ met alleen firmacode, partij_id, vak, regio, bewijs en datum).
 """
 import json
 import re
+import time
 
 from . import scheiding as S
 
@@ -18,12 +19,36 @@ OCTOPUS_CODES = {S.HA: ("HA", "HARC"), S.HB: ("HB", "HARM")}
 STOPWOORDEN = {"binnen", "buiten", "werken", "werk", "nieuwe", "nieuw", "plaatsen", "plaatsing", "leveren", "levering",
                "voor", "met", "van", "een", "het", "de", "en", "of", "in", "op", "aan", "uitvoeren", "renovatie"}
 NIET_ZOEKEN = ("/0 archive/", "/_mag weg", "/nog te sorteren")
+# Alleen een treffer in een offerte- of onderaannemersmap zegt met wie de firma al werkte (gemeten 01-11-2026: "plat"
+# gaf Revit-bibliotheken, mails en "Platteau"); H-A: .../Quotes & Invoices/Offerte/<lot>, HB: 05. ONDERAANNEMER en
+# Offerte IN per post.
+OFFERTEMAP = re.compile(r"\b(?:offerte\w*|quotes?|onderaannem\w*|prijsaanbieding\w*|prijsvragen?)\b", re.I)
+UITGANG = ("", "en", "s", "e", "te", "ten")
 
 
 def zoekwoorden(werk, maximum=2):
     """De woorden van het werk waarop een mapnaam zou passen: de langste eerst, zonder stopwoorden."""
     woorden = [w for w in re.findall(r"[a-zà-ÿ]{4,}", S.normaal(werk).lower()) if w not in STOPWOORDEN]
     return sorted(dict.fromkeys(woorden), key=len, reverse=True)[:maximum]
+
+
+def woord_in(woord, naam):
+    """Staat het woord als heel woord in de naam (ook meervoud of een samenstelling met een vakwoord, platdak), en niet
+    als stuk van een ander woord (Platane, Plates, platform, Platteau)?"""
+    from .vakwoorden import _samengesteld
+    for t in re.findall(r"[a-z0-9à-ÿ]+", S.normaal(naam).lower()):
+        if any(t == woord + u for u in UITGANG):
+            return True
+        if t.startswith(woord) and len(t) - len(woord) >= 3 and _samengesteld(t[len(woord):]):
+            return True
+        if t.endswith(woord) and len(t) - len(woord) >= 3 and _samengesteld(t[:-len(woord)]):
+            return True
+    return False
+
+
+def in_offertemap(pad):
+    """Ligt dit pad onder een offerte- of onderaannemersmap (een bovenliggende map, niet de treffer zelf)?"""
+    return any(OFFERTEMAP.search(deel) for deel in pad.split("/")[:-1])
 
 
 MAX_PAGINAS = 20
@@ -34,32 +59,57 @@ class Onvolledig(list):
     volledig = True
 
 
-def _dropbox_zoek(query, pad, rpc=None):
-    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12)."""
+def _dropbox_zoek(query, pad, rpc=None, deadline=None):
+    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12). Met een
+    deadline (time.monotonic, controle 17 en 18) start geen verzoek meer na de deadline en wacht elk verzoek hoogstens tot
+    de deadline; dan zegt het verslag dat er meer zijn."""
+    from .webpagina import binnen
     if rpc is None:
         import bronnen
-        rpc = bronnen._rpc
-    uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
+        basis = lambda p, body, t: bronnen._rpc(p, body, timeout=t)     # noqa: E731
+    else:
+        basis = lambda p, body, t: rpc(p, body)     # noqa: E731
+
+    def vraag(p, body):
+        if not deadline:
+            return basis(p, body, 60)
+        rest = deadline - time.monotonic()
+        if rest < 1:
+            raise TimeoutError("deadline")
+        # Codex, controle 19: ook een antwoord dat druppelsgewijs binnenkomt, stopt op de deadline
+        return binnen(lambda: basis(p, body, min(60, rest)), rest)
     treffers = Onvolledig()
-    for _ in range(MAX_PAGINAS):
-        for m in (uit or {}).get("matches") or []:
-            meta = ((m.get("metadata") or {}).get("metadata")) or {}
-            if meta.get("path_display"):
-                treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
-        if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
-            return treffers
-        uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
+    try:
+        if deadline and time.monotonic() > deadline:
+            raise TimeoutError("deadline")
+        uit = vraag("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
+        for _ in range(MAX_PAGINAS):
+            for m in (uit or {}).get("matches") or []:
+                meta = ((m.get("metadata") or {}).get("metadata")) or {}
+                if meta.get("path_display"):
+                    treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
+            if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
+                return treffers
+            if deadline and time.monotonic() > deadline:
+                break
+            uit = vraag("files/search/continue_v2", {"cursor": uit["cursor"]})
+    except TimeoutError:          # ook een verzoek dat niet voor de deadline antwoordt (socket-timeout)
+        pass
     treffers.volledig = False
     return treffers
 
 
-def in_mappen(firma, werk, zoek=None, maximum=12):
-    """[{naam, pad, project}] uit de mappen van deze firma, met het werk in de naam. zoek(query, pad) is te vervangen
-    in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet als de zoekfunctie ze teruggeeft)."""
-    zoek = zoek or _dropbox_zoek
+def in_mappen(firma, werk, zoek=None, maximum=12, deadline=None):
+    """[{naam, pad, project}] uit de offerte- en onderaannemersmappen van deze firma, met het werk als heel woord in de
+    naam. zoek(query, pad) is te vervangen in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet
+    als de zoekfunctie ze teruggeeft)."""
+    zoek = zoek or (lambda q, p: _dropbox_zoek(q, p, deadline=deadline))
     basis = BASIS[firma]
     gezien, uit = set(), Onvolledig()
     for woord in zoekwoorden(werk):
+        if deadline and time.monotonic() > deadline:      # Codex, controle 18: geen nieuw zoekwoord na de deadline
+            uit.volledig = False
+            break
         treffers = zoek(woord, basis) or []
         if getattr(treffers, "volledig", True) is False:
             uit.volledig = False
@@ -69,6 +119,8 @@ def in_mappen(firma, werk, zoek=None, maximum=12):
             if not laag.startswith(basis.lower() + "/") or any(n in laag for n in NIET_ZOEKEN):
                 continue
             if laag.startswith(BASIS[S.andere(firma)].lower()) or S.schendingen(pad, firma):
+                continue
+            if not woord_in(woord, t.get("naam") or pad.rsplit("/", 1)[-1]) or not in_offertemap(pad):
                 continue
             ouder = pad.rsplit("/", 1)[0] if t.get("soort") == "file" else pad
             if ouder.lower() in gezien:

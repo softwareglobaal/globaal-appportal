@@ -117,16 +117,19 @@ def lotkeuze(v, lots):
             "\n\nStel de vraag opnieuw met `lot:`, bijvoorbeeld het nummer vooraan de map.")
 
 
-def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan):
+def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan, overgeslagen=0):
     """Het verslag van De Offertevergelijker. letters: [(letter, bestand, sleutelregel)]; uit: offertes.vergelijk();
     per_post: [{onderwerp, cellen}] of None. Geen gunning: de laagste prijs is een feit, geen advies (X4)."""
     from .offertes import datumtekst
     firma = v["firma"]
     rijen = uit["rijen"]
     gelezen = [r for r in rijen if r.get("soort") == "offerte"]
-    niet = [r for r in rijen if r.get("soort") != "offerte"]
+    geen = [r for r in rijen if r.get("soort") == "geen offerte"]
+    niet = [r for r in rijen if r.get("soort") not in ("offerte", "geen offerte")]
     kop = f"**Vergelijking {lotnaam} ({S.FIRMANAMEN[firma]}):** {len(gelezen)} offertes gelezen"
-    kop += f", {len(niet)} niet (scan of onleesbaar)." if niet else "."
+    kop += f", {len(niet)} niet (scan of onleesbaar)" if niet else ""
+    andere = len(geen) + (overgeslagen or 0)
+    kop += f", {andere} documenten die geen offerte zijn (fiche of brochure) tellen niet mee." if andere else "."
     if uit.get("laagste") and uit.get("verschil") is not None:
         kop += (f" Laagste totaal exclusief btw: Inschrijver {uit['laagste']['letter']}, {euro(uit['laagste']['excl'])}; "
                 f"verschil met de hoogste {euro(uit['verschil'])} ({uit['verschil_pct']} procent).")

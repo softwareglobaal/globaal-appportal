@@ -5,6 +5,7 @@ geen echte bouwheren, adressen of offertes.
 
 Draaien: python3 mijnagents-runner/tests/test_bouw.py
 """
+import json
 import sys
 import time
 from pathlib import Path
@@ -215,11 +216,13 @@ posten, red = F.keur_posten({"offertes": {"A": {"posten": [{"nr": "1", "totaal":
 check("een bedrag dat niet in de offerte staat, valt weg", posten["A"] == {"1": 4000.0, "2": 6000.0} and red["A"])
 posten, red = F.keur_posten({"offertes": {"A": {"posten": [{"nr": "1", "totaal": "4.000,00"}]}}}, {"A": "4.000,00"}, {"A": 10000.0})
 check("posten die niet optellen tot het totaal: geen vergelijking per post", posten["A"] == {} and red["A"])
+_aan, F.OFFERTE_NAAR_AI = F.OFFERTE_NAAR_AI, False
 try:
-    F.posten_uit_model({"A": "x"})
-    check("zonder ja van Mehdi gaat geen offerte naar de AI (X5)", F.OFFERTE_NAAR_AI)
+    F.posten_uit_model({"A": "x"}, vraag=lambda *a, **k: {"tekst": "{}"})
+    check("zonder ja van Mehdi gaat geen offerte naar de AI (X5)", False)
 except PermissionError:
     check("zonder ja van Mehdi gaat geen offerte naar de AI (X5)", True)
+F.OFFERTE_NAAR_AI = _aan
 r = F.redigeer("Aan: Jan Voorbeeld\nMevr. An Voorbeeld\nmail an@voorbeeld.com, tel 0470 12 34 56\nWerf Voorbeeldstraat 1\n"
                "De werken aan de gevel.", ["Voorbeeldstraat 1"])
 check("redactie: bouwheer, contact en werfadres weg, gewone tekst blijft", "Jan" not in r and "An Voorbeeld" not in r
@@ -333,7 +336,7 @@ check("X9 zonder bevestigd totaal geen vergelijking per post", p9b["A"] == {} an
 r10 = F.redigeer("Werf: Voorbeeldstraat 1\nProject: Renovatie bij de klant\nLevering te Kerkplein 12 bus 3.\nPlaatsen van ramen.")
 check("X10 werfregel en adressen weg, het werk blijft", "Voorbeeldstraat" not in r10 and "Kerkplein 12" not in r10
       and "Plaatsen van ramen." in r10, r10)
-check("X10 de offerte gaat nog niet naar de AI", F.OFFERTE_NAAR_AI is False)
+check("X5 ja van Mehdi op 01-11-2026: de offerte gaat via zijn abonnement naar Claude", F.OFFERTE_NAAR_AI is True)
 klok = iter([0, 10, 999, 999]).__next__
 gl, tk = F.lees_bestanden([("A", {"pad": "/a"}, "a"), ("B", {"pad": "/b"}, "b"), ("C", {"pad": "/c"}, "c")],
                           lambda p: (_ for _ in ()).throw(OSError("weg")), deadline=100, klok=klok)
@@ -732,7 +735,507 @@ sys_kbo, _ = Z.opdracht("werkwijze", "dakwerken", "3000 Leuven", 25, "uitvoering
 check("Codex 15-4: het model krijgt geen KBO-veld en geen KBO-taak meer", "kbo_url" not in sys_kbo
       and "het web en de KBO" not in sys_kbo and "in de KBO, of null" not in sys_kbo)
 _ww = open(Path(__file__).resolve().parents[1] / "werkwijze" / "aannemerszoeker.md", encoding="utf-8").read()
-check("de werkwijze zegt dat de code de KBO leest (versie 1.1)", "Versie 1.1" in _ww and "leest de code zelf" in _ww)
+check("de werkwijze zegt dat de code de KBO leest", "leest de code ook zelf" in _ww)
+
+print("\nOp het abonnement van Mehdi, nooit de API-sleutel (Mehdi 01-11-2026)")
+import os  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+
+import claude_abonnement as CA  # noqa: E402
+from bouw import webpagina as WP  # noqa: E402
+
+_oud_env = dict(os.environ)
+os.environ.update({"ANTHROPIC_API_KEY": "sk-ant-api-nep", "SALES_ANTHROPIC_API_KEY": "x", "ANTHROPIC_AUTH_TOKEN": "y",
+                   "KENNIS_DSN": "postgres://geheim", "PATH": "/usr/bin"})
+env = CA.omgeving("sk-ant-oat01-nep", "/tmp/thuis-nep")
+check("het kindproces krijgt geen API-sleutel en geen ander geheim", not any(
+    k in env for k in ("ANTHROPIC_API_KEY", "SALES_ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "KENNIS_DSN"))
+    and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat01-nep" and env.get("PATH") == "/usr/bin")
+check("controle 17: een eigen lege HOME, geen instellingen of login van de server", env["HOME"] == "/tmp/thuis-nep"
+      and env["CLAUDE_CONFIG_DIR"].startswith("/tmp/thuis-nep") and env["XDG_CONFIG_HOME"].startswith("/tmp/thuis-nep"))
+os.environ.clear()
+os.environ.update(_oud_env)
+cmd = CA.opdracht("systeem", ("WebSearch", "WebFetch"), "opus", 25)
+check("Claude Code zonder CLAUDE.md, plugins, MCP of andere tools", all(x in cmd for x in (
+    "--safe-mode", "--restricted", "--strict-mcp-config", "--no-session-persistence")) and "--bare" not in cmd
+    and cmd[cmd.index("--tools") + 1] == "WebSearch,WebFetch" and cmd[cmd.index("--allowedTools") + 1] == "WebSearch,WebFetch")
+cmd0 = CA.opdracht("systeem", (), "opus", 2)
+check("zonder gereedschap: --tools leeg en niets toegelaten", cmd0[cmd0.index("--tools") + 1] == "" and "--allowedTools" not in cmd0)
+
+INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5-5", "apiKeySource": "none"}
+LIMIET_OK = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False}}
+WS = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebSearch", "input": {"query": "dak"}}]}}
+WF = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch",
+                                                   "input": {"url": "https://www.dakeen.voorbeeld.com/"}}]}}
+KLAAR = {"type": "result", "subtype": "success", "is_error": False, "result": "klaar", "num_turns": 3,
+         "usage": {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}}
+_NEP = r"""import json, os, sys, time
+rec, uit, code = sys.argv[1], sys.argv[2], int(sys.argv[3])
+json.dump({"env": dict(os.environ), "cwd": os.getcwd(), "invoer": sys.stdin.read()}, open(rec, "w"))
+for regel in open(uit):
+    if regel.strip() == "SLAAP":
+        time.sleep(30)
+    print(regel.rstrip("\n"), flush=True)
+sys.exit(code)
+"""
+_echt_opdracht, _echt_bron, _echt_limiet = CA.opdracht, CA.controleer_bron, CA.LIMIET_BESTAND
+with tempfile.TemporaryDirectory() as _d:
+    CA.LIMIET_BESTAND = os.path.join(_d, "limiet.json")
+    CA.controleer_bron = lambda env, cwd: None
+    leeg, vol = os.path.join(_d, "leeg.env"), os.path.join(_d, "vol.env")
+    open(leeg, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\n")
+    open(vol, "w").write("sk-ant-oat01-nep\n")
+    os.chmod(vol, 0o600)
+    _open = os.path.join(_d, "open")
+    open(_open, "w").write("sk-ant-oat01-nep\n")
+    os.chmod(_open, 0o644)
+    check("het gedeelde tokenbestand: alleen met rechten 600", CA.lees_token(vol) == "sk-ant-oat01-nep"
+          and CA.lees_token(_open) == "" and CA.lees_token(leeg) == "" and CA.lees_token(os.path.join(_d, "weg")) == "")
+    check("een plek voor alle agents op het abonnement (zoals De Prijsonderzoeker)",
+          CA.TOKEN_BESTAND.endswith("/.config/prijsonderzoeker/claude-token"))
+    nep, rec, uitf = os.path.join(_d, "nep.py"), os.path.join(_d, "rec.json"), os.path.join(_d, "uit.txt")
+    open(nep, "w").write(_NEP)
+
+    def nep_claude(regels, code=0):
+        open(uitf, "w").write("\n".join(r if isinstance(r, str) else json.dumps(r) for r in regels) + "\n")
+        CA.opdracht = lambda *a, **k: [sys.executable, nep, rec, uitf, str(code)]
+
+    def fout_van(**kw):
+        try:
+            CA.vraag("s", "g", bron=vol, **kw)
+            return None
+        except CA.Fout as e:
+            return e
+
+    _gestart = []
+    _echt_draai = CA.draai
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = None
+    try:
+        CA.vraag("s", "g", bron=leeg)
+    except CA.Fout as x:
+        e = x
+    check("zonder token start niets en valt niets terug op de API", e is not None and e.aanmelden and not _gestart)
+    CA.draai = _echt_draai
+
+    nep_claude([INIT, LIMIET_OK, WS, WF, KLAAR])
+    uit = CA.vraag("systeem", "de vraag", tools=("WebSearch", "WebFetch"), bron=vol)
+    r = json.load(open(rec))
+    check("de vraag gaat via stdin, in een lege werkmap, met alleen het token", r["invoer"] == "de vraag"
+          and "claude-abonnement-" in r["cwd"] and "ANTHROPIC_API_KEY" not in r["env"]
+          and r["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-nep" and "claude-thuis-" in r["env"]["HOME"])
+    check("antwoord, gereedschap, tokens en model uit de stroom", uit["tekst"] == "klaar" and uit["tokens"] == 115
+          and uit["beurten"] == 3 and uit["model"] == "claude-opus-5-5"
+          and [n for n, _ in uit["gereedschap"]] == ["WebSearch", "WebFetch"])
+    _t0 = time.monotonic()
+    nep_claude([dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 17: meldt Claude Code bij de start toch een API-sleutel, dan stopt de code het proces meteen",
+          e is not None and e.soort == "bron" and e.wacht and time.monotonic() - _t0 < 10)
+    nep_claude([dict(INIT, apiKeySource="apiKeyHelper"), "SLAAP", KLAAR])
+    check("controle 17: ook een apiKeyHelper telt als API-sleutel", fout_van() is not None)
+    _t0 = time.monotonic()
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": True}},
+                "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 17: extra verbruik boven het abonnement stopt het proces meteen", e is not None and e.limiet
+          and time.monotonic() - _t0 < 10)
+    _gestart.clear()
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = fout_van()
+    check("controle 18: na extra verbruik start de volgende vraag niet tot het venster voorbij is", e is not None
+          and e.limiet and not _gestart)
+    CA.draai = _echt_draai
+    os.remove(CA.LIMIET_BESTAND)
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning",
+                                                                      "resetsAt": time.time() + 3600}}, "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 18: een waarschuwing van het abonnement stopt ook", e is not None and e.limiet)
+    _echt_onthoud = CA.onthoud_limiet
+    os.remove(CA.LIMIET_BESTAND)
+    CA.onthoud_limiet = lambda info, bestand=None: False
+    e = fout_van()
+    CA.onthoud_limiet = _echt_onthoud
+    check("controle 20: mislukt het bewaren van een limiet na de vraag, dan is het een limietfout", e is not None
+          and e.limiet and "niet te onthouden" in str(e))
+    json.dump({"info": {"status": "allowed_warning", "resetsAt": time.time() - 10}}, open(CA.LIMIET_BESTAND, "w"))
+    check("een voorbij venster houdt niets meer tegen", CA.bekende_limiet() is None)
+    check("controle 18: boven 90 procent van een venster start geen nieuwe vraag", CA.limiet_reden(
+        {"status": "allowed", "unifiedWindows": {"seven_day": {"utilization": 0.93}}}) is not None
+          and CA.limiet_reden({"status": "allowed", "unifiedWindows": {"seven_day": {"utilization": 0.36}}}) is None)
+    os.remove(CA.LIMIET_BESTAND)
+    CA.controleer_bron = lambda env, cwd: "bron: Claude Code zou aanmelden met api_key (ANTHROPIC_API_KEY)"
+    _gestart.clear()
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = fout_van()
+    check("controle 18: zegt auth status iets anders dan het abonnement, dan start er niets", e is not None
+          and e.soort == "bron" and e.wacht and not _gestart)
+    CA.draai = _echt_draai
+    CA.controleer_bron = lambda env, cwd: None
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}}, "SLAAP", KLAAR])
+    e = fout_van()
+    check("een bereikte limiet laat de vraag wachten", e is not None and e.limiet)
+    os.remove(CA.LIMIET_BESTAND)          # de limiet zonder eindtijd geldt een uur; de volgende proeven beginnen vrij
+    nep_claude([INIT, WS, WS, WS, "SLAAP", KLAAR])
+    e = fout_van(max_gereedschap=2)
+    check("controle 17: een harde grens op zoek- en leesbeurten", e is not None and "zoek- of leesbeurten" in str(e))
+    _t0 = time.monotonic()
+    nep_claude([INIT, "SLAAP", KLAAR])
+    e = fout_van(timeout=2)
+    check("na de timeout stopt de code het proces", e is not None and "binnen 2 s" in str(e) and time.monotonic() - _t0 < 10)
+    nep_claude([INIT, {"type": "result", "subtype": "success", "is_error": True,
+                       "result": "Invalid API key sk-ant-oat01-nep · Please run /login"}], code=1)
+    e = fout_van()
+    check("een geweigerde login vraagt Mehdi om aan te melden, zonder het token te tonen", e is not None and e.aanmelden
+          and "sk-ant-oat01-nep" not in str(e))
+    nep_claude([INIT, {"type": "result", "subtype": "error_max_turns", "is_error": True}], code=1)
+    e = fout_van()
+    check("te veel beurten is een fout, geen half antwoord", e is not None and not e.aanmelden and not e.limiet)
+CA.opdracht, CA.controleer_bron, CA.LIMIET_BESTAND = _echt_opdracht, _echt_bron, _echt_limiet
+
+
+def _status(uit, fout=None):
+    def run(cmd, **kw):
+        if fout:
+            raise fout
+        _statusrun.append((cmd, kw))
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(uit), "")
+    return run
+
+
+_statusrun = []
+_oud_beheerd = CA.BEHEERD
+with tempfile.TemporaryDirectory() as _bd:
+    CA.BEHEERD = (_bd,)
+    open(os.path.join(_bd, "managed-settings.json"), "w").write("{}")
+    check("beheerde instellingen op de machine: niet starten", str(CA.controleer_bron({}, "/y", run=_status(
+        {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"}))).startswith("bron"))
+CA.BEHEERD = ("/geen/beheerde/map",)
+check("auth status met het abonnementstoken: goed", CA.controleer_bron({"HOME": "/x"}, "/y", run=_status(
+    {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"})) is None
+      and _statusrun[0][0][1:] == ["auth", "status"] and _statusrun[0][1]["env"] == {"HOME": "/x"})
+check("auth status met een API-sleutel: niet starten", str(CA.controleer_bron({}, "/y", run=_status(
+    {"loggedIn": True, "authMethod": "api_key", "apiProvider": "firstParty", "apiKeySource": "ANTHROPIC_API_KEY"}))
+    ).startswith("bron"))
+check("auth status zonder login of onleesbaar: aanmelden", str(CA.controleer_bron({}, "/y", run=_status(
+    {"loggedIn": False}))).startswith("aanmelden") and str(CA.controleer_bron({}, "/y", run=_status(
+        {}, OSError("weg")))).startswith("aanmelden"))
+CA.BEHEERD = _oud_beheerd
+_zv = []
+try:
+    Z.zoek("w", "dak", "3000 Leuven", 25, "uitvoering", deadline=time.monotonic() + Z.LEESTIJD + 10,
+           vraag=lambda *a, **k: _zv.append(1))
+    check("controle 18: te weinig tijd in de ronde: de vraag wacht en Claude start niet", False)
+except CA.Fout as e:
+    check("controle 18: te weinig tijd in de ronde: de vraag wacht en Claude start niet", e.soort == "tijd" and not _zv)
+_t0 = time.monotonic()
+check("controle 19: een onbekende limietstatus stopt ook", CA.limiet_reden({}) is not None
+      and CA.limiet_reden({"status": "allowed"}) is None)
+_oud_lb, _oud_draai = CA.LIMIET_BESTAND, CA.draai
+CA.LIMIET_BESTAND = "/dev/null/geen/limiet.json"
+_gestart = []
+CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as _tf:
+    _tf.write("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-nep\n")
+try:
+    CA.vraag("s", "g", bron=_tf.name)
+    check("controle 19: kan de code een limiet niet onthouden, dan start er geen vraag", False)
+except CA.Fout as e:
+    check("controle 19: kan de code een limiet niet onthouden, dan start er geen vraag", e.soort == "bron"
+          and "niet te onthouden" in str(e) and not _gestart)
+with tempfile.TemporaryDirectory() as _d2:
+    _ro = os.path.join(_d2, "limiet.json")
+    open(_ro, "w").write("{}")
+    os.chmod(_ro, 0o444)
+    check("controle 20: een limietbestand dat niet te schrijven is, telt als niet schrijfbaar",
+          CA.limiet_schrijfbaar(_ro) is False and CA.limiet_schrijfbaar(_d2) is False
+          and CA.limiet_schrijfbaar(os.path.join(_d2, "goed", "limiet.json")) is True)
+    os.chmod(_ro, 0o644)
+os.remove(_tf.name)
+CA.LIMIET_BESTAND, CA.draai = _oud_lb, _oud_draai
+_t0 = time.monotonic()
+
+
+_t0 = time.monotonic()
+check("controle 18: een trage DNS-opzoeking houdt de code niet op", WP.openbaar_ip(
+    "traag.voorbeeld.com", 443, opzoeken=lambda *a, **k: time.sleep(3) or [], timeout=0.2) is None
+      and time.monotonic() - _t0 < 1)
+check("bewaking: een gewone start en een toegelaten limiet stoppen niets", CA.bewaking(json.dumps(INIT), {}) is None
+      and CA.bewaking(json.dumps(LIMIET_OK), {}) is None and CA.bewaking("geen json", {}) is None)
+
+_hier = Path(__file__).resolve().parents[1]
+_bronnen = [_hier / "aannemerszoeker.py", _hier / "offertevergelijker.py"] + sorted((_hier / "bouw").glob("*.py"))
+_api = [p.name for p in _bronnen if any(w in p.read_text(encoding="utf-8") for w in (
+    "from anthropic", "import anthropic", "Anthropic(", "messages.create", "zet_anthropic"))]
+check("grendel: geen enkele bouwmodule roept de API aan (alleen claude_abonnement)", _api == [], _api)
+
+
+def _dns(adres):
+    return lambda host, poort, **kw: [(2, 1, 6, "", (adres, poort))]
+
+
+check("webpagina: een openbaar adres mag", WP.openbaar("https://dakeen.voorbeeld.com/", _dns("93.184.216.34")))
+for _url, _ip in (("http://127.0.0.1:3022/api", "127.0.0.1"), ("http://localhost/", "127.0.0.1"),
+                  ("http://intern.voorbeeld.com/", "10.0.0.5"), ("http://169.254.169.254/latest/meta-data", "169.254.169.254"),
+                  ("https://dakeen.voorbeeld.com:8443/", "93.184.216.34"), ("ftp://dakeen.voorbeeld.com/", "93.184.216.34"),
+                  ("file:///etc/passwd", "93.184.216.34")):
+    check(f"webpagina: {_url} mag niet", not WP.openbaar(_url, _dns(_ip)))
+
+
+class _Antw:
+    def __init__(self, status=200, soort="text/html; charset=utf-8", data=b"<p>hallo</p>", plaats=None, traag=0):
+        self.status, self.soort, self.data, self.plaats, self.traag = status, soort, data, plaats, traag
+
+    def getheader(self, naam):
+        return {"Content-Type": self.soort, "Location": self.plaats}.get(naam)
+
+    def read(self, n):
+        time.sleep(self.traag)
+        stuk, self.data = self.data[:n], self.data[n:]
+        return stuk
+
+
+def _web(antwoorden, verbonden):
+    class Verbinding:
+        def __init__(self, schema, host, poort, ip, timeout):
+            verbonden.append((host, ip))
+
+        def request(self, *a, **k):
+            pass
+
+        def getresponse(self):
+            return antwoorden.pop(0)
+
+        def close(self):
+            pass
+    return Verbinding
+
+
+_vb = []
+_dnsrij = iter(["93.184.216.34", "10.0.0.5"])
+WP.haal("https://dakeen.voorbeeld.com/", opzoeken=lambda h, p, **k: [(2, 1, 6, "", (next(_dnsrij), p))],
+        verbinding=_web([_Antw()], _vb))
+check("controle 17: de code verbindt met het gekeurde adres, een tweede opzoeking telt niet", _vb == [("dakeen.voorbeeld.com",
+                                                                                                         "93.184.216.34")])
+
+
+def _dns_naar(tabel):
+    return lambda host, poort, **kw: [(2, 1, 6, "", (tabel[host], poort))]
+
+
+_dnst = {"dakeen.voorbeeld.com": "93.184.216.34", "intern.voorbeeld.com": "10.0.0.5"}
+for _naam, _antw, _verwacht in (
+        ("een omleiding naar binnen", [_Antw(302, plaats="http://intern.voorbeeld.com/")], "geen openbaar adres"),
+        ("te veel omleidingen", [_Antw(301, plaats="/a") for _ in range(WP.MAX_OMLEIDINGEN + 1)], "te veel omleidingen"),
+        ("een pdf is geen webpagina", [_Antw(soort="application/pdf")], "geen webpagina"),
+        ("een fout van de server", [_Antw(500)], "http 500")):
+    try:
+        WP.haal("https://dakeen.voorbeeld.com/", opzoeken=_dns_naar(_dnst), verbinding=_web(_antw, []))
+        check(f"webpagina: {_naam} wordt geweigerd", False)
+    except OSError as e:
+        check(f"webpagina: {_naam} wordt geweigerd", _verwacht in str(e), str(e))
+_t0 = time.monotonic()
+try:
+    WP.haal("https://dakeen.voorbeeld.com/", timeout=0.5, opzoeken=_dns_naar(_dnst),
+            verbinding=_web([_Antw(data=b"x" * 300000, traag=0.2)], []))
+    check("controle 17: een trage pagina stopt na de totale tijd", False)
+except OSError as e:
+    check("controle 17: een trage pagina stopt na de totale tijd", "te traag" in str(e) and time.monotonic() - _t0 < 3)
+check("een omleiding binnen de site wordt gevolgd", WP.haal("http://dakeen.voorbeeld.com/", opzoeken=_dns_naar(_dnst),
+      verbinding=_web([_Antw(301, plaats="https://dakeen.voorbeeld.com/nl"), _Antw(data=b"<p>welkom</p>")], [])) ==
+      "<p>welkom</p>")
+_t0 = time.monotonic()
+def _traag_web():
+    class Verbinding:
+        def __init__(self, *a):
+            pass
+
+        def request(self, *a, **k):
+            time.sleep(0.4)
+
+        def getresponse(self):
+            time.sleep(0.4)
+            return _Antw(data=b"x" * 400000, traag=0.4)
+
+        def close(self):
+            pass
+    return Verbinding
+
+
+try:
+    WP.haal("https://dakeen.voorbeeld.com/", timeout=0.6, opzoeken=_dns_naar(_dnst), verbinding=_traag_web())
+    check("controle 19: trage stappen na elkaar stoppen samen op de totale tijd", False)
+except OSError as e:
+    check("controle 19: trage stappen na elkaar stoppen samen op de totale tijd", time.monotonic() - _t0 < 1.5, str(e))
+_t0 = time.monotonic()
+_trdb = E._dropbox_zoek("dak", "/x", rpc=lambda m, b: time.sleep(3) or {"matches": []}, deadline=time.monotonic() + 1.5)
+check("controle 19: een druppelend antwoord van Dropbox stopt op de deadline", _trdb.volledig is False
+      and time.monotonic() - _t0 < 2.5)
+_html = ("<html><head><title>x</title><style>.a{}</style></head><body><script>var geheim=1</script><nav>Menu</nav>"
+         "<p>Wij leggen&nbsp;EPDM op platte daken.</p><footer>BTW BE 0123.456.749 <a href='mailto:info@dakeen.voorbeeld.com'>"
+         "mail ons</a> <span data-cfemail='" + bytes([0x42] + [ord(c) ^ 0x42 for c in "jo@dakeen.voorbeeld.com"]).hex()
+         + "'>[email&#160;protected]</span></footer></body></html>")
+_t = WP.tekst(_html)
+check("webpagina: tekst zonder script en stijl, met mailto en verborgen mailadres", "geheim" not in _t and ".a{}" not in _t
+      and "Wij leggen EPDM op platte daken." in _t and "info@dakeen.voorbeeld.com" in _t and "jo@dakeen.voorbeeld.com" in _t, _t)
+
+_gehaald = []
+
+
+def _haal_nep(url):
+    _gehaald.append(url)
+    if "kapot" in url:
+        raise OSError("weg")
+    return {"https://www.dakeen.voorbeeld.com/": "<p>Dak Een BV legt EPDM op platte daken in de regio Leuven.</p>" * 3,
+            "https://www.dakeen.voorbeeld.com/contact": "<p>Dak Een BV, BTW BE 0123.456.749, info@dakeen.voorbeeld.com</p>"
+            }.get(url, "<p>andere pagina</p>" * 20)
+
+
+_firmas = [{"naam": "Dak Een BV", "url": "https://www.dakeen.voorbeeld.com/",
+            "paginas": ["https://www.dakeen.voorbeeld.com/contact", "https://gids.voorbeeld.com/dakeen",
+                        "https://www.dakeen.voorbeeld.com/kapot"]},
+           {"naam": "Dak Twee", "url": "https://daktwee.voorbeeld.com/"}]
+_lz = Z.lees_sites(_firmas, ["https://daktwee.voorbeeld.com/a", "https://daktwee.voorbeeld.com/b",
+                             "https://daktwee.voorbeeld.com/c", "https://daktwee.voorbeeld.com/d"], _haal_nep)
+check("de code leest zelf: de url zoals het model ze gaf, bewaard zonder www", "https://www.dakeen.voorbeeld.com/" in _gehaald
+      and "https://dakeen.voorbeeld.com" in _lz and "https://dakeen.voorbeeld.com/contact" in _lz)
+check("alleen pagina's van de eigen site, een kapotte pagina ontbreekt", not any("gids." in u for u in _gehaald)
+      and not any("kapot" in u for u in _lz))
+check("hoogstens PER_FIRMA pagina's per firma", sum(1 for u in _gehaald if "daktwee" in u) == Z.PER_FIRMA)
+_gehaald.clear()
+check("na de deadline leest de code geen pagina meer", Z.lees_sites(_firmas, [], _haal_nep, deadline=time.monotonic() + 1) == {}
+      and _gehaald == [])
+
+_vragen = []
+
+
+def _vraag_nep(systeem, gebruiker, **kw):
+    _vragen.append(kw)
+    return {"tekst": "```json\n" + json.dumps({"firmas": [
+        {"naam": "Dak Een BV", "url": "https://www.dakeen.voorbeeld.com/", "paginas": ["https://www.dakeen.voorbeeld.com/contact"],
+         "ondernemingsnummer": "0123.456.749", "email": "info@dakeen.voorbeeld.com", "telefoon": "016 00 00 00",
+         "bewijs": "Dak Een BV legt EPDM op platte daken in de regio Leuven."},
+        {"naam": "Dak Drie", "url": "https://dakdrie.voorbeeld.com/", "ondernemingsnummer": "0123.456.749",
+         "bewijs": "Een zin die alleen in de samenvatting van WebFetch stond."}]}) + "\n```",
+            "gereedschap": [("WebSearch", {}), ("WebFetch", {"url": "https://dakdrie.voorbeeld.com/"})], "tokens": 1000,
+            "beurten": 4, "stop": "success", "model": "claude-opus-5-5"}
+
+
+_z = Z.zoek("werkwijze", "plat dak EPDM", "3000 Leuven", 25, "uitvoering", "2026-11-01", deadline=time.monotonic() + 300,
+            vraag=_vraag_nep, haal=_haal_nep)
+check("zoeken vraagt WebSearch en WebFetch op het abonnement", _vragen[-1]["tools"] == ("WebSearch", "WebFetch")
+      and _vragen[-1]["max_beurten"] == Z.MAX_BEURTEN and _z["zoekopdrachten"] == 1 and _z["leesbeurten"] == 1)
+_k = Z.keur(_z["gegevens"]["firmas"], _z["gelezen"], {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+            {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+_een = next(f for f in _k["goed"] + _k["na_te_kijken"] if f["naam"] == "Dak Een BV")
+_drie = next((f for f in _k["goed"] + _k["na_te_kijken"] + [x["aanbod"] for x in _k["afgewezen"]] if f["naam"] == "Dak Drie"),
+             {})
+check("een firma met citaat en nummer op de pagina die de code las, staat klaar", _een in _k["goed"] and _een["site_bewezen"]
+      and _een["email"] == "info@dakeen.voorbeeld.com" and _een["telefoon"] is None)
+check("een citaat dat niet op de pagina staat die de code las, bewijst niets", not _drie.get("site_bewezen"))
+check("het model hoort dat de code de pagina's zelf leest", "De code leest die pagina's daarna zelf" in Z.VORM
+      and "web_fetch" not in Z.VORM)
+
+_gids = {"https://gids.voorbeeld.com/x": "<p>Dak X legt EPDM op platte daken in de regio Leuven.</p>" * 3,
+         "https://gids.voorbeeld.com/y": "<p>Dak Y, BTW BE 0123.456.749, dakwerken.</p>" * 3}
+_fg = [{"naam": "Dak X", "url": "https://gids.voorbeeld.com/x", "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Dak X legt EPDM op platte daken in de regio Leuven."},
+       {"naam": "Dak Y", "url": "https://gids.voorbeeld.com/y"}]
+_lg = Z.lees_sites(_fg, ["https://gids.voorbeeld.com/z"], lambda u: _gids.get(u, "<p>andere firma</p>" * 20))
+check("controle 17: op een gedeelde gids leest de code alleen de eigen pagina van elke firma", "https://gids.voorbeeld.com/z"
+      not in _lg and _fg[0]["_paginas"] == ["https://gids.voorbeeld.com/x"])
+_kg = Z.keur(_fg, _lg, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+_x = next(f for f in _kg["goed"] + _kg["na_te_kijken"] if f["naam"] == "Dak X")
+check("controle 17: het nummer van een andere firma op dezelfde gids bewijst niets", not _x["site_bewezen"] and _x not in _kg["goed"])
+_kort = {"https://kort.voorbeeld.com": "Welkom", "https://kort.voorbeeld.com/over":
+         "Kort BV legt EPDM op platte daken. BTW BE 0123.456.749. " * 3}
+_fk = [{"naam": "Kort BV", "url": "https://kort.voorbeeld.com/", "_paginas": list(_kort), "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Kort BV legt EPDM op platte daken."}]
+_kk = Z.keur(_fk, _kort, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+check("controle 17: een korte homepage met een goede tweede pagina wordt niet geweerd", [f["naam"] for f in _kk["goed"]] == ["Kort BV"])
+_db = {"https://een.voorbeeld.com": "<p>Een</p>" * 30, "https://twee.voorbeeld.com":
+       "Dak Twee BV legt EPDM op platte daken. BTW BE 0123.456.749. " * 3}
+_fd = [{"naam": "Dak Een", "url": "https://een.voorbeeld.com/", "ondernemingsnummer": "0123.456.749", "bewijs": "niets"},
+       {"naam": "Dak Twee BV", "url": "https://twee.voorbeeld.com/", "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Dak Twee BV legt EPDM op platte daken."}]
+_kd = Z.keur(_fd, _db, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+check("controle 17: bij een dubbel blijft de best bewezen kandidaat", [f["naam"] for f in _kd["goed"]] == ["Dak Twee BV"]
+      and not _kd["na_te_kijken"])
+_dbp = []
+_tr0 = E._dropbox_zoek("dak", "/x", rpc=lambda m, b: _dbp.append(m) or {"matches": [], "has_more": True, "cursor": "c"},
+                       deadline=time.monotonic() - 1)
+check("controle 18: na de deadline start geen verzoek naar Dropbox meer", _dbp == [] and _tr0.volledig is False)
+
+
+def _dbx_traag(m, b):
+    raise TimeoutError("timed out")
+
+
+check("controle 18: een verzoek dat niet voor de deadline antwoordt, maakt de lijst onvolledig",
+      E._dropbox_zoek("dak", "/x", rpc=_dbx_traag, deadline=time.monotonic() + 30).volledig is False)
+_woorden = []
+E.in_mappen(S.HA, "dakwerken epdm", zoek=lambda q, p: _woorden.append(q) or [], deadline=time.monotonic() - 1)
+check("controle 18: geen nieuw zoekwoord na de deadline", _woorden == [])
+
+print("\nEigen mappen: hele woorden, alleen offertemappen (gemeten 01-11-2026)")
+for _naam in ("Fastening Plates", "Platane 6Platane_6.rfa", "04 Percelen Informatie Platform", "Offerte koper dak Platteau.pdf",
+              "Plategrond 1st verdiep.pdf"):
+    check(f"'plat' past niet op {_naam}", not E.woord_in("plat", _naam))
+for _naam in ("06 Plat dak - EPDM", "Platdak offerte.pdf", "platte daken.pdf"):
+    check(f"'plat' past op {_naam}", E.woord_in("plat", _naam))
+_tr = [{"soort": "file", "naam": "platdakvensters.eml",
+        "pad": "/Work All/01. H-A WORK/x/2999 S 1/00. Communicatie/11. Mails/platdakvensters.eml"},
+       {"soort": "folder", "naam": "06 Plat dak - EPDM",
+        "pad": "/Work All/01. H-A WORK/x/2999 S 1/3. Quotes & Invoices/Offerte/06 Plat dak - EPDM"},
+       {"soort": "file", "naam": "Offerte koper dak Platteau.pdf",
+        "pad": "/Work All/01. H-A WORK/x/2998 S 2/3. Quotes & Invoices/Offerte/6. Roof/Offerte koper dak Platteau.pdf"}]
+check("alleen de offertemap met het hele woord blijft", [e["naam"] for e in E.in_mappen(S.HA, "plat dak EPDM",
+      zoek=lambda q, p: _tr)] == ["06 Plat dak - EPDM"])
+
+print("\nOffertevergelijker: fiches tellen niet mee, OCR pas na het ja van Mehdi")
+check("een technische fiche zonder totaal is geen offerte", F.lees(["Technische fiche EPDM-membraan" + VUL2])["soort"]
+      == "geen offerte")
+check("een document zonder totaal en zonder offertewoord is geen offerte", F.lees(["Plaatsingsadvies. De membranen worden volledig gekleefd op een droge, "
+                                                  "stofvrije ondergrond, met overlappen van tien centimeter."])["soort"]
+      == "geen offerte")
+check("een offerte die naar een technische fiche verwijst, blijft een offerte", F.lees([
+    "Offerte dakwerken. Technische fiche in bijlage." + VUL2 + "\nTotaal excl. btw 10.000,00\n"])["soort"] == "offerte")
+check("fiche volgens de naam", F.fiche_naam("Technische fiche EPDM.pdf") and F.fiche_naam("DoP membraan.pdf")
+      and not F.fiche_naam("Offerte technische installaties.pdf") and not F.fiche_naam("2026-10 Dak Een.pdf"))
+_vs = V.vergelijkingsverslag({"firma": S.HB}, "lot 06", [("A", {}, "a"), ("B", {}, "b")],
+                             F.vergelijk([{"letter": "A", "lees": F.lees(["Offerte" + VUL2 + "\nTotaal excl. btw 10.000,00\n"])},
+                                          {"letter": "B", "lees": F.lees(["Technische fiche EPDM" + VUL2])}], date(2026, 11, 1)),
+                             None, {}, "2026-11-01", True, 2)
+check("het verslag telt fiches apart, ook de overgeslagen", "1 offertes gelezen" in _vs and "3 documenten die geen offerte zijn" in _vs,
+      _vs.splitlines()[0])
+_echt_paginas = F.paginas
+F.paginas = lambda data: {b"scan": ["  "], b"ocr": ["Offerte" + VUL2 + "\nTotaal excl. btw 2.000,00\n"]}.get(data)
+_ocr = []
+gl, _ = F.lees_bestanden([("A", {"pad": "/a"}, "a")], lambda p: b"scan", ocr_fn=lambda d: _ocr.append(d) or b"ocr")
+check("zonder ja van Mehdi geen OCR: de scan blijft OCR nodig", gl[0]["lees"]["soort"] == "scan" and not _ocr)
+F.OCR_AAN = True
+gl, _ = F.lees_bestanden([("A", {"pad": "/a"}, "a")], lambda p: b"scan", ocr_fn=lambda d: b"ocr")
+check("met OCR wordt een scan gelezen, met de vraag de bedragen na te kijken", gl[0]["lees"]["soort"] == "offerte"
+      and gl[0]["lees"]["excl"] == 2000.0 and F.OCR_REDEN in gl[0]["lees"]["redenen"])
+gl, _ = F.lees_bestanden([("A", {"pad": "/a"}, "a")], lambda p: b"scan", ocr_fn=lambda d: None)
+check("mislukte OCR: de scan blijft OCR nodig", gl[0]["lees"]["soort"] == "scan")
+gl, _ = F.lees_bestanden([("A", {"pad": "/a"}, "a")], lambda p: b"scan", deadline=100, klok=lambda: 50,
+                         ocr_fn=lambda d: b"ocr")
+check("geen OCR als de tijd van de ronde er niet meer voor volstaat", gl[0]["lees"]["soort"] == "scan")
+F.OCR_AAN = False
+F.paginas = _echt_paginas
+_pv = []
+_aan, F.OFFERTE_NAAR_AI = F.OFFERTE_NAAR_AI, True
+F.posten_uit_model({"A": "tekst A", "B": "tekst B"}, vraag=lambda s, g, **kw: _pv.append((s, g, kw)) or {"tekst": "```json\n{}\n```"})
+F.OFFERTE_NAAR_AI = _aan
+check("posten via het abonnement, zonder gereedschap", _pv and _pv[0][2]["tools"] == () and "INSCHRIJVER A" in _pv[0][1])
+_wv = open(_hier / "werkwijze" / "offertevergelijker.md", encoding="utf-8").read()
+check("werkwijzen zeggen: abonnement, nooit een API-sleutel", "nooit met een" in _wv and "API-sleutel" in _wv
+      and "Of een scan met OCR gelezen mag worden." in _wv and "API-sleutel" in _ww and "Versie 1.2" in _ww)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)
