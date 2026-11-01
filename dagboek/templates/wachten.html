@@ -29,7 +29,7 @@
     {% for w in vak['wachten'] %}
       <a class="tegel wacht kleur-{{ w['kleur'] }}" href="{{ url_for('wacht_pagina', naam=w['naam'], dag=dag) }}">
         <div class="kop"><span class="stip {{ w['kleur'] }}"></span><span class="naam">{{ w['label'] }}</span></div>
-        <div class="groot">{{ w['aantal'] }}{% if w['noden'] %} <span class="open">{{ w['noden']|length }} open</span>{% endif %}</div>
+        <div class="groot">{{ '?' if w['leesfout'] else w['aantal'] }}{% if w['noden'] %} <span class="open">{{ w['noden']|length }} open nu</span>{% endif %}</div>
         <div class="klein regel {{ 'fouttekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</div>
       </a>
     {% endfor %}

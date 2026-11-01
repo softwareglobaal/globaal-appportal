@@ -154,7 +154,7 @@ with A.app.test_request_context():
 check("D14 dagknoppen: vier, de laatste is vandaag", html.count('class="dagkeuze"') == 1
       and [k["dag"] for k in KZ] == [(A.vandaag() - timedelta(days=3 - i)).isoformat() for i in range(4)]
       and KZ[-1]["naam"].startswith("vandaag, ") and KZ[-1]["actief"] and not KZ[0]["actief"], KZ)
-check("D14 tegel toont open meldingen naast het item", "1 open</span>" in html)
+check("D14 tegel toont open meldingen naast het item", "1 open nu</span>" in html)
 r = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET)
 html = r.get_data(as_text=True)
 check("D14 wacht laadt", r.status_code == 200, r.status_code)
@@ -181,7 +181,16 @@ html = C.get("/wachten/sms-wacht?dag=" + A.vandaag().isoformat(), headers=MET).g
 check("D14 gelijke fouten gegroepeerd, ook niet opeenvolgend", "12:00 a <span class=\"zacht\">(2 keer)</span>" in html
       and "11:00 b" in html and html.count("10:00 a") == 0, html[-2500:])
 html = C.get("/wachten/locatie-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
-check("D14 hartslag telt niet voor een vorige dag", "stand van nu" not in html)
+check("D14 hartslag telt niet voor een vorige dag, kleur van het bord blijft", "stand van nu" not in html
+      and '<span class="stip rood"></span> za 31 okt 2026: fout' in html, html[:2500])
+LEES = json.loads(json.dumps(WACHTEN))
+LEES["vakken"][0]["wachten"][2].update(leesfout="niet gelezen (OperationalError)", kleur="rood", oordeel="fout")
+A.haal_wachten = lambda dag: json.loads(json.dumps(LEES))
+html = C.get("/wachten/locatie-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 leesfout is onbekend, niet leeg", "onbekend</span> items binnen" in html and "Niets binnengekomen" not in html
+      and "Onbekend: het bord kon deze wacht niet lezen (niet gelezen (OperationalError))" in html, html[-3000:])
+html = C.get("/wachten?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 tegel bij leesfout toont ?", ">?</div>" in html and "kon niet lezen: niet gelezen (OperationalError)" in html)
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)

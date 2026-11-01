@@ -17,7 +17,7 @@
   <div class="kaart samen">
     <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
-      <div><span class="groot">{{ w['aantal'] }}</span> items binnen</div>
+      <div><span class="groot">{{ 'onbekend' if w['leesfout'] else w['aantal'] }}</span> items binnen</div>
       <div><span class="groot">{{ w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 else 'regels' }} in het werkverslag</div>
       {% if is_vandaag and w['status'] and w['status']['laatste'] %}<div>laatste ronde <span class="groot">{{ w['status']['laatste'] }}</span></div>{% endif %}
       {% if w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
@@ -33,13 +33,16 @@
   {% endif %}
   {% if w['noden'] %}
   <div class="kaart">
-    <h2 class="oranje-tekst">Open meldingen ({{ w['noden']|length }})</h2>
+    <h2 class="oranje-tekst">Open meldingen nu ({{ w['noden']|length }})</h2>
+    <p class="zacht klein">Wat deze wacht op dit moment nodig heeft; dat hoort niet bij één dag.</p>
     {% for n in w['noden'] %}<p class="nood">{{ n }}</p>{% endfor %}
   </div>
   {% endif %}
   <div class="kaart">
-    <h2>Wat binnenkwam ({{ w['aantal'] }})</h2>
-    {% if w['items'] %}
+    <h2>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] else w['aantal'] }})</h2>
+    {% if w['leesfout'] %}
+    <p class="leeg">Onbekend: het bord kon deze wacht niet lezen ({{ w['leesfout'] }}). Dat is niet hetzelfde als leeg.</p>
+    {% elif w['items'] %}
     <table class="lijst">
       <tr class="kop"><td>Tijd</td><td>Van wie of wat</td><td>Kort</td></tr>
       {% for it in w['items'] %}
