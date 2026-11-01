@@ -472,9 +472,10 @@ def oud_vervallen(staat, moment):
 
 def vervallen_voorstellen(staat):
     """De voorstellen 'als gemist aanvaarden' die ik zette voor een geval dat nu vervallen is of niet meer verdwenen
-    (het kwam terug): die mogen op het bord vervallen. Alleen de actie (met de korte sleutel), nooit een onderwerp."""
+    (het kwam terug): die mogen op het bord vervallen. Een gemis dat Mehdi al aanvaardde, niet. Alleen de actie (met de
+    korte sleutel), nooit een onderwerp."""
     return sorted(f"{GEMIST_ACTIE} ({sleutel})" for sleutel, v in staat["voorstellen"].items()
-                  if v.get("fid") not in staat["verdwenen"])
+                  if v.get("fid") not in staat["verdwenen"] and v.get("fid") not in staat["gemist"])
 
 
 def vervallen_markeren(droog=False):
@@ -772,11 +773,11 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
     # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8), tenzij
     # Zoom ze in verwerking had en dezelfde meeting nu een vervanging heeft (ARCH-1): dan wacht ze op het bewijs daarvan.
     per_meeting = {m["uuid"]: m for m in meetings}
-    vorige = {fid: oud["vervangen_door"] for fid, oud in staat["gezien"].items() if oud.get("vervangen_door")}
-    geclaimd = {v["door"] for v in staat["vervallen"].values() if v.get("door")} | set(vorige.values())
+    claims = {fid: oud["vervangen_door"] for fid, oud in staat["gezien"].items() if oud.get("vervangen_door")}
+    geclaimd = {v["door"] for v in staat["vervallen"].values() if v.get("door")} | set(claims.values())
     for fid, oud in sorted(staat["gezien"].items()):
         if fid not in per_id and fid not in staat["bestanden"]:
-            door = vervanging(fid, oud, per_meeting, geclaimd - {vorige.get(fid)})
+            door = vervanging(fid, oud, per_meeting, geclaimd - {claims.get(fid)})
             if door:
                 staat["gezien"][fid] = {**oud, "vervangen_door": door}
                 geclaimd.add(door)

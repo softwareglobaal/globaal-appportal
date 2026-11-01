@@ -1291,6 +1291,8 @@ def _oude_staat():
                                              "start": "2026-10-29T09:00:05Z", "ts": "2026-10-29T10:20:00+00:00"}
     staat["voorstellen"] = {ZA._gemist_sleutel(f, v): {"fid": f, "ts": v["sinds"]} for f, v in staat["verdwenen"].items()}
     staat["voorstellen"]["terug1234"] = {"fid": "kwam-terug", "ts": "2026-10-27T13:06:00+00:00"}
+    staat["voorstellen"]["aanvaard1"] = {"fid": "al-gemist", "ts": "2026-10-27T13:06:00+00:00"}
+    staat["gemist"]["al-gemist"] = {"start": st, "grootte": 0, "aanvaard": sinds, "sleutel": "aanvaard1"}
     ZA.schrijf_staat(staat)
     return json.loads(json.dumps(staat))
 
@@ -1322,6 +1324,7 @@ def test_t0120_arch1_oude_gevallen_vervallen_met_bewijs_en_niets_uit_de_staat():
     sleutel = ZA._gemist_sleutel("oud-a", voor["verdwenen"]["oud-a"])
     assert f"{ZA.GEMIST_ACTIE} ({sleutel})" in tekst and f"{ZA.GEMIST_ACTIE} (terug1234)" in tekst, tekst
     assert f"{ZA.GEMIST_ACTIE} ({ZA._gemist_sleutel('oud-b', voor['verdwenen']['oud-b'])})" not in tekst, tekst
+    assert f"{ZA.GEMIST_ACTIE} (aanvaard1)" not in tekst, "een aanvaard gemis vervalt niet"
     assert "Proefgesprek" not in tekst and "/Zoom/" not in tekst, "geen onderwerp of pad op het scherm"
     with contextlib.redirect_stdout(io.StringIO()):
         assert ZA.main(["--vervallen-markeren"]) == 0
