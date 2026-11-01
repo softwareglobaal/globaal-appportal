@@ -134,3 +134,16 @@ Tests: 246 prijstests groen.
   Juist is: zonder token en merkteken gaat er geen enkele vraag naar het model.
 
 Tests: 248 prijstests groen.
+
+## Verwerking Codex-controle 22 (niet klaar)
+
+1. Punt 1 van controle 21 was opgelost.
+2. Zonder token gaat geen vraag naar het model. Met een token en zonder merkteken doet alleen `--proef-abonnement` een
+   korte modelvraag. Dat is bewust: het is de poort uit overleg 19, en ze draait pas na Mehdi's bevestiging.
+3. Hoog, hersteld. Eindigt het zoeken met `fout` of `limiet`, of zonder leesbaar antwoord, dan gooit `een_vraag`
+   `VraagBlijft`:
+   - er komt geen leeg verslag;
+   - de bordvraag en de volgende vragen blijven klaarstaan;
+   - de nood staat al op het bord.
+
+Tests: 250 prijstests groen.

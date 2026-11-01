@@ -921,6 +921,15 @@ r = NepRonde()
 PO.werk(r, None)
 check("ook bij een andere fout blijft de bordvraag klaarstaan, met een nood (Codex 21, punt 3)",
       opgepakt == [] and "2 wachten" in r.detail and any("blijft klaarstaan" in n for n in noden), r.detail)
+for stop in ("fout", "limiet"):
+    PO.O.onderzoek = lambda *a, stop=stop, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {},
+                                                 "tekst": "", "tokens": 10, "tellers": [], "leesbeurten": (0, 0),
+                                                 "zoekopdrachten": 0, "stop": stop, "model": "m", "fout": "x"}
+    klaar.clear()
+    r = NepRonde()
+    PO.werk(r, None)
+    check(f"bij stop '{stop}' geen verslag en blijft de bordvraag klaarstaan (Codex 22, punt 3)",
+          opgepakt == [] and not klaar and "2 wachten" in r.detail, r.detail)
 PO.open_vragen = oud_open
 noden.clear()
 PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
@@ -934,7 +943,8 @@ PO.O.onderzoek = lambda *a, **k: {"gegevens": None, "gelezen": {}, "tekst": "", 
 PO.werk(NepRonde(), f"vloerwasser {GEHEIM}")
 check("de vraag staat nooit in het logboek, ook niet bij een fout (Codex X3)",
       logboek and not any(GEHEIM in str(x) for x in logboek), str(logboek)[:300])
-check("ook zonder antwoord krijgt Mehdi een verslag", klaar and klaar[-1]["soort"] == "prijsverslag")
+check("zonder leesbaar antwoord geen leeg verslag, wel een nood (Codex 22, punt 3)",
+      not klaar and any("zonder leesbaar antwoord" in n for n in noden), str(klaar)[:200])
 logboek.clear()
 PO.werk(NepRonde(), "droger voor mevrouw Proefnaam")
 check("een vraag met persoonsgegevens gaat niet naar het model", klaar[-1]["titel"] == "Prijsvraag niet verstuurd: persoonsgegevens"

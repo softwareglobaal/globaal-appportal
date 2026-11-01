@@ -70,6 +70,11 @@ def open_vragen():
     return sorted(vragen, key=lambda it: it.get("id") or 0)
 
 
+class VraagBlijft(Exception):
+    """De vraag gaf geen verslag (fout, limiet of geen leesbaar antwoord): ze blijft klaarstaan, de nood is al gemeld
+    (Codex controle 22, punt 3)."""
+
+
 def vingerafdruk(vraag, vandaag):
     """Wat het logboek van een vraag bewaart: nooit de vraag zelf (Codex X3), alleen een vingerafdruk."""
     return hashlib.sha256(f"{vandaag}:{vraag}".encode()).hexdigest()[:12]
@@ -104,12 +109,12 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
         ag.log("prijsvraag", "fout", f"vraag {va}: claude -p eindigde met een fout", uit.get("fout"))
         r.nood("Prijsvraag: claude -p eindigde met een fout", wie="claude-code")
     g = uit["gegevens"]
+    if uit["stop"] in ("fout", "limiet"):
+        raise VraagBlijft(uit["stop"])
     if g is None:
         ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
-        r.nood("Prijsvraag zonder leesbaar antwoord van het model", wie="claude-code")
-        zet_klaar(vraag, "Prijsvraag zonder antwoord", "**Geen antwoord:** het zoeken gaf geen bruikbare gegevens. "
-                  "Ik kocht, bood en contacteerde niets.", vandaag)
-        return 0
+        r.nood("Prijsvraag zonder leesbaar antwoord van het model; de vraag blijft klaarstaan", wie="claude-code")
+        raise VraagBlijft("geen antwoord")
     aanbiedingen = g.get("aanbiedingen") if isinstance(g.get("aanbiedingen"), list) else []
     for a in aanbiedingen:
         if isinstance(a, dict):
@@ -167,6 +172,8 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
             r.nood(f"Prijsvraag niet gedaan, niets via de API: het Claude-abonnement werkt niet op de VM ({str(e)[:160]})",
                    wie="claude-code")
             break
+        except VraagBlijft:
+            break                                   # de nood staat er al; de vraag blijft klaarstaan
         except Exception as e:  # noqa: BLE001  de vraag blijft klaarstaan, met een nood (Codex controle 21, punt 3)
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Prijsvraag mislukt bij het zoeken; de vraag blijft klaarstaan", wie="claude-code")
