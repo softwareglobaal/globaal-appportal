@@ -221,6 +221,17 @@ def weekoverzicht(week):
     return len(rijen)
 
 
+def archiefmap(g):
+    """De map met gesprek.json van dit gesprek; de map kan hernoemd zijn (Belgische tijd, Prive): dan zoek ik op uniek.
+    '' als er geen is."""
+    map_ = g.get("archief") or ""
+    if map_ and os.path.exists(os.path.join(map_, "gesprek.json")):
+        return map_
+    kandidaten = [p for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True)
+                  if g["uniek"].split(":", 1)[-1] in open(p, encoding="utf-8", errors="ignore").read()]
+    return os.path.dirname(kandidaten[0]) if kandidaten else ""
+
+
 def geval_van(g, lijst, projecten, gevonden=None):
     """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json (gevonden: de map
     die de labelronde vond, ook als ze hernoemd is), het label dat ik gaf en het bewezen H-A-nummer, zoals in de
@@ -292,24 +303,20 @@ def _ronde(r, van, tot, vandaag, alleen=False):
         if alleen:      # de inhaalweg van versie 3 (X7: bouwen mag, draaien niet): geen labels, dus geen API
             if not GA.ANALYSE_AAN:
                 ag.log(f"{van} tot {tot}", "melding", "alleen analyse gevraagd, maar De Gespreksanalist staat uit")
-            _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag)
+            # ook hier de hernoemde Fathommappen (Codex T-0120 toets 1); Plaud staat op de VM in plaud-invoer
+            gevonden = {g["uniek"]: archiefmap(g) for g in gesprekken if g.get("bron") == "fathom"}
+            _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden)
             r.detail = f"alleen analyse ({van} tot {tot})"
             return
         gelabeld = overgeslagen = tokens = ongeldig = 0
         gevonden = {}               # uniek -> de archiefmap die ik vond, voor versie 3
         twijfel, tel, weken = [], Counter(), set()
         for g in gesprekken:
-            map_ = g.get("archief") or ""
+            map_ = archiefmap(g)
+            if not map_:
+                overgeslagen += 1
+                continue
             gj = os.path.join(map_, "gesprek.json")
-            if not (map_ and os.path.exists(gj)):
-                # map kan hernoemd zijn (Belgische tijd, Prive): zoek op uniek
-                kandidaten = [p for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True)
-                              if g["uniek"].split(":", 1)[-1] in open(p, encoding="utf-8", errors="ignore").read()]
-                if not kandidaten:
-                    overgeslagen += 1
-                    continue
-                gj = kandidaten[0]
-                map_ = os.path.dirname(gj)
             gevonden[g["uniek"]] = map_
             d = json.load(open(gj, encoding="utf-8"))
             sleutel = (g["datum"], g["start"])
@@ -331,10 +338,15 @@ def _ronde(r, van, tot, vandaag, alleen=False):
                 tokens += t_
             if uit.get("label") not in LABELS or uit.get("zekerheid") not in ("hoog", "middel", "laag"):
                 # T-0095: eerst controleren, dan bewaren; anders kwam een record zonder zekerheid in gesprek.json
+                # (en de vrije tekst van het model gaat niet in het werkverslag: ze kan een naam dragen)
                 ongeldig += 1
-                ag.log(f"{g['datum']} {g['start']}", "fout", f"modelantwoord zonder geldig label of zekerheid: niet bewaard "
-                       f"(label {str(uit.get('label'))[:30]!r}, zekerheid {str(uit.get('zekerheid'))[:10]!r})")
+                ag.log(f"{g['datum']} {g['start']}", "fout", "modelantwoord zonder geldig label of zekerheid: niet bewaard")
                 continue
+            # de tekstvelden die verder gelezen worden, bestaan altijd (T-0095: een ontbrekende reden liet de ronde
+            # na het bewaren vallen)
+            uit = {**{k: "" for k in ("reden", "agenda_toets", "locatie_toets", "projectnummer", "vraag_aan_mehdi",
+                                      "afdeling_onderwerp", "deelnemers_rol")},
+                   **{k: v for k, v in uit.items() if v is not None}}
             week = datetime.fromisoformat(g["datum"]).strftime("%G-W%V")
             d["archivaris"] = {**uit, "doelmap": DOEL.get(uit["label"], ""), "datum": g["datum"], "start": g["start"], "week": week,
                                "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "locatie_context": loc_context,

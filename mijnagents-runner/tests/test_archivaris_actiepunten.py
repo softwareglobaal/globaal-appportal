@@ -159,6 +159,7 @@ ACTIEPUNTEN = [
      "recording_timestamp": "00:04:12"},
     {"description": "Offerte dak opvragen", "assignee": {"name": "Proefpersoon Zeta"}, "recording_timestamp": "00:09:01"},
     {"description": "Punt zonder tijdstip", "assignee": {"name": "Proefpersoon Zeta"}},
+    {"description": "Punt ver na de laatste uiting", "assignee": {"name": "Proefpersoon Zeta"}, "recording_timestamp": "00:31:00"},
 ]
 
 
@@ -223,7 +224,7 @@ def test_zoom_vangnettekst_is_altijd_prive():
     for g in gevallen:
         rec, toestand = GA.verwerk(g, vraag=_geen_model)
         assert toestand == "privé" and rec["regel"] == "privégesprek, 41 min" and "samenvatting" not in rec, rec
-    assert not GA.is_prive({"bron": "zoom", "zoom_prive": False})
+    assert GA.is_prive({"bron": "zoom", "zoom_prive": False}), "ook een zoom.json met prive=false blijft privé"
 
 
 def test_fathom_gebruikt_eigen_samenvatting_en_actiepunten_en_slaat_het_model_over():
@@ -236,7 +237,9 @@ def test_fathom_gebruikt_eigen_samenvatting_en_actiepunten_en_slaat_het_model_ov
     assert [p["wat"] for p in rec["actiepunten"]] == ["Aangepast plan naar de klant sturen", "Offerte dak opvragen"]
     assert all(GA.citaat_in(p["citaat"], tekst) and len(p["citaat"]) <= 200 for p in rec["actiepunten"]), rec
     assert rec["actiepunten"][1]["citaat"].startswith("Goed. Dan vraag ik de offerte"), "een korte uiting wordt aangevuld"
-    assert rec["weggegooid"] == 1, "het punt zonder tijdstip heeft geen citaat"
+    assert rec["weggegooid"] == 2, "zonder tijdstip, of ver van elke uiting, is er geen citaat"
+    uit = GA.uitingen(os.path.join(map_, "transcript.json"))
+    assert GA.citaat_bij(uit, GA.seconden("00:31:00")) == "" and GA.citaat_bij(uit, GA.seconden("00:04:05")).startswith("Ik stuur")
 
 
 def test_fathom_zonder_samenvatting_wacht_en_vraagt_geen_model():
@@ -359,9 +362,12 @@ class NepVraag:
         return {"tekst": "```json\n" + json.dumps(self.antwoord, ensure_ascii=False) + "\n```", "tokens": 1234}
 
 
-def _budget(dag="2026-11-02", teller=None):
+def _budget(dag="2026-11-02", teller=None, benutting=0.40):
+    """Een budget met een verse meting van het weekvenster (zoals Ai Angel die op het abonnement achterlaat)."""
     if os.path.exists(LIMIET):
         os.remove(LIMIET)
+    if benutting is not None:
+        _meet(benutting)
     return GA.Budget(dag, teller=teller, limiet=LIMIET)
 
 
@@ -371,7 +377,8 @@ def test_plaud_en_zoom_tekst_gaan_niet_naar_het_model_zolang_de_vlag_uit_staat()
     rec, toestand = GA.verwerk(_plaud()[0], _budget(), vraag)
     assert rec is None and toestand == "model staat uit" and not vraag.vragen
     zoom = {**_plaud()[0], "uniek": "zoom:meeting:w1", "bron": "zoom", "zoom_prive": False}
-    assert GA.verwerk(zoom, _budget(), vraag) == (None, "model staat uit") and not vraag.vragen
+    with vervangen((GA, "MODEL_AAN", True)):
+        assert GA.verwerk(zoom, _budget(), vraag)[1] == "privé" and not vraag.vragen, "Zoom-tekst is altijd privé"
 
 
 def test_nepmodel_plaud_twee_zinnen_en_alleen_letterlijke_citaten():
@@ -410,12 +417,16 @@ def test_hoogstens_vijf_gesprekken_per_dag_hoe_vaak_de_ronde_ook_draait():
 
 def test_geen_vraag_vanaf_60_procent_van_het_weekvenster_en_niet_zonder_nieuwe_meting():
     with vervangen((GA, "MODEL_AAN", True)):
-        for benutting, herstart, verwacht in ((0.60, None, 0), (0.59, None, 1), (0.95, time.time() - 60, 1)):
-            budget, vraag = _budget(), NepVraag(benutting=0.30)
-            _meet(benutting, herstart=herstart)
+        for benutting, herstart, gezien, verwacht in ((0.60, None, None, "weekvenster op 60 procent (grens 60)"),
+                                                      (0.59, None, None, "model"),
+                                                      (0.30, time.time() - 60, None, "weekvenster onbekend of ouder dan 12 uur"),
+                                                      (0.30, None, time.time() - 13 * 3600, "weekvenster onbekend of ouder dan 12 uur"),
+                                                      (None, None, None, "weekvenster onbekend of ouder dan 12 uur")):
+            budget, vraag = _budget(benutting=None), NepVraag(benutting=0.30)
+            if benutting is not None:
+                _meet(benutting, gezien=gezien, herstart=herstart)
             toestand = GA.verwerk(_plaud()[0], budget, vraag)[1]
-            assert len(vraag.vragen) == verwacht, (benutting, toestand)
-        assert toestand == "model", "een herstart venster is geen volle week meer"
+            assert toestand == verwacht and len(vraag.vragen) == (verwacht == "model"), (benutting, herstart, gezien, toestand)
         budget, vraag = _budget(), NepVraag(benutting=0.61)
         uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=3)]
         assert len(vraag.vragen) == 1 and uit[1:] == ["weekvenster op 61 procent (grens 60)"] * 2, uit
@@ -439,7 +450,9 @@ def test_een_fout_van_het_abonnement_stopt_het_model_zonder_uitwijking_en_geeft_
     rij = {"bron": "plaud", "datum": "2026-10-21", "start": "09:00", "uniek": "plaud:ef56",
            "archief": "Data uit Mehdi/Plaud/2026-10-21 0900 Proefpersoon Zeta/transcript.md"}
     with vervangen((GA, "ANALYSE_AAN", True), (GA, "MODEL_AAN", True), (GA, "UITVOER", os.path.join(THUIS, "nood")),
-                   (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (CA, "vraag", vraag)):
+                   (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (CA, "vraag", vraag),
+                   (CA, "LIMIET_BESTAND", LIMIET)):
+        _meet(0.40)
         ag, r = _labelronde([rij], _geen_model)
     assert (CA.LIMIET_NOOD, "mehdi") in r.noden and len(vraag.vragen) == 2, (r.noden, vraag.vragen)
     assert any("1 abonnement: limiet" in str(a) for a in ag.logboek), ag.logboek
@@ -508,11 +521,12 @@ class GeenBord:
         raise AssertionError(f"de proef riep het bord aan: {naam}")
 
 
-def _proefdata():
-    basis = os.path.join(THUIS, "proefdata")
+def _proefdata(zonder=True, naam=None):
+    basis = os.path.join(THUIS, naam or ("proefdata" if zonder else "proefdata-zonder"))
     fathom, plaud, zoom = (os.path.join(basis, n) for n in ("fathom-data", "plaud-invoer", "zoom-data"))
     rijen = []
-    for dag, sleutel, samenvatting, punten in (("06", "f1", SAMENVATTING, None), ("27", "f2", SAMENVATTING, ACTIEPUNTEN),
+    for dag, sleutel, samenvatting, punten in (("06", "f1", SAMENVATTING, None if zonder else ACTIEPUNTEN),
+                                               ("27", "f2", SAMENVATTING, ACTIEPUNTEN),
                                                ("08", "f3", None, ACTIEPUNTEN), ("14", "f4", SAMENVATTING, ACTIEPUNTEN)):
         map_ = os.path.join(fathom, f"2026-10-{dag} 1000 Proefpersoon Zeta {sleutel}")
         _schrijf(os.path.join(map_, "transcript.json"), FATHOM_TRANSCRIPT)
@@ -546,22 +560,22 @@ def _vingerafdruk(map_):
     return uit
 
 
-def _proef(model_aan, vraag):
-    basis, fathom, plaud, zoom, rijen = _proefdata()
+def _proef(model_aan, vraag, zonder=True, keer=1, naam=None):
+    basis, fathom, plaud, zoom, rijen = _proefdata(zonder, naam)
     uitvoer = os.path.join(basis, "gespreksanalist")
-    voor = _vingerafdruk(basis)
+    voor = {p: h for p, h in _vingerafdruk(THUIS).items() if p != LIMIET}
     with vervangen((AR, "db", _db(rijen)), (AR, "afspraken", lambda van, tot: []), (AR, "ag", GeenBord()),
                    (AR.projectadressen, "CACHE", os.path.join(basis, "geen-cache.json")),
                    (AR.projectadressen, "index", _geen_model), (GA, "MODEL_AAN", model_aan), (GA, "UITVOER", uitvoer),
                    (GA, "PLAUD_INVOER", plaud), (GA, "ZOOM_DATA", zoom), (CA, "LIMIET_BESTAND", LIMIET),
                    (CA, "vraag", vraag)):
-        if os.path.exists(LIMIET):
-            os.remove(LIMIET)
-        pad, u = PR.proef("2026-10", vraag, nu=AR.datetime(2026, 11, 2, 3, 0).astimezone())
+        _meet(0.40)
+        for i in range(keer):
+            pad, u = PR.proef("2026-10", vraag, nu=AR.datetime(2026, 11, 2, 3, 0, i).astimezone())
         scherm = io.StringIO()
         with contextlib.redirect_stdout(scherm), vervangen((sys, "argv", ["proef", "--maand", "2026-10"])):
             PR.main()
-    na = _vingerafdruk(basis)
+    na = {p: h for p, h in _vingerafdruk(THUIS).items() if p != LIMIET}     # de hele tijdelijke HOME
     nieuw = sorted(set(na) - set(voor))
     gewijzigd = [p for p in voor if na.get(p) != voor[p] and "/gespreksanalist/proef/" not in p]
     return pad, u, nieuw, gewijzigd, scherm.getvalue()
@@ -575,11 +589,12 @@ def test_proef_neemt_zes_gesprekken_verspreid_en_schrijft_alleen_het_proefbestan
                       ("plaud", "plaud:p1", "model"), ("plaud", "plaud:p2", "model"),
                       ("zoom-tekst", "zoom:meeting:z1", "privé"), ("privé", "fathom:f4", "privé")], rollen
     assert u["gekozen"] == 6 and u["tekort"] == [] and u["zonder_actiepunt"] and u["prive_alleen_regel"], u
-    assert u["actiepunten"] == 4 and u["weggegooid"] == 5 and u["letterlijk_procent"] == 44, u
-    assert u["tokens"] == 2468 and len(vraag.vragen) == 4 and u["weekvenster_na"] == 0.40, "twee proeven: 4 vragen"
+    assert u["actiepunten"] == 4 and u["weggegooid"] == 6 and u["letterlijk_procent"] == 40, u
+    assert u["tokens"] == 2468 and u["modelvragen"] == 2 and u["weekvenster_na"] == 0.40, u
+    assert len(vraag.vragen) == 4, "proef() en main() samen: vier vragen"
     assert os.stat(pad).st_mode & 0o777 == 0o600 and os.path.dirname(pad).endswith("gespreksanalist/proef"), pad
-    assert len([p for p in nieuw if "/gespreksanalist/" in p]) == 2 and not gewijzigd, (nieuw, gewijzigd)
-    assert all(p.endswith(".json") and "/proef/" in p for p in nieuw if "/gespreksanalist/" in p), nieuw
+    assert len(nieuw) == 2 and not gewijzigd, ("buiten het proefbestand niets nieuws of gewijzigd", nieuw, gewijzigd)
+    assert all(p.endswith(".json") and "/gespreksanalist/proef/proef-2026-10-" in p for p in nieuw), nieuw
     assert "Zeta" not in scherm and "Proefstraat" not in scherm and "proefbestand:" in scherm, scherm
     d = json.load(open(pad, encoding="utf-8"))
     tekst = {g["uniek"]: g for g in d["gesprekken"]}
@@ -645,6 +660,66 @@ def test_een_meting_zonder_weekvenster_na_een_vraag_stopt_het_model():
         budget = _budget()
         uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=3)]
     assert len(vraag.vragen) == 1 and uit[1:] == ["weekvenster na de vorige vraag niet gemeten"] * 2, uit
+
+
+
+# ------------------------------------------------------------------------------- Codex T-0120 toets 1 ---
+def test_proef_herhalen_omzeilt_de_vijf_per_dag_niet():
+    vraag = NepVraag()
+    pad, u, nieuw, gewijzigd, scherm = _proef(True, vraag, keer=3, naam="proefdata-herhaal")
+    gemaakt = sorted(p for p in nieuw if "20261102-03000" in p)
+    tellen = [json.load(open(p, encoding="utf-8"))["modelvragen"] for p in gemaakt]
+    assert tellen == [2, 2, 1], tellen
+    assert "al 5 gesprekken naar het model vandaag" in [g["toestand"] for g in u["gesprekken"]], u["gesprekken"]
+
+
+def test_proef_zonder_fathomgesprek_zonder_actiepunt_noemt_het_tekort():
+    pad, u, nieuw, gewijzigd, scherm = _proef(True, NepVraag(), zonder=False)
+    rollen = [g["rol"] for g in u["gesprekken"]][:2]
+    assert rollen == ["fathom", "fathom met actiepunten"], rollen
+    assert "geen werkgesprek zonder actiepunt in de uitkomst" in u["tekort"] and not u["zonder_actiepunt"], u["tekort"]
+
+
+def test_vol5_twee_nummers_in_de_titel_en_plaud_zonder_label():
+    assert GA.dossier_van("UNABO project", "", "[UB-KO] 46118 en 46200 Proefstraat") == ("", "")
+    assert GA.dossier_van("UNABO project", "", "[UB-KO] 46118 HA2612 Proefstraat") == ("", "")
+    plaud = {"label": "", "afdeling": "unabo", "project": "UNAB:46118", "zekerheid": "middel"}
+    assert GA.herkomst(plaud) == {"label": "", "firma": "UNABO", "soort": "", "dossier": "46118",
+                                  "dossier_bewijs": "dossier van de wacht, zekerheid middel", "label_van": "afdeling van de wacht"}
+    assert GA.herkomst({**plaud, "zekerheid": "laag"})["dossier"] == ""
+    assert GA.herkomst({**plaud, "project": "HARC:2612"})["dossier"] == "", "het dossier moet bij de firma horen"
+    assert GA.herkomst({"afdeling": "regie"})["soort"] == "intern" and GA.herkomst({"afdeling": "onbekend"})["label_van"] == ""
+    rec, _ = GA.verwerk({**_plaud()[0], "label": "", "afdeling": "h-architects", "project": "HARC:2612", "zekerheid": "hoog"})
+    assert rec is None, "zonder model komt Plaud niet verder"
+    map_ = _fathom_map("2026-10-24 1000 zonder label")
+    rec, _ = GA.verwerk(_geval(map=map_, label="", afdeling="tkn"))
+    assert (rec["firma"], rec["label_van"]) == ("TKN", "afdeling van de wacht"), rec
+
+
+def test_t0095_antwoord_zonder_reden_laat_de_ronde_niet_vallen_en_geen_vrije_tekst_in_het_werkverslag():
+    map_ = os.path.join(DATA, "fathom-data", "2026-10-21 1100 proef reden")
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": 7101})
+    _schrijf(os.path.join(map_, "transcript.md"), "# kop\n\n[00:00:01] Proefpersoon Zeta: goedemorgen")
+    rij = {"datum": "2026-10-21", "start": "11:00", "uniek": "fathom:7101", "archief": map_}
+    ag, r = _labelronde([rij], lambda *a: ({"label": "Onbekend", "zekerheid": "laag"}, 10))
+    d = json.load(open(os.path.join(map_, "gesprek.json"), encoding="utf-8"))
+    assert d["archivaris"]["label"] == "Onbekend" and d["archivaris"]["reden"] == "", d
+    assert ag.klaar and "Archivaris: 1 gesprek" in ag.klaar[0]["titel"], ag.klaar
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": 7101})
+    ag, r = _labelronde([rij], lambda *a: ({"label": "Proefpersoon Zeta sales", "zekerheid": "Proefonderwerp Omega"}, 10))
+    fout = [a for a in ag.logboek if a[1] == "fout"]
+    assert fout and not any(w in str(fout) for w in ("Zeta", "Omega")), fout
+
+
+def test_alleen_analyse_vindt_ook_een_hernoemde_fathommap():
+    map_ = _fathom_map("2026-10-21 1700 hernoemd inhaal")
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": "rec9500"})
+    rijen = [{"datum": "2026-10-21", "start": "17:00", "uniek": "fathom:rec9500",
+              "archief": os.path.join(DATA, "fathom-data", "2026-10-21 1500 oude naam")}]
+    uitvoer = os.path.join(THUIS, "hernoemd-inhaal")
+    with vervangen((GA, "UITVOER", uitvoer), (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (GA, "ANALYSE_AAN", True)):
+        ag, r = _labelronde(rijen, _geen_model, alleen=True)
+    assert json.load(open(os.path.join(uitvoer, "fathom", "rec9500.json"), encoding="utf-8"))["samenvatting_van"] == "fathom"
 
 
 if __name__ == "__main__":

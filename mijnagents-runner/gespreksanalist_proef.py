@@ -2,16 +2,19 @@
 """De proef van De Gespreksanalist (T-0120, besluit X5): droog, op zes gesprekken uit een maand.
 
 Twee Fathom, twee Plaud en een Zoom-tekst, verspreid over de maand (de eerste en de tweede helft), waarvan een zonder
-actiepunt (een Fathom-gesprek met een samenvatting maar zonder actiepunten van Fathom), plus een privégesprek dat alleen
-"privégesprek, N min" mag geven. De Zoom-tekst is zelf ook altijd privé (zoom_wacht.py:266). Dezelfde code als de
+actiepunt (bij voorkeur een Fathom-gesprek met een samenvatting maar zonder actiepunten van Fathom; is er geen, dan
+zegt de rol "fathom" en staat het in de tekorten als ook de uitkomst geen gesprek zonder actiepunt heeft), plus een
+privégesprek dat alleen "privégesprek, N min" mag geven. De Zoom-tekst is zelf ook altijd privé (zoom_wacht.py:266). Dezelfde code als de
 nachtronde (gespreksanalist.verwerk), maar:
 - alleen lezen: de gesprekkentabel (alleen lezend), de archieven op de VM, de agenda op het bord en de bewaarde
   projectindex (nooit een nieuwe uit Dropbox);
 - alleen schrijven: het proefbestand (rechten 600) in ~/appportal/mijnagents-data/gespreksanalist/proef/. Nooit
   gesprek.json, nooit de uitvoer of de dagteller van de nachtronde, nooit het bord (geen hartslag, logboek of klaarzet).
-  Met het model aan schrijft claude_abonnement zelf zijn limietbestand bij, zoals bij elke vraag;
+  Een uitzondering, alleen met het model aan: claude_abonnement schrijft bij elke vraag zelf zijn limietbestand
+  (~/.cache/claude-abonnement/limiet.json), de grendel tegen extra verbruik die elke agent op het abonnement deelt;
 - Plaud gaat alleen naar het model als gespreksanalist.MODEL_AAN aan staat (het ja van Mehdi, T-0122 keuze 1), en
-  binnen hetzelfde budget (5 per dag, 60 procent van het weekvenster); anders zegt de proef "model staat uit".
+  binnen hetzelfde budget (5 per dag, met een verse meting van het weekvenster onder 60 procent); de modelvragen van de
+  nachtronde (dagteller) en van eerdere proeven die dag (hun proefbestand) tellen mee; anders zegt de proef waarom niet.
 
 Meet per gesprek: actiepunten, weggegooide actiepunten, het aandeel met een letterlijk citaat (doel 100 procent),
 tokens en duur. Codex leest het proefbestand. Op het scherm alleen het pad en aantallen, geen naam of inhoud.
@@ -29,8 +32,8 @@ sys.path.insert(0, HIER)
 import archivaris as AR  # noqa: E402  de leesweg en geval_van van de nachtronde
 import gespreksanalist as GA  # noqa: E402
 
-ROLLEN = (("fathom zonder actiepunt", "fathom", 1), ("fathom met actiepunten", "fathom", 2),
-          ("plaud", "plaud", 1), ("plaud", "plaud", 2), ("zoom-tekst", "zoom", 0), ("privé", "prive", 0))
+ROLLEN = (("fathom zonder actiepunt", 1), ("fathom met actiepunten", 2), ("plaud", 1), ("plaud", 2), ("zoom-tekst", 0),
+          ("privé", 0))
 
 
 def bewaarde_projecten():
@@ -68,10 +71,10 @@ def kies(gevallen, zoom):
                "plaud": [g for g in werk if g["bron"] == "plaud"], "zoom-tekst": zoom,
                "privé": [g for g in gevallen if GA.is_prive(g)]}
     gekozen, tekort, keuze = set(), [], []
-    for rol, _, helft in ROLLEN:
+    for rol, helft in ROLLEN:
         g = pak(groepen[rol], helft, gekozen)
         if g is None and rol.startswith("fathom"):
-            g = pak(fathom, helft, gekozen)              # dan maar een ander Fathom-gesprek met samenvatting
+            g, rol = pak(fathom, helft, gekozen), "fathom"    # een ander Fathom-gesprek, onder zijn eigen naam
         if g is None:
             tekort.append(f"{rol}: geen gesprek" + (" met een samenvatting van Fathom (FATHOM-1 eerst)" if rol.startswith("fathom") else ""))
         else:
@@ -95,28 +98,51 @@ def meet(rol, geval, budget, vraag=None):
     return uit
 
 
+def eerdere_vragen(uitmap, dag):
+    """Hoeveel modelvragen de proeven van die dag al deden (uit hun proefbestand): zo omzeilt een herhaalde proef de
+    vijf per dag niet, zonder dat de proef de dagteller van de nachtronde aanraakt."""
+    n = 0
+    try:
+        namen = os.listdir(uitmap)
+    except OSError:
+        return 0
+    for naam in namen:
+        if naam.startswith("proef-") and naam.endswith(".json"):
+            try:
+                with open(os.path.join(uitmap, naam), encoding="utf-8") as f:
+                    d = json.load(f)
+                n += int(d.get("modelvragen") or 0) if str(d.get("ts") or "")[:10] == dag else 0
+            except (OSError, ValueError, AttributeError, TypeError):
+                continue
+    return n
+
+
 def proef(maand, vraag=None, uitmap=None, nu=None):
     """Het pad van het proefbestand. vraag: in een test het nepmodel."""
     nu = nu or datetime.now().astimezone()
+    uitmap = uitmap or os.path.join(GA.UITVOER, "proef")
     van, tot = f"{maand}-01", f"{maand}-31"
     rijen = [dict(r) for r in AR.db().execute("select * from gesprek_log where bron in ('fathom','plaud') and datum "
                                               "between ? and ? order by datum, start", (van, tot))]
     lijst, projecten = AR.afspraken(van, tot), bewaarde_projecten()
     keuze, tekort = kies([AR.geval_van(g, lijst, projecten) for g in rijen], GA.zoom_gevallen(van, tot))
     budget = GA.Budget(nu.strftime("%Y-%m-%d"), teller=None)    # de dagteller van de nachtronde telt mee, maar blijft
-    voor = GA.weekbenutting()[0]
+    budget.vandaag += eerdere_vragen(uitmap, nu.strftime("%Y-%m-%d"))
+    begin, voor = budget.vandaag, GA.weekbenutting()[0]
     gevallen = [meet(rol, g, budget, vraag) for rol, g in keuze if g]
     werk = [g for g in gevallen if g["record"] and not g["record"].get("prive")]
     punten, weg = sum(g["actiepunten"] for g in werk), sum(g["weggegooid"] for g in werk)
+    if not any(not g["actiepunten"] for g in werk):
+        tekort.append("geen werkgesprek zonder actiepunt in de uitkomst")
     uitslag = {"proef": "De Gespreksanalist, besluit X5 (T-0120)", "maand": maand, "ts": nu.isoformat(),
-               "model_aan": GA.MODEL_AAN, "gekozen": len(gevallen), "tekort": tekort,
+               "model_aan": GA.MODEL_AAN, "modelvragen": budget.vandaag - begin, "gekozen": len(gevallen), "tekort": tekort,
                "actiepunten": punten, "weggegooid": weg,
                "letterlijk_procent": round(100 * punten / (punten + weg)) if punten + weg else None,
                "zonder_actiepunt": any(not g["actiepunten"] for g in werk),
                "prive_alleen_regel": all(g.get("alleen_privegesprek", True) for g in gevallen),
                "tokens": sum(g["tokens"] for g in gevallen), "duur_s": round(sum(g["duur_s"] for g in gevallen), 2),
                "weekvenster_voor": voor, "weekvenster_na": GA.weekbenutting()[0], "gesprekken": gevallen}
-    pad = os.path.join(uitmap or os.path.join(GA.UITVOER, "proef"), f"proef-{maand}-{nu.strftime('%Y%m%d-%H%M%S')}.json")
+    pad = os.path.join(uitmap, f"proef-{maand}-{nu.strftime('%Y%m%d-%H%M%S')}.json")
     return GA.schrijf_600(pad, uitslag), uitslag
 
 

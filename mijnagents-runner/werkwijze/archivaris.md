@@ -110,12 +110,13 @@ Angel weten wat er in gesprekken werd afgesproken. Code: `gespreksanalist.py`.
 |---|---|
 | Een actiepunt | wat, wie, tegen wanneer, voor wie (mehdi, collega, klant, agent of onbekend) en een letterlijk citaat van hoogstens 200 tekens |
 | De controle | zonder model: staat het citaat niet letterlijk in het transcript (minstens 12 tekens en drie woorden), dan gooi ik het actiepunt weg |
-| Firma en dossier | mijn label als firma en soort (UNABO project wordt UNABO, project); het dossier is het bewezen H-A-nummer, of voor een andere firma het enige nummer van die firma in de agendatitel, met "niet bevestigd" |
+| Firma en dossier | mijn label als firma en soort (UNABO project wordt UNABO, project); het dossier is het bewezen H-A-nummer, of voor een andere firma het enige nummer in de agendatitel, van die firma, met "niet bevestigd". Zonder mijn label (Plaud op de VM) de afdeling van de wacht als firma en het dossier dat de wacht besliste, bij zekerheid hoog of middel |
 | Privé | alleen "privégesprek, N min": ik lees het transcript niet, er is geen samenvatting en geen model. Privé is de privévlag van de wacht, mijn label Prive, of Zoom-tekst (de vangnettekst van De Zoomwacht is altijd privé) |
 | Fathom | de eigen samenvatting en actiepunten van Fathom (samenvatting.md en actiepunten.md); het citaat is de uiting op het tijdstip dat Fathom noemt. Nooit het model. Zonder samenvatting wacht het gesprek |
-| Plaud en Zoom-tekst | het model op het abonnement van Mehdi (`claude_abonnement`), nooit de API. Alleen als het model aan staat, hoogstens 5 gesprekken per dag, en geen vraag vanaf 60 procent van het weekvenster of zonder nieuwe meting na een vraag |
+| Plaud en Zoom-tekst | het model op het abonnement van Mehdi (`claude_abonnement`), nooit de API. Alleen als het model aan staat, hoogstens 5 gesprekken per dag, en alleen met een meting van het weekvenster van hoogstens 12 uur oud die onder 60 procent ligt; na elke vraag een nieuwe meting. Zoom-tekst blijft privé zolang De Zoomwacht dat zegt |
 | Uitvoer | een bestand per gesprek in `mijnagents-data/gespreksanalist/<bron>/` op de VM (rechten 600), niet in `gesprek.json` en dus niet in Dropbox. Mijn werkverslag krijgt alleen aantallen |
-| De proef | `gespreksanalist_proef.py --maand 2026-10`: zes gesprekken, droog, alleen een proefbestand (600) in `gespreksanalist/proef/` |
+| De proef | `gespreksanalist_proef.py --maand 2026-10`: zes gesprekken, droog, alleen een proefbestand (600) in `gespreksanalist/proef/`; de modelvragen van eerdere proeven die dag tellen mee |
+| Inhalen | `archivaris.py --alleen-analyse --van ... --tot ...`: alleen versie 3, zonder labels (die gaan nog via de API); pas na de vlaggen en nooit als eenmalige opdracht zonder overleg |
 
 Twee vlaggen in de code, allebei uit: de stap zelf (na FATHOM-1, als De Fathomwacht de
 samenvatting van Fathom echt ophaalt) en het model (na het ja van Mehdi, T-0122 keuze 1).

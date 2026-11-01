@@ -7,14 +7,16 @@ klant, agent of onbekend) en een letterlijk citaat van hoogstens 200 tekens. Met
 
 Per bron (X9):
 - Privé gaat voor alles: alleen "privégesprek, N min". Geen transcript lezen, geen model, geen samenvatting. Privé is
-  de privévlag of de afdeling privé van de wacht, het label Prive van De Archivaris, of Zoom-tekst zonder uitdrukkelijk
-  prive=false: de vangnettekst van De Zoomwacht is altijd privé (zoom_wacht.py:266, X1).
+  de privévlag of de afdeling privé van de wacht, het label Prive van De Archivaris, of Zoom-tekst: de vangnettekst van
+  De Zoomwacht is altijd privé (zoom_wacht.py:266, X1). Zoom-tekst komt dus pas bij het model als die regel in De
+  Zoomwacht zelf verandert, en dan ook hier.
 - Fathom: de eigen samenvatting en actiepunten van Fathom (samenvatting.md en actiepunten.md van De Fathomwacht,
   FATHOM-1). Een gesprek met een samenvatting van Fathom gaat nooit naar het model; zonder samenvatting wacht het
   (Fathom heeft het model niet nodig, overleg T-0120 K3).
 - Plaud en Zoom-tekst: het model op het abonnement van Mehdi (koppelingen/claude_abonnement.vraag), nooit de API en
   nooit een betaalde uitwijking (X3, keuze 1 van T-0122). Alleen als MODEL_AAN True is (uit tot het ja van Mehdi),
-  hoogstens MAX_PER_DAG gesprekken per dag en geen nieuwe vraag vanaf WEEKGRENS van het weekvenster (Budget).
+  hoogstens MAX_PER_DAG gesprekken per dag, en alleen met een meting van het weekvenster van hoogstens MAX_OUDERDOM
+  oud die onder WEEKGRENS ligt (Budget).
 
 Een controle zonder model (citaat_in) gooit elk actiepunt weg waarvan het citaat niet letterlijk in het transcript
 staat. Ook een actiepunt van Fathom krijgt zo een citaat: de uiting op het tijdstip dat Fathom noemt.
@@ -51,6 +53,7 @@ ANALYSE_AAN = False
 MODEL_AAN = False
 MAX_PER_DAG = 5          # "hoogstens 5 per nacht": een teller per kalenderdag, hoe vaak de cron ook draait
 WEEKGRENS = 0.60         # geen nieuwe vraag als het weekvenster (seven_day) op 60 procent of hoger staat (X3, Codex)
+MAX_OUDERDOM = 12 * 3600  # een oudere of geen meting van het weekvenster: geen vraag (onbekend is geen ruimte)
 MAX_TRANSCRIPT = 200000  # tekens transcript naar het model
 MAX_CITAAT = 200
 MIN_CITAAT = 12          # tekens na normaal(), en minstens drie woorden: "ja" of "ok" staat in elk transcript
@@ -63,6 +66,10 @@ ZOOM_DATA = os.path.join(DATA, "zoom-data")
 PLAUD_OP_MAC = "Data uit Mehdi/Plaud/"   # zo begint gesprek_log.archief van De Plaudwacht (plaud_wacht.py ARCHIEF_OP_MAC)
 # VOL-5: de firma van het label als interne code, voor het dossier uit de agendatitel (koppelingen/nummerlezer.py)
 FIRMACODE = {"HA": "HARC", "UNABO": "UNAB", "TKN": "TKNB", "Harmoniebouw": "HARM", "Contrax": "CONT", "Elevait": "ELEV"}
+# VOL-5 zonder label van De Archivaris (Plaud op de VM heeft geen gesprek.json): de afdeling van de wacht als firma
+# (fathom_wacht.AFDELINGEN, die De Plaudwacht via fw.herken ook gebruikt)
+AFDELING_FIRMA = {"h-architects": "HA", "unabo": "UNABO", "harmoniebouw": "Harmoniebouw", "contrax": "Contrax",
+                  "tkn": "TKN", "elevait": "Elevait"}
 
 
 # ------------------------------------------------------------------------------------------- transcript ---
@@ -170,12 +177,11 @@ def prive_regel(minuten):
 
 
 def is_prive(geval):
-    """Privé volgens de wacht (vlag of afdeling), het label Prive van De Archivaris, of Zoom-tekst die niet
-    uitdrukkelijk werk is (vangnettekst is altijd privé, zoom_wacht.py:266). Bij twijfel privé."""
+    """Privé volgens de wacht (vlag of afdeling), het label Prive van De Archivaris, of Zoom-tekst: de vangnettekst is
+    altijd privé (zoom_wacht.py:266), ook als zoom.json iets anders zou zeggen. Bij twijfel privé."""
     afdeling = str(geval.get("afdeling") or "").strip().lower()
-    if geval.get("prive") or afdeling in ("prive", "privé") or str(geval.get("label") or "").lower() in ("prive", "privé"):
-        return True
-    return geval.get("bron") == "zoom" and geval.get("zoom_prive") is not False
+    return bool(geval.get("prive") or afdeling in ("prive", "privé") or geval.get("bron") == "zoom"
+                or str(geval.get("label") or "").lower() in ("prive", "privé"))
 
 
 # -------------------------------------------------------------------------------- firma en dossier (VOL-5) ---
@@ -201,10 +207,31 @@ def dossier_van(label, ha_nummer="", titel=""):
     if firma == "HA":
         return (ha_nummer, "bevestigd") if ha_nummer else ("", "")
     code = FIRMACODE.get(firma)
-    if not code or not titel:
+    # nummerlezer leest alleen het eerste nummer na de agendacode: staan er meer nummers in de titel, dan niets
+    if not code or not titel or len(set(re.findall(r"(?<!\d)\d{4,6}(?!\d)", titel))) != 1:
         return "", ""
     k = nummerlezer.enig([k for k in nummerlezer.lees(titel, "vergadertitel") if k.rol == "agendafirma"], code)
     return (k.nummer, "agendatitel, niet bevestigd") if k else ("", "")
+
+
+def herkomst(geval):
+    """VOL-5: label, firma, soort, dossier, dossier_bewijs en label_van van een werkgesprek. Het label van De Archivaris
+    gaat voor. Zonder label (Plaud op de VM) de afdeling van de wacht als firma, en het dossier dat de wacht besliste
+    ('FIRMA:NUMMER' in gesprek_log.project, plaud/dossier.beslis), alleen bij dezelfde firma en zekerheid hoog of middel."""
+    label = str(geval.get("label") or "")
+    if label:
+        firma, soort = firma_en_soort(label)
+        dossier, bewijs = dossier_van(label, geval.get("ha_nummer", ""), geval.get("titel", ""))
+        van = "archivaris"
+    else:
+        afdeling = str(geval.get("afdeling") or "").strip().lower()
+        firma, soort = AFDELING_FIRMA.get(afdeling, ""), ("intern" if afdeling == "regie" else "")
+        m = re.fullmatch(r"([A-Z]{4}):(\d{3,6})", str(geval.get("project") or "").strip())
+        zeker = str(geval.get("zekerheid") or "")
+        dossier, bewijs = ((m.group(2), f"dossier van de wacht, zekerheid {zeker}")
+                           if m and firma and FIRMACODE.get(firma) == m.group(1) and zeker in ("hoog", "middel") else ("", ""))
+        van = "afdeling van de wacht" if firma or soort else ""
+    return {"label": label, "firma": firma, "soort": soort, "dossier": dossier, "dossier_bewijs": bewijs, "label_van": van}
 
 
 # ------------------------------------------------------------------------------------------------ Fathom ---
@@ -224,11 +251,14 @@ def _markdown(lichaam):
 
 
 def citaat_bij(uit, sec):
-    """De letterlijke woorden op een tijdstip: de uiting die daar loopt, aangevuld met de volgende tot ongeveer 60
-    tekens, ingekort tot MAX_CITAAT op een woordgrens. '' zonder tijdstip of uiting."""
+    """De letterlijke woorden op een tijdstip: de uiting die hoogstens een minuut ervoor begon (of anders binnen 15
+    seconden erna), aangevuld met de volgende tot ongeveer 60 tekens, ingekort tot MAX_CITAAT op een woordgrens. ''
+    zonder tijdstip of zonder uiting in de buurt: nooit een uiting van veel eerder."""
     if sec is None:
         return ""
-    i = max((n for n, (s, _, _) in enumerate(uit) if s is not None and s <= sec), default=None)
+    i = max((n for n, (s, _, _) in enumerate(uit) if s is not None and sec - 60 <= s <= sec), default=None)
+    if i is None:
+        i = min((n for n, (s, _, _) in enumerate(uit) if s is not None and sec < s <= sec + 15), default=None)
     if i is None:
         return ""
     tekst = uit[i][2]
@@ -342,9 +372,9 @@ def weekbenutting(bestand=None, nu=None):
 
 class Budget:
     """Mag er nog een gesprek naar het model? Hoogstens MAX_PER_DAG per dag (teller.json in UITVOER; een mislukte vraag
-    telt mee), en geen vraag als het weekvenster op WEEKGRENS of hoger staat. Is het weekvenster onbekend, dan mag
-    alleen de eerste vraag van de ronde (die meet het); na elke vraag moet er een nieuwe meting van het weekvenster zijn,
-    anders stopt het model voor de rest van de ronde (onbekend is geen ruimte). Een fout van
+    telt mee), en alleen met een meting van het weekvenster die hoogstens MAX_OUDERDOM oud is en onder WEEKGRENS ligt.
+    Na elke vraag moet er een nieuwe meting zijn. Anders stopt het model voor de rest van de ronde: onbekend of oud is
+    geen ruimte (Codex T-0120 toets 1). De meting komt van elke agent op het abonnement (Ai Angel, ANGEL-3). Een fout van
     het abonnement stopt het ook (stop, fout). teller=None: alleen in het geheugen (de proef), vanaf de stand in het
     bestand."""
 
@@ -368,10 +398,13 @@ class Budget:
             return self.stop
         if self.vandaag >= MAX_PER_DAG:
             return f"al {MAX_PER_DAG} gesprekken naar het model vandaag"
-        benutting, gezien = weekbenutting(self.limiet, self.klok())
+        nu = self.klok()
+        benutting, gezien = weekbenutting(self.limiet, nu)
         if self.sinds is not None and (gezien < self.sinds or benutting is None):
             self.stop = "weekvenster na de vorige vraag niet gemeten"
-        elif benutting is not None and benutting >= WEEKGRENS:
+        elif benutting is None or nu - gezien > MAX_OUDERDOM:
+            self.stop = f"weekvenster onbekend of ouder dan {MAX_OUDERDOM // 3600} uur"
+        elif benutting >= WEEKGRENS:
             self.stop = f"weekvenster op {int(benutting * 100)} procent (grens {int(WEEKGRENS * 100)})"
         return self.stop
 
@@ -441,10 +474,7 @@ def verwerk(geval, budget=None, vraag=None, nu=None):
     uit = uitingen(os.path.join(geval.get("map") or "-", "transcript.json"))
     if not uit:
         return None, "geen transcript"
-    firma, soort = firma_en_soort(geval.get("label"))
-    dossier, bewijs = dossier_van(geval.get("label"), geval.get("ha_nummer", ""), geval.get("titel", ""))
-    werk = {**_kop(geval), "prive": False, "label": geval.get("label") or "", "firma": firma, "soort": soort,
-            "dossier": dossier, "dossier_bewijs": bewijs}
+    werk = {**_kop(geval), "prive": False, **herkomst(geval)}
     if geval["bron"] == "fathom":
         eigen = fathom_eigen(geval["map"], uit)
         if eigen is None:
@@ -470,15 +500,13 @@ def verwerk(geval, budget=None, vraag=None, nu=None):
 def stap(geval, budget=None, vraag=None, map_=None, nu=None):
     """(record om te bewaren of None, toestand). Een gesprek gaat een keer door versie 3. Opnieuw alleen als het nu
     privé is en toen niet (of omgekeerd): dan verdwijnt de samenvatting en blijft alleen de privéregel. Een nieuw label
-    (een correctie van Mehdi) zet alleen firma, soort en dossier opnieuw, zonder model."""
+    of dossier (een correctie van Mehdi) zet alleen de herkomst opnieuw, zonder model."""
     oud, prive = lees(geval["uniek"], map_), is_prive(geval)
     if oud and int(oud.get("versie") or 0) >= VERSIE and bool(oud.get("prive")) == prive:
-        if prive or oud.get("label", "") == (geval.get("label") or ""):
+        nieuw = {} if prive else herkomst(geval)
+        if all(oud.get(k, "") == v for k, v in nieuw.items()):
             return None, "al gedaan"
-        firma, soort = firma_en_soort(geval.get("label"))
-        dossier, bewijs = dossier_van(geval.get("label"), geval.get("ha_nummer", ""), geval.get("titel", ""))
-        return {**oud, "label": geval.get("label") or "", "firma": firma, "soort": soort, "dossier": dossier,
-                "dossier_bewijs": bewijs, "ts": (nu or datetime.now().astimezone()).isoformat()}, "nieuw label"
+        return {**oud, **nieuw, "ts": (nu or datetime.now().astimezone()).isoformat()}, "nieuw label"
     return verwerk(geval, budget, vraag, nu)
 
 

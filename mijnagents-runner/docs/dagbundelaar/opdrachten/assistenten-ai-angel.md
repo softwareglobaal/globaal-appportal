@@ -54,8 +54,8 @@ Uitbreiding van De Archivaris (versie 3), code `gespreksanalist.py`, proef `gesp
 10. **Welke beslissing blijft bij Mehdi?** Of Plaud en Zoom-tekst naar het model mogen, hoogstens vijf per nacht, nadat
     Extra usage uit staat (T-0122 keuze 1): **open (Mehdi)**. Of samenvattingen later in de Dropbox-kopie mogen:
     **open (Mehdi)**.
-11. **Wanneer kijken of melden?** Elke ronde van De Archivaris; het model hoogstens vijf gesprekken per dag, nooit vanaf
-    60 procent van het weekvenster. Een nood alleen bij een fout van het abonnement (de bestaande noden).
+11. **Wanneer kijken of melden?** Elke ronde van De Archivaris; het model hoogstens vijf gesprekken per dag, alleen
+    met een verse meting van het weekvenster (hoogstens 12 uur oud) onder 60 procent. Een nood alleen bij een fout van het abonnement (de bestaande noden).
 
 Eerste proef (X5): droog op zes gesprekken uit oktober: twee Fathom (een zonder actiepunt), twee Plaud, een Zoom-tekst en
 een privégesprek dat alleen "privégesprek, N min" mag geven; uitvoer alleen een proefbestand (600) op de VM. Meten:
