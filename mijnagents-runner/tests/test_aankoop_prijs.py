@@ -921,8 +921,9 @@ r = NepRonde()
 PO.werk(r, None)
 check("ook bij een andere fout blijft de bordvraag klaarstaan, met een nood (Codex 21, punt 3)",
       opgepakt == [] and "2 wachten" in r.detail and any("blijft klaarstaan" in n for n in noden), r.detail)
-for stop in ("fout", "limiet"):
-    PO.O.onderzoek = lambda *a, stop=stop, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {},
+for stop in ("fout", "limiet", "plafond"):
+    PO.O.onderzoek = lambda *a, stop=stop, **k: {"gegevens": {"vraag_kort": "lidar", "aanbiedingen": []}, "gelezen": {},
+                                                 "zoekresultaten": {},
                                                  "tekst": "", "tokens": 10, "tellers": [], "leesbeurten": (0, 0),
                                                  "zoekopdrachten": 0, "stop": stop, "model": "m", "fout": "x"}
     klaar.clear()
@@ -939,7 +940,7 @@ PO.werk(NepRonde(), "vloerwasser X1")
 check("de limiet van het abonnement wordt een nood (G4)", any("limiet van het Claude-abonnement" in n for n in noden), str(noden))
 check("geen dollargrens meer in de runner", not hasattr(PO, "MAX_DOLLAR"))
 PO.O.onderzoek = lambda *a, **k: {"gegevens": None, "gelezen": {}, "tekst": "", "tokens": 10, "zoekopdrachten": 0,
-                                  "stop": "end_turn", "model": "m"}
+                                  "stop": "klaar", "model": "m"}
 PO.werk(NepRonde(), f"vloerwasser {GEHEIM}")
 check("de vraag staat nooit in het logboek, ook niet bij een fout (Codex X3)",
       logboek and not any(GEHEIM in str(x) for x in logboek), str(logboek)[:300])

@@ -147,3 +147,9 @@ Tests: 248 prijstests groen.
    - de nood staat al op het bord.
 
 Tests: 250 prijstests groen.
+
+## Verwerking Codex-controle 23 (niet klaar)
+
+Punt 3 van controle 22 was opgelost. Nieuw en hersteld: ook bij `plafond` (tijd, beurten, zoekgrens) komt er geen verslag,
+ook niet met leesbare JSON; alleen een vraag met stop `klaar` (die bron en limietmelding bewees) geeft een verslag. Elke
+andere stop laat de bordvraag staan. Tests: 251 prijstests groen.

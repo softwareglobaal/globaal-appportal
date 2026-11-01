@@ -109,7 +109,8 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
         ag.log("prijsvraag", "fout", f"vraag {va}: claude -p eindigde met een fout", uit.get("fout"))
         r.nood("Prijsvraag: claude -p eindigde met een fout", wie="claude-code")
     g = uit["gegevens"]
-    if uit["stop"] in ("fout", "limiet"):
+    if uit["stop"] != "klaar":
+        # Alleen een vraag die gewoon eindigde, bewees dat ze binnen het abonnement bleef (Codex controle 23).
         raise VraagBlijft(uit["stop"])
     if g is None:
         ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
