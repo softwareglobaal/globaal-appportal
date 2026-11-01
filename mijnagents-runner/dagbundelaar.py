@@ -522,14 +522,22 @@ def gezondheid_regels(samenvatting):
     return regels[:12] or None
 
 
+def websites_gelezen(items):
+    """Alleen websites-items van een ronde die minstens een browser las (inhoud['browsers'] niet leeg). Een ronde zonder
+    gelezen browser (launchd zonder Full Disk Access, T-0077, overleg 02-11-2026 K4) is onbekend, geen nul; een gelezen
+    browser met nul bezoeken telt wel."""
+    return [x for x in items if _inhoud(x).get("browsers")]
+
+
 def lees_eigen(eerste):
     """Wispr, websites en gezondheid per dag uit het bord (Mehdi, 31-10-2026). Een dag die geen wacht zag, ontbreekt:
     onbekend, nooit nul."""
     vw = f"wispr:{WISPR_GEBRUIKER}:"
     wispr = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE ? AND uniek >= ?",
                                      (vw + "%", vw + eerste)), vw, lambda i: i.get("vandaag"))
-    web = per_dag_uit(bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'websites:%' AND uniek >= ?",
-                                   ("websites:" + eerste,)), "websites:", lambda i: None)
+    web = per_dag_uit(websites_gelezen(bord.db_lees(
+        "SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'websites:%' AND uniek >= ?", ("websites:" + eerste,))),
+        "websites:", lambda i: None)
     gez = {x["uniek"][11:]: gezondheid_regels(_inhoud(x).get("samenvatting")) for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek LIKE 'gezondheid:%' AND uniek >= ?", ("gezondheid:" + eerste,))}
     vy = f"youtube:{WISPR_GEBRUIKER}:"

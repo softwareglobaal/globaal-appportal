@@ -9,6 +9,8 @@ venster laat geen geschiedenis na en telt dus nooit mee.
 
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
 op in het dagbestand. Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
+Is geen enkele browser gelezen, dan zet de wacht niets klaar: onbekend is geen 0 (T-0077, 02-11-2026). macOS 27
+beschermt ook de mappen van Chrome en Firefox; onder launchd heeft alleen een programma met Full Disk Access toegang.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
 import glob
@@ -141,8 +143,10 @@ def main():
     per_dag = tel(bezoeken, dagen)
     nood = []
     if "Safari" in onleesbaar:
-        nood.append({"tekst": "Safari is niet te lezen: geef Python Full Disk Access (System Settings, Privacy & Security)",
-                     "wie": "mehdi"})
+        # Overleg 02-11-2026 K2: geen verzoek om Python Full Disk Access te geven; de toestemming hoort bij een eigen
+        # vast programma (de starter van de Browserwacht), niet bij Python.
+        nood.append({"tekst": "Safari is niet te lezen: de Browserwacht heeft een eigen programma met Full Disk Access nodig",
+                     "wie": "claude-code"})
     if not gelezen:
         nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
@@ -151,6 +155,16 @@ def main():
     titel = f"Websites {DAG}: {v['bezoeken']} bezoeken op {v['sites']} sites"
     if DROOG:
         print(json.dumps(inhoud, ensure_ascii=False, indent=1))
+        return
+    if not gelezen:
+        # 02-11-2026 (T-0077): geen enkele browser gelezen (launchd zonder Full Disk Access) is onbekend, geen 0.
+        # Dan geen klaarzet: het Dagboek houdt de dag op "onbekend" in plaats van "0 bezoeken op 0 sites".
+        bord("/api/logboek", {"regels": [
+            {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "bron",
+             "tekst": "gelezen: niets; niets klaargezet"
+                      + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")}]})
+        hartslag("fout", taak="geen browser gelezen", detail="niets klaargezet; geen Full Disk Access?", nood=nood)
+        print(f"Websites {DAG}: geen browser gelezen, niets klaargezet")
         return
     uit = bord("/api/klaarzet", {"items": [{"van": NAAM, "voor": "mehdi", "soort": "websites", "sleutel": DAG,
                                             "titel": titel, "uniek": f"websites:{DAG}", "inhoud": inhoud}]})
