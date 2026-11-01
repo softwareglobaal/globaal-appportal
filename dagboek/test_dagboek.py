@@ -76,6 +76,20 @@ tg = {x["naam"]: x for x in A.tegels(dict(t, whatsapp={"stand": "aangesloten", "
                                                         "oproepen": 0, "minuten": 0}))}
 check("D06 WA-6 aangesloten zonder bericht blijft 0", tg["WhatsApp"]["groot"] == 0
       and tg["WhatsApp"]["klein"] == "berichten, 0 oproepen", tg["WhatsApp"])
+# WA-6, Codex-toets 2: ook /bronnen toont een onbekend aantal als vraagteken, nooit als 0
+_bs = A.bron_stand({"gesprekken": [], "telling": dict(t, whatsapp={"stand": "stil sinds 27-10 10:07", "gesprekken": 2,
+                                                                     "berichten": 5, "oproepen": None, "minuten": None},
+                                                       telefoon={"stand": "onbekend voor deze dag", "oproepen": None,
+                                                                 "minuten": None},
+                                                       sms={"stand": "stil sinds 27-10 10:07", "gesprekken": None,
+                                                            "berichten": None},
+                                                       xelion={"stand": "onbekend voor deze dag", "oproepen": None,
+                                                               "minuten": None, "gemist": None})}, "", None)
+check("D12 WA-6 bronnen: onbekend is een vraagteken", _bs["WhatsApp"]["tekst"] == "5 berichten, ? oproepen"
+      and _bs["Telefoon"]["tekst"] == "? oproepen" and _bs["Sms en iMessage"]["tekst"] == "? berichten in ? gesprekken"
+      and _bs["Telefoon Xelion"]["tekst"] == "? oproepen, ? gemist", json.dumps({k: _bs[k] for k in
+                                                                              ("WhatsApp", "Telefoon", "Sms en iMessage",
+                                                                               "Telefoon Xelion")}))
 open(os.path.join(MAP, gisteren[:4], f"{gisteren}.json"), "w").write("{kapot")
 check("D06 kapotte telling valt niet", C.get("/", headers=MET).status_code == 200)
 alles = html + C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
