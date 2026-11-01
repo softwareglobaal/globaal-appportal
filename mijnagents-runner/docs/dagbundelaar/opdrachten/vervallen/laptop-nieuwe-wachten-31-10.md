@@ -1,3 +1,5 @@
+> **VERVALLEN (01-11-2026).** Vervangen door opdrachten/opdracht-claude1-macbook-01-11.md, dat dezelfde stappen bevat en actueel is. Niet meer uitvoeren. Zie WIE-DOET-WAT.md.
+
 # Laptop: nieuwe wachten aanzetten (31-10-2026)
 
 Voor Claude 1 op de laptop van Mehdi. Doe de stappen in volgorde. Mehdi hoeft alleen te
@@ -34,7 +36,7 @@ Let op: WhatsApp en Belwacht iPhone staan uit tot de proef slaagt. De sms-proef 
 falen; dan blijven WhatsApp en Belwacht gewoon aan en staat alleen de Sms-wacht uit.
 
 Faalt de sms-proef met "0 berichten": op de iPhone moeten Messages in iCloud en Text Message
-Forwarding aan staan. Stappen staan in `docs/whatsapp-sms-iphone-naar-het-dagboek.md`.
+Forwarding aan staan. Stappen staan in `mijnagents-runner/docs/dagbundelaar/opdrachten/vervallen/whatsapp-sms-iphone-naar-het-dagboek.md`.
 
 ## 4. Fotowacht bijwerken
 
@@ -62,7 +64,7 @@ Zegt hij "geen browsergeschiedenis gevonden" of "operation not permitted":
 ## 6. Dropbox
 
 De Dagbundelaar meldt dat de Dropbox-synchronisatie op de Mac niet loopt. Zie stap 6 van
-`docs/laptop-inrichten-voor-de-dagbundelaar.md`.
+`mijnagents-runner/docs/dagbundelaar/opdrachten/laptop-inrichten-voor-de-dagbundelaar.md`.
 
 ## 7. Klaar melden
 

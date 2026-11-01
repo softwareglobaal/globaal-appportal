@@ -113,7 +113,7 @@ Alles via `softwareglobaal/globaal-vm-beheer` (workflow vm):
    niets anders live zette: dagbestanden van 29 en 30-10, 8 taken (6 voor Mehdi, 2 voor een agent), geen enkele zonder
    bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0. Volledig resultaat (rechten 600) in
    `mijnagents-data/mehdi-agent/droog-20261031.md` op de VM.
-   Daarna, voor stap 3: het driehoeksoverleg (`opdracht-driehoeksoverleg-mehdi-agent.md`) zonder open punten van
+   Daarna, voor stap 3: het driehoeksoverleg (`dagbundelaar/opdrachten/opdracht-driehoeksoverleg-mehdi-agent.md`) zonder open punten van
    ernst hoog of middel (AGENTNORM.md 8).
 3. Aanmaken met de generator. Die weigert een runner met eigen code, dus het skelet gaat naar een tijdelijke map
    (`RUNNERMAP`, zoals in `tests/test_nieuwe_agent.py`); de kaart en de werkwijze komen op het bord met alle controles

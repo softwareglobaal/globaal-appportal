@@ -9,8 +9,8 @@
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
 - [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
       agent), geen enkele zonder bron geweigerd, 4 punten die de bundel miste, 19.064 tokens, exit 0.
-- [ ] Driehoeksoverleg Ai Angel, achteraf (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
-      Claude 1 op de laptop samen met dat van het Dagboek (`docs/driehoeksoverleg-starten-voor-claude-1.md`).
+- [ ] Driehoeksoverleg Ai Angel, achteraf (`mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-driehoeksoverleg-mehdi-agent.md`), start door
+      Claude 1 op de laptop samen met dat van het Dagboek (`mijnagents-runner/docs/dagbundelaar/opdrachten/driehoeksoverleg-starten-voor-claude-1.md`).
 - [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
       eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).
       De lijst staat op mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
@@ -1316,5 +1316,5 @@ subdiscipline-statistieken.
 - [x] Wispr-wacht: de serverwacht heet nu wispr-team-wacht, overschrijft de laptopwacht niet meer
 - [x] Sms-wacht, Belwacht Xelion en YouTube-wacht gebouwd; Dagbundelaar, weekoverzicht, Dagboek en /bronnen tonen ze
 - [x] VM live 01-11-2026 08:07: pull, apps herbouwd, drie wachten op het bord, cron xelion_wacht.py elk uur
-- [ ] Laptop: docs/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
+- [ ] Laptop: mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
 - [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling

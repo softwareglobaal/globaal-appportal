@@ -1,3 +1,5 @@
+> **Grotendeels uitgevoerd (28 tot 30-10-2026).** Nog open: alleen stap 6 (Dropbox-sync). Die zit ook in opdracht-claude1-macbook-01-11.md, stap 7. Zie WIE-DOET-WAT.md.
+
 # Laptop inrichten voor De Dagbundelaar
 
 Versie 1.0 (28-10-2026). Opdracht voor Claude 1 op Mehdi's laptop. Doel: de wachten
@@ -94,5 +96,5 @@ Niet verplicht: de wachten halen na een slaap tot zestig dagen in. Wil Mehdi het
 ## Stap 9. Driehoeksoverleg
 
 Draai op de laptop het overleg over de bronnen (opdracht staat naast dit document):
-`cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/bronnen-20261028/rapport.md -t "Bronnen Dagbundelaar" < ~/dev/globaal-appportal/mijnagents-runner/docs/opdracht-driehoeksoverleg-bronnen.md`. Het verslag gaat
+`cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/bronnen-20261028/rapport.md -t "Bronnen Dagbundelaar" < ~/dev/globaal-appportal/mijnagents-runner/docs/dagbundelaar/opdrachten/vervallen/opdracht-driehoeksoverleg-bronnen.md`. Het verslag gaat
 terug naar Mehdi, beslissing bovenaan, hoogstens vijf regels.

@@ -1,3 +1,5 @@
+> **VERVALLEN (01-11-2026).** Deel 1 en 2 staan nu in opdrachten/opdracht-claude1-macbook-01-11.md (stap 2). Deel 3 (de Sms-wacht) is gebouwd. Niet meer uitvoeren. Zie WIE-DOET-WAT.md.
+
 # WhatsApp, sms en iMessage naar het Dagboek
 
 Versie 1.0 (31-10-2026). Voor Mehdi (iPhone, drie schakelaars) en Claude 1 (laptop).

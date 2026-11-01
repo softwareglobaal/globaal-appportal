@@ -3269,4 +3269,4 @@ verbruik. Het bord rangschikt niet zelf, linkt alleen naar de bron en stuurt nie
 - **Stand 31-10-2026**: droog geprobeerd op de VM met de echte dagbestanden (8 taken, geen zonder bron, 19.064
   tokens), daarna live gezet op Mehdi's ja (workflow vm, run 41240626256): kaart met de generator, eerste ronde met
   alle 14 normen ok, planning gezet en nagelezen. Het driehoeksoverleg
-  (`mijnagents-runner/docs/opdracht-driehoeksoverleg-mehdi-agent.md`) kijkt achteraf na.
+  (`mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-driehoeksoverleg-mehdi-agent.md`) kijkt achteraf na.

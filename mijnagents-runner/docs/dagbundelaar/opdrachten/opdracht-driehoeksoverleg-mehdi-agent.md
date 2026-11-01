@@ -17,7 +17,7 @@ oneens wat er moet veranderen, met bestand en regel.
   8 taken (6 voor Mehdi, 2 voor een agent, 0 voor een collega), geen enkele zonder bron geweigerd, 4 punten die de
   bundel miste, 19.064 tokens in een ronde.
 - Wat de bundel nog mist (actiepunten van gesprekken, wie op antwoord wacht, afspraken van morgen, zes keer per dag)
-  staat als P2, P5 en P7 in het overleg Dagboek compleet (`docs/opdracht-driehoeksoverleg-dagboek-compleet.md`).
+  staat als P2, P5 en P7 in het overleg Dagboek compleet (`mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-driehoeksoverleg-dagboek-compleet.md`).
 
 ## Punten om te stemmen
 

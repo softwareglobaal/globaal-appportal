@@ -85,7 +85,7 @@ typ /usr/bin/python3 en klik op Open. Daarna de droge proef opnieuw.
 ## Stap 7. Dropbox-sync
 
 De Dagbundelaar meldt dat "Data uit Mehdi" niet synchroniseert. Volg stap 6 van
-`mijnagents-runner/docs/laptop-inrichten-voor-de-dagbundelaar.md`.
+`mijnagents-runner/docs/dagbundelaar/opdrachten/laptop-inrichten-voor-de-dagbundelaar.md`.
 
 ## Stap 8. Nakijken en melden
 
