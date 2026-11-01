@@ -58,6 +58,7 @@ class Wereld:
         self.status = {"whatsapp-wacht": {"naam": "whatsapp-wacht", "status": "rust", "taak": "", "ts": NU.isoformat()},
                        "belwacht": {"naam": "belwacht", "status": "rust", "taak": "", "ts": NU.isoformat()}}
         self.items, self.vervals = {}, None
+        self.mailberichten, self.mailsql = None, ""                  # None: de twee rijen hieronder (db_lees)
         self.dagregel = json.dumps({"telling": "volledig", "stand": "definitief", "bronnen": {"rapport": "ok", "chat": "ok"},
                                     "chat": {"telling": "ondergrens"}})
 
@@ -67,6 +68,9 @@ class Wereld:
         if "FROM klaarzet" in sql:
             return [{"uniek": f"zoom:dag:{DAG}", "inhoud": self.dagregel}] if self.dagregel is not None else []
         if "FROM mailbericht" in sql:
+            self.mailsql = sql
+            if self.mailberichten is not None:
+                return [dict(x) for x in self.mailberichten]
             return [{"postvak": "info@h-architects.be", "message_id": "<w1@x>", "datum": f"{DAG}T08:36:57+02:00", "soort": "koud"},
                     {"postvak": "info@h-architects.be", "message_id": "<w2@x>", "datum": f"{DAG}T09:00:00+02:00", "soort": "koud"}]
         if "FROM status" in sql:
@@ -1176,6 +1180,36 @@ def test_db1_dropbox_termijn_per_bestandsversie():
         os.utime(os.path.join(m, "ontvangst.txt"))
         r, _ = ronde(w)
         assert dropbox(r), r.noden
+
+
+def test_mail4_reservesleutel_voor_rijen_zonder_message_id():
+    """MAIL-4 (T-0120): mailbericht kreeg pas op 19-10-2026 een kolom message_id; een oudere rij heeft ze leeg, maar draagt
+    de sleutel van de wacht in uniek (postvak:Message-ID, of postvak:uid zonder Message-ID). De dagvaststelling nam alleen
+    rijen met message_id, en telde zo 12-10 tot 19-10 te weinig (16-10 mch@: 6 in plaats van 12). Nu geldt een vaste
+    reservesleutel; een oude rij wordt niet aangevuld. Dezelfde mail uit IMAP en uit mailbericht telt precies een keer."""
+    pv = "proef@proef.test"
+    imap = [{"datum": f"{DAG}T08:00:00+02:00", "message_id": "<a1@x>", "uid": 11},     # staat nog in de gelezen map
+            {"datum": f"{DAG}T09:00:00+02:00", "message_id": "", "uid": 12}]           # zonder Message-ID, nog in de map
+    rijen = [{"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T08:00:00+02:00", "soort": "koud"},
+             {"uniek": f"{pv}:12", "postvak": pv, "message_id": "", "datum": f"{DAG}T09:00:00+02:00", "soort": "gewoon"},
+             # weggesorteerd naar een map die de wachten niet lezen: alleen in mailbericht
+             {"uniek": f"{pv}:<a3@x>", "postvak": pv, "message_id": "", "datum": f"{DAG}T10:00:00+02:00", "soort": "melding"},
+             {"uniek": f"{pv}:13", "postvak": pv, "message_id": "", "datum": f"{DAG}T11:00:00+02:00", "soort": "melding"},
+             # een nieuwe rij met message_id, ook nog in IMAP onder dezelfde sleutel
+             {"uniek": f"{pv}:<a1@x>", "postvak": pv, "message_id": "<a1@x>", "datum": f"{DAG}T08:00:00+02:00", "soort": "koud"}]
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        w.mailberichten = rijen
+        ronde(w, mail=lambda dagen_: ({pv: {"berichten": [dict(k) for k in imap], "onvolledig": []}}, {}, set()))
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+    assert "message_id, '') != ''" not in w.mailsql and "uniek" in w.mailsql, w.mailsql
+    assert f"  - {pv}: 4 binnen (1 gewoon, 1 koud, 2 melding)" in t, t
+    assert "- mail: 4 binnen" in t, t
+    # de vaste sleutel zelf: Message-ID, anders uit uniek, anders postvak plus uid
+    S = D.V.mail_sleutel
+    assert S(pv, {"message_id": "<a1@x>", "uid": 5}) == "<a1@x>" == S(pv, {"uniek": f"{pv}:<a1@x>", "message_id": ""})
+    assert S(pv, {"uid": 12}) == S(pv, {"uniek": f"{pv}:12"}) == f"{pv}:12"
+    assert S(pv, {"uid": 12}) != S("ander@proef.test", {"uid": 12}), "een uid is alleen uniek binnen een postvak"
 
 
 def test_vol4_eigen_werk_en_gezondheid_standaard_uit():

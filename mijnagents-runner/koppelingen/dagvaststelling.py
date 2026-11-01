@@ -344,6 +344,26 @@ def _berichten(g):
 
 
 # --------------------------------------------------------------------------------------------------- mail ---
+def mail_sleutel(postvak, k):
+    """MAIL-4 (T-0120): de vaste sleutel van een bericht, gelijk voor een kop uit de postbus en een rij uit mailbericht. De
+    Message-ID; anders de sleutel van de wacht uit uniek (postvak:Message-ID of postvak:uid, zo sinds 26-09-2026; de
+    kolom message_id bestaat pas sinds 19-10-2026 en een oudere rij wordt niet aangevuld); anders postvak plus uid (een uid
+    is alleen uniek binnen een postvak). None: geen sleutel."""
+    mid = (k.get("message_id") or "").strip()
+    if mid:
+        return mid
+    rest = str(k.get("uniek") or "")
+    if rest.lower().startswith(str(postvak).lower() + ":"):
+        rest = rest[len(postvak) + 1:].strip()
+        if "@" in rest:
+            return rest
+    elif k.get("uid") not in (None, ""):
+        rest = str(k["uid"])
+    else:
+        return None
+    return f"{postvak}:{rest}" if rest else None
+
+
 def mail_telling(dag, ontvangen, verzonden, soorten=None):
     """ontvangen en verzonden: {postvak: {'berichten': [koppen], 'onvolledig': [reden]}}, met koppen zoals de postbus ze
     geeft (datum, message_id, aan). De runner leest zelf de mappen, dus de leesdekking van deze ronde is gekend (E4).
@@ -377,7 +397,7 @@ def mail_telling(dag, ontvangen, verzonden, soorten=None):
             for k in v.get("berichten") or []:
                 if not k.get("datum") or brusselse_dag(k["datum"]) != dag:
                     continue
-                mid = (k.get("message_id") or "").strip() or hashlib.sha1(
+                mid = mail_sleutel(postvak, k) or hashlib.sha1(
                     f"{k.get('datum')}{k.get('onderwerp')}{k.get('aan')}".encode()).hexdigest()
                 if mid in hier:
                     continue

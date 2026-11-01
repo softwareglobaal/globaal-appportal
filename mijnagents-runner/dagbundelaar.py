@@ -993,9 +993,11 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
     zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
-    gezien_door_wachten = bord.db_lees("SELECT postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ? "
-                                       "AND COALESCE(message_id, '') != ''", (eerste, laatste))
-    soorten = {x["message_id"]: x["soort"] for x in gezien_door_wachten}
+    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel uit uniek
+    gezien_door_wachten = [x for x in bord.db_lees(
+        "SELECT uniek, postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ?", (eerste, laatste))
+        if V.mail_sleutel(x["postvak"], x)]
+    soorten = {V.mail_sleutel(x["postvak"], x): x["soort"] for x in gezien_door_wachten}
     statussen = {x["naam"]: x for x in bord.db_lees(
         "SELECT naam, status, taak, ts FROM status WHERE naam IN (%s)" % ", ".join("?" * len(KANAALWACHTEN)),
         tuple(KANAALWACHTEN.values()))}
@@ -1018,7 +1020,7 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         # Ze voegen alleen toe; een onleesbare map blijft onvolledig (E4).
         for x in gezien_door_wachten:
             ontvangen.setdefault(x["postvak"], {"berichten": [], "onvolledig": []})["berichten"].append(
-                {"datum": x["datum"], "message_id": x["message_id"]})
+                {"datum": x["datum"], "message_id": x.get("message_id") or "", "uniek": x.get("uniek") or ""})
     except Exception as e:  # noqa: BLE001
         ontvangen = verzonden = None
         prive_postvakken, mailfout = set(), f"{type(e).__name__}"
