@@ -638,7 +638,7 @@ def test_whatsapp_wacht_ronde_zonder_namen():
     assert any(u.startswith("whatsapp-oproep:") for u in b.tabel)
     for naam in (JAN, PIET, GROEP, "Kees Proef", "32470000001"):
         assert naam not in gemeld, naam
-    assert "gisteren" in r.detail and "berichten" in r.detail
+    assert "gisteren niet gedekt, gezien: 1 oproepen (1 min)" in r.detail, r.detail       # 23-10 is niet gedekt
 
 
 def test_wa2_ronde_schrijft_berichten_maar_geen_dekking_voor_de_oproepgeschiedenis():
@@ -673,7 +673,8 @@ def test_wa2_zonder_oproep_zegt_werkverslag_en_droog_onbekend():
     assert gedekt is None and not any(u.startswith(("dekking:", "whatsapp-oproep:")) for u in b.tabel), sorted(b.tabel)
     # 'niet gekend', niet 'onbekend': dat woord staat als persoon in de rijen en valt onder het masker
     assert "geen oproep op de Mac: oproepen niet gekend" in r.detail and "0 oproepen" not in gemeld, gemeld
-    assert gemeld.count("oproepen niet gekend") == 4 and "berichten" in gemeld, gemeld
+    assert gemeld.count("oproepen niet gekend") == 4, gemeld
+    assert any(u.startswith("whatsapp:") for u in b.tabel), "de berichten staan er wel"
     with tempfile.TemporaryDirectory() as map_:
         oud = M.KOPIE
         M.KOPIE = Path(map_)
@@ -689,6 +690,23 @@ def test_wa2_zonder_oproep_zegt_werkverslag_en_droog_onbekend():
     regels = uit.getvalue().splitlines()
     assert regels and all("oproepen niet gekend" in x and "0 oproepen" not in x and "niet gedekt" in x
                           for x in regels), regels
+
+
+def test_wa2_ongedekte_dag_toont_geen_nul():
+    """WA-2 en VOL-19, Codex-toets 2: ook een dag na het begin van de oproepgeschiedenis die geen dekkingsrij heeft (de
+    Mac sliep, de dag loopt nog, de bron kreeg daarna niets) toont in werkverslag, hartslag en --droog geen nul: wat
+    gezien is, staat als 'gezien'; een gedekte dag toont zijn echte aantallen, ook een 0."""
+    leeg = {"berichten": 0, "gesprekken": 0, "oproepen": 0, "minuten": 0, "gemist": 0}
+    een = {"berichten": 5, "gesprekken": 2, "oproepen": 1, "minuten": 0, "gemist": 0}
+    assert WA._dagtekst(leeg, DAG, {DAG}, None) == "0 berichten in 0 gesprekken, 0 oproepen (0 min), 0 zonder gesprek"
+    assert WA._dagtekst(leeg, DAG, set(), None) == "niet gedekt, gezien: niets"
+    assert WA._dagtekst(een, DAG, set(), None) == "niet gedekt, gezien: 5 berichten in 2 gesprekken, 1 oproepen"
+    assert WA._dagtekst(een, DAG, set(), DAG) == "niet gedekt, gezien: 5 berichten in 2 gesprekken; oproepen niet gekend"
+    r, b, gedekt, gemeld = _draai(WA, whatsapp_wereld, "whatsapp")
+    # 23-10 (gisteren) en 24-10 (vandaag) hebben geen dekkingsrij: geen enkele nul in werkverslag of hartslag
+    assert "dag 2026-10-23 gelezen niet gedekt, gezien: 1 oproepen (1 min)" in gemeld, gemeld
+    assert "dag 2026-10-24 gelezen niet gedekt, gezien: niets" in gemeld, gemeld
+    assert not re.search(r"\b0 (berichten|gesprekken|oproepen|min|zonder)", gemeld), gemeld
 
 
 def test_wa1_inhaal_vanaf_een_dag():

@@ -31,12 +31,21 @@ TAAK = "WhatsApp-databank lezen"          # met 'databank': zo ziet De Dagbundel
 ag = bord.Agent(NAAM)
 
 
-def _oproepen(s, dag, oproepen_vanaf):
-    """WA-2: de oproepen van een dag als tekst; tot en met het begin van de oproepgeschiedenis op de Mac niet gekend,
-    nooit 0. ('onbekend' staat als persoon in de rijen en valt dus onder het masker.)"""
-    if oproepen_vanaf and dag <= oproepen_vanaf:
-        return "oproepen niet gekend"
-    return f"{s['oproepen']} oproepen ({s['minuten']} min), {s['gemist']} zonder gesprek"
+def _dagtekst(s, dag, gedekt, oproepen_vanaf):
+    """WA-2 en VOL-19: de aantallen van een dag (M.samenvatting) als tekst, zonder naam. Een gedekte dag toont zijn echte
+    aantallen, ook een 0. Een dag zonder dekkingsrij (de dag loopt nog, de Mac sliep, de bron kreeg daarna niets) is niet
+    helemaal gelezen: alleen wat gezien is, nooit een nul (Codex-toets 2). Tot en met het begin van de oproepgeschiedenis
+    op de Mac zijn de oproepen niet gekend. ('onbekend' staat als persoon in de rijen en valt dus onder het masker.)"""
+    voor = bool(oproepen_vanaf and dag <= oproepen_vanaf)
+    if dag in gedekt and not voor:
+        return (f"{s['berichten']} berichten in {s['gesprekken']} gesprekken, {s['oproepen']} oproepen "
+                f"({s['minuten']} min), {s['gemist']} zonder gesprek")
+    delen = [f"{s['berichten']} berichten in {s['gesprekken']} gesprekken"] if s["berichten"] else []
+    if s["oproepen"] and not voor:
+        delen.append(f"{s['oproepen']} oproepen" + (f" ({s['minuten']} min)" if s["minuten"] else ""))
+    if s["gemist"] and not voor:
+        delen.append(f"{s['gemist']} zonder gesprek")
+    return "niet gedekt, gezien: " + (", ".join(delen) or "niets") + ("; oproepen niet gekend" if voor else "")
 
 
 def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
@@ -66,12 +75,11 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
     s = M.samenvatting(rijen, gisteren)
     for dag in dagen[-2:]:
         d = M.samenvatting(rijen, dag)
-        ag.log(f"dag {dag}", "gelezen", f"{d['berichten']} berichten in {d['gesprekken']} gesprekken, "
-               f"{_oproepen(d, dag, oproepen_vanaf)}")
+        ag.log(f"dag {dag}", "gelezen", _dagtekst(d, dag, set(gedekt), oproepen_vanaf))
     r.detail = (f"privé; {len(dagen)} dagen gelezen ({dagen[0]} tot {dagen[-1]}); nieuwste bericht "
                 f"{M.uur_van(nieuwste) if nieuwste else 'geen'} op {M.dag_van(nieuwste) if nieuwste else '-'}; "
-                f"gisteren {s['berichten']} berichten in {s['gesprekken']} gesprekken, "
-                f"{_oproepen(s, gisteren, oproepen_vanaf)}; dekking tot {max(gedekt) if gedekt else 'geen'}"
+                f"gisteren {_dagtekst(s, gisteren, set(gedekt), oproepen_vanaf)}; "
+                f"dekking tot {max(gedekt) if gedekt else 'geen'}"
                 + (" (geen oproep op de Mac: oproepen niet gekend)" if info["oudste_oproep"] is None else
                    f" (oproepen op de Mac pas vanaf {oproepen_vanaf})" if oproepen_vanaf and oproepen_vanaf >= dagen[0] else "")
                 + f"; {len(rijen)} rijen, {vervallen} vervallen; ronde-id:{ronde_id}")
@@ -90,11 +98,9 @@ def droog(vanaf=None):
     rijen, info = M.whatsapp_rijen(kopie, dagen)
     oproepen_vanaf = M.oproepen_vanaf(info["oudste_oproep"], nu)
     rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"], oproepen_vanaf)
+    gedekt = {x["datum"] for x in rijen if x["bron"] == "dekking"}
     for dag in dagen:
-        s = M.samenvatting(rijen, dag)
-        gedekt = any(x["uniek"] == f"dekking:{KANAAL}:{dag}" for x in rijen)
-        print(f"{dag}: {s['berichten']} berichten in {s['gesprekken']} gesprekken, {_oproepen(s, dag, oproepen_vanaf)}"
-              f"{'' if gedekt else ', niet gedekt'}")
+        print(f"{dag}: {_dagtekst(M.samenvatting(rijen, dag), dag, gedekt, oproepen_vanaf)}")
     return 0
 
 
