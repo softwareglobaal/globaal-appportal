@@ -9,7 +9,6 @@ Een grendel die niet van het model afhangt: een aanbod telt alleen als het model
 de eigen leestool (aankoop/leesserver.py). Die geeft het model precies de tekst die ze ook in het leeslog zet, en dat
 leeslog is `gelezen` voor aanbod.py. Een link uit een zoekresultaat alleen gaat nooit in het verslag.
 """
-import hashlib
 import json
 import os
 import queue
@@ -28,9 +27,9 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 CLAUDE = os.path.expanduser(os.environ.get("PRIJS_CLAUDE", "~/.local/bin/claude"))
 MODEL = os.environ.get("PRIJS_MODEL", "opus")      # een alias, geen modelcode die kan verdwijnen (overleg 14, X1)
 TOKEN_BESTAND = os.path.expanduser(os.environ.get("PRIJS_TOKEN_BESTAND", "~/.config/prijsonderzoeker/claude-token"))
-# Het merkteken van een geslaagde abonnementsproef, met de vingerafdruk van het token (overleg 19): een prijsvraag start
-# alleen als de proef met dit token abonnementsvensters zag. Een setup-token toont zonder modelvraag geen abonnementstype.
-MERK_BESTAND = os.path.expanduser(os.environ.get("PRIJS_MERK_BESTAND", "~/.config/prijsonderzoeker/abonnement-bewezen.json"))
+# De laatst gemeten benutting van de limietvensters van het abonnement (overleg 25, K2): lag die boven GRENS_GEBRUIK en
+# is het venster nog niet herstart, dan start een vraag niet, zodat ze nooit in betaald extra verbruik begint.
+LIMIET_BESTAND = os.path.expanduser(os.environ.get("PRIJS_LIMIET_BESTAND", "~/.config/prijsonderzoeker/limiet.json"))
 MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
@@ -283,18 +282,40 @@ def omgeving(token, werkmap, bron=None):
     return env
 
 
-def vingerafdruk_token(token):
-    return hashlib.sha256(token.encode()).hexdigest()[:16]
+# Zonder herstarttijd: de duur van het venster na de meting; een onbekend venster telt als het langste (Codex 27).
+VENSTERDUUR = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
+LANGSTE_VENSTER = 7 * 86400
 
 
-def bewezen(token):
-    """Zag een abonnementsproef met precies dit token abonnementsvensters (overleg 19)?"""
+def te_vol(nu=None):
+    """Lag de laatst gemeten benutting van een venster boven de grens, en is dat venster nog niet herstart? Zonder
+    bekende herstarttijd geldt de duur van dat venster na de meting; zonder meettijd de tijd van het bestand."""
+    nu = time.time() if nu is None else nu
     try:
-        with open(MERK_BESTAND, encoding="utf-8") as f:
-            merk = json.load(f)
-    except (OSError, ValueError):
+        with open(LIMIET_BESTAND, encoding="utf-8") as f:
+            bewaard = json.load(f)
+        vensters = bewaard.get("vensters") or {}
+        gemeten = float(bewaard.get("gemeten_ts") or os.path.getmtime(LIMIET_BESTAND))
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
-    return isinstance(merk, dict) and merk.get("token") == vingerafdruk_token(token) and bool(merk.get("vensters"))
+    for naam, v in vensters.items():
+        if isinstance(v, dict) and isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK:
+            herstart = (v["resetsAt"] if isinstance(v.get("resetsAt"), (int, float))
+                        else gemeten + VENSTERDUUR.get(str(naam), LANGSTE_VENSTER))
+            if herstart > nu:
+                return True
+    return False
+
+
+def bewaar_limiet(vensters):
+    """De gemeten vensters van deze vraag bewaren voor de volgende (rechten 600)."""
+    if not vensters:
+        return
+    os.makedirs(os.path.dirname(LIMIET_BESTAND), mode=0o700, exist_ok=True)
+    nieuw = LIMIET_BESTAND + ".nieuw"
+    with open(os.open(nieuw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+        json.dump({"vensters": vensters, "gemeten": time.strftime("%Y-%m-%dT%H:%M:%S"), "gemeten_ts": time.time()}, f)
+    os.replace(nieuw, LIMIET_BESTAND)
 
 
 def voor_de_start(token, werkmap):
@@ -363,7 +384,7 @@ class _Stand:
         self.extra_verbruik = None          # overageStatus uit de stream, voor het werkverslag
         self.soort = None                   # het abonnement volgens claude auth status
         self.config = None                  # de eigen configuratiemap van claude -p
-        self.vensters = set()               # de limietvensters van het abonnement (five_hour, seven_day)
+        self.vensters = {}                  # {venster: {utilization, resetsAt}} uit de stream
 
 
 def verwerk_regel(st, d):
@@ -377,13 +398,16 @@ def verwerk_regel(st, d):
             return "centraal"             # centrale instellingen van een organisatie: stoppen voor de eerste aanvraag
     elif soort == "rate_limit_event":
         info = d.get("rate_limit_info") or {}
+        # overageStatus wordt alleen bewaard: de betekenis is niet gedocumenteerd en blokkeert dus niet (overleg 25, X1).
         st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
-        st.vensters |= {str(k) for k in (info.get("unifiedWindows") or {})} | ({str(info["rateLimitType"])}
-                                                                               if info.get("rateLimitType") else set())
+        # Ook de melding zelf is een venster (rateLimitType); een venster zonder eigen herstarttijd neemt die van de
+        # melding over (Codex controle 26, punt 1).
+        for naam, v in [(info.get("rateLimitType") or "melding", info)] + list((info.get("unifiedWindows") or {}).items()):
+            if isinstance(v, dict) and v.get("utilization") is not None:
+                st.vensters[str(naam)] = {"utilization": v.get("utilization"),
+                                          "resetsAt": v.get("resetsAt", info.get("resetsAt"))}
         if info.get("isUsingOverage"):
             return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
-        if st.extra_verbruik == "allowed":
-            return "extra_aan"            # Usage credits staan aan: dan kan een volgende aanvraag geld kosten (Codex 16)
         st.limiet = st.limiet or info.get("status") == "rejected"
         vensters = [info] + [v for v in (info.get("unifiedWindows") or {}).values() if isinstance(v, dict)]
         if any(isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK for v in vensters):
@@ -492,8 +516,11 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     deadline: time.monotonic() waarop de vraag klaar moet zijn (de deadline van de ronde, Codex X6 en overleg 14, X4)."""
     deadline = deadline or time.monotonic() + 420
     token = token or lees_token()
-    if not bewezen(token):
-        raise GeenAbonnement("nog geen geslaagde abonnementsproef voor dit token (prijsonderzoeker.py --proef-abonnement)")
+    if te_vol():
+        # Niet starten: de vorige meting zat boven de grens en het venster is nog niet herstart (overleg 25, K2).
+        return {"gegevens": None, "gelezen": {}, "zoekresultaten": {}, "tekst": "", "tokens": 0, "tellers": [],
+                "leesbeurten": (0, 0), "zoekopdrachten": 0, "stop": "limiet", "model": MODEL, "beurten": 0, "bron": None,
+                "reden": "vol_vooraf", "extra_verbruik": None, "abonnement": None, "fout": ""}
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
     eigen_map = werkmap is None
     werkmap = werkmap or tempfile.mkdtemp(prefix="prijsvraag-")
@@ -505,14 +532,13 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)
     finally:
+        bewaar_limiet(st.vensters)
         if eigen_map:
             shutil.rmtree(werkmap, ignore_errors=True)
     if reden == "bron":
         raise GeenAbonnement(f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement; meteen gestopt")
     if reden == "betaald":
         raise GeenAbonnement("Claude Code startte extra betaald verbruik bovenop het abonnement; meteen gestopt")
-    if reden == "extra_aan":
-        raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
     if reden == "centraal":
         raise GeenAbonnement("het account krijgt centrale instellingen van een organisatie; meteen gestopt")
     if st.bron != "none":
@@ -531,10 +557,6 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         stop = "fout"
     else:
         stop = "klaar"
-    if stop == "klaar" and (not st.vensters & {"five_hour", "seven_day"} or st.extra_verbruik is None):
-        # Elke vraag moet zelf tonen dat ze binnen het abonnement bleef (overleg 19, K2; Codex controle 20).
-        raise GeenAbonnement("geen limietmelding van het abonnement in deze vraag: niet na te gaan of ze binnen het "
-                             "abonnement bleef")
     tekst = str(einde.get("result") or "".join(st.teksten[-1:])).strip()
     gebruik = einde.get("usage") or {}
     tellers = {"input": gebruik.get("input_tokens", 0) or 0, "output": gebruik.get("output_tokens", 0) or 0,
@@ -550,12 +572,14 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
 
 
 def proef_abonnement(token=None, wacht=120):
-    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Pas te draaien als Mehdi bevestigde dat
-    Usage credits uitstaan, na het aanmelden en na een uitrol (overleg 14, X7; Codex controle 17): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
+    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Na het aanmelden of een uitrol: toont dat het
+    token werkt en dat Claude Code geen API-sleutel gebruikt (overleg 14, X7). Geen poort meer (overleg 25)."""
     try:
         token = token or lees_token()
     except GeenAbonnement as e:
         return False, str(e)
+    if te_vol():
+        return False, f"de vorige meting zat boven {GRENS_GEBRUIK:.0%} van een limiet; na de herstart opnieuw"
     with tempfile.TemporaryDirectory(prefix="abonnement-") as werkmap:
         try:
             soort = voor_de_start(token, werkmap)
@@ -568,37 +592,29 @@ def proef_abonnement(token=None, wacht=120):
                                timeout=wacht, cwd=werkmap, env=omgeving(token, werkmap))
         except (subprocess.TimeoutExpired, OSError) as e:
             return False, f"claude -p antwoordde niet ({type(e).__name__})"
-    st = _Stand()
+    st, reden = _Stand(), None
     for regel in r.stdout.splitlines():
         try:
             d = json.loads(regel)
         except ValueError:
             continue
         reden = verwerk_regel(st, d) if isinstance(d, dict) else None
-        if reden == "bron":
-            return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
-        if reden == "betaald":
-            return False, "Claude Code startte extra betaald verbruik"
-        if reden == "vol":
-            return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
-        if reden == "extra_aan":
-            return False, "Usage credits staan aan op dit account: zet ze uit in claude.ai, Settings > Usage"
+        if reden in ("bron", "betaald", "vol", "centraal"):
+            break
+    bewaar_limiet(st.vensters)            # ook als de proef stopt (Codex controle 26, punt 2)
+    if reden == "bron":
+        return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
+    if reden == "betaald":
+        return False, "Claude Code startte extra betaald verbruik"
+    if reden == "vol":
+        return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
+    if reden == "centraal":
+        return False, "het account krijgt centrale instellingen van een organisatie"
     einde = st.einde or {}
     if st.bron != "none":
         return False, "geen startbericht van claude -p: de bron is niet bewezen"
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
-    if st.extra_verbruik is None:
-        # Zonder limietmelding is niet na te gaan of Usage credits uitstaan: dan nooit "werkt" (Codex controle 17, 3).
-        return False, "geen limietmelding van het abonnement: niet na te gaan of Usage credits uitstaan"
-    if not st.vensters & {"five_hour", "seven_day"}:
-        return False, "geen limietvensters van een abonnement in de stream: dit lijkt geen persoonlijk abonnement"
-    os.makedirs(os.path.dirname(MERK_BESTAND), mode=0o700, exist_ok=True)
-    nieuw = MERK_BESTAND + ".nieuw"
-    with open(os.open(nieuw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
-        json.dump({"token": vingerafdruk_token(token), "vensters": sorted(st.vensters), "extra_verbruik": st.extra_verbruik,
-                   "datum": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
-    os.replace(nieuw, MERK_BESTAND)
     return True, f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
 

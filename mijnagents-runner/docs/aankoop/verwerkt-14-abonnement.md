@@ -153,3 +153,33 @@ Tests: 250 prijstests groen.
 Punt 3 van controle 22 was opgelost. Nieuw en hersteld: ook bij `plafond` (tijd, beurten, zoekgrens) komt er geen verslag,
 ook niet met leesbare JSON; alleen een vraag met stop `klaar` (die bron en limietmelding bewees) geeft een verslag. Elke
 andere stop laat de bordvraag staan. Tests: 251 prijstests groen.
+
+## Overleg 25 (Mehdi: "moet werken en mag geen geld kosten")
+
+Kernoorzaak (X1, K1, 3-0): ik bouwde grendels voor de eerste echte proef. Een daarvan, de weigering bij
+`overageStatus: "allowed"`, steunde op een onbewezen uitleg en blokkeerde de agent.
+Besluit (K2, 2-1): vereenvoudigen, niet opnieuw beginnen. Mehdi hoeft niets (K3, 2-1); Usage credits uitzetten mag als
+extra zekerheid. Gebouwd:
+- vervallen: de weigering bij `overageStatus: "allowed"`, de proefpoort met merkteken (overleg 19), en de eis dat een
+  vraag een limietmelding toont voor ze "klaar" is;
+- blijft: stop bij `isUsingOverage`, boven 90 procent, bij een andere bron dan het abonnement, en de witte-lijstomgeving;
+- nieuw: de gemeten vensters gaan naar `~/.config/prijsonderzoeker/limiet.json` (600); lag de vorige meting boven 90
+  procent en is dat venster nog niet herstart, dan start een vraag niet.
+Lessen: `lessen-nieuwe-agent.md`. Werkwijze 1.3. Tests: 249 prijstests groen.
+
+## Verwerking Codex-controle 26 (niet klaar)
+
+1. **Herstarttijd uit de melding zelf.** De melding is nu zelf een venster (`rateLimitType`). Heeft een venster geen
+   eigen herstarttijd, dan neemt het die van de melding over. Is er geen herstarttijd bekend, dan blokkeert een meting
+   boven 90 procent vijf uur na het meten (`gemeten_ts`).
+2. **Voorafstop ook bij de abonnementsproef.** De proef start niet na een meting boven 90 procent. Ze bewaart haar
+   meting ook als ze stopt.
+
+Tests: 255 prijstests groen.
+
+## Verwerking Codex-controle 27 (niet klaar)
+
+De twee punten van controle 26 waren opgelost. Nieuw en hersteld: zonder herstarttijd blokkeert een meting boven 90
+procent zo lang als haar venster duurt (`five_hour` vijf uur, `seven_day` zeven dagen, een onbekend venster zeven dagen),
+gerekend vanaf de meting; een bestand zonder meettijd telt vanaf de tijd van het bestand. Geen eindeloze blokkade: de
+agent moet blijven werken (overleg 25, K4). Tests: 259 prijstests groen.
