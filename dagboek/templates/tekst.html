@@ -1,0 +1,38 @@
+{% extends "basis.html" %}
+{% block titel %}Tekst · {{ dagnaam_ }} · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>{% if t and t.get('wie') %}{{ t['wie'] }}{% else %}Tekst van een gesprek{% endif %}</h1>
+  <a href="{{ url_for('dag_pagina', dag=dag) }}">terug naar {{ dagnaam_ }}</a>
+</header>
+<main>
+  {% if not t %}
+    <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
+      <div class="zacht">Daardoor kan het Dagboek deze tekst nu niet lezen. Dat is onbekend, niet leeg.</div></div>
+  {% else %}
+  <div class="kaart">
+    <div class="zacht">{{ t.get('datum') or dag }} {{ t.get('tijd') or '' }} · {{ t.get('bron') or '' }}{% if t.get('label') %} · <span class="etiket">{{ t['label'] }}</span>{% endif %}</div>
+    {% if t.get('wat') %}<div><b>{{ t['wat'] }}</b></div>{% endif %}
+    <div class="zacht klein">Zoals de wacht de tekst bewaarde; het Dagboek verandert er niets aan.</div>
+  </div>
+  {% if t.get('fout') %}
+    <div class="kaart"><p class="leeg">{{ t['fout'] }}</p></div>
+  {% elif t.get('md') %}
+    <div class="kaart"><pre class="tekst">{{ t['md'] }}</pre></div>
+  {% else %}
+    <div class="kaart">
+      {% for r in t.get('regels') or [] %}
+      <div class="regel"><span class="tijd">{{ r['tijd'] }}</span> {% if r['wie'] %}<b>{{ r['wie'] }}:</b> {% endif %}{{ r['tekst'] }}</div>
+      {% else %}<p class="leeg">De tekst is leeg.</p>{% endfor %}
+    </div>
+  {% endif %}
+  {% endif %}
+</main>
+<style>
+  .etiket{background:#2b2f3a;color:var(--oranje);border-radius:8px;padding:0 7px;font-size:12px}
+  pre.tekst{white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
+  .regel{padding:5px 0;border-top:1px solid var(--rand);overflow-wrap:anywhere}
+  .regel:first-child{border-top:0}
+  .regel .tijd{color:var(--zacht);font-variant-numeric:tabular-nums;margin-right:6px;font-size:13px}
+</style>
+{% endblock %}

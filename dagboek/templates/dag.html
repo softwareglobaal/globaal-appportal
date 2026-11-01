@@ -67,6 +67,7 @@
         {% for it in w['items'] %}
         <details class="item{% if it['fout'] %} fout{% endif %}">
           <summary><span class="tijd">{{ it['tijd'] or '-' }}</span> <b>{{ it['wie'] }}</b>{% if it.get('label') %} <span class="etiket">{{ it['label'] }}</span>{% endif %} <span class="zacht">{{ it['wat'] }}</span></summary>
+          {% if it.get('tekst') %}<p class="tekstlink"><a href="{{ url_for('tekst_pagina', dag=dag_, gesprek=it['tekst']) }}">de volledige tekst lezen</a></p>{% endif %}
           {% if it.get('detail') %}
           <dl>{% for k, v in it['detail'] %}<dt>{{ k }}</dt><dd>{% if v.startswith('http://') or v.startswith('https://') %}<a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>{% endfor %}</dl>
           {% else %}<p class="leeg klein">Meer weet de wacht hier niet over.</p>{% endif %}
@@ -123,6 +124,8 @@
   details.item[open]>summary::before{content:"▾"}
   details.item.fout>summary{color:var(--rood)}
   details.item .tijd{color:var(--zacht);font-variant-numeric:tabular-nums;display:inline-block;min-width:46px}
+  .tekstlink{margin:6px 0 2px 24px}
+  .tekstlink a{color:var(--accent);font-weight:700}
   .etiket{background:#2b2f3a;color:var(--oranje);border-radius:8px;padding:0 7px;font-size:12px}
   details.item dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:4px 0 10px 24px;font-size:14px}
   details.item dt{color:var(--zacht)}

@@ -139,7 +139,8 @@ WACHTEN = {"dag": "2026-10-31", "items": 2, "telling": {}, "vakken": [
          "rondes": 3, "gedekt": True, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": {"laatste": "21:37"},
          "items": [{"tijd": "09:15", "wie": "Sara Proef", "wat": "3 berichten", "fout": False, "label": "",
                     "detail": [["wie", "Sara Proef"], ["thema", "Proefthema"], ["link", "https://voorbeeld.test/opname/1"]]},
-                   {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False, "label": "priv\u00e9", "detail": []}],
+                   {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False, "label": "priv\u00e9", "detail": [],
+                    "tekst": "zoom:meeting:ABC=="}],
          "log": [{"tijd": "21:37", "stap": "bron", "tekst": "2 gesprekken", "fout": False}]},
         {"naam": "sms-wacht", "label": "De Sms-wacht", "kleur": "rood", "oordeel": "fout", "aantal": 0, "rondes": 1,
          "gedekt": None, "leesfout": "", "logfout": "", "noden": ["Full Disk Access ontbreekt"], "status": None,
@@ -168,6 +169,24 @@ check("D14 items met detail", "Sara Proef" in html and "Tom Proef" in html and "
       and 'href="https://voorbeeld.test/opname/1"' in html, html[-6000:])
 check("D14 priv\u00e9 is een label, naam blijft", '<b>Tom Proef</b> <span class="etiket">priv\u00e9</span>' in html)
 check("D14 item zonder detail zegt het", "Meer weet de wacht hier niet over." in html)
+check("D14 item met tekst wijst naar de tekstpagina", 'href="/dag/2026-10-31/tekst?gesprek=zoom:meeting:ABC%3D%3D"' in html
+      and html.count("de volledige tekst lezen") == 1, html[-6000:])
+# D15: de tekstpagina leest de tekst via het bord.
+A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom Proef", "wat": "Kort gesprek", "bron": "zoom", "datum": "2026-10-31",
+                              "tijd": "10:02", "label": "priv\u00e9", "regels": [{"tijd": "00:00:05", "wie": "Tom", "tekst": "Hallo."}]}
+r = C.get("/dag/2026-10-31/tekst?gesprek=zoom:meeting:ABC==", headers=MET)
+ht = r.get_data(as_text=True)
+check("D15 tekstpagina met regels", r.status_code == 200 and "<b>Tom:</b> Hallo." in ht and "00:00:05" in ht
+      and '<span class="etiket">priv\u00e9</span>' in ht and 'href="/dag/2026-10-31">terug naar za 31 okt 2026' in ht, ht[-2500:])
+check("D07 geen gedachtestreepje (tekst)", "\u2014" not in ht and "\u2013" not in ht)
+A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom Proef", "md": "# Kop\n\nMehdi: tekst."}
+check("D15 tekst als md", '<pre class="tekst"># Kop' in C.get("/dag/2026-10-31/tekst?gesprek=f:1", headers=MET).get_data(as_text=True))
+A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom", "fout": "geen tekst bewaard: proef"}
+check("D15 zonder tekst zegt dat", "geen tekst bewaard: proef" in C.get("/dag/2026-10-31/tekst?gesprek=f:1", headers=MET).get_data(as_text=True))
+A.haal_tekst = lambda uniek: None
+check("D15 bord onbereikbaar", "Het bord antwoordt niet" in C.get("/dag/2026-10-31/tekst?gesprek=f:1", headers=MET).get_data(as_text=True))
+check("D15 zonder gesprek 404, zonder groep 403", C.get("/dag/2026-10-31/tekst", headers=MET).status_code == 404
+      and C.get("/dag/2026-10-31/tekst?gesprek=f:1", headers={"X-authentik-groups": "x"}).status_code == 403)
 check("D14 werkverslag", "2 gesprekken" in html and "21:37" in html)
 check("D14 dagbestand onder De Dagbundelaar", html.index('id="dagbundelaar"') < html.index("Dagbestand van De Dagbundelaar")
       < html.index('id="whatsapp-wacht"'))
@@ -214,7 +233,21 @@ check("D14 rij bij werkverslagfout toont de fout, niet het item", "kon niet leze
 check("D14 dag in de toekomst is 404", C.get("/dag/" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)
 check("D14 vandaag bereikbaar via volgende dag", 'href="/dag/2026-10-31">volgende dag' in C.get("/dag/2026-10-30", headers=MET).get_data(as_text=True))
 check("D14 geen datum 404", C.get("/wachten?dag=gisteren", headers=MET).status_code == 404
-      and C.get("/dag/gisteren", headers=MET).status_code == 404)
+      and C.get("/dag/gisteren", headers=MET).status_code == 404 and C.get("/dag/0001-01-01", headers=MET).status_code == 404
+      and C.get("/wachten?dag=0001-01-01", headers=MET).status_code == 404)
+check("D14 onbekende oude wachtlink 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404
+      and C.get("/wachten/Geen%20Wacht?dag=2026-10-31", headers=MET).status_code == 404)
+A.haal_wachten = lambda dag: None
+check("D14 oude wachtlink zonder bord stuurt toch door", C.get("/wachten/sms-wacht?dag=2026-10-31", headers=MET).status_code == 302)
+A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
+TEL = {"n": 0}
+def tel_locatie(pad):
+    TEL["n"] += 1
+    return None
+A.haal_locatie = tel_locatie
+C.get("/dag/2026-10-31", headers=MET)
+check("D14 locatie een keer per dagpagina", TEL["n"] == 1, TEL)
+A.haal_locatie = lambda pad: None
 check("D07 geen gedachtestreepje (wachten)", "\u2014" not in html and "\u2013" not in html)
 
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
