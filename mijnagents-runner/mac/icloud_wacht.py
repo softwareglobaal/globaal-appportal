@@ -46,6 +46,7 @@ METADATA_VERSIE = 2  # T-0120 FOTO-8: vanaf versie 2 staan plaats en tijd alleen
 MENSEN_GEZICHT = 0.10
 APP_IMPORT = (3, 8)
 AFSPRAAK_PAGINAS = 40
+_RONDE = {}              # tijdens één avondronde (_werk): de bak met afspraken wordt één keer doorgebladerd
 ONLINE = re.compile(r"(?i)https?://|\b(?:teams|zoom|google meet|meet\.google|webex|online)\b")
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
@@ -279,6 +280,34 @@ def werkafspraken(dag):
     Nooit een privéafspraak of een online vergadering (Codex 1: anders ging een foto bij een privéafspraak als werk naar
     Dropbox). None als de bak niet antwoordde of geen lijst gaf: onbekend, nooit 'geen afspraken'. De bak geeft hoogstens
     500 items per vraag: er wordt teruggebladerd met tot_id (Codex 2), hoogstens AFSPRAAK_PAGINAS keer."""
+    items = _RONDE["afspraken"] if "afspraken" in _RONDE else bak_afspraken()
+    if items is None:
+        return None
+    if _RONDE.get("aan"):
+        _RONDE["afspraken"] = items
+    uit = []
+    for it in items:
+        if it.get("soort") != "afspraak" or it.get("voor") == "prive":
+            continue
+        try:
+            d = json.loads(it.get("inhoud") or "{}")
+        except ValueError:
+            continue
+        if not isinstance(d, dict):
+            continue
+        adres = (d.get("locatie") or "").strip()
+        firma = str(d.get("firma") or "").upper()
+        if (d.get("datum") != dag or not adres or not firma or firma == "PRIVE" or ONLINE.search(adres)
+                or not (d.get("buiten") or re.search(r"\b\d{4}\b", adres))):
+            continue
+        uit.append({"titel": d.get("titel") or it.get("titel", ""), "start": (d.get("start") or "")[11:16], "einde": (d.get("einde") or "")[11:16],
+                    "adres": adres, "firma": d.get("firma", ""), "soort": d.get("soort", ""), "nummer": d.get("nummer", "")})
+    return uit
+
+
+def bak_afspraken():
+    """Alle afspraken uit de bak, 500 per vraag, teruggebladerd met tot_id (Codex 2); None als de bak niet antwoordde, geen
+    lijst gaf of meer dan AFSPRAAK_PAGINAS pagina's heeft (onbekend, nooit 'geen afspraken')."""
     items, tot_id = [], None
     for _ in range(AFSPRAAK_PAGINAS):
         q = {"status": "alle", "soort": "afspraak", "n": 500}
@@ -301,24 +330,7 @@ def werkafspraken(dag):
     else:
         print("afspraken niet volledig gelezen: meer dan", AFSPRAAK_PAGINAS * 500, file=sys.stderr)
         return None
-    uit = []
-    for it in items:
-        if it.get("soort") != "afspraak" or it.get("voor") == "prive":
-            continue
-        try:
-            d = json.loads(it.get("inhoud") or "{}")
-        except ValueError:
-            continue
-        if not isinstance(d, dict):
-            continue
-        adres = (d.get("locatie") or "").strip()
-        firma = str(d.get("firma") or "").upper()
-        if (d.get("datum") != dag or not adres or not firma or firma == "PRIVE" or ONLINE.search(adres)
-                or not (d.get("buiten") or re.search(r"\b\d{4}\b", adres))):
-            continue
-        uit.append({"titel": d.get("titel") or it.get("titel", ""), "start": (d.get("start") or "")[11:16], "einde": (d.get("einde") or "")[11:16],
-                    "adres": adres, "firma": d.get("firma", ""), "soort": d.get("soort", ""), "nummer": d.get("nummer", "")})
-    return uit
+    return items
 
 
 def coord(adres):
@@ -949,6 +961,8 @@ def _werk():
         hartslag("fout", taak="fotobibliotheek niet gevonden", detail=DB)
         sys.exit(1)
     hartslag("actief", taak=f"foto's van {DAG} lezen")
+    _RONDE.clear()
+    _RONDE["aan"] = True
     dagen, melding = dagen_te_lezen(date.fromisoformat(DAG))
     if melding:
         bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": "inhalen", "stap": "melding", "tekst": melding}]})

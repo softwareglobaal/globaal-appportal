@@ -445,7 +445,8 @@ def _bewaar(dag, ind):
     pad = _pad(dag)
     os.makedirs(os.path.dirname(pad), exist_ok=True)
     tijdelijk = f"{pad}.{os.getpid()}.tmp"
-    with open(tijdelijk, "w", encoding="utf-8") as f:
+    fd = os.open(tijdelijk, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)     # meteen 0640, nooit even 0644
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(ind, f, ensure_ascii=False, indent=1)
     os.chmod(tijdelijk, 0o640)
     os.replace(tijdelijk, pad)
