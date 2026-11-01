@@ -10,6 +10,10 @@ Werkt op macOS en Windows (dezelfde app, dezelfde databank):
   Windows: %APPDATA%\\Wispr Flow\\flow.sqlite
 Token: ~/.config/mijnagents/token (AGENTS_TOKEN van het bord). Gebruiker: WISPR_GEBRUIKER of de
 loginnaam. Gebruik: wispr_wacht.py [--dag JJJJ-MM-DD] [--dagen N]  (standaard: gisteren tot vandaag, 14 dagen terug in het rapport)
+
+Inhalen (WISPR-2, 01-11-2026): --dag met een vroegere dag werkt het item van die dag bij met de volle telling en de
+DAGEN dagen ervoor (per_dag, ook een dag zonder dictaat: 0), niets van na die dag. Het rapport blijft dan staan: het
+toont de stand van vandaag, en een inhaalronde schrijft niets in Dropbox.
 """
 import getpass
 import json
@@ -78,12 +82,18 @@ def lees(dagen):
     c = sqlite3.connect(f"file:{os.path.join(tmp, 'flow.sqlite')}?mode=ro", uri=True)
     sinds = (datetime.fromisoformat(DAG) - timedelta(days=dagen)).strftime("%Y-%m-%d")
     per_dag = defaultdict(lambda: {"dictaten": 0, "woorden": 0, "seconden": 0.0, "apps": defaultdict(int)})
+    # WISPR-2: precies de dagen tot en met DAG, elke dag erin (de wacht keek: 0 is 0, nooit onbekend), niets erna
+    venster = {(datetime.fromisoformat(DAG) - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(dagen)}
+    for d in venster:
+        per_dag[d]          # maakt de lege dag aan
     # timestamp is UTC-tekst; Belgische dag = +2 (zomer) / +1: we nemen de lokale tijd van deze computer
     for ts, woorden, duur, app in c.execute("select timestamp, numWords, duration, app from History where substr(timestamp,1,10) >= ? order by timestamp", (sinds,)):
         try:
             d = datetime.fromisoformat(ts.replace(" +00:00", "+00:00").replace(" ", "T", 1)).astimezone().strftime("%Y-%m-%d")
         except ValueError:
             d = ts[:10]
+        if d not in venster:
+            continue
         r = per_dag[d]
         r["dictaten"] += 1
         r["woorden"] += int(woorden or 0)
@@ -131,10 +141,15 @@ def main():
     hartslag("actief", taak=f"gebruik van {GEBRUIKER} lezen")
     per_dag, totaal = lees(DAGEN)
     tekst, kern = rapport(per_dag, totaal)
-    os.makedirs(RAPPORT, exist_ok=True)
-    open(os.path.join(RAPPORT, f"{GEBRUIKER}.md"), "w", encoding="utf-8").write(tekst)
-    json.dump({"gebruiker": GEBRUIKER, "stand": DAG, **kern, "per_dag": {d: {k: (v if k != "apps" else dict(v)) for k, v in r.items()} for d, r in per_dag.items()}},
-              open(os.path.join(RAPPORT, f"{GEBRUIKER}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    inhaal = DAG != datetime.now().date().isoformat()
+    if inhaal:
+        waar = f"rapport niet herschreven (inhaalronde voor {DAG})"
+    else:
+        os.makedirs(RAPPORT, exist_ok=True)
+        open(os.path.join(RAPPORT, f"{GEBRUIKER}.md"), "w", encoding="utf-8").write(tekst)
+        json.dump({"gebruiker": GEBRUIKER, "stand": DAG, **kern, "per_dag": {d: {k: (v if k != "apps" else dict(v)) for k, v in r.items()} for d, r in per_dag.items()}},
+                  open(os.path.join(RAPPORT, f"{GEBRUIKER}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        waar = f"rapport {os.path.join(RAPPORT, GEBRUIKER + '.md')}"
     vandaag = per_dag.get(DAG, {"dictaten": 0, "woorden": 0, "seconden": 0})
     uit = bord("/api/klaarzet", {"items": [{"van": NAAM, "voor": "licentiewacht", "soort": "gebruik", "sleutel": GEBRUIKER,
                                             "titel": f"Wispr Flow {GEBRUIKER} {DAG}: {vandaag['dictaten']} dictaten, {vandaag['woorden']} woorden; week {kern['week_woorden']} woorden ({kern['oordeel']})",
@@ -144,9 +159,9 @@ def main():
     bord("/api/logboek", {"regels": [
         {"naam": NAAM, "onderwerp": f"{GEBRUIKER} {DAG}", "stap": "bron", "tekst": f"{vandaag['dictaten']} dictaten, {vandaag['woorden']} woorden vandaag; laatste 7 dagen {kern['week_dictaten']} dictaten, {kern['week_woorden']} woorden, {kern['week_minuten']} min",
          "detail": "\n".join(f"{a}: {n} woorden" for a, n in kern["apps_week"].items())},
-        {"naam": NAAM, "onderwerp": f"{GEBRUIKER} {DAG}", "stap": "schrijf", "tekst": f"rapport {os.path.join(RAPPORT, GEBRUIKER + '.md')}; klaargezet {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt; oordeel: {kern['oordeel']}"}]})
+        {"naam": NAAM, "onderwerp": f"{GEBRUIKER} {DAG}", "stap": "schrijf", "tekst": f"{waar}; klaargezet {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt; oordeel: {kern['oordeel']}"}]})
     hartslag("klaar", taak=f"gebruik van {GEBRUIKER} gemeld", detail=f"week {kern['week_woorden']} woorden, {kern['week_dictaten']} dictaten: {kern['oordeel']}")
-    print(f"{GEBRUIKER} {DAG}: vandaag {vandaag['dictaten']} dictaten / {vandaag['woorden']} woorden; week {kern['week_woorden']} woorden ({kern['oordeel']}); rapport in {RAPPORT}")
+    print(f"{GEBRUIKER} {DAG}: vandaag {vandaag['dictaten']} dictaten / {vandaag['woorden']} woorden; week {kern['week_woorden']} woorden ({kern['oordeel']}); {waar}")
 
 
 if __name__ == "__main__":

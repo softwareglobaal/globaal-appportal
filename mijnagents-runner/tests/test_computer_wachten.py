@@ -6,7 +6,10 @@ Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.p
 - C02 (WEB-2): leest De Websitewacht geen enkele browser, dan zet ze niets klaar (onbekend is nooit 0 bezoeken): alleen
   een foute hartslag en een foutregel in het werkverslag;
 - C03 (WEB-3): Safari telt alleen de bezoeken van deze Mac (origin 0), niet die van een ander toestel via iCloud
-  (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube.
+  (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube;
+- C04 (WISPR-2): de inhaalweg van De Wispr-wacht (--dag voor een vroegere dag): per_dag is precies het venster tot die
+  dag, ook een dag zonder dictaat (0, de wacht keek), niets erna; de titel is de telling van die dag; het rapport in
+  Dropbox blijft staan (het toont de stand van vandaag); een gewone ronde van vandaag schrijft het wel.
 
 Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis.
 Draaien: python3 mijnagents-runner/tests/test_computer_wachten.py
@@ -135,6 +138,36 @@ check("C03 websites: alleen Safari van deze Mac", sites == ["proef-werk.test", "
 q = next(x for b, _, x in Y.BRONNEN if b == "Safari")
 videos = [v for _, v, _, _ in Y.lees_bestand(pad, q, 0)]
 check("C03 YouTube: alleen Safari van deze Mac", videos == ["werkvideo1"], videos)
+
+# C04 (WISPR-2): een verzonnen flow.sqlite; de middag in UTC is in elke tijdzone van Europa dezelfde dag.
+map_ = tempfile.mkdtemp()
+db = os.path.join(map_, "flow.sqlite")
+c = sqlite3.connect(db)
+c.execute("CREATE TABLE History (timestamp TEXT, numWords INTEGER, duration REAL, app TEXT)")
+for d, n in (("2026-10-27", 1), ("2026-10-28", 2), ("2026-10-30", 1), ("2026-10-31", 3)):
+    for i in range(n):
+        c.execute("INSERT INTO History VALUES (?, ?, ?, ?)", (f"{d} 12:0{i}:00.000 +00:00", 100, 30.0, "com.apple.Notes"))
+c.commit()
+c.close()
+rapport = os.path.join(map_, "rapport")
+W = laad("wispr_wacht")
+W.DB, W.RAPPORT, W.TOKEN, W.GEBRUIKER, W.DAG, W.DAGEN = db, rapport, "proef", "Proef", "2026-10-30", 3
+W.bord = nep = NepBord()
+W.main()
+item = nep.naar("/api/klaarzet")[-1]["items"][0]
+pd = item["inhoud"]["per_dag"]
+check("C04 Wispr: per_dag is het venster tot de dag", sorted(pd) == ["2026-10-28", "2026-10-29", "2026-10-30"], sorted(pd))
+check("C04 Wispr: dag zonder dictaat is 0, niet onbekend", pd.get("2026-10-29", {}).get("dictaten") == 0, pd)
+check("C04 Wispr: titel is de telling van die dag", item["uniek"] == "wispr:Proef:2026-10-30"
+      and "2026-10-30: 1 dictaten, 100 woorden" in item["titel"], item["titel"])
+check("C04 Wispr: week telt niets na de dag", item["inhoud"]["week_dictaten"] == 3, item["inhoud"]["week_dictaten"])
+log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+check("C04 Wispr: inhaalronde laat het rapport staan", not os.path.exists(rapport)
+      and any(r["stap"] == "schrijf" and "inhaalronde" in r["tekst"] for r in log), log)
+W.DAG = datetime.now().date().isoformat()
+W.main()
+check("C04 Wispr: ronde van vandaag schrijft het rapport", os.path.exists(os.path.join(rapport, "Proef.md"))
+      and os.path.exists(os.path.join(rapport, "Proef.json")))
 
 print("wachten van de computer:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
