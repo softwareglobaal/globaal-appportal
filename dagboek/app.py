@@ -486,6 +486,8 @@ def wacht_kort(w):
     """Eén regel per wacht op de tegel: de fout, anders de open melding, anders het eerste item, anders het oordeel."""
     if w.get("leesfout"):
         return "kon niet lezen: " + str(w["leesfout"])
+    if w.get("logfout"):
+        return "kon niet lezen: " + str(w["logfout"])
     if w.get("fouten"):
         return "fout: " + str(w["fouten"][-1].get("tekst") or "")
     if w.get("stand_fout"):

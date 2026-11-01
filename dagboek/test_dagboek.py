@@ -14,7 +14,7 @@ import os
 import shutil
 import sys
 import tempfile
-from datetime import timedelta
+from datetime import date, timedelta
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 MAP = tempfile.mkdtemp()
@@ -120,6 +120,8 @@ check("D07 geen gedachtestreepje (eigen)", "\u2014" not in html and "\u2013" not
 check("healthz", C.get("/healthz").get_json().get("ok") is True)
 
 # D14: de pagina Wachten (Mehdi, 01-11-2026): per wacht wat binnenkwam, uit het bord over het interne netwerk.
+# De testklok staat vast op 31-10-2026 (Codex 01-11): de pagina toont alleen de laatste WACHT_DAGEN dagen.
+A.vandaag = lambda: date(2026, 10, 31)
 check("D14 wachten zonder groep 403", C.get("/wachten", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
 A._cache.clear()
 A.haal_wachten = lambda dag: None
@@ -199,6 +201,9 @@ html = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET).get_data(as_
 check("D14 werkverslag niet gelezen: items blijven, werkverslag onbekend", "Sara Proef" in html and "2</span> items binnen" in html
       and "onbekend</span> regels in het werkverslag" in html and "Geen ronde op deze dag" not in html
       and "het bord kon het werkverslag niet lezen" in html, html[-3500:])
+html = C.get("/wachten?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 tegel bij werkverslagfout toont de fout, niet het item", "kon niet lezen: werkverslag niet gelezen (OperationalError)" in html
+      and "09:15 Sara Proef 3 berichten" not in html, html[-3000:])
 check("D14 dag buiten de vier dagen is 404", C.get("/wachten?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten/whatsapp-wacht?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten?dag=" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)
