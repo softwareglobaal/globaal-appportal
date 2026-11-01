@@ -7288,27 +7288,37 @@ def regel_afspraak(regel, afspraken):
     geen keer (Codex-toetsen 1 en 2, T-0120 AG-4)."""
     passend = {}
     for a in afspraken:
-        kop = f"{(a.get('start') or '')[:16]} {_toon(a, 50)}"
-        if regel == kop or regel.startswith(kop + ": "):
-            passend.setdefault(len(kop), set()).add(_sleutel(a))
+        # ook de titel zonder de 'VR ' die vragen_in_agenda er later in dezelfde ronde voor zet (Codex-toets 3)
+        for titel in {_toon(a, 50), _toon(dict(a, titel=re.sub(r"^VR\s+", "", a.get("titel") or "")), 50)}:
+            kop = f"{(a.get('start') or '')[:16]} {titel}"
+            if regel == kop or regel.startswith(kop + ": "):
+                passend.setdefault(len(kop), set()).add(_sleutel(a))
     beste = passend[max(passend)] if passend else set()
     return next(iter(beste)) if len(beste) == 1 else None
 
 
-def adres_noden(zonder_rit, onvolledig, gevraagd=(), afspraken=()):
+def rit_koppeling(zonder_rit, afspraken):
+    """regel -> sleutel van de afspraak, gemaakt meteen na reistijd_zetten, voor de titels nog veranderen (een VR-vraag
+    later in de ronde). adres_noden gebruikt deze koppeling (Codex-toets 3, T-0120 AG-4)."""
+    return {r: regel_afspraak(r, afspraken) for rij in (zonder_rit or {}).values() for r in rij}
+
+
+def adres_noden(zonder_rit, onvolledig, gevraagd=(), afspraken=(), koppeling=None):
     """De noden over projectnummer, adres en reistijd, zo dat een afspraak in hoogstens een staat (T-0120 AG-4; tot
     01-11-2026 stond een afspraak zonder adres in drie noden). Een voorrangsregel per afspraak, herkend aan agenda, id en
     start: de adresvraag van adres_vraag_noden (gevraagd: die afspraken), dan de reden waarom de reistijd ontbreekt
     (zonder_rit_indelen; regel_afspraak koppelt elke regel aan een van afspraken), dan 'zonder adres', dan 'zonder
     projectnummer' (onvolledig: (afspraak, wat) uit onvolledig_per_afspraak). Online volstaat het nummer, dus daar nooit
-    een adresmelding."""
+    een adresmelding. koppeling: uit rit_koppeling, gemaakt voor de titels in de ronde veranderden; wat daar niet in
+    staat, koppel ik hier."""
+    koppeling = koppeling or {}
     onvolledig = list(onvolledig or ())
     kandidaten = list(afspraken) + [a for a, _ in onvolledig]
     gedekt = {_sleutel(a) for a in gevraagd}
     gevraagd = set(gedekt)
     noden = []
     for reden, rij in (zonder_rit or {}).items():
-        sleutels = [regel_afspraak(r, kandidaten) for r in rij]
+        sleutels = [koppeling[r] if r in koppeling else regel_afspraak(r, kandidaten) for r in rij]
         if any(s is None or s not in gevraagd for s in sleutels):
             noden.append({"tekst": f"Buitenafspraken zonder reistijd, reden: {reden}", "wie": "mehdi"})
         gedekt.update(s for s in sleutels if s)
@@ -8132,6 +8142,7 @@ def _ronde(rd):
         # Mehdi niet welke afspraak zonder reistijd staat. Gezien 20-09-2026, toen het
         # wekelijkse werfbezoek geen rit kreeg omdat "3010 Kessel-Lo" niet om te zetten was.
         zonder_rit = zonder_rit_indelen(rregels)
+        rit_sleutels = rit_koppeling(zonder_rit, rit_items)   # AG-4: nu, voor een VR-vraag de titel verandert
         te_krap = [r[:140] for r in rregels if "TE KRAP" in r]
 
         rooster = rooster_maken(items, archief, vandaag, mail_noden)
@@ -8241,7 +8252,7 @@ def _ronde(rd):
         gevraagd = []
         noden.extend(adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, gevraagd=gevraagd))
         # T-0120 AG-4: nummer, adres en reistijd na de adresvragen, zo dat een afspraak in hoogstens een nood staat
-        noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items))
+        noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items, rit_sleutels))
         if vg or vw:
             ag.log(f"dag {vandaag}", "schrijf", f"vragen in de agenda: {vg} gezet (VR), {vw} opgelost")
         if not DAG_ARG and geplande_start():

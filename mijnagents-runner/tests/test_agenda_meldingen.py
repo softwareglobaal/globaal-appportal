@@ -144,6 +144,17 @@ try:
           == (dubbel_a["kalender"], "id-dubbel", dubbel_a["start"])
           and W.regel_afspraak(f"{kort_a['start'][:16]} {W._toon(kort_a, 50)}: adres niet gevonden (x)", [kort_a, dubbel_a])
           == (kort_a["kalender"], "id-kort", kort_a["start"]))
+    # Codex-toets 3: in dezelfde ronde zet vragen_in_agenda 'VR ' voor de titel, na de reistijdregel
+    vr_a = dict(afspraak("!! Mehdi: [HA-PB] proef met een vraag", "16:00"), id="id-vr")
+    vr_regel = f"{vr_a['start'][:16]} {W._toon(vr_a, 50)}"
+    vr_onv = W.onvolledig_per_afspraak([vr_a], MORGEN)
+    vr_kop = W.rit_koppeling({"geen adres in de agenda": [vr_regel]}, [vr_a])
+    vr_a["titel"] = "VR " + vr_a["titel"]
+    check("AG-4 na een VR-vraag in dezelfde ronde blijft het een nood (de koppeling van voor de vraag)",
+          teksten(W.adres_noden({"geen adres in de agenda": [vr_regel]}, vr_onv, [], [vr_a], vr_kop)) == [TEKST["rit"]])
+    check("AG-4 regel_afspraak herkent de afspraak ook met 'VR ' ervoor",
+          W.regel_afspraak(vr_regel, [vr_a]) == (vr_a["kalender"], "id-vr", vr_a["start"])
+          and teksten(W.adres_noden({"geen adres in de agenda": [vr_regel]}, vr_onv, [], [vr_a])) == [TEKST["rit"]])
     zelfde = dict(kort_a, id="id-zelfde", kalender="andere@proef.test")
     check("AG-4 twee afspraken met dezelfde titel op dezelfde minuut: onzeker, dus geen van beide verborgen",
           W.regel_afspraak(f"{kort_a['start'][:16]} {W._toon(kort_a, 50)}", [kort_a, zelfde]) is None
@@ -162,7 +173,9 @@ finally:
     W.plek_zoeken, W.vaste_plek, W.projectadressen.index = _oud4
 RONDE = inspect.getsource(W._ronde)
 check("AG-4 de ronde meldt nummer, adres en reistijd via adres_noden, na de adresvragen",
-      RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items))")
+      RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items, rit_sleutels))")
+      > RONDE.index("rit_sleutels = rit_koppeling(zonder_rit, rit_items)")
+      and RONDE.index("noden.extend(adres_noden(zonder_rit, onvolledig_a, gevraagd, rit_items, rit_sleutels))")
       > RONDE.index("adres_vraag_noden(rit_items, niet_op_kaart=niet_op_kaart, gevraagd=gevraagd)")
       and "Buitenafspraken zonder reistijd, reden" not in RONDE and "Buitenafspraken zonder adres" not in RONDE)
 
