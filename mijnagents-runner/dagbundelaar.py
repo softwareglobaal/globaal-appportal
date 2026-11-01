@@ -154,19 +154,34 @@ def bundelen(voor_dag=None):
 
     # DB-7 (T-0120): het bord geeft hoogstens 500 items per lezing (mijnagents/app.py, /api/klaarzet), nieuwste eerst. Een
     # afspraak die De Agendawacht dagen vooraf klaarzette (tot zeven dagen vooruit), viel buiten de laatste 500 (19-10: 12
-    # gemist). Daarom terugbladeren met tot_id tot een item dat meer dan twee weken voor de dag gemaakt werd (ts is het
-    # tijdstip van aanmaken, een herziening laat het staan), of tot het einde van de bak; hoogstens 40 bladzijden.
-    grens = (date.fromisoformat(DAG) - timedelta(days=14)).isoformat()
-    items, tot, tot_de_grens = [], None, False
-    for _ in range(40):
-        deel = bord.call("/api/klaarzet?status=alle&n=500" + (f"&tot_id={tot}" if tot else "")).get("items", [])
-        items += deel
-        ids = [it["id"] for it in deel if isinstance(it.get("id"), int)]
-        oudste = min((it for it in deel if isinstance(it.get("id"), int)), key=lambda it: it["id"], default={})
-        if len(deel) < 500 or not ids or (oudste.get("ts") or "")[:10] < grens:
-            tot_de_grens = True
-            break
-        tot = min(ids)
+    # gemist). Daarom terugbladeren met tot_id, hoogstens 40 bladzijden per lezing.
+    def lees_bak(vraag, grens=None):
+        """Alle items van een lezing tot het einde van de bak, of tot een item dat voor grens gemaakt werd (ts is het
+        tijdstip van aanmaken: app.py zet het alleen bij een nieuw item). Geeft (items, volledig)."""
+        uit, tot = [], None
+        for _ in range(40):
+            deel = bord.call(vraag + (f"&tot_id={tot}" if tot else "")).get("items", [])
+            uit += deel
+            ids = [it["id"] for it in deel if isinstance(it.get("id"), int)]
+            oudste = min((it for it in deel if isinstance(it.get("id"), int)), key=lambda it: it["id"], default={})
+            if len(deel) < 500 or not ids or (grens and (oudste.get("ts") or "")[:10] < grens):
+                return uit, True
+            tot = min(ids)
+        return uit, False
+
+    # De hele bak tot twee weken voor de dag. Codex-toets 1: een verplaatste afspraak houdt haar oude ts en kan voor die
+    # grens liggen; de open afspraken lees ik daarom apart, tot het einde. Een opgepakte afspraak volgt de bron niet meer
+    # (app.py: zonder revisie blijft ze staan), dus die kan niet naar deze dag verhuizen.
+    items, alles_gelezen = lees_bak("/api/klaarzet?status=alle&n=500", (date.fromisoformat(DAG) - timedelta(days=14)).isoformat())
+    open_afspraken, open_gelezen = lees_bak("/api/klaarzet?status=klaar&soort=afspraak&n=500")
+    items += open_afspraken
+    if not (alles_gelezen and open_gelezen):
+        # Codex-toets 1: geen Dagverslag uit een onvolledige lezing, anders probeert de volgende ochtend het niet opnieuw
+        # (bundeldagen kijkt naar het Dagverslag); geen bundel en niets op opgepakt
+        ag.log(f"dag {DAG}", "fout", "klaarzetbak niet volledig gelezen (40 bladzijden): geen Dagverslag, de volgende ochtend opnieuw")
+        return {"detail": f"{DAG}: klaarzetbak niet volledig gelezen, geen Dagverslag", "bronnen": 0,
+                "nood": [{"tekst": "Ochtendronde las de klaarzetbak niet volledig: geen Dagverslag, de volgende ochtend "
+                                   "probeert opnieuw", "wie": "claude-code"}]}
     # Z14: de Zoom-dagregels per soort lezen; n=500 over de hele bak dekt minder dan een week
     zoomlezing = bord.call("/api/klaarzet?status=klaar&soort=zoom&n=50").get("items", [])
     van_dag, zoom_dag, nagekomen, gezien = [], [], [], set()
@@ -276,9 +291,6 @@ def bundelen(voor_dag=None):
                               ("locatie", "Locatiedagboek (Locatiewacht 21:30; tracker aan?)", "mehdi")):
         if soort not in soorten:
             nood.append({"tekst": f"Voor {DAG} geen {tekst}", "wie": wie})
-    if not tot_de_grens:
-        nood.append({"tekst": "Ochtendronde las de klaarzetbak niet tot de grens: bronnen van de dag kunnen ontbreken",
-                     "wie": "claude-code"})
     # WhatsApp en telefoon meldt de dagvaststelling zelf, op grond van de hartslag van hun wacht (Codex D2). Plaud meldt
     # De Plaudwacht zelf; tot 01-11-2026 stond hier een vaste melding zonder meting (DB-2, T-0120).
     return {"detail": f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", "nood": nood, "bronnen": len(van_dag)}
