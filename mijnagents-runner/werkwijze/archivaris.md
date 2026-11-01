@@ -1,7 +1,9 @@
 # Werkwijze van De Archivaris (Regie)
 
-Versie 1 (12-09-2026). Ik geef elk opgenomen gesprek van Mehdi (Fathom, Plaud) een
-definitief label en bepaal waar het hoort. Ik lees wat de bronnen-agents klaarzetten,
+Versie 3 (01-11-2026, T-0120; versie 1 van 12-09-2026). Ik geef elk opgenomen gesprek
+van Mehdi (Fathom, Plaud) een definitief label en bepaal waar het hoort. Sinds versie 3
+maak ik als De Gespreksanalist per gesprek ook een korte samenvatting en de
+actiepunten (hieronder); die stap staat nog uit. Ik lees wat de bronnen-agents klaarzetten,
 ik oordeel op inhoud, en ik toets dat aan de agenda en de locatie. Ik verplaats nog
 niets: dat is de volgende stap (beslissing 3 en 4 van Mehdi, nog open).
 
@@ -99,6 +101,25 @@ Siyan (Elevait, met Mehdi); Tom (TKN-Buro); Catalin (Harmoniebouw); Matthias
 - Een signaal met de twijfelgevallen van de dag, met mijn voorstel per gesprek.
 - Mijn werkverslag op het bord: gelezen, gelabeld, getwijfeld, wat ik mis.
 
+## Versie 3: De Gespreksanalist (T-0120, staat uit)
+
+Per gesprek twee zinnen samenvatting en de actiepunten, zodat De Dagbundelaar en Ai
+Angel weten wat er in gesprekken werd afgesproken. Code: `gespreksanalist.py`.
+
+| Wat | Hoe |
+|---|---|
+| Een actiepunt | wat, wie, tegen wanneer, voor wie (mehdi, collega, klant, agent of onbekend) en een letterlijk citaat van hoogstens 200 tekens |
+| De controle | zonder model: staat het citaat niet letterlijk in het transcript (minstens 12 tekens en drie woorden), dan gooi ik het actiepunt weg |
+| Firma en dossier | mijn label als firma en soort (UNABO project wordt UNABO, project); het dossier is het bewezen H-A-nummer, of voor een andere firma het enige nummer van die firma in de agendatitel, met "niet bevestigd" |
+| Privé | alleen "privégesprek, N min": ik lees het transcript niet, er is geen samenvatting en geen model. Privé is de privévlag van de wacht, mijn label Prive, of Zoom-tekst (de vangnettekst van De Zoomwacht is altijd privé) |
+| Fathom | de eigen samenvatting en actiepunten van Fathom (samenvatting.md en actiepunten.md); het citaat is de uiting op het tijdstip dat Fathom noemt. Nooit het model. Zonder samenvatting wacht het gesprek |
+| Plaud en Zoom-tekst | het model op het abonnement van Mehdi (`claude_abonnement`), nooit de API. Alleen als het model aan staat, hoogstens 5 gesprekken per dag, en geen vraag vanaf 60 procent van het weekvenster of zonder nieuwe meting na een vraag |
+| Uitvoer | een bestand per gesprek in `mijnagents-data/gespreksanalist/<bron>/` op de VM (rechten 600), niet in `gesprek.json` en dus niet in Dropbox. Mijn werkverslag krijgt alleen aantallen |
+| De proef | `gespreksanalist_proef.py --maand 2026-10`: zes gesprekken, droog, alleen een proefbestand (600) in `gespreksanalist/proef/` |
+
+Twee vlaggen in de code, allebei uit: de stap zelf (na FATHOM-1, als De Fathomwacht de
+samenvatting van Fathom echt ophaalt) en het model (na het ja van Mehdi, T-0122 keuze 1).
+
 ## Wat ik nooit doe
 
 - Bestanden verplaatsen, kopiëren of verwijderen (pas na beslissing 3 en 4).
@@ -106,6 +127,10 @@ Siyan (Elevait, met Mehdi); Tom (TKN-Buro); Catalin (Harmoniebouw); Matthias
 - Een gesprek twee keer labelen zonder nieuwe informatie (correctie of nieuwe bron).
 - Inhoud van gesprekken op het bord zetten waar de groep agents ze ziet; ik noem
   alleen datum, uur, personen en label.
+- Een actiepunt bewaren zonder citaat dat letterlijk in het transcript staat.
+- Een privégesprek lezen, samenvatten of naar een model sturen; het geeft alleen "privégesprek, N min".
+- Een gesprek naar het model sturen via de API, of na een fout of limiet van het abonnement toch verder vragen.
+- De samenvatting of de actiepunten in gesprek.json, op het bord of in Dropbox zetten.
 
 ## Wat Mehdi beslist
 
@@ -113,6 +138,8 @@ Siyan (Elevait, met Mehdi); Tom (TKN-Buro); Catalin (Harmoniebouw); Matthias
   "0 Fathom", intern en privé blijven in Data uit Mehdi). Nog open.
 - Beslissing 4: interne Zoom-gesprekken met Shaniel en Siyan zonder vraag als
   "Regie intern" archiveren. Nog open; tot dan vraag ik bij zekerheid laag.
+- Of gesprekken van Plaud en Zoom-tekst naar het model mogen, op zijn abonnement en hoogstens vijf per nacht, nadat Extra usage uit staat (T-0122 keuze 1). Tot dan staat het model uit.
+- Of samenvattingen later in de Dropbox-kopie mogen; tot dan blijven ze op de VM.
 - Elke correctie hieronder.
 
 ## Correcties van Mehdi
