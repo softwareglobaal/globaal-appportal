@@ -118,7 +118,7 @@ def lotkeuze(v, lots):
             "\n\nStel de vraag opnieuw met `lot:`, bijvoorbeeld het nummer vooraan de map.")
 
 
-def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan, overgeslagen=0):
+def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan, overgeslagen=0, oudere=()):
     """Het verslag van De Offertevergelijker. letters: [(letter, bestand, sleutelregel)]; uit: offertes.vergelijk();
     per_post: [{onderwerp, cellen}] of None. Geen gunning: de laagste prijs is een feit, geen advies (X4)."""
     from .offertes import datumtekst
@@ -130,7 +130,8 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     kop = f"**Vergelijking {lotnaam} ({S.FIRMANAMEN[firma]}):** {len(gelezen)} offertes gelezen"
     kop += f", {len(niet)} niet gelezen (scan, onleesbaar of te veel: zie de redenen)" if niet else ""
     andere = len(geen) + (overgeslagen or 0)
-    kop += f", {andere} documenten die geen offerte zijn (fiche of brochure) tellen niet mee." if andere else "."
+    kop += f", {andere} documenten die geen offerte zijn (fiche of brochure) tellen niet mee" if andere else ""
+    kop += f", {len(oudere)} oudere versies van dezelfde offerte tellen niet mee." if oudere else "."
     if uit.get("laagste") and uit.get("verschil") is not None:
         kop += (f" Laagste totaal exclusief btw: Inschrijver {uit['laagste']['letter']}, {euro(uit['laagste']['excl'])}; "
                 f"verschil met de hoogste {euro(uit['verschil'])} ({uit['verschil_pct']} procent).")
@@ -164,6 +165,7 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     letop = list(uit["letop"]) + [f"Inschrijver {l}: {r}" for l, rs in (post_redenen or {}).items() for r in rs]
     regels += ["", "## Om op te letten"] + ([f"- {x}" for x in letop] or ["- niets bijzonders gevonden in de totalen"])
     regels += ["", "## Welke offerte is welke letter (alleen voor jou)"] + [f"- Inschrijver {l}: {s}" for l, _, s in letters]
+    regels += [f"- Oudere versie van inschrijver {l}, telt niet mee: {s}" for l, s in oudere]
     regels += ["", f"Gelezen op {vandaag}. Ik aanvaardde, tekende of verstuurde niets en schreef niets in Dropbox."]
     return "\n".join(regels)
 

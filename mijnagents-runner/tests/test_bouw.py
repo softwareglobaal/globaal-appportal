@@ -1314,6 +1314,32 @@ _hits = [{"soort": "folder", "naam": "2026-06-16 Dakwerken (ontvangen van U82)",
 check("HB: de projectmap is de map die met de code begint, niet een fotomap met de code erin",
       MP.projectmap(S.HB, "U82", zoek=lambda q, p: _hits) == "/H/P/17. U82_X"
       and MP.projectmap(S.HB, "U82", zoek=lambda q, p: _hits[:1]) is None)
+_p = F.lees(pdf("Offerte OFR 1", "Totaal zonder B.T.W. :                          4.750,20",
+                "Totaal :                               EUR      5.747,74", "Betaling binnen 30 dagen."))
+check("'zonder B.T.W.' met punten is exclusief; het kale totaal erna is inclusief door de btw-som",
+      _p["excl"] == 4750.2 and _p["incl"] == 5747.74 and _p["btw_tarief"] == 21, _p)
+_p = F.lees(pdf("Offerte ramen", "729,40 E 0% Totaal elementen", "729,40 E Totaal", "Voorwaarden volgen."))
+check("een totaal bij 0 procent btw is exclusief, met de vraag het na te kijken", _p["excl"] == 729.4
+      and any("0 procent" in r for r in _p["redenen"]), _p)
+_vb = [{"naam": "Klantofferte 670010001 (Dak Een).pdf", "gewijzigd": "2026-02-19T10:00:00Z"},
+       {"naam": "Klantofferte 670010001 - tweede versie.pdf", "gewijzigd": "2026-02-20T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-08-25_offerte 2026013.pdf", "gewijzigd": "2026-08-25T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-10-20_offerte 2026013 en overeenkomst 2026006.pdf", "gewijzigd": "2026-10-20T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-09-28_meerwerk MW 2026022.pdf", "gewijzigd": "2026-09-28T10:00:00Z"},
+       {"naam": "2999 20260904 RAMENPLAN.pdf", "gewijzigd": "2026-09-04T10:00:00Z"},
+       {"naam": "2999 20260904 RAMENPLAN v2.pdf", "gewijzigd": "2026-09-05T10:00:00Z"}]
+_tel, _oud = F.versies(_vb)
+check("versies van dezelfde offerte: alleen de nieuwste telt, een meerwerk en een datum zijn geen offertenummer",
+      [b["naam"] for b in _tel] == ["2999 20260904 RAMENPLAN v2.pdf", "2999 20260904 RAMENPLAN.pdf",
+                                    "Dak Twee/2999_Dak Twee_2026-09-28_meerwerk MW 2026022.pdf",
+                                    "Dak Twee/2999_Dak Twee_2026-10-20_offerte 2026013 en overeenkomst 2026006.pdf",
+                                    "Klantofferte 670010001 - tweede versie.pdf"]
+      and len(_oud) == 2, [b["naam"] for b in _tel])
+_vs2 = V.vergelijkingsverslag({"firma": S.HB}, "40. POST", [("A", {}, "a.pdf")], F.vergelijk(
+    [{"letter": "A", "lees": F.lees(["Offerte" + VUL2 + "\nTotaal excl. btw 10.000,00\n"])}], date(2026, 11, 1)),
+    None, {}, "2026-11-01", True, 0, [("A", "a-v1.pdf")])
+check("het verslag noemt een oudere versie, zonder letter", "1 oudere versies van dezelfde offerte tellen niet mee" in _vs2
+      and "- Oudere versie van inschrijver A, telt niet mee: a-v1.pdf" in _vs2, _vs2.splitlines()[0])
 from bouw import proefbank as PB  # noqa: E402
 _o = PB.Opname(lambda *a, **k: {"gelezen": True})
 check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",
