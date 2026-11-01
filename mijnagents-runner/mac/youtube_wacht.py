@@ -87,6 +87,29 @@ def hartslag(status, taak="", detail="", nood=None):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
+def niet_gelezen(onleesbaar):
+    """Waarom geen enkele browser gelezen is (YT-2, 01-11-2026: onder launchd weigerde macOS Chrome en Firefox, en de
+    melding zei "niet gevonden"). PermissionError is een weigering van macOS; een andere fout een onleesbaar bestand."""
+    geweigerd = [b for b, f in onleesbaar.items() if f == "PermissionError"]
+    anders = [b for b in onleesbaar if b not in geweigerd]
+    delen = (["geweigerd: " + ", ".join(geweigerd)] if geweigerd else []) + (
+        ["onleesbaar: " + ", ".join(anders)] if anders else [])
+    if not delen:
+        return "Geen browsergeschiedenis gevonden op deze Mac"
+    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+
+
+def fout_in_werkverslag(tekst):
+    """Een mislukte ronde staat ook in het werkverslag: anders zegt de wachtenpagina "geen ronde" (YT-2)."""
+    if DROOG:
+        print("werkverslag fout", tekst)
+        return
+    try:
+        bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "fout", "tekst": tekst}]})
+    except Exception as e:  # noqa: BLE001
+        print("werkverslag mislukt:", e, file=sys.stderr)
+
+
 def video(adres):
     """De video-ID van een YouTube-adres (watch?v=, youtu.be/, shorts/, live/), anders None. Zoeken, kanalen, de
     startpagina en reacties tellen niet."""
@@ -175,9 +198,11 @@ def main():
             gelezen[browser] += 1
             bekeken += [(browser,) + r for r in rijen]
     if not gelezen:
-        hartslag("fout", taak="geen browsergeschiedenis gevonden",
-                 nood=[{"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"}])
-        print("geen browsergeschiedenis gevonden", file=sys.stderr)
+        tekst = niet_gelezen(onleesbaar)
+        fout_in_werkverslag(tekst)
+        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
+                 nood=[{"tekst": tekst, "wie": "claude-code"}])
+        print(tekst, file=sys.stderr)
         return 1
     per_dag = tel(bekeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "gebruiker": GEBRUIKER,
