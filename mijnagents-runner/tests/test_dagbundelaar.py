@@ -83,10 +83,12 @@ class NepRonde:
         return False
 
 
-def bundelen(dag, nb, nacht=False, gepland=False):
+def bundelen(dag, nb, nacht=False, gepland=False, onvolledig=None):
     """De ochtendronde van De Dagbundelaar met een nagebootst bord; de dagvaststelling heeft eigen tests
-    (test_dagbundelaar_vaststelling.py) en is hier een lege stap. gepland: de ronde uit de keten (zonder --dag)."""
-    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen)
+    (test_dagbundelaar_vaststelling.py) en is hier een lege stap. gepland: de ronde uit de keten (zonder --dag).
+    onvolledig: het bestand met de dagen die de ochtend niet volledig las (standaard een nieuw, tijdelijk bestand)."""
+    oud = (bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen, D.ONVOLLEDIG)
+    D.ONVOLLEDIG = onvolledig or os.path.join(tempfile.mkdtemp(prefix="dagbundel-"), "onvolledig.json")
     bord.call = nb.call
     bord.opgepakt = lambda kid, door: nb.opgepakt.append(kid)
     D.DAG, D.DAG_GEGEVEN, D.NACHT = dag, not gepland, nacht
@@ -100,7 +102,7 @@ def bundelen(dag, nb, nacht=False, gepland=False):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             D.main()
     finally:
-        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen = oud
+        bord.call, bord.opgepakt, D.DAG, D.DAG_GEGEVEN, D.NACHT, D.vastleggen, D.ONVOLLEDIG = oud
         for naam in ("ronde", "klaarzet", "hartslag", "log", "log_verstuur"):
             D.ag.__dict__.pop(naam, None)
     return nb
@@ -623,15 +625,24 @@ def test_db7_ochtendronde_bladert_terug():
     noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
     assert [t for t in noden if t.startswith("Ochtendronde las de klaarzetbak niet volledig")], noden
     assert not nb.bundels and not nb.opgepakt, (nb.bundels, nb.opgepakt)
-    # de volgende ochtend (de bak is weer leesbaar): die dag heeft geen Dagverslag, dus ze komt opnieuw aan de beurt
+    # Codex-toets 2: de bak blijft meer dan BUNDEL_INHAAL dagen te vol; daarna is ze weer leesbaar. De dag blijft open
+    # (ONVOLLEDIG) en komt dan nog aan de beurt, met de verborgen afspraak.
+    staat = os.path.join(tempfile.mkdtemp(prefix="dagbundel-"), "onvolledig.json")
     oud_gisteren = D.V.gisteren
     try:
-        D.V.gisteren = lambda nu: "2026-10-21"
-        nb = bundelen("2026-10-21", GroteBak(bak + [afspraak]), gepland=True)
+        D.V.gisteren = lambda nu: DAG
+        nb = bundelen(DAG, GroteBak(vol + [afspraak]), gepland=True, onvolledig=staat)
+        assert not nb.bundels and DAG in json.load(open(staat)), (nb.bundels, open(staat).read())
+        D.V.gisteren = lambda nu: "2026-10-28"
+        nb = bundelen("2026-10-28", GroteBak(vol + [afspraak]), gepland=True, onvolledig=staat)
+        assert not nb.bundels and DAG in json.load(open(staat)) and "2026-10-28" in json.load(open(staat))
+        D.V.gisteren = lambda nu: "2026-10-30"
+        nb = bundelen("2026-10-30", GroteBak(bak + [afspraak]), gepland=True, onvolledig=staat)
     finally:
         D.V.gisteren = oud_gisteren
     verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
-    assert f"dagverslag:{DAG}" in verslagen and 900 in nb.opgepakt, (verslagen, nb.opgepakt)
+    assert f"dagverslag:{DAG}" in verslagen and "dagverslag:2026-10-28" in verslagen and 900 in nb.opgepakt, (verslagen, nb.opgepakt)
+    assert json.load(open(staat)) == {}, "na het Dagverslag is de dag niet meer open"
 
 
 def test_db3_maandag_bundelt_het_weekend():

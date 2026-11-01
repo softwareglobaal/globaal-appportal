@@ -113,6 +113,9 @@ KANAALWACHTEN = {"whatsapp": "whatsapp-wacht", "telefoon": "belwacht", "sms": "s
 ZOOM_ONZEKER = "_zoom_onzeker"                                # sleutel van v1.6 in de staat; wordt opgeruimd
 ZOOM_TERUGBLIK = 6                                            # zoom_wacht.TERUGBLIK: zolang kan een dagregel nog herzien worden
 BUNDEL_INHAAL = 7                                             # DB-3: zoveel dagen kijkt de ochtend hoogstens terug
+# DB-7, Codex-toets 2: de dagen waarvan de ochtend de klaarzetbak niet volledig las; ze komen elke ochtend terug, ook
+# ouder dan BUNDEL_INHAAL, tot ze een Dagverslag hebben (niet in de map dagboek, dus niet naar Dropbox)
+ONVOLLEDIG = os.path.join(DATA, "dagbundel-onvolledig.json")
 
 
 def bundelen(voor_dag=None):
@@ -179,7 +182,7 @@ def bundelen(voor_dag=None):
         # Codex-toets 1: geen Dagverslag uit een onvolledige lezing, anders probeert de volgende ochtend het niet opnieuw
         # (bundeldagen kijkt naar het Dagverslag); geen bundel en niets op opgepakt
         ag.log(f"dag {DAG}", "fout", "klaarzetbak niet volledig gelezen (40 bladzijden): geen Dagverslag, de volgende ochtend opnieuw")
-        return {"detail": f"{DAG}: klaarzetbak niet volledig gelezen, geen Dagverslag", "bronnen": 0,
+        return {"detail": f"{DAG}: klaarzetbak niet volledig gelezen, geen Dagverslag", "bronnen": 0, "onvolledig": True,
                 "nood": [{"tekst": "Ochtendronde las de klaarzetbak niet volledig: geen Dagverslag, de volgende ochtend "
                                    "probeert opnieuw", "wie": "claude-code"}]}
     # Z14: de Zoom-dagregels per soort lezen; n=500 over de hele bak dekt minder dan een week
@@ -343,11 +346,20 @@ def main():
         else:
             # DB-3 (T-0120): met --dag die dag; uit de keten gisteren en de dagen ervoor zonder Dagverslag (bundeldagen)
             bdagen = [DAG] if DAG_GEGEVEN else bundeldagen(nu)
+            onvolledig = lees_json(ONVOLLEDIG)
+            open_voor = dict(onvolledig)
             for bdag in bdagen:
                 uit = bundelen(bdag)
                 for n in uit["nood"]:
                     r.nood(n["tekst"], wie=n["wie"])
                 delen.append((f"{bdag}: " if len(bdagen) > 1 else "") + uit["detail"])
+                # DB-7, Codex-toets 2: een dag zonder volledige lezing blijft open tot hij een Dagverslag heeft
+                if uit.get("onvolledig"):
+                    onvolledig.setdefault(bdag, nu.isoformat())
+                else:
+                    onvolledig.pop(bdag, None)
+            if onvolledig != open_voor:
+                _schrijf(ONVOLLEDIG, json.dumps(onvolledig, indent=1, sort_keys=True))
             begin = ochtend.tijdstip(nacht.get("start"))
             stappen = nacht.get("stappen") or {}
             if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
@@ -417,7 +429,7 @@ def bundeldagen(nu):
     bundelde tot 01-11-2026 alleen gisteren: vrijdag en zaterdag kregen nooit een Dagverslag en hun items bleven op klaar.
     Nu gisteren en elke dag van de BUNDEL_INHAAL dagen ervoor zonder Dagverslag op het bord. Codex-toets 1: ook voorbij
     een dag met een Dagverslag, want dat kan van een ronde met de hand zijn (zaterdag met --dag, vrijdag ontbreekt).
-    Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
+    Daarbij elke dag uit ONVOLLEDIG (DB-7). Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
     g = date.fromisoformat(V.gisteren(nu))
     uit = [g.isoformat()]
     for i in range(1, BUNDEL_INHAAL):
@@ -426,6 +438,8 @@ def bundeldagen(nu):
             {"uniek": f"dagverslag:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
         if not any(x.get("uniek") == f"dagverslag:{dag}" for x in terug):
             uit.append(dag)
+    # DB-7, Codex-toets 2: een dag die de ochtend niet volledig las, ook als hij ouder is dan BUNDEL_INHAAL
+    uit += [d for d in lees_json(ONVOLLEDIG) if d not in uit and d < g.isoformat()]
     return sorted(uit)
 
 
