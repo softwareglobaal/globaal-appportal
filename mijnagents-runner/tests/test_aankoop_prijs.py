@@ -338,6 +338,18 @@ r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Grati
 check("verzending van de productpagina van een ander product telt niet, ook met Belgie (overleg 29, X2)",
       r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"]
       and "verzending" not in r["goed"][0]["context"], str(r["goed"]))
+MODEL = dict(paginas, **{"https://winkel.voorbeeld.com/levering": pagina(
+    "Levering: gratis verzending naar België voor de P70. Verzending naar België voor de X1: 4,95 euro.")})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "gratis verzending naar België voor de P70"},
+                      verzending=0)], VANDAAG, KOERSEN, paginas=MODEL)
+check("een tarief voor een ander model op de verzendpagina telt niet (Codex-controle 30, X2)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending naar België voor de X1: 4,95 euro"},
+                      verzending=4.95)], VANDAAG, KOERSEN, paginas=MODEL)
+check("een tarief voor dit model op de verzendpagina telt (Codex-controle 30, X2)",
+      r["beste"] is not None and r["beste"]["totaal_eur"] == 504.95 and A.voor_dit_product("België: 9,95 euro", {})
+      and not A.voor_dit_product("voor de MOVA-RC-P70ULC", {"titel": "MOVA V70 Ultra", "modelcode": "MOVA-RC-V70ULC-WHT"}),
+      str(r["goed"]))
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verzending: 7,95 euro voor elke bestelling"},
                       verzending=7.95)], VANDAAG, KOERSEN,
               paginas={"https://winkel.voorbeeld.com/x1": paginas["https://winkel.voorbeeld.com/x1"],

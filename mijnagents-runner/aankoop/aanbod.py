@@ -40,6 +40,8 @@ VOOR_BELGIE = re.compile(r"belgi[eëu]|belgique|belgien|benelux|alle bestellinge
                          r"alle bestellungen|jede bestellung|toutes les commandes|chaque commande", re.I)
 LANDCODE_BE = re.compile(r"(?<![A-Za-z])BE(?![A-Za-z])")
 PRODUCTPAGINA = re.compile(r'"price"\s*:|product:price:amount', re.I)
+# Een modelnaam in een tarief (P70, V70, X1, MOVA-RC-V70ULC): dan geldt het tarief voor dat product (overleg 29, X2).
+MODELNAAM = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{1,6}-?\d{1,5}[A-Za-z]*(?![A-Za-z0-9])")
 GRATIS = re.compile(r"gratis|free|kostenlos|gratuit", re.I)
 # Een "past" vlak na zo'n woord kan over iets anders gaan dan het toestel zelf (Codex X2, ronde 6).
 ACCESSOIRE = re.compile(r"accessoire|accessory|accessories|zubeh|optione|optional|los verkrijgbaar|apart verkrijgbaar|"
@@ -117,6 +119,14 @@ def citaat_op_pagina(citaat, tekst):
     """Staat dit citaat letterlijk in de tekst (spaties gelijkgemaakt)? Een te kort citaat bewijst niets."""
     citaat = _schoon(str(citaat or ""))
     return len(citaat) >= MIN_CITAAT and citaat in _schoon(tekst)
+
+
+def voor_dit_product(citaat, aanbod):
+    """Noemt een verzendtarief een model, dan moet het dit aanbod zijn (titel of modelcode); een tarief zonder
+    modelnaam is algemeen (Codex-controle 30, X2)."""
+    namen = MODELNAAM.findall(str(citaat or ""))
+    eigen = f"{aanbod.get('titel') or ''} {aanbod.get('modelcode') or ''}".lower()
+    return not namen or any(n.lower() in eigen for n in namen)
 
 
 def voor_belgie(citaat):
@@ -294,7 +304,7 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
             # X2, gemeten bij RoboCleaners); een tarief voor een ander land of een ander product niet (Codex X12).
             eigen = eigen_tekst if eigen_tekst is not None else alle_tekst
             if not (citaat_op_pagina(citaat, eigen) or (verzendtekst and citaat_op_pagina(citaat, verzendtekst)
-                                                         and voor_belgie(citaat))):
+                                                         and voor_belgie(citaat) and voor_dit_product(citaat, aanbod))):
                 return False
         elif not citaat_op_pagina(citaat, alle_tekst):
             return veld == "veilingkosten" and not waarde      # geen vaste kosten kan je niet citeren
