@@ -565,6 +565,17 @@ het vervangt een Excel-deurwaarderstracker. Draait **op de host** als Flask-app
   `http://172.17.0.1:5050`; `sudo ufw allow 5050/tcp`. Authentik: proxy-provider +
   app + groepen **`schuldentracker`** (zien) en **`schuldentracker-bewerken`**
   (Mehdi, Angela). DNS via de wildcard.
+- **SSO-geheim (`X-SSO-Secret`, 22-10-2026):** de app weigert elke request
+  zonder de juiste kop (`sso_auth.py`, 403), zodat niemand die poort 5050
+  rechtstreeks bereikt zich als gebruiker kan voordoen. De waarde staat alleen
+  in de `.env` op de VM, onder dezelfde naam `SSO_SHARED_SECRET` in
+  `~/appportal/.env` (via `docker-compose.yml` naar nginx, `${SSO_SHARED_SECRET}`
+  in de template) en in `~/Finance/Schuldentracker/.env`. Van 03-07 tot
+  22-10-2026 stond de waarde letterlijk in de template in deze publieke repo
+  (sinds d4dc77f); die waarde geldt als uitgelekt. Roteren, ook later:
+  `scripts/schuldentracker-sso-roteren.sh` (zie de kop van het script voor het
+  commando). Grendel: `.github/workflows/geheimen-grendels.yml` faalt op elke
+  hex-reeks van 32+ tekens onder `nginx/`, zonder de waarde te tonen.
 - **Nog open:** (a) back-up van `data/finance.db`, (b) **de OpenAI-key in `.env`
   roteren** (stond in platte tekst, ook in de OneDrive-kopie).
 

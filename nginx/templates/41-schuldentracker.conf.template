@@ -1,6 +1,14 @@
+# Geheim dat de app eist naast de X-authentik-*-koppen (X-SSO-Secret), zodat
+# niemand die poort 5050 rechtstreeks bereikt zich als gebruiker kan voordoen.
+# Waarde alleen in de .env op de VM: SSO_SHARED_SECRET in ~/appportal/.env
+# (via docker-compose.yml naar nginx) en dezelfde waarde onder dezelfde naam in
+# ~/Finance/Schuldentracker/.env. Nooit een letterlijke waarde hier: de repo is
+# publiek, en de grendel geheimen-grendels.yml faalt op elke lange hex-reeks.
+# Roteren: scripts/schuldentracker-sso-roteren.sh. forward-auth.conf zet de
+# kop alleen voor deze host, leeg = niet verstuurd.
 map $host $schuldentracker_sso_secret {
     default "";
-    "schuldentracker.${BASE_DOMAIN}" "ce9f59eeb6e129f364291df1ac581b6a3058c66207a506756a8a459118e5de7f";
+    "schuldentracker.${BASE_DOMAIN}" "${SSO_SHARED_SECRET}";
 }
 
 server {
