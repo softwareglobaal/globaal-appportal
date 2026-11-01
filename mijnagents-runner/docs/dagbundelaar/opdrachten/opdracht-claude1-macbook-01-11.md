@@ -87,6 +87,10 @@ typ /usr/bin/python3 en klik op Open. Daarna de droge proef opnieuw.
 De Dagbundelaar meldt dat "Data uit Mehdi" niet synchroniseert. Volg stap 6 van
 `mijnagents-runner/docs/dagbundelaar/opdrachten/laptop-inrichten-voor-de-dagbundelaar.md`.
 
+Gemeten door Claude 1 op 01-11-2026 17:00: de sync draait op de laptop (launchd `be.globaal.mijnagents.data-uit-mehdi`,
+33 rondes "klaar" op 01-11 in `~/Library/Logs/mijnagents-data-uit-mehdi.log`; laatste fout 31-10 14:44, rsync). Deze
+stap is uitgevoerd.
+
 ## Stap 8. Nakijken en melden
 
 Na een uur, op mijnagents.globaal.be, groep Dagbundelaar:
