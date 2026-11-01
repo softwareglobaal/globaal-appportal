@@ -83,16 +83,16 @@ def _telling_tekst(t):
 
 
 DETAIL_MAX = 600
-# klaarzet.inhoud mag 60.000 tekens zijn (Codex 02-11): die staat er helemaal, de rest van het detail kort.
+# klaarzet.inhoud mag 60.000 tekens zijn (Codex 02-11): die staat er helemaal en letterlijk (regeleinden blijven), de
+# rest van het detail kort.
 DETAIL_LANG = ("inhoud",)
-DETAIL_LANG_MAX = 60000
 
 
 def _item(tijd, wie, wat, fout=False, label="", detail=None, tekst=""):
     """Eén item: tijd, van wie of wat, kort, een label (bv. privé), het detail (alles wat de wacht erover weet, als
     lijst van (naam, waarde) in een vaste volgorde; lege waarden blijven weg) en tekst: de sleutel waarmee de volledige
     tekst van het gesprek te lezen is (/api/wachten/tekst), of leeg als er geen tekst bewaard is."""
-    d = [(k, kort(v, DETAIL_LANG_MAX if k in DETAIL_LANG else DETAIL_MAX)) for k, v in (detail or [])
+    d = [(k, str(v) if k in DETAIL_LANG else kort(v, DETAIL_MAX)) for k, v in (detail or [])
          if v not in (None, "", 0, False)]
     return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout), "label": label, "detail": d,
             "tekst": tekst}
@@ -118,6 +118,10 @@ def tekst_pad(r):
                                               "transcript.json")))
     elif bron == "fathom" and "mijnagents-data/" in archief:
         rest = archief.split("mijnagents-data/", 1)[1].rstrip("/")
+        # Zonder transcript schrijft de Fathomwacht toch een transcript.md met alleen een kop, en daarnaast
+        # geen-transcript.txt (fathom_wacht.bewaar): dan is er geen tekst (Codex 02-11).
+        if os.path.isfile(os.path.join(DATA, rest, "geen-transcript.txt")):
+            return ""
         paden = [os.path.join(DATA, rest, "transcript.md"), os.path.join(DATA, rest, "transcript.json")]
     elif bron == "plaud" and "/Plaud/" in archief:
         mapnaam = archief.split("/Plaud/", 1)[1].split("/", 1)[0]
@@ -244,8 +248,7 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
-        inhoud_tekst = (json.dumps(inhoud, ensure_ascii=False, indent=1) if isinstance(inhoud, (dict, list))
-                        else (r["inhoud"] or ""))
+        inhoud_tekst = r["inhoud"] or ""   # letterlijk zoals bewaard, nooit opnieuw opgemaakt of afgekapt
         detail = [("soort", r["soort"]), ("titel", r["titel"]), ("voor", r["voor"]), ("status", r["status"]),
                   ("opgepakt door", r["opgepakt_door"]), ("opgepakt op", uur(r["opgepakt_ts"])), ("sleutel", r["sleutel"]),
                   ("verwijzing", r["verwijzing"]), ("nummer", r["uniek"]), ("klaargezet", uur(r["ts"])), ("inhoud", inhoud_tekst)]
