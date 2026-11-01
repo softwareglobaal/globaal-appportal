@@ -68,6 +68,13 @@ MEHDI = ("mehdi", "mehdi chegini")   # zoals de bronnen hem schrijven, naast zij
 ONBEKEND = re.compile(r"^(speaker|spreker|deelnemer|externe?|onbekend|unknown)\b", re.I)
 
 
+def is_mac(rij):
+    """CB-1: een rij van de Mac of Xelion (op het voorvoegsel van uniek) is privé, ook zonder vlag, tot de keuze CB-2
+    (Codex-toets 1 en 2); zo ook het gesprek waaraan ze hangt. Dezelfde regel als privegrens op de tak van de groep
+    prive; is_prive zelf blijft van die groep."""
+    return str(rij.get("uniek") or "").startswith(MAC)
+
+
 def is_groep(personen):
     """CB-1: een groep van de Mac ('groep: naam', of 'groep' bij een groepsoproep zonder naam) is nooit een persoon."""
     p = str(personen or "").strip()
@@ -170,8 +177,8 @@ def prive_gesprekken(rijen):
         if r.get("sessie"):
             koppel(u, "sessie:" + r["sessie"])
     prive = {wortel("rij:" + str(r.get("uniek") or "")) for r in rijen
-             if is_prive(r) and not str(r.get("dubbel_van") or "").startswith("buiten:")}
-    return lambda r: is_prive(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
+             if (is_prive(r) or is_mac(r)) and not str(r.get("dubbel_van") or "").startswith("buiten:")}
+    return lambda r: is_prive(r) or is_mac(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
 
 
 def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
@@ -192,9 +199,9 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
             opgevallen["telt_niet"] += in_dagen   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
         k = kanaal(r.get("uniek"), r.get("personen"))
-        # CB-1: een rij van de Mac of Xelion is privé, ook zonder vlag, tot de keuze CB-2 (Codex-toets 1). Laat CB-2
-        # ooit werkcontacten bij naam toe, dan blijft een groep (is_groep, ook een groepsoproep) erbuiten.
-        prive = prive_groep(r) or str(r.get("uniek") or "").startswith(MAC)
+        # CB-1: een rij van de Mac of Xelion is privé tot de keuze CB-2 (is_mac in prive_groep). Laat CB-2 ooit
+        # werkcontacten bij naam toe, dan blijft een groep (is_groep, ook een groepsoproep) erbuiten.
+        prive = prive_groep(r)
         if k != "mail":
             # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
             # Een privérij van elk kanaal, ook een onbekend, maakt iemand privé (controle 5); bekend maakt alleen een

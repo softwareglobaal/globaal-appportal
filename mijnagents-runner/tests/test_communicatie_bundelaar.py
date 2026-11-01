@@ -339,6 +339,14 @@ def test_cb1_mac_kanalen_eigen_kanaal_en_prive_geteld():
     assert sum(c["aantal"] for c in d["prive_per_kanaal"].values()) == 7, d["prive_per_kanaal"]
     for naam in ("Lien", "32470000098", "Omega", "Werfgroep"):
         assert naam not in json.dumps(gezet) and naam not in r.detail, naam
+    # Codex-toets 2: een gesprek dat aan een Mac-rij zonder privévlag hangt (dubbel_van, in beide richtingen), is privé
+    for rijen in ([rij("fathom:61", "Mehdi, Klant Omega", 20), rij("telefoon:U3-3000", "Klant Omega", 20,
+                                                                  dubbel_van="fathom:61")],
+                  [rij("whatsapp-oproep:K1-1", "Klant Omega", 9), rij("plaud:62", "Mehdi Chegini, Klant Omega", 9,
+                                                                      dubbel_van="whatsapp-oproep:K1-1")]):
+        r, gezet, dagen, _ = ronde(rijen=rijen)
+        assert "Omega" not in json.dumps(gezet) and dagen[DAG]["personen"] == [], (rijen[0]["uniek"], dagen[DAG])
+        assert sum(c["aantal"] for c in dagen[DAG]["prive_per_kanaal"].values()) == 1, dagen[DAG]
     assert C.kanaal("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef") == "groepschat"
     assert C.kanaal("whatsapp:0a1b:2026-10-25", "Lien Proef") == "whatsapp" and C.kanaal("fax:1") is None
     assert C.kanaal("zoom:chat:kanaal-proef-123:2026-10-25") == "groepschat", "Zoom zoals het was"
