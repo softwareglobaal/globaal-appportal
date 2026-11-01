@@ -104,7 +104,7 @@ def test_ronde_zonder_namen():
     try:
         werkwijze = (RUNNER / "werkwijze" / "xelion-wacht.md").read_text(encoding="utf-8")
         r = NepRonde(werkwijze)
-        X.werk(r, "c" * 32, lezer=lambda van, tot: spiegel(), terug=terug, nu=NU)
+        X.werk(r, "c" * 32, lezer=lambda van, tot: spiegel(), terug=terug, nu=NU, telefoon=lambda van, tot: [])
     finally:
         bord.call, X.ag.log = echt_call, echt_log
     gemeld = X.ag.maskeer(r.detail) + " ".join(log)
@@ -143,9 +143,9 @@ def test_tel2_inhaal_vanaf_01_10():
     bord.call, X.ag.log = call, lambda *x, **k: None
     try:
         r = NepRonde(werkwijze)
-        X.werk(r, "d" * 32, lezer=lezer, terug=terug, nu=nu, vanaf="2026-10-01")
+        X.werk(r, "d" * 32, lezer=lezer, terug=terug, nu=nu, vanaf="2026-10-01", telefoon=lambda van, tot: [])
         kort = NepRonde(werkwijze)
-        X.werk(kort, "e" * 32, lezer=lezer, terug=terug, nu=nu)
+        X.werk(kort, "e" * 32, lezer=lezer, terug=terug, nu=nu, telefoon=lambda van, tot: [])
     finally:
         bord.call, X.ag.log = echt_call, echt_log
     assert gevraagd[0][0] == M.daggrens("2026-10-01") and gevraagd[1][0] == M.daggrens("2026-10-19"), gevraagd
@@ -160,6 +160,49 @@ def test_tel2_inhaal_vanaf_01_10():
             raise AssertionError(optie)
         except SystemExit as e:
             assert e.code == 2
+
+
+def test_tel6_xelion_en_iphone_tellen_een_keer():
+    """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam (zelfde begin binnen twee minuten, ongeveer
+    even lang, allebei gesprek of allebei gemist), krijgt dubbel_van telefoon:<uniek>; de dag telt die oproep een keer.
+    Een oproep die vijf minuten later begint of veel langer duurt, is een andere."""
+    rijen, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    # in Brussel: xelion:11 om 10:00 (2 min), xelion:12 om 11:00 gemist, xelion:13 om 12:00 (1 min)
+    telefoon = [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": ""},
+                {"uniek": "telefoon:B-2", "datum": DAG, "start": "11:00", "minuten": 0, "dubbel_van": M.GEMIST},
+                {"uniek": "telefoon:C-3", "datum": DAG, "start": "12:05", "minuten": 1, "dubbel_van": ""},
+                {"uniek": "telefoon:D-4", "datum": DAG, "start": "10:00", "minuten": 30, "dubbel_van": ""}]
+    assert X.ontdubbel(rijen, telefoon) == 2
+    op = {r["uniek"]: r for r in rijen}
+    assert op["xelion:11"]["dubbel_van"] == "telefoon:A-1" and op["xelion:12"]["dubbel_van"] == "telefoon:B-2"
+    assert op["xelion:13"]["dubbel_van"] == "", op["xelion:13"]
+    alles = rijen + [dict(t, personen="", thema="", prive=1, bron="telefoon") for t in telefoon]
+    gedekt = D.gedekte_dagen(alles)
+    kanalen = {k: D.kanaal_van_dag("aangesloten", k, DAG, gedekt) for k in ("xelion", "telefoon")}
+    v = V.vaststellen(DAG, [], set(), alles, {}, [], "volledig", None, kanalen, lambda a: False)
+    assert v["xelion"]["oproepen"] == 1 and v["xelion"]["gemist"] == 0, v["xelion"]
+    assert v["telefoon"]["oproepen"] == 3, v["telefoon"]                  # A, C en D; xelion:11 telt niet opnieuw
+    # zonder iPhone-rijen verandert niets
+    rijen2, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(rijen2, []) == 0 and {r["uniek"]: r["dubbel_van"] for r in rijen2}["xelion:12"] == M.GEMIST
+    # de iPhone-rijen komen van het bord zonder wie of thema, alleen van De Belwacht
+    import sqlite3
+    import tempfile
+    with tempfile.TemporaryDirectory() as map_:
+        db = Path(map_) / "b.db"
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE gesprek_log(uniek, datum, start, minuten, personen, thema, bron, dubbel_van)")
+        con.executemany("INSERT INTO gesprek_log VALUES(?,?,?,?,?,?,?,?)", [
+            ("telefoon:A-1", DAG, "10:01", 2, "Jan Proef", "telefoon, inkomend", "telefoon", None),
+            ("xelion:99", DAG, "10:01", 2, "Jan Proef", "Xelion", "xelion", ""),
+            ("telefoon:Z-9", "2026-09-01", "10:01", 2, "Jan Proef", "telefoon", "telefoon", "")])
+        con.commit()
+        con.close()
+        gelezen = X.telefoon_lokaal("2026-10-17", "2026-10-31", db=db)
+    assert gelezen == [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": ""}], gelezen
+    # een vervallen iPhone-rij is geen paar
+    rijen3, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(rijen3, [dict(telefoon[0], dubbel_van=M.VERVALLEN)]) == 0
 
 
 def test_zonder_grenzen_geen_lezing():
