@@ -126,6 +126,7 @@ con = sqlite3.connect(os.environ["AGENTS_DB"])
 for sql, args in (_dagregel("2026-10-27", "volledig", "definitief", ok),
                   _dagregel("2026-10-28", "volledig", "voorlopig: Fathom levert nog", ok),
                   _dagregel("2026-10-29", "volledig", "definitief", dict(ok, chat="fout: HTTP 500")),
+                  _dagregel("2026-10-25", "volledig", "definitief", {"rapport": "ok"}),
                   _dagregel(vandaag, "volledig", "definitief", ok)):
     con.execute(sql, args)
 con.commit()
@@ -140,6 +141,7 @@ def _zoom(dag):
 check("W12 zoom: dagregel volledig, definitief, elke bron ok geeft helemaal gelezen", _zoom("2026-10-27")["gedekt"] is True)
 check("W12 zoom: een voorlopige dagregel geeft nog niet helemaal gelezen", _zoom("2026-10-28")["gedekt"] is False)
 check("W12 zoom: een bron niet ok geeft nog niet helemaal gelezen", _zoom("2026-10-29")["gedekt"] is False)
+check("W12 zoom: een ontbrekende bron is niet gelezen", _zoom("2026-10-25")["gedekt"] is False)
 check("W12 zoom: een dag zonder dagregel is nog niet helemaal gelezen", _zoom("2026-10-26")["gedekt"] is False)
 check("W12 zoom: vandaag toont niets", _zoom(vandaag)["gedekt"] is None)
 check("W12 whatsapp houdt zijn dekkingsrij", w["whatsapp-wacht"]["gedekt"] is True)
