@@ -4,7 +4,12 @@ op inhoud, getoetst aan agenda en locatie, en bepaalt waar het hoort. Verplaatst
 (beslissing 3 en 4 van Mehdi zijn nog open). Werkwijze op het bord is de bron van de
 regels; de sectie "Correcties van Mehdi" daar gaat boven alles.
 
+Versie 3 (T-0120): aan het eind van de ronde De Gespreksanalist (gespreksanalist.py): per gesprek twee zinnen
+samenvatting en de actiepunten met een letterlijk citaat, alleen als gespreksanalist.ANALYSE_AAN; Plaud en Zoom-tekst
+via het model alleen als gespreksanalist.MODEL_AAN (beide staan uit).
+
 Gebruik: archivaris.py [--van JJJJ-MM-DD --tot JJJJ-MM-DD]   (standaard: de laatste drie dagen)
+         archivaris.py --alleen-analyse --van ... --tot ...     (inhaalweg van versie 3: geen labels, dus geen API)
 """
 import glob
 import json
@@ -26,6 +31,7 @@ import organisatie  # noqa: E402
 import organisatie  # noqa: E402
 import nummerlezer  # noqa: E402
 import projectadressen  # noqa: E402
+import gespreksanalist as GA  # noqa: E402  versie 3: samenvatting en actiepunten per gesprek (T-0120 ANGEL-1)
 
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
 BORDMAP = os.path.expanduser("~/appportal/mijnagents-data/bord")
@@ -198,20 +204,93 @@ def weekoverzicht(week):
         a = d.get("archivaris")
         if not a or a.get("week") != week:
             continue
-        rijen.append((a["datum"], a["start"], os.path.basename(os.path.dirname(gj)), a))
+        # T-0095: een oud record zonder zekerheid (of label) gaf KeyError en liet 101 rondes uitvallen; lezen met .get
+        rijen.append((a.get("datum", ""), a.get("start", ""), os.path.basename(os.path.dirname(gj)), a))
     rijen.sort()
     regels = [f"# Labels {week}: gesprekken volgens De Archivaris", "",
               "Label op inhoud, getoetst aan agenda en locatie. Correcties: werkwijze van De Archivaris op het bord, sectie Correcties van Mehdi.", "",
               "| datum | uur | map | label | afdeling onderwerp | wie, in welke rol | zekerheid | agenda | doelmap (nog niet actief) |", "|---|---|---|---|---|---|---|---|---|"]
     for datum, start, naam, a in rijen:
-        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a['label']}** | {a.get('afdeling_onderwerp', '')} | {a.get('deelnemers_rol', '')[:70]} | {a['zekerheid']} | {a.get('agenda_toets', '')[:50]} | {a.get('doelmap', '')} |")
-    tel = Counter(a["label"] for *_, a in rijen)
+        regels.append(f"| {datum} | {start} | {naam[:45]} | **{a.get('label', '')}** | {a.get('afdeling_onderwerp', '')} | {a.get('deelnemers_rol', '')[:70]} | {a.get('zekerheid', '')} | {a.get('agenda_toets', '')[:50]} | {a.get('doelmap', '')} |")
+    tel = Counter(a.get("label", "") for *_, a in rijen)
     tel_afd = Counter(a.get("afdeling_onderwerp", "") for *_, a in rijen)
     regels += ["", "## Telling per label", "", "| label | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel.most_common()]
     regels += ["", "## Telling per afdeling van het onderwerp", "", "| afdeling | aantal |", "|---|---|"] + [f"| {k} | {v} |" for k, v in tel_afd.most_common()] + [""]
     os.makedirs(BORDMAP, exist_ok=True)
     open(os.path.join(BORDMAP, f"Labels {week}.md"), "w", encoding="utf-8").write("\n".join(regels))
     return len(rijen)
+
+
+def _hoort_bij(pad, sleutel):
+    """Is deze gesprek.json van dit gesprek? Op het recording_id (of de url) van Fathom, of het plaud_id: True of False;
+    None als het bestand geen id draagt. Een onleesbaar bestand is van niemand."""
+    try:
+        with open(pad, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(d, dict):
+        return False
+    ids = {str(d[k]) for k in ("recording_id", "plaud_id") if d.get(k) not in (None, "")}
+    if d.get("url"):
+        ids.add(str(d["url"]).rstrip("/").rsplit("/", 1)[-1])
+    return (sleutel in ids) if ids else None
+
+
+def archiefmap(g):
+    """De map met gesprek.json van dit gesprek, of ''. Het pad uit de gesprekkentabel telt als die gesprek.json bij dit
+    gesprek hoort (zonder id, zoals vroeger: ja); anders kan de map hernoemd zijn (Belgische tijd, Prive) en zoek ik op
+    het id zelf, nooit op een stukje tekst (Codex T-0120 toets 2: rec9500 is niet rec95001)."""
+    sleutel = g["uniek"].split(":", 1)[-1]
+    map_ = g.get("archief") or ""
+    if map_ and _hoort_bij(os.path.join(map_, "gesprek.json"), sleutel) is not False:
+        return map_
+    for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True):
+        if _hoort_bij(p, sleutel):
+            return os.path.dirname(p)
+    return ""
+
+
+def geval_van(g, lijst, projecten, gevonden=None):
+    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json, het label dat ik
+    gaf en het bewezen H-A-nummer, zoals in de labelronde (ha_projectnummer). Fathom: de map die archiefmap() vond
+    (gevonden, '' als er geen is; None: nu zoeken), nooit een oud pad dat naar een ander gesprek wijst."""
+    map_ = g.get("archief") or ""
+    if g.get("bron") == "fathom":
+        map_ = archiefmap(g) if gevonden is None else gevonden
+    if g.get("bron") == "plaud":    # De Plaudwacht noemt de map op de Mac; op de VM staat transcript.json in plaud-invoer
+        deel = map_[len(GA.PLAUD_OP_MAC):].split("/")[0] if map_.startswith(GA.PLAUD_OP_MAC) else ""
+        map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel else ""
+    try:
+        with open(os.path.join(map_, "gesprek.json"), encoding="utf-8") as f:
+            label = str((json.load(f).get("archivaris") or {}).get("label") or "")
+    except (OSError, ValueError, AttributeError):
+        label = ""
+    a = afspraak_op(g, lijst)
+    return {**g, "map": map_, "label": label, "titel": (a or {}).get("titel", ""),
+            "ha_nummer": ha_projectnummer(a, g.get("project"), {("HARC", str(n)) for n in projecten})}
+
+
+def _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden=None):
+    """Versie 3, De Gespreksanalist (gespreksanalist.py): alleen als GA.ANALYSE_AAN; Plaud en Zoom-tekst alleen met
+    GA.MODEL_AAN, op het abonnement en binnen GA.Budget. De uitvoer staat op de VM, buiten gesprek.json; het werkverslag
+    krijgt alleen aantallen, geen naam, onderwerp of citaat."""
+    if not GA.ANALYSE_AAN:
+        return
+    tel, budget, gevonden = Counter(), GA.Budget(vandaag), gevonden or {}
+    for geval in [geval_van(g, lijst, projecten, gevonden.get(g["uniek"])) for g in gesprekken] + GA.zoom_gevallen(van, tot):
+        rec, toestand = GA.stap(geval, budget)
+        if rec:
+            GA.bewaar(rec)
+        tel[toestand] += 1
+    ag.log(f"{van} tot {tot}", "schrijf", "gespreksanalist (versie 3): " + (", ".join(f"{v} {k}" for k, v in tel.most_common()) or "geen gesprekken"))
+    e = budget.fout
+    if e is not None:                       # zoals De Offertevergelijker: de bestaande noden van het abonnement
+        if e.soort in ("aanmelden", "limiet"):
+            r.nood(GA.claude_abonnement.AANMELDEN_NOOD if e.aanmelden else GA.claude_abonnement.LIMIET_NOOD, wie="mehdi")
+        else:
+            r.nood(GA.claude_abonnement.BRON_NOOD if e.soort == "bron" else "De Gespreksanalist kreeg geen antwoord van "
+                   "Claude op het abonnement", wie="claude-code")
 
 
 def main():
@@ -225,36 +304,41 @@ def main():
     van = van or (datetime.fromisoformat(tot) - timedelta(days=3)).strftime("%Y-%m-%d")
     # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de Correcties van Mehdi, of geen ronde; en wat ik
     # las (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, zonder kennis.
+    alleen = "--alleen-analyse" in sys.argv
     try:
-        with ag.ronde(f"gesprekken labelen {van} tot {tot}") as r:
-            _ronde(r, van, tot, vandaag)
+        with ag.ronde(f"gesprekken {'analyseren' if alleen else 'labelen'} {van} tot {tot}") as r:
+            _ronde(r, van, tot, vandaag, alleen)
     except bord.RondeGestopt as e:
         print(f"ronde gestopt: {e}", file=sys.stderr)
         return 1
     return 0
 
 
-def _ronde(r, van, tot, vandaag):
+def _ronde(r, van, tot, vandaag, alleen=False):
     try:
         corr = correcties(r.werkwijze)
         regels_mehdi = [f"{d} {u} {n} = {l}" + (f" ({r})" if r else "") for (d, u), (l, r, n) in corr.items()]
         lijst = afspraken(van, tot)
         projecten = projectadressen.index()
         gesprekken = [dict(r) for r in db().execute("select * from gesprek_log where bron in ('fathom','plaud') and datum between ? and ? order by datum, start", (van, tot))]
-        gelabeld = overgeslagen = tokens = 0
+        if alleen:      # de inhaalweg van versie 3 (X7: bouwen mag, draaien niet): geen labels, dus geen API
+            if not GA.ANALYSE_AAN:
+                ag.log(f"{van} tot {tot}", "melding", "alleen analyse gevraagd, maar De Gespreksanalist staat uit")
+            # ook hier de hernoemde Fathommappen (Codex T-0120 toets 1); Plaud staat op de VM in plaud-invoer
+            gevonden = {g["uniek"]: archiefmap(g) for g in gesprekken if g.get("bron") == "fathom"}
+            _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden)
+            r.detail = f"alleen analyse ({van} tot {tot})"
+            return
+        gelabeld = overgeslagen = tokens = ongeldig = 0
+        gevonden = {}               # uniek -> de archiefmap die ik vond, voor versie 3
         twijfel, tel, weken = [], Counter(), set()
         for g in gesprekken:
-            map_ = g.get("archief") or ""
+            map_ = archiefmap(g)
+            gevonden[g["uniek"]] = map_
+            if not map_:
+                overgeslagen += 1
+                continue
             gj = os.path.join(map_, "gesprek.json")
-            if not (map_ and os.path.exists(gj)):
-                # map kan hernoemd zijn (Belgische tijd, Prive): zoek op uniek
-                kandidaten = [p for p in glob.glob(os.path.expanduser("~/appportal/mijnagents-data/*/**/gesprek.json"), recursive=True)
-                              if g["uniek"].split(":", 1)[-1] in open(p, encoding="utf-8", errors="ignore").read()]
-                if not kandidaten:
-                    overgeslagen += 1
-                    continue
-                gj = kandidaten[0]
-                map_ = os.path.dirname(gj)
             d = json.load(open(gj, encoding="utf-8"))
             sleutel = (g["datum"], g["start"])
             c = corr.get(sleutel)
@@ -273,6 +357,17 @@ def _ronde(r, van, tot, vandaag):
             else:
                 uit, t_ = label_met_model(g, transcript_van(map_), a, loc, project, regels_mehdi)
                 tokens += t_
+            if uit.get("label") not in LABELS or uit.get("zekerheid") not in ("hoog", "middel", "laag"):
+                # T-0095: eerst controleren, dan bewaren; anders kwam een record zonder zekerheid in gesprek.json
+                # (en de vrije tekst van het model gaat niet in het werkverslag: ze kan een naam dragen)
+                ongeldig += 1
+                ag.log(f"{g['datum']} {g['start']}", "fout", "modelantwoord zonder geldig label of zekerheid: niet bewaard")
+                continue
+            # de tekstvelden die verder gelezen worden, bestaan altijd (T-0095: een ontbrekende reden liet de ronde
+            # na het bewaren vallen)
+            uit = {**{k: "" for k in ("reden", "agenda_toets", "locatie_toets", "projectnummer", "vraag_aan_mehdi",
+                                      "afdeling_onderwerp", "deelnemers_rol")},
+                   **{k: v for k, v in uit.items() if v is not None}}
             week = datetime.fromisoformat(g["datum"]).strftime("%G-W%V")
             d["archivaris"] = {**uit, "doelmap": DOEL.get(uit["label"], ""), "datum": g["datum"], "start": g["start"], "week": week,
                                "agenda_afspraak": (a or {}).get("titel", ""), "locatie": loc, "locatie_context": loc_context,
@@ -286,11 +381,12 @@ def _ronde(r, van, tot, vandaag):
             if uit["zekerheid"] == "laag" or uit["label"] == "Onbekend":
                 twijfel.append(f"{g['datum']} {g['start']} {(g.get('personen') or '')[:35]} · voorstel {uit['label']} · {uit.get('vraag_aan_mehdi') or uit['reden'][:80]}")
         n_week = sum(weekoverzicht(w) for w in weken if w)
+        _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden)
         if twijfel:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"Archivaris: {len(twijfel)} gesprek(ken) waar ik twijfel",
                           "uniek": f"archivaris-twijfel:{vandaag}:{len(twijfel)}",
                           "inhoud": "Antwoord met één regel per gesprek onder 'Correcties van Mehdi' in mijn werkwijze: `- datum uur naam = label`.\n" + "\n".join("- " + t for t in twijfel)}])
-        ag.log(f"{van} tot {tot}", "schrijf", f"{gelabeld} gesprekken gelabeld, {overgeslagen} al gelabeld of zonder archief, {len(twijfel)} twijfel; weekoverzicht {n_week} rijen; {tokens} tokens",
+        ag.log(f"{van} tot {tot}", "schrijf", f"{gelabeld} gesprekken gelabeld, {overgeslagen} al gelabeld of zonder archief, {ongeldig} ongeldig antwoord, {len(twijfel)} twijfel; weekoverzicht {n_week} rijen; {tokens} tokens",
                "\n".join(f"{k}: {v}" for k, v in tel.most_common()))
         if not os.environ.get("ANTHROPIC_API_KEY"):
             r.nood("Geen ANTHROPIC_API_KEY in de omgeving: ik kan niet labelen", wie="claude-code")
