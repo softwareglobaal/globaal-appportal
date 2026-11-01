@@ -134,6 +134,15 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
            f"vraag {va}: {len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
            f"{len(gezien)} gezien maar niet nagekeken, {len(res['afgewezen'])} afgewezen",
            [{"url": x["aanbod"].get("url"), "redenen": x["redenen"]} for x in res["afgewezen"]])
+    # Per aanbod in het verslag de citaten en wat ontbreekt, zodat een volgende fout meetbaar is (overleg 33, F). Alleen
+    # gegevens van de winkelpagina's en de netwaarden, nooit de vraag of eisen in haar woorden (Codex X3).
+    ag.log("prijsvraag", "bron", f"vraag {va}: bewijs per aanbod in het verslag",
+           [{"url": x.get("url"), "ontbreekt": x.get("ontbreekt"), "compatibel": x.get("compatibel"),
+             "btw": [x.get("btw_inbegrepen"), x.get("verzending_btw_inbegrepen")], "verzending": x.get("verzending"),
+             "bewijs": x.get("bewijs"),
+             "netwaarden": {e: o for e, o in (x["compatibiliteit"].items() if isinstance(x.get("compatibiliteit"), dict)
+                                             else []) if A._EIS_BEWIJS.match(str(e))}}
+            for x in res["goed"] + res["niet_compatibel"]])
     # Het verslag zelf noemt de vraag; het staat in het klaargezette item, niet in het logboek (Codex X3, ronde 2).
     ag.log("prijsvraag", "melding", f"prijsverslag {va} klaargezet voor Mehdi (soort {SOORT})")
     return len(res["goed"])

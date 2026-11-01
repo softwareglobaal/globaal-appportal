@@ -127,7 +127,11 @@ check("btw per kostenpost: 100 zonder btw plus 10 verzending met btw is 131 (Cod
 t = A.totaal(aanbod(prijs=100, verzending=10, btw_inbegrepen=False, verzending_btw_inbegrepen=None), KOERSEN)
 check("prijs zonder btw en verzending zonder opgave: onvolledig, niet erven (Codex X9, ronde 3)", t[:2] == (None, ["btw"]), str(t))
 t = A.totaal(aanbod(prijs=100, verzending=10, verzending_btw_inbegrepen=None), KOERSEN)
-check("ook bij een prijs met btw erft de verzending niet (Codex X9, ronde 4)", t[:2] == (None, ["btw"]), str(t))
+check("bij een consumentenprijs met btw in de EU erft de verzending de btw (overleg 33, X5)", t[:2] == (110.0, []), str(t))
+t = A.totaal(aanbod(prijs=100, verzending=10, verzending_btw_inbegrepen=None, bewijs={"verzending": "verzending 10 euro"}),
+             KOERSEN, pagina("100 euro, verzending 10 euro. Alle bedragen excl. btw."))
+check("zegt de winkel dat bedragen zonder btw zijn, dan erft de verzending niet (overleg 33, X5)",
+      t[:2] == (None, ["btw"]), str(t))
 t = A.totaal(aanbod(prijs=100, verzending=0, verzending_btw_inbegrepen=None), KOERSEN)
 check("gratis verzending heeft geen btw-status nodig", t[:2] == (100.0, []), str(t))
 t = A.totaal(aanbod(soort="veiling", prijs=1000, verzending=50, veilingkosten=0), KOERSEN)
@@ -215,6 +219,23 @@ def hand_oordeel(a, paginas):
 
 check("een handleiding met dezelfde modelcode bewijst 220 V en 60 Hz (bereik 220-240 V en 50/60 Hz)",
       hand_oordeel(met_hand(), {WINKEL: WPAG, HANDL: HPAG}) == "ja")
+DOC = "https://data.winkel.voorbeeld.com/manual/v70-ultra-complete.pdf"
+WPAG_DOC = pagina(f"Documenten: {DOC} https://winkel.voorbeeld.com/bebat.pdf\nMOVA V70 ULTRA COMPLETE WHITE. Nu 1.399,00 euro.")
+HPAG_DOC = pagina("MOVA V70 Ultra Complete Robotic Vacuum Cleaner. Base Station / Model RCVE0707 / Rated Input 220-240 V / "
+                  "50-60 Hz / Rated Output 20 V")
+V70 = dict(titel="MOVA V70 ULTRA COMPLETE WHITE", code="MOVA-RC-V70ULC-WHT")
+check("een handleiding die de aanbodpagina zelf linkt en hetzelfde model noemt, bewijst 220 V en 60 Hz (overleg 33, M2)",
+      hand_oordeel(met_hand(citaat="Rated Input 220-240 V / 50-60 Hz", bewijs_url=DOC, **V70), {WINKEL: WPAG_DOC, DOC: HPAG_DOC})
+      == "ja")
+check("dezelfde handleiding zonder link op de aanbodpagina telt niet (overleg 33, X2)",
+      hand_oordeel(met_hand(citaat="Rated Input 220-240 V / 50-60 Hz", bewijs_url=DOC, **V70),
+                   {WINKEL: WPAG_DOC.replace(DOC, "https://andere.voorbeeld.com/x.pdf"), DOC: HPAG_DOC}) == "onbekend")
+check("een gelinkt document van een ander model telt niet (overleg 33, X2)",
+      hand_oordeel(met_hand(citaat="Rated Input 220-240 V / 50-60 Hz", bewijs_url=DOC, **V70),
+                   {WINKEL: WPAG_DOC, DOC: HPAG_DOC.replace("V70", "P70")}) == "onbekend")
+check("een gelinkt document over een optioneel laadstation telt niet (overleg 33, X2)",
+      hand_oordeel(met_hand(citaat="Rated Input 220-240 V / 50-60 Hz", bewijs_url=DOC, **V70),
+                   {WINKEL: WPAG_DOC, DOC: HPAG_DOC.replace("Base Station", "Optioneel laadstation")}) == "onbekend")
 check("een handleiding van een andere modelcode telt niet", hand_oordeel(met_hand(), {
       WINKEL: WPAG, HANDL: HPAG.replace("VX-200EU", "VX-200US")}) == "onbekend")
 check("een langere modelcode op de handleiding is een andere variant (VX-200EUX)", hand_oordeel(met_hand(), {
@@ -331,6 +352,26 @@ r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Verze
 check("het tarief voor Belgie telt, ook met de landcode BE (overleg 29, X2)",
       r["beste"]["totaal_eur"] == 509.95 and A.voor_belgie("Verzendkosten BE grote toestellen: 19,95 euro")
       and not A.voor_belgie("Wij verzenden to be sure") and not A.voor_belgie("Verzending Nederland 6,95"), str(r["goed"]))
+TABEL = dict(paginas, **{"https://winkel.voorbeeld.com/verzending": pagina(
+    "U kan de verzendkosten als volgt simuleren:\n| Land\n| Verzendkost\n| België/Luxemburg/Nederland\n| 12,50 €\n"
+    "| Frankrijk, Duitsland\n| 15,00 €")})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "België/Luxemburg/Nederland | 12,50 €"},
+                      verzending=12.5, verzending_btw_inbegrepen=None)], VANDAAG, KOERSEN, paginas=TABEL)
+check("een tarief uit de verzendtabel telt met het verzendwoord in de kop (overleg 33, M3)",
+      r["beste"] is not None and r["beste"]["totaal_eur"] == 512.5, str([(g["totaal_eur"], g["ontbreekt"]) for g in r["goed"]]))
+RETOURTABEL = dict(paginas, **{"https://winkel.voorbeeld.com/verzending": pagina(
+    "Verzendkosten: zie de kassa. Retour naar België: 9,95 €")})
+r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "naar België: 9,95 €"}, verzending=9.95)],
+              VANDAAG, KOERSEN, paginas=RETOURTABEL)
+check("een retourbedrag na het verzendwoord telt niet als verzending (overleg 33, X3)",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"], str(r["goed"]))
+check("gratis levering met een datum ertussen telt (overleg 33, M4)",
+      A.gratis_verzending("Levering aan huis : vanaf di. 03 november Gratis"))
+check("geen gratis levering bij retour, drempelbedrag, afhaling of ontkenning ertussen (overleg 33, X4)",
+      not A.gratis_verzending("Levering aan huis. Retourneren is gratis")
+      and not A.gratis_verzending("Levering vanaf 50 euro gratis")
+      and not A.gratis_verzending("Levering aan huis 9,95 Afhaling in de winkel gratis")
+      and not A.gratis_verzending("Levering is helaas niet altijd gratis"))
 PRODUCT_Y = dict(paginas, **{"https://winkel.voorbeeld.com/y": pagina(
     'Product Y. {"offers": {"price": 99, "priceCurrency": "EUR"}} Gratis verzending naar België voor Y.')})
 r = A.verwerk([aanbod(bewijs={"prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending naar België voor Y."})],
@@ -832,6 +873,13 @@ check("de leestool maakt tekst van de pagina, met productgegevens en foto's, zon
       and "Nu 499,00 euro" in tekst and "Netspanning | 127 V, 60 Hz" in tekst and '"price": 499' in tekst
       and "https://www.winkel.voorbeeld.com/img/x1.jpg" in tekst and "https://cdn.voorbeeld.com/x1b.jpg" in tekst
       and "geheim" not in tekst and ".x{}" not in tekst, tekst)
+log5 = os.path.join(NEPMAP, "documenten.jsonl")
+DOCHTML = ("<html><body><h1>X1</h1><a href='/manual/x1.pdf'>Handleiding</a><a href='https://cdn.voorbeeld.com/spec.PDF'>"
+           "Specificaties</a><a href='/x2'>X2</a></body></html>")
+tekst5, _ = L.lees("https://winkel.voorbeeld.com/x1", log5, lambda u: (u, "text/html", DOCHTML.encode()))
+check("de leestool toont de PDF-links van de pagina, zoals een handleiding (overleg 33, A)",
+      "Documenten: https://winkel.voorbeeld.com/manual/x1.pdf https://cdn.voorbeeld.com/spec.PDF" in tekst5
+      and "/x2" not in tekst5.split("Documenten:")[1].splitlines()[0], tekst5)
 regel = json.loads(open(leeslog).read().splitlines()[0])
 check("het model krijgt precies de tekst die in het leeslog staat (X2)", tekst == f"URL: {regel['eind_url']}\n\n{regel['tekst']}")
 gl, lb = O.gelezen_uit(leeslog)

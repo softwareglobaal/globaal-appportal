@@ -112,7 +112,9 @@ telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met pre
 eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en
 citeer je de tekst waaruit dat blijkt. Netspanning en netfrequentie staan zelden op een winkelpagina: zoek en lees dan
 een pagina van de fabrikant, de handleiding of het specificatieblad van precies die modelcode, en geef die pagina als
-bewijs_url; dat telt alleen als dezelfde modelcode op de aanbodpagina en op die bewijspagina staat. In niet_nagekeken
+bewijs_url; dat telt als dezelfde modelcode op de aanbodpagina en op die bewijspagina staat, of als de aanbodpagina
+dat document zelf linkt (de regel "Documenten:" bovenaan de tekst van lees_pagina) en het hetzelfde model noemt. Lees
+daarom eerst de handleiding of het specificatieblad dat de winkelpagina linkt. In niet_nagekeken
 komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina niet leesbaar was; die worden nooit
 aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
 ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een
