@@ -1315,6 +1315,6 @@ subdiscipline-statistieken.
 - [x] Fotowacht niet meer rood door werfverslagtaken die op gegevens wachten (icloud_wacht.py)
 - [x] Wispr-wacht: de serverwacht heet nu wispr-team-wacht, overschrijft de laptopwacht niet meer
 - [x] Sms-wacht, Belwacht Xelion en YouTube-wacht gebouwd; Dagbundelaar, weekoverzicht, Dagboek en /bronnen tonen ze
-- [ ] VM: git pull, sms-wacht/xelion-wacht/youtube-wacht registreren, cron xelion_wacht.py elk uur (wacht op Mehdi)
-- [ ] Laptop: docs/laptop-nieuwe-wachten-31-10.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
+- [x] VM live 01-11-2026 08:07: pull, apps herbouwd, drie wachten op het bord, cron xelion_wacht.py elk uur
+- [ ] Laptop: docs/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
 - [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling
