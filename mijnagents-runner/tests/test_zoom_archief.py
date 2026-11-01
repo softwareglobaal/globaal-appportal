@@ -1390,6 +1390,39 @@ def test_t0120_arch5_een_later_bestand_krijgt_een_tweede_beschrijving():
     assert kaart + "/opname-3.json" not in d.bestanden, "zonder nieuw bestand geen derde beschrijving"
 
 
+def test_t0120_arch2_overzicht_per_dag_voor_de_wachtenpagina_zonder_onderwerp():
+    """ARCH-2 (meting 01-11-2026): op /wachten/zoom-archief stond elke dag "draaide, niets binnen", terwijl De
+    Zoomarchivaris elke dag bestanden kopieert. Elke ronde schrijft ze nu naast de staat een overzicht per Brusselse dag
+    van de kopie (wachten.json; het bord leest het alleen lezend op /data/zoom-archief): per gekopieerd bestand het uur
+    van het gesprek, de soort, de MB en de map Zoom/<datum uur> in Mehdi's Dropbox; verdwenen gevallen apart, zonder
+    id. Nooit een onderwerp, uuid, bestandsid, pad, hash of link: de weergave en de route achter Authentik doet de
+    pagina."""
+    z, _, _ = opzet()
+    z.meeting("u1", "2026-10-27T08:05:00Z", onderwerp=GEHEIM_ONDERWERP, bestanden=DRIE[:2])
+    b = _in_verwerking(z, "weg", "2026-10-27T11:00:00Z")
+    ronde()
+    del z.meetings["weg"]
+    ronde(nu=NU + timedelta(hours=1))
+    pad = os.path.join(ZA.DATA, "wachten.json")
+    tekst = open(pad, encoding="utf-8").read()
+    o = json.loads(tekst)
+    kopie = {ZA.brussel(b_["ts"]).date().isoformat() for b_ in ZA.lees_staat()["bestanden"].values()}
+    assert len(kopie) == 1, kopie       # de dag van de kopie (de klok van de kopie, niet die van de proef)
+    dag = o["dagen"][kopie.pop()]
+    assert len(dag["gekopieerd"]) == 2, dag
+    assert {f["soort"] for f in dag["gekopieerd"]} == {"scherm en spreker", "tijdlijn"}, dag["gekopieerd"]
+    assert all(f["uur"] == "09:05" and f["map"] == "Zoom/2026-10-27 0905" and f["mb"] >= 0 for f in dag["gekopieerd"]), dag
+    weg = o["dagen"][(NU + timedelta(hours=1)).astimezone(ZA.BRUSSEL).date().isoformat()]
+    assert weg["verdwenen"] == [{"uur": "12:00", "mb": 0.0}], weg
+    for verboden in ("Proefgesprek", "Zeta", "u1", b, "weg", "hash", "/Zoom/", "http", ZA.kort("u1")):
+        assert verboden not in tekst, verboden
+    with open(pad, encoding="utf-8") as f:
+        assert json.load(f)["ts"], "het overzicht zegt wanneer het geschreven is"
+    voor = open(pad, encoding="utf-8").read()
+    ronde(droog=True, nu=NU + timedelta(hours=2))
+    assert open(pad, encoding="utf-8").read() == voor, "een droge ronde schrijft geen overzicht"
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

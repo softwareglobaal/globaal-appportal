@@ -27,7 +27,10 @@ Elke ronde (cron elk uur, onder een eigen slot, nooit tijdens de gesprekkenketen
    alles wat Zoom heeft al bewezen was voor de ronde begon, niets in verwerking is, elk bewijs klopte, en niets
    verdwenen (tenzij Mehdi dat ene verlies aanvaardde), onvolledig of geblokkeerd is. Daarnaast wisregel_veilig: niets
    ouder dan 30 dagen zonder bewijs. Een ronde die niet alles kon nakijken, trekt ja in. De Zoomwacht leest beide
-   voor ZA-01.
+   voor ZA-01;
+7. een overzicht per dag voor de wachtenpagina in mijnagents-data/zoom-archief/wachten.json (ARCH-2): per gekopieerd
+   bestand het uur van het gesprek, de soort, de MB en de map Zoom/<datum uur>, verdwenen gevallen apart. Het bord
+   leest het alleen lezend; er staat geen onderwerp, id, pad, hash of link in.
 Op het bord en in het werkverslag alleen aantallen, GB en datums, nooit een onderwerp, naam of pad. Een normale
 achterstand is geen nood; een nood is een blokkade en blijft staan tot ze opgelost is, ook in een ronde die het
 bestand niet probeerde: de fouten per bestand staan in de staat.
@@ -353,6 +356,55 @@ def problemen(m):
             uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}:{tel[kenmerk]}"] = (
                 "bestand zonder id, downloadlink of bekende status", f.get("id", ""))
     return uit
+
+
+# ------------------------------------------------------------ overzicht ---
+def _map_kort(pad):
+    """'/Zoom/2026-10-29 1005 <onderwerp> <uuid8>/<bestand>' -> ('Zoom/2026-10-29 1005', '10:05'): alleen datum en uur."""
+    delen = (pad or "").split("/")
+    kop = delen[2].split(" ")[:2] if len(delen) > 2 else []
+    if len(kop) != 2 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", kop[0]) or not re.fullmatch(r"\d{4}", kop[1]):
+        return "Zoom", ""
+    return f"Zoom/{kop[0]} {kop[1]}", f"{kop[1][:2]}:{kop[1][2:]}"
+
+
+def _soort_uit_naam(pad):
+    """De soort uit een bestandsnaam '<HHMMSS> <soort> <id6>.<ext>' (bestandsnaam), of de extensie."""
+    naam = (pad or "").rsplit("/", 1)[-1]
+    delen = naam.rsplit(".", 1)[0].split(" ")
+    return " ".join(delen[1:-1]) or (naam.rsplit(".", 1)[-1] if "." in naam else "bestand")
+
+
+def _dag_van(iso):
+    t = _utc(iso)
+    return t.astimezone(BRUSSEL).date().isoformat() if t else ""
+
+
+def wachten_overzicht(staat, moment):
+    """ARCH-2 (meting 01-11-2026: op /wachten/zoom-archief stond elke dag "draaide, niets binnen"): per Brusselse dag
+    van de kopie elk bewezen bestand (uur van het gesprek, soort, MB, map Zoom/<datum uur> in Mehdi's Dropbox), en per
+    dag waarop iets verdween de verdwenen gevallen (uur, MB). Geen onderwerp, uuid, bestandsid, pad, hash of link: de
+    staat heeft het onderwerp in het pad, dit overzicht nooit."""
+    dagen = {}
+
+    def dag(d):
+        return dagen.setdefault(d, {"gekopieerd": [], "verdwenen": []})
+    for b in staat["bestanden"].values():
+        d = _dag_van(b.get("ts"))
+        if d:
+            kaart, uur = _map_kort(b.get("pad"))
+            dag(d)["gekopieerd"].append({"uur": uur, "soort": _soort_uit_naam(b.get("pad")),
+                                         "mb": round(int(b.get("grootte") or 0) / 1024 ** 2, 1), "map": kaart})
+    for v in staat["verdwenen"].values():
+        d = _dag_van(v.get("sinds"))
+        if d:
+            st = _utc(v.get("start"))
+            dag(d)["verdwenen"].append({"uur": st.astimezone(BRUSSEL).strftime("%H:%M") if st else "",
+                                        "mb": round(int(v.get("grootte") or 0) / 1024 ** 2, 1)})
+    for x in dagen.values():
+        x["gekopieerd"].sort(key=lambda f: (f["uur"], f["soort"]))
+        x["verdwenen"].sort(key=lambda f: f["uur"])
+    return {"ts": moment, "dagen": dict(sorted(dagen.items()))}
 
 
 # ------------------------------------------------------------ vervangen ---
@@ -886,6 +938,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             "open_ouder_dan_30_dagen": len(oud_open), "verdwenen": len(staat["verdwenen"]),
             "gemist_aanvaard": len(staat["gemist"]), "onvolledig": len(staat["onvolledig"]),
             "blokkades": len(staat["blokkades"])})
+        _schrijf_json(os.path.join(DATA, "wachten.json"), wachten_overzicht(staat, moment))
     else:
         dekking = veilig = False
     r.detail = (f"{'droog: ' if droog else ''}{'proef: ' if proef else ''}{len(klaar)} bestanden ({gb(klaar):.1f} GB) "
