@@ -129,7 +129,10 @@ def bevries(deal_id: int):
 
 # --------------------------------------------------------------------- test ---
 def plan_op_bevroren(invoer: dict):
-    ca.WERKWIJZE = invoer.get("werkwijze", "")
+    # NA09-rest: een bevroren invoer zonder werkwijze meet een agent zonder regels; die proef zegt niets
+    if not (invoer.get("werkwijze") or "").strip():
+        raise ca.bord.RondeGestopt(f"bevroren invoer {invoer.get('nummer', '?')} zonder werkwijze")
+    ca.WERKWIJZE = invoer["werkwijze"]
     ca._SCHEMA_CACHE[invoer["soort"]] = invoer.get("veldenschema") or {}
     bronnen_compact = invoer.get("bronnen")
     # plan_met_model verwacht ruwe bronnen en kort ze zelf in; een compacte set past ongewijzigd.

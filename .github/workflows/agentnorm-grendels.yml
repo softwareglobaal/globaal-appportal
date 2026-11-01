@@ -28,3 +28,5 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_bouwwacht.py
       # T-0064 (31-10-2026): elke runner die ~/agents/.env laadt, laadt eerst ~/appportal/.env, de ene sleutelbron
       - run: python3 mijnagents-runner/tests/test_sleutelbron.py
+      # NA09-rest (T-0075, 01-11-2026): geen runner leest nog een werkwijze met eigen code; de oudere gaan door de ronde
+      - run: python3 mijnagents-runner/tests/test_na09_rest.py

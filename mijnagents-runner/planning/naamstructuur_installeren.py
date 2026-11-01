@@ -47,7 +47,10 @@ def registreer():
         ("benamingen-wacht", "Benamingenwacht", "controleert namen en deelt bronbewijs met Mappenwacht", "mappen-wacht"),
         ("mappen-wacht", "Mappenwacht", "controleert folderstructuur op dezelfde bronindex", "benamingen-wacht")):
         zaad = open(os.path.join(RUNNER, "werkwijze", naam + ".md"), encoding="utf-8").read()
-        huidige = bord.call(f"/api/agent/{naam}/werkwijze").get("werkwijze", "") if naam in bestaand else ""
+        # NA09-rest (overleg 12, X8): streng lezen. Een kapot antwoord werd hier een lege tekst, en dan zette ik het zaad
+        # alsof er nog niets stond; nu geeft het WerkwijzeOnbekend en stopt de installatie. Een agent die nog niet
+        # bestaat, lees ik pas na zijn registratie (anders een 404), en ik zaai alleen op een bewezen lege werkwijze.
+        huidige = bord.Agent(naam).werkwijze_lezen() if naam in bestaand else ""
         if huidige and huidige.strip() != zaad.strip():
             raise ValueError("werkwijze op bord wijkt af; bestaande bron wordt niet overschreven")
         bord.call("/api/agent", {"naam": naam, "label": label, "type": "regie", "rol": rol,
@@ -58,6 +61,8 @@ def registreer():
                   "tools": ["Dropbox metadata lezen", "bestaande agenda- en gespreksindex", "gedeeld overzicht /naamstructuur"],
                   "prive": True, "levert_aan": [levert], "draait_op": "VM"})
         if not huidige:
+            if bord.Agent(naam).werkwijze_lezen():
+                raise ValueError("werkwijze verscheen op het bord tijdens de registratie; bestaande bron wordt niet overschreven")
             antwoord = bord.call(f"/api/agent/{naam}/werkwijze", {"werkwijze": zaad})
             if not antwoord.get("ok"):
                 raise RuntimeError("werkwijze niet geregistreerd")

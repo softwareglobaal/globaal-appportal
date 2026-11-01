@@ -306,10 +306,13 @@ def _fathom_wacht():
 
 
 def test_k3_fathom_wacht_afgebroken_blijft_niet_op_actief():
-    """J1, K3: SystemExit (zo komt SIGTERM binnen) of Ctrl-C midden in de ronde: de laatste hartslag is fout."""
+    """J1, K3: SystemExit (zo komt SIGTERM binnen) of Ctrl-C midden in de ronde: de laatste hartslag is fout. Sinds
+    NA09-rest (01-11-2026) loopt De Fathomwacht door de gedeelde ronde: die zet de fout, met de onderbreking in het
+    detail, en houdt open wat al open stond (open noden onbekend: geen lijst; bekend: dezelfde lijst)."""
     fw = _fathom_wacht()
-    for onderbreking in (SystemExit(143), KeyboardInterrupt()):
-        nb = BordNabootsing()
+    oud = [{"naam": "fathom-wacht", "tekst": "Oude nood", "wie": "mehdi"}]
+    for onderbreking, open_noden in ((SystemExit(143), None), (KeyboardInterrupt(), None), (SystemExit(143), oud)):
+        nb = BordNabootsing(open_noden=open_noden)
         echt = (bord.call, fw.fathom.beschikbaar)
         bord.call, fw.fathom.beschikbaar = nb.call, (lambda: True)
 
@@ -329,13 +332,17 @@ def test_k3_fathom_wacht_afgebroken_blijft_niet_op_actief():
         assert gestopt, "de onderbreking hoort door te gaan, niet opgeslokt te worden"
         statussen = nb.statussen()
         assert statussen[0]["status"] == "actief" and statussen[-1]["status"] == "fout", statussen
-        assert statussen[-1]["taak"] == "ronde afgebroken" and "nood" not in statussen[-1], \
-            "een afgebroken ronde sluit geen noden die ze niet meer kon nakijken"
+        assert type(onderbreking).__name__ in statussen[-1]["detail"], statussen[-1]
+        if open_noden is None:
+            assert "nood" not in statussen[-1], "een afgebroken ronde sluit geen noden die ze niet meer kon nakijken"
+        else:
+            assert statussen[-1]["nood"] == [{"tekst": "Oude nood", "wie": "mehdi"}], statussen[-1]
 
 
 def test_k3_fathom_wacht_gewone_uitgangen_onveranderd():
-    """Een gewone fout en een ontbrekende sleutel melden zoals voordien, zonder extra hartslag erachter. RZ2-02: zonder
-    sleutel geeft main() wel 1, zodat het script niet met exit 0 eindigt."""
+    """Een ontbrekende sleutel meldt zoals voordien. RZ2-02: zonder sleutel geeft main() 1, zodat het script niet met
+    exit 0 eindigt. Een werkwijze die niet te lezen is, stopt de ronde met precies een fouthartslag, met de nood erin;
+    tot 01-11-2026 kwam daar een tweede fouthartslag 'ronde mislukt' achter, die de reden uit het detail duwde."""
     fw = _fathom_wacht()
     nb = BordNabootsing()
     echt = (bord.call, fw.fathom.beschikbaar)
@@ -352,14 +359,13 @@ def test_k3_fathom_wacht_gewone_uitgangen_onveranderd():
     bord.call, fw.fathom.beschikbaar = nb.call, (lambda: True)
     try:
         with redirect_stderr(io.StringIO()):
-            try:
-                fw.main()
-            except bord.RondeGestopt:
-                pass
+            code = fw.main()
     finally:
         bord.call, fw.fathom.beschikbaar = echt
-    assert nb.statussen()[-1]["taak"] == "ronde mislukt", nb.statussen()
-    assert "ronde afgebroken" not in [s["taak"] for s in nb.statussen()]
+    statussen = nb.statussen()
+    assert code == 1 and [s["status"] for s in statussen] == ["actief", "fout"], (code, statussen)
+    assert "Werkwijze niet gelezen: bordfout" in statussen[-1]["detail"], statussen[-1]
+    assert {"tekst": "Werkwijze niet gelezen: bordfout", "wie": "claude-code"} in statussen[-1]["nood"], statussen[-1]
 
 
 STUURPROGRAMMA = r"""
@@ -403,7 +409,7 @@ def test_k3_fathom_wacht_sigterm_als_proces():
     assert "WERK" in regels, f"de ronde kwam niet aan het werk: {regels} {fout}"
     assert p.returncode == 128 + signal.SIGTERM, f"exitcode {p.returncode}, verwacht {128 + signal.SIGTERM}: {fout}"
     assert statussen and statussen[0]["status"] == "actief" and statussen[-1]["status"] == "fout", statussen
-    assert statussen[-1]["taak"] == "ronde afgebroken", statussen
+    assert "SystemExit" in statussen[-1]["detail"] and "nood" not in statussen[-1], statussen
 
 
 def test_z13_fathom_wacht_zet_de_bron_zelf():
@@ -588,6 +594,20 @@ def test_bas04_kort_venster_herschrijft_geen_onvolledig_dagboek():
     assert "| 12:00 |" in lees("2026-10-23") and "Jan Klant" in lees("2026-10-23"), "in het volle venster wordt vrijdag geschreven"
 
 
+def test_na09_rest_fathom_wacht_gaat_door_de_ronde():
+    """N4, N12-N14 (NA09-rest, 01-11-2026): De Fathomwacht las haar werkwijze streng, maar buiten de ronde, en meldde
+    nooit welke regels ze las. Nu staan de werkwijze, de gedeelde lessen en de collega's in haar kennis, en eindigt ze
+    met een hartslag van de ronde."""
+    nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+    fathom_ronde(nb, [(gesprek(8201, "2026-10-24T07:00:00Z", "2026-10-24T07:20:00Z"), herkenning(["Jan Klant"], "Werf"))],
+                 nu=ZATERDAG, dagen=1)
+    kennis = nb.kennis()
+    assert kennis, "De Fathomwacht meldde geen kennis: de gedeelde ronde liep niet (N4, N12)"
+    for stuk in ("werkwijze op het bord", "gedeelde lessen", "collega's op het bord"):
+        assert stuk in kennis[-1]["bron"], f"'{stuk}' ontbreekt in de kennis: {kennis[-1]['bron']}"
+    assert [s["status"] for s in nb.statussen()] == ["actief", "waakt"], nb.statussen()
+
+
 def test_bas04_kort_venster_opent_geen_nood_over_de_eigen_sleutel():
     """BAS-04, J1: zonder opname van Mehdi's account in de laatste 24 uur opende een korte ronde de nood dat zijn sleutel
     ontbreekt, tot de keten van 13:00. Een kort venster bewijst dat niet: de vorige stand van die nood blijft. Het volle
@@ -607,8 +627,11 @@ def test_bas04_kort_venster_opent_geen_nood_over_de_eigen_sleutel():
     h = laatste(open_, van_shaniel, 1)
     assert {"tekst": SLEUTEL_NOOD, "wie": "mehdi"} in h["nood"], f"stond ze open, dan blijft ze open: {h}"
     h = laatste(None, van_shaniel, 1)
-    assert h["status"] == "waakt" and "nood" not in h, f"open noden onbekend: geen lijst, zodat het bord niets sluit: {h}"
-    assert "Betrokken personen" in h["detail"], f"wat de ronde vond, staat dan in het detail: {h['detail']}"
+    # open noden onbekend: sinds NA09-rest (overleg 12, X6) gaat wat de ronde vond mee met nood_sluiten false, zodat het
+    # bord niets sluit; de sleutelnood, waarvan de stand onbekend is, gaat niet mee en blijft zoals ze stond
+    assert h["status"] == "waakt" and h.get("nood_sluiten") is False, f"open noden onbekend: het bord sluit niets: {h}"
+    assert any("Betrokken personen" in n["tekst"] for n in h["nood"]), f"wat de ronde vond, gaat mee: {h}"
+    assert not any("eigen Fathom-sleutel" in n["tekst"] for n in h["nood"]), f"de sleutelnood is onbekend: {h}"
     h = laatste(open_, van_mehdi, 1)
     assert not any("eigen Fathom-sleutel" in n["tekst"] for n in h["nood"]), f"een eigen opname bewijst de sleutel: {h}"
     h = laatste([], van_shaniel, 14)

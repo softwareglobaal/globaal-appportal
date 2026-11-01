@@ -474,6 +474,26 @@ def toezicht(r, m, status, st_obj, uitkomsten, taken, tellers):
     return code
 
 
+def personentabel(r, fw):
+    """De tabel Betrokken personen van De Fathomwacht, van het bord (een plek, N6), of None. Onbekend is niet leeg, en een
+    lege tabel is geen tabel (NA09-rest, overleg 12, 01-11-2026). Tot dan werd een antwoord zonder werkwijze een lege
+    tabel, en herkende het model privé en afdeling zonder die voorkennis; een transcript in een verkeerde dossiermap is
+    niet zomaar terug te halen. Dan een nood, en deze ronde geen opname: ze wacht ongemoeid op de volgende."""
+    try:
+        tekst = bord.Agent("fathom-wacht").werkwijze_lezen()
+    except bord.WerkwijzeOnbekend as e:
+        r.nood("Personentabel van De Fathomwacht niet gelezen", wie="claude-code")
+        ag.log("Plaud", "fout", f"personentabel van De Fathomwacht niet gelezen ({e}); deze ronde geen opname herkend")
+        return None
+    personen = fw.personen_uit_werkwijze(tekst)
+    if not personen:
+        r.nood("Personentabel van De Fathomwacht leeg", wie="mehdi")
+        ag.log("Plaud", "fout", "personentabel van De Fathomwacht leeg; deze ronde geen opname herkend")
+        return None
+    r.bron("werkwijze fathom-wacht (personentabel)", tekst)
+    return personen
+
+
 def ronde(r):
     tellers = {"gedaan": 0, "ongewijzigd": 0, "wacht_op_transcript": 0, "uitgesteld": 0, "fout": 0, "fouten": 0, "herstel": 0}
     m, status = lees_invoer()
@@ -509,14 +529,14 @@ def ronde(r):
         if u["uitkomst"] == "ter_beoordeling":
             r.nood("Een Plaud-opname past bij een verzoek van De Contractmaker; Mehdi bevestigt de bestemming in de salesmap", wie="mehdi")
     import fathom_wacht as fw
-    personen = fw.personen_uit_werkwijze(bord.call("/api/agent/fathom-wacht/werkwijze").get("werkwijze") or "")
+    personen = personentabel(r, fw)
     try:
         deals = fw.deals_index()
     except Exception as e:  # noqa: BLE001  onvolledig bewijs, geen definitieve conclusie (nacontrole v1.1, P2-8)
         deals = None
         ag.log("Plaud", "fout", f"Pipedrive niet gelezen: {type(e).__name__}; dossierbewijs deze ronde onvolledig")
     budget = {"over": MAX_HERKENNING}
-    for o, romp in opnames:
+    for o, romp in (opnames if personen else []):     # zonder personentabel geen opname: ze wacht op de volgende ronde
         eigen = per_id.get(o["plaud_id"], [])
         if o["start_brussel"][:10] < SINDS and not eigen:
             continue
@@ -529,7 +549,7 @@ def ronde(r):
         tellers[res["uitkomst"]] = tellers.get(res["uitkomst"], 0) + 1
         tellers["fouten"] += res["fouten"]
     code = toezicht(r, m, status, st_obj, uitkomsten, taken, tellers)
-    if tellers["fouten"]:
+    if tellers["fouten"] or not personen:
         code = code or DEELS
     if budget["over"] <= 0:
         ag.log("Plaud", "bevinding", "herkenningsbudget van deze ronde op; de rest volgt in de volgende rondes")
