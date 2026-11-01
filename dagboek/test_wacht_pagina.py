@@ -2,6 +2,8 @@
 
 - AG-2: de regels van een signaal of dagplan staan als lijst onder het item; '(privé)' blijft '(privé)'; ruwe HTML in een
   regel blijft tekst;
+- AG-9: een werkverslag met meer dan een blad toont de bladknoppen; ?blad=1 vraagt het bord om dat blad van deze wacht;
+  zonder blad blijft de vraag aan het bord dezelfde als voordien;
 
 Het bord is nagebootst (haal_wachten). Verzonnen voorbeelden, geen echte namen. Draait in de Docker-build.
 """
@@ -16,6 +18,7 @@ os.environ["DAGBOEK_MAP"] = tempfile.mkdtemp()
 os.environ["DAGBOEK_GROUPS"] = "dagboek"
 sys.path.insert(0, HIER)
 import app as A  # noqa: E402
+HAAL_ECHT = A.haal_wachten                 # de echte vraag aan het bord, voor de proef van het pad
 
 C = A.app.test_client()
 MET = {"X-authentik-groups": "medewerkers|dagboek"}
@@ -52,6 +55,45 @@ check("AG-2 ruwe HTML in een regel blijft tekst", "&lt;b&gt;proef&lt;/b&gt; C" i
 A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(items=[dict(SIG, regels=[])])))
 html = C.get("/wachten/agenda-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
 check("AG-2 een item zonder regels krijgt geen lege lijst", '<ul class="regels">' not in html)
+
+# --- AG-9
+gevraagd = []
+
+
+def bord(dag, *a):
+    gevraagd.append((dag,) + a)
+    blad = a[1] if len(a) > 1 else None
+    log = [{"tijd": "08:00", "stap": "schrijf", "tekst": f"proefregel {'0001' if blad == 1 else '1200'}", "fout": False}]
+    return json.loads(json.dumps(wacht(rondes=1200, log=log, log_blad=blad or 2, log_bladen=2)))
+
+
+A.haal_wachten = bord
+html = C.get("/wachten/agenda-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("AG-9 zonder blad: dezelfde vraag aan het bord als voordien, het laatste blad", gevraagd[-1] == ("2026-10-31",)
+      and "proefregel 1200" in html, gevraagd)
+check("AG-9 de bladknoppen staan er, blad 2 is aan",
+      'href="/wachten/agenda-wacht?dag=2026-10-31&amp;blad=1"' in html and '<a class="aan" href="/wachten/agenda-wacht?dag=2026-10-31&amp;blad=2"' in html
+      and "blad 2 van 2" in html, html[-5000:])
+html = C.get("/wachten/agenda-wacht?dag=2026-10-31&blad=1", headers=MET).get_data(as_text=True)
+check("AG-9 ?blad=1 vraagt het bord om blad 1 van deze wacht en toont het begin",
+      gevraagd[-1] == ("2026-10-31", "agenda-wacht", 1) and "proefregel 0001" in html and "blad 1 van 2" in html, gevraagd)
+html = C.get("/wachten/agenda-wacht?dag=2026-10-31&blad=nul", headers=MET)
+check("AG-9 een blad dat geen getal is, geeft gewoon het laatste blad", html.status_code == 200 and gevraagd[-1] == ("2026-10-31",))
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(wacht(rondes=3, log=[{"tijd": "08:00", "stap": "bron", "tekst": "x",
+                                                                             "fout": False}], log_blad=1, log_bladen=1)))
+html = C.get("/wachten/agenda-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("AG-9 een werkverslag van een blad krijgt geen bladknoppen", "blad 1 van 1" not in html and "&amp;blad=" not in html)
+pad = []
+A._cache.clear()
+_oud = A.urllib.request.urlopen
+A.urllib.request.urlopen = lambda req, timeout=0: pad.append(req.full_url) or (_ for _ in ()).throw(OSError("proef"))
+try:
+    HAAL_ECHT("2026-10-31", "agenda-wacht", 2)
+    HAAL_ECHT("2026-10-31")
+finally:
+    A.urllib.request.urlopen = _oud
+check("AG-9 de vraag aan het bord draagt wacht en blad alleen als er een blad gevraagd is",
+      pad == [A.BORD + "/api/wachten/dag?dag=2026-10-31&wacht=agenda-wacht&blad=2", A.BORD + "/api/wachten/dag?dag=2026-10-31"], pad)
 
 print("wacht-pagina: alles ok" if not fout else f"wacht-pagina: {fout} fout(en)")
 sys.exit(1 if fout else 0)

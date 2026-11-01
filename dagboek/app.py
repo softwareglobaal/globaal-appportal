@@ -10,6 +10,7 @@ import json
 import os
 import re
 import time
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -407,9 +408,10 @@ WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
 
 
-def haal_wachten(dag):
-    """Per wacht wat er binnenkwam, of None als het bord niet antwoordt. Een minuut bewaard."""
-    pad = f"/api/wachten/dag?dag={dag}"
+def haal_wachten(dag, naam=None, blad=None):
+    """Per wacht wat er binnenkwam, of None als het bord niet antwoordt. Een minuut bewaard. Met naam en blad: dat blad
+    van het werkverslag van die wacht (T-0120 AG-9)."""
+    pad = f"/api/wachten/dag?dag={dag}" + (f"&wacht={urllib.parse.quote(naam)}&blad={int(blad)}" if naam and blad else "")
     bewaard = _cache.get(pad)
     if bewaard and time.monotonic() - bewaard[0] < 60:
         return bewaard[1]
@@ -436,9 +438,10 @@ def locatie_items(dag):
              "fout": False} for r in ritten if r["soort"] != "gat"]
 
 
-def wachten_dag(dag):
-    """Alle wachten van één dag uit het bord, met de Locatiewacht uit het Locatie-dashboard erbij, of None."""
-    gegevens = haal_wachten(dag)
+def wachten_dag(dag, naam=None, blad=None):
+    """Alle wachten van één dag uit het bord, met de Locatiewacht uit het Locatie-dashboard erbij, of None. Met naam en
+    blad: dat blad van het werkverslag van die wacht (AG-9); zonder blad dezelfde vraag als voordien."""
+    gegevens = haal_wachten(dag, naam, blad) if naam and blad else haal_wachten(dag)
     if not gegevens:
         return None
     for vak in gegevens["vakken"]:
@@ -544,7 +547,8 @@ def wacht_pagina(naam):
     if not mag():
         abort(403)
     d = wacht_dag_uit_vraag()
-    gegevens = wachten_dag(d.isoformat())
+    blad = request.args.get("blad", type=int)               # T-0120 AG-9: het werkverslag per blad
+    gegevens = wachten_dag(d.isoformat(), naam, blad if blad and blad > 0 else None)
     w, vak = None, ""
     if gegevens:
         for v in gegevens["vakken"]:

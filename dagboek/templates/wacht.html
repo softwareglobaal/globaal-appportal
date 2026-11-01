@@ -56,6 +56,10 @@
   </div>
   <div class="kaart">
     <h2>Werkverslag van deze dag ({{ 'onbekend' if w['logfout'] else w['rondes'] }})</h2>
+    {% if (w['log_bladen'] or 1) > 1 %}
+    <nav class="dagkeuze bladen">{% for b in range(1, w['log_bladen'] + 1) %}<a class="{{ 'aan' if b == w['log_blad'] }}" href="{{ url_for('wacht_pagina', naam=naam, dag=dag, blad=b) }}">blad {{ b }}</a>{% endfor %}
+      <span class="zacht klein">blad {{ w['log_blad'] }} van {{ w['log_bladen'] }}</span></nav>
+    {% endif %}
     {% if w['logfout'] %}
     <p class="leeg">Onbekend: het bord kon het werkverslag niet lezen ({{ w['logfout'] }}). Dat is niet hetzelfde als geen ronde.</p>
     {% elif w['log'] %}

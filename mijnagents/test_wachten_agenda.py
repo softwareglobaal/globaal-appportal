@@ -88,5 +88,20 @@ sms = w["sms-wacht"]["items"][0]
 check("AG-2 een wacht buiten het vak Agenda krijgt geen regels (nooit de tekst van een bericht)",
       "regels" not in sms and "geheime" not in str(sms), sms)
 
+# --- AG-9
+check("AG-9 de dag met 1.200 regels telt ze allemaal", ag["rondes"] == 1200, ag["rondes"])
+check("AG-9 zonder blad het laatste blad, met het aantal bladen", ag["log_blad"] == 2 and ag["log_bladen"] == 2
+      and ag["log"][-1]["tekst"].endswith("proefregel 1200") and len(ag["log"]) == 1200 - WD.MAX_LOG,
+      (ag.get("log_blad"), ag.get("log_bladen"), len(ag["log"])))
+b1 = wachten("2026-10-29", wacht="agenda-wacht", blad=1)["agenda-wacht"]
+check("AG-9 blad 1 begint bij de eerste regel en loopt door het midden", b1["log_blad"] == 1
+      and b1["log"][0]["tekst"].endswith("proefregel 0001") and any(x["tekst"].endswith("proefregel 0600") for x in b1["log"])
+      and len(b1["log"]) == WD.MAX_LOG, (b1["log_blad"], b1["log"][0]))
+b9 = wachten("2026-10-29", wacht="agenda-wacht", blad=9)["agenda-wacht"]
+check("AG-9 een blad buiten het bereik wordt het laatste", b9["log_blad"] == 2 and b9["log"][-1]["tekst"].endswith("proefregel 1200"))
+bx = wachten("2026-10-29", wacht="agenda-wacht", blad=1)
+check("AG-9 het blad geldt alleen voor de gevraagde wacht", bx["calendly-wacht"]["log_blad"] == 1
+      and bx["calendly-wacht"]["log_bladen"] == 1)
+
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

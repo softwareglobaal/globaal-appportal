@@ -15,7 +15,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 # Mehdi leest de wacht per dag in het Dagboek: niets wegkappen wat hij daar wil zien (Codex 01-11). Een dag heeft hoogstens
 # enkele honderden rondes (de Fotowacht 435 op 30-10).
 MAX_ITEMS = 2000
-MAX_LOG = 1000
+MAX_LOG = 1000                          # regels per blad van het werkverslag (T-0120 AG-9: 23-10 had er 4.445)
 KORT = 160
 # Welke wacht schrijft welke bron in de gesprekkentabel (gesprek_log.bron).
 GESPREK_BRON = {"whatsapp-wacht": "whatsapp", "belwacht": "telefoon", "sms-wacht": "sms", "xelion-wacht": "xelion",
@@ -163,7 +163,9 @@ def lees_log(conn, wacht, van, tot):
              "fout": r["stap"] == "fout"} for r in rijen]
 
 
-def per_wacht(conn, wacht, label, dag, status=None, noden=()):
+def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None):
+    """blad: welk blad van het werkverslag (1 is het begin); zonder blad het laatste, zoals voordien de laatste MAX_LOG
+    regels. Een blad buiten het bereik wordt het dichtstbijzijnde (T-0120 AG-9)."""
     van, tot = grenzen(dag)
     items, gedekt, leesfout, logfout = [], None, "", ""
     # Items en werkverslag apart gelezen en apart gemeld (Codex 01-11): faalt het een, dan blijft het ander staan.
@@ -193,15 +195,19 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         oordeel, kleur = "draaide, niets binnen", "oranje"
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
+    bladen = max(1, -(-len(log) // MAX_LOG))
+    blad = bladen if blad is None else min(max(1, int(blad)), bladen)
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
-            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten, "log": log[-MAX_LOG:],
+            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten,
+            "log": log[(blad - 1) * MAX_LOG:blad * MAX_LOG], "log_blad": blad, "log_bladen": bladen,
             "gedekt": gedekt, "leesfout": leesfout, "logfout": logfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
 
 
-def dag(conn, dag_, agents, vakken, boven):
-    """Alle wachten van de groep Dagbundelaar voor één dag, in hun vakken. agents: naam -> label."""
+def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
+    """Alle wachten van de groep Dagbundelaar voor één dag, in hun vakken. agents: naam -> label. wacht en blad: dat blad
+    van het werkverslag voor die ene wacht (T-0120 AG-9); de andere wachten krijgen hun laatste blad."""
     date.fromisoformat(dag_)
     st = {r["naam"]: r for r in conn.execute("SELECT * FROM status").fetchall()}
     nood = {}
@@ -210,7 +216,8 @@ def dag(conn, dag_, agents, vakken, boven):
     groepen = [("De Dagbundelaar en Ai Angel", tuple(boven))] + [(v, tuple(w)) for v, w in vakken]
     uit = []
     for vak, namen in groepen:
-        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()))
+        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()),
+                                                      blad=blad if n == wacht else None)
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]
     return {"dag": dag_, "vakken": uit,
