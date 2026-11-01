@@ -35,10 +35,15 @@ if printf '%s\n' "$TOKEN" | ssh globaal 'set -e; read -r T; umask 077; d="$HOME/
     mkdir -p "$d"; chmod 700 "$d"; printf "%s\n" "$T" > "$d/claude-token.nieuw"; chmod 600 "$d/claude-token.nieuw"
     mv "$d/claude-token.nieuw" "$d/claude-token"
     export CLAUDE_CODE_OAUTH_TOKEN="$T"; unset T ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+    # Proef zonder modelvraag en dus zonder kosten (Codex, controle 22): geen beheerde instellingen op de VM en
+    # `claude auth status` meldt het abonnementstoken van Anthropic zelf, net als claude_abonnement.controleer_bron.
+    for m in /etc/claude-code; do for n in managed-settings.json managed-settings.d managed-mcp.json; do
+      [ ! -e "$m/$n" ] || exit 3; done; done
     t="$(mktemp -d)"; p="$HOME/.local/bin:/usr/bin:/bin"; c="$HOME/.local/bin/claude"; cd "$t"
-    HOME="$t" PATH="$p" "$c" -p --safe-mode --restricted --strict-mcp-config \
-      --no-session-persistence --tools "" "Antwoord met precies: OK" < /dev/null 2>/dev/null | grep -q OK
-    cd /; rm -rf "$t"'; then
+    s="$(HOME="$t" CLAUDE_CONFIG_DIR="$t/.claude" PATH="$p" "$c" auth status --json < /dev/null 2>/dev/null)"
+    cd /; rm -rf "$t"
+    printf "%s" "$s" | grep -q "\"authMethod\": *\"oauth_token\"" && printf "%s" "$s" | grep -q "\"apiProvider\": *\"firstParty\"" \
+      && ! printf "%s" "$s" | grep -q "apiKeySource"'; then
   echo; echo "Klaar: Claude op de server is aangemeld voor een jaar. Je mag dit venster sluiten."
 else
   echo; echo "De aanmelding is niet gelukt of de proef faalde. Zeg het tegen Claude."
