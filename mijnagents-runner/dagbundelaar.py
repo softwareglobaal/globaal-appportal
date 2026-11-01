@@ -487,6 +487,9 @@ def kanaal_van_dag(stand, kanaal, dag, gedekt):
 
 
 WISPR_GEBRUIKER = os.environ.get("WISPR_GEBRUIKER", "Mehdi")
+# VOL-4 (T-0120, overleg X2): het blok Eigen werk en gezondheid staat standaard uit, ongeacht wie het Dagboek leest. Pas
+# aan na het bestaande ja van Mehdi op T-0079 rij 7, met een eigen commit. Uit: niets gelezen, geen blok in de .md.
+EIGEN_AAN = False
 
 
 def _inhoud(x):
@@ -986,7 +989,7 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         tuple(KANAALWACHTEN.values()))}
     kanalen = {k: kanaalstand(statussen.get(w), nu) for k, w in KANAALWACHTEN.items()}
     try:
-        eigen_van = lees_eigen(eerste)
+        eigen_van = lees_eigen(eerste) if EIGEN_AAN else (lambda dag: None)
     except Exception as e:  # noqa: BLE001
         ag.log("eigen", "fout", f"Wispr, websites en gezondheid niet gelezen ({type(e).__name__})")
         eigen_van = lambda dag: {"wispr": None, "websites": None, "youtube": None, "gezondheid": None}  # noqa: E731

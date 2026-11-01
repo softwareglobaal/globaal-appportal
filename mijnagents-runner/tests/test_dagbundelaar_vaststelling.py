@@ -1115,6 +1115,36 @@ def test_fase2_telling_naast_het_dagbestand():
         assert json.loads(lees(tpad))["dagversie"] == 2, "de telling volgt de versie van het dagbestand"
 
 
+def test_vol4_eigen_werk_en_gezondheid_standaard_uit():
+    """VOL-4 (T-0120, overleg X2): het blok Eigen werk en gezondheid staat standaard uit, tot het bestaande ja op T-0079
+    rij 7. Vlag uit: geen lezing, geen sleutel eigen in de .json van de dag en geen regels in de .md. Vlag aan: het blok
+    staat er, zodat deze test de fout ook ziet."""
+    assert D.EIGEN_AAN is False, "de vlag staat standaard uit"
+    gelezen = []
+
+    def lees_eigen(eerste):
+        gelezen.append(eerste)
+        return lambda dag: {"wispr": {"dictaten": 3, "woorden": 40, "seconden": 30}, "websites": None, "youtube": None,
+                            "gezondheid": ["Stappen: 8234", "Rusthartslag: 58"]}
+
+    oud = D.lees_eigen
+    D.lees_eigen = lees_eigen
+    try:
+        with tempfile.TemporaryDirectory() as m:
+            ronde(Wereld(m))
+            md = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+            x = json.loads(lees(os.path.join(m, "dagboek", "2026", f"{DAG}.json")))
+        assert not gelezen, "vlag uit: de gegevens worden niet eens gelezen"
+        assert "eigen" not in x and "Eigen werk" not in md and "Stappen" not in md and "Wispr" not in md, md
+        D.EIGEN_AAN = True
+        with tempfile.TemporaryDirectory() as m:
+            ronde(Wereld(m))
+            md = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert gelezen and "## Eigen werk en gezondheid" in md and "Stappen: 8234" in md, md
+    finally:
+        D.lees_eigen, D.EIGEN_AAN = oud, False
+
+
 def test_fase2_telling_niet_teruggelezen():
     """X2: de dag komt pas op het bord als de telling teruggelezen is; anders faalt de ronde."""
     with tempfile.TemporaryDirectory() as m:
