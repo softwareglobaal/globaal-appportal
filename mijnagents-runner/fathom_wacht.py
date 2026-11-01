@@ -214,6 +214,14 @@ def prive_verwijzing(map_, start, gid):
     return os.path.join(os.path.dirname(map_), f"{start[:10]} {start[11:16].replace(':', '')} (privé) [{gid}]")
 
 
+def fathom_link(g, prive):
+    """FATHOM-3: de link in de gesprekkentabel. Voor een werkgesprek de deellink (share_url), die zonder aanmelden opent
+    (gemeten 12-09-2026), zodat de wachtenpagina 'open in Fathom' kan tonen; zonder deellink de gewone link. Een
+    privégesprek krijgt nooit de deellink (overleg K5), alleen de gewone link (fathom.video/calls/..., vraagt aanmelden)."""
+    gewoon = g.get("url") or ""
+    return gewoon if prive else (g.get("share_url") or gewoon)
+
+
 def is_prive(herk, besl=None):
     """RZ3-01 (besluit van de regie, 22-10-2026: de veilige kant). Een gesprek is privé als de herkenning prive zegt OF de
     dossierbeslissing (plaud/dossier.py) het privé noemt: afdeling prive, ook met prive=false. Tot dan las ik voor de
@@ -458,7 +466,7 @@ def _ronde(r):
                    "personen": ", ".join(herk.get("personen") or []), "bedrijf": herk.get("bedrijf", ""), "afdeling": herk.get("afdeling", ""),
                    "thema": herk.get("thema", ""), "project": herk.get("project", "") or (deal["titel"] if deal else ""),
                    "prive": prive, "zekerheid": herk.get("zekerheid", ""), "waarom": herk.get("waarom", ""), "archief": map_,
-                   "link": g.get("url", ""), "opgenomen_door": (g.get("recorded_by") or {}).get("name", ""),
+                   "link": fathom_link(g, prive), "opgenomen_door": (g.get("recorded_by") or {}).get("name", ""),
                    "bron": "fathom"}   # Z13: expliciet, niet de stille standaard van het bord
             rijen.append(rij)
             logdag.setdefault(start[:10], []).append(rij)
@@ -487,7 +495,10 @@ def _ronde(r):
                 klaar.append({"voor": voor, "soort": "transcript", "sleutel": dossiersleutel,
                               "titel": f"{start} Fathom: {herk.get('hoofdpersoon') or g.get('title')} · {herk.get('thema', '')[:60]}",
                               "uniek": f"fathom:{gid}", "verwijzing": pad or map_,
-                              "inhoud": {**{k: v for k, v in rij.items() if k not in ("waarom", "bron")}, "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
+                              # FATHOM-3: de deellink alleen in de gesprekkentabel; het item (ook naar de export in Dropbox)
+                              # houdt de gewone link, die aanmelden vraagt
+                              "inhoud": {**{k: v for k, v in rij.items() if k not in ("waarom", "bron")}, "link": g.get("url", ""),
+                                         "waarom": herk.get("waarom", ""), "transcript_pad": pad or os.path.join(map_, "transcript.md"),
                                          "dossier": besl["dossier"], "firma": besl["firma"], "projectnummer": besl["projectnummer"],
                                          "deal_id": deal["id"] if deal else None, "zekerheid_dossier": besl["zekerheid"],
                                          "conflict": besl["conflict"], "redenen": besl["redenen"]}})

@@ -6,6 +6,9 @@
   per recording_id alleen ontbrekende samenvatting.md, actiepunten.json en actiepunten.md in de bestaande map, nooit
   overschrijven; de samenvatting is de markdown-tekst, geen str() van het object; onbekend is nooit een lege lijst;
   niets ervan op het bord, ook niet van een privégesprek; een mislukte aanvulvraag is een nood en laat de ronde staan.
+- FATHOM-3 (datadeel): de rij in de gesprekkentabel draagt de deellink van Fathom (share_url, anders url); een
+  privégesprek nooit de deellink, die opent zonder aanmelden. Het klaarzet-item houdt de gewone link. Het ontdubbelen
+  op de wachtenpagina toetst mijnagents/test_wachten_dag.py (W12).
 
 Geen netwerk en geen taalmodel: Fathom en het bord zijn nagebootst (fathom_ronde uit test_bord_lees.py), elk gesprek
 staat al in het archief, dus herkent de ronde niets opnieuw. Alle namen en adressen zijn verzonnen.
@@ -191,6 +194,28 @@ def test_fathom1_mislukte_aanvulvraag_laat_de_ronde_staan_met_een_nood():
     assert gezet.get("/api/gesprekken") and gezet.get("/api/klaarzet"), list(gezet)
     assert laatste["status"] == "waakt" and any("samenvatting en actiepunten" in n["tekst"] for n in laatste["nood"]), laatste
     assert "ValueError" in scherm and "Geheime tekst" not in scherm, scherm
+
+
+# ------------------------------------------------------------------------------------------------ FATHOM-3 ---
+def test_fathom3_rij_draagt_de_deellink_nooit_bij_prive():
+    """FATHOM-3, met de privéregel van het overleg (K5): de deellink opent zonder aanmelden; een werkgesprek krijgt ze in
+    de rij (de wachtenpagina toont 'open in Fathom'), een privégesprek houdt de gewone link die aanmelden vraagt. Zonder
+    deellink de gewone link. Het klaarzet-item verandert niet (Z13): het gaat ook naar de export in Dropbox."""
+    def met_deellink(g):
+        return dict(g, share_url=f"https://fathom.video/share/deel{g['recording_id']}")
+    werk = met_deellink(gesprek(7701, "2026-10-21T08:00:00Z", "2026-10-21T08:30:00Z"))
+    prive = met_deellink(gesprek(7702, "2026-10-21T18:00:00Z", "2026-10-21T18:20:00Z"))
+    zonder = gesprek(7703, "2026-10-21T10:00:00Z", "2026-10-21T10:10:00Z")
+    nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+    gezet, _, _ = fathom_ronde(nb, [(werk, herkenning(["Jan Proef"], "Proefdak")),
+                                    (prive, herkenning(["Zeta Thuis"], "thuis", prive=True, afdeling="prive")),
+                                    (zonder, herkenning(["Jan Proef"], "Plan"))])
+    link = {r["uniek"]: r["link"] for r in gezet["/api/gesprekken"][0]["rijen"]}
+    assert link == {"fathom:7701": "https://fathom.video/share/deel7701", "fathom:7702": "https://fathom.video/calls/7702",
+                    "fathom:7703": "https://fathom.video/calls/7703"}, link
+    items = {i["uniek"]: i for i in gezet["/api/klaarzet"][0]["items"]}
+    assert "deel77" not in json.dumps(items), "de deellink gaat niet mee in een klaarzet-item"
+    assert items["fathom:7701"]["inhoud"]["link"] == "https://fathom.video/calls/7701", items["fathom:7701"]["inhoud"]
 
 
 def test_fathom1_eenmalige_aanvulronde_droog_en_echt():
