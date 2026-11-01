@@ -6,7 +6,7 @@
 > Dit is de enige takenlijst. Wat hier niet staat, is niet afgesproken.
 
 Plaats: repo globaal-appportal, `mijnagents-runner/docs/dagbundelaar/WIE-DOET-WAT.md`.
-Laatst bijgewerkt: 01-11-2026 15:20 door Claude 2.
+Laatst bijgewerkt: 01-11-2026 16:30 door Claude 1.
 
 ## Wie is wie
 
@@ -27,7 +27,7 @@ Laatst bijgewerkt: 01-11-2026 15:20 door Claude 2.
 | # | Wie | Wat | Opdracht | Stand |
 |---|---|---|---|---|
 | 0 | Claude 1 | De vaste regel over deze takenlijst in je eigen instellingen zetten. | `opdrachten/claude1-regel-takenlijst-instellen.md` | open |
-| 1 | Claude 1 (Mehdi klikt mee) | Laptopkant aanzetten: Sms-wacht, Fotowacht, YouTube-wacht, Dropbox-sync. Mehdi zet Messages in iCloud en Text Message Forwarding aan op de iPhone, geeft Full Disk Access en typt het laptopwachtwoord. | `opdrachten/opdracht-claude1-macbook-01-11.md` | open |
+| 1 | Claude 1 (Mehdi klikt mee) | Laptopkant aanzetten: Sms-wacht, Fotowacht, YouTube-wacht, Dropbox-sync. Mehdi zet Messages in iCloud en Text Message Forwarding aan op de iPhone, geeft Full Disk Access en typt het laptopwachtwoord. | `opdrachten/opdracht-claude1-macbook-01-11.md` | deels, 01-11 16:16 (Claude 1): Sms-wacht, WhatsApp-wacht en Belwacht aan, proef geslaagd, rondes op het bord. Full Disk Access werkte pas na verwijderen (-) en opnieuw toevoegen; uit en aan zetten hield de oude versie vast. Open: Fotowacht (wachtwoord Mehdi, werkstand T-0042); YouTube-wacht vindt onder launchd geen browsergeschiedenis (in Terminal wel), voor Claude 2. |
 | 2 | Claude 1 | Websitewacht aanzetten en Wispr-wacht een keer draaien (stap 1 tot 6). Daarna de map van de Gezondheidswacht nakijken (stap 7). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
 | 3 | Mehdi | Health Auto Export op de iPhone instellen (twee stappen onderaan). | `opdrachten/wispr-websites-gezondheid-naar-het-dagboek.md` | open |
 | 4 | Claude 1 | Driehoeksoverleg draaien over Dagboek compleet en Ai Angel. Verslagen in de map `naslag/` zetten als `rapport-dagboek-compleet.md` en `rapport-mehdi-agent.md`, en pushen. | `opdrachten/driehoeksoverleg-starten-voor-claude-1.md` | open |
