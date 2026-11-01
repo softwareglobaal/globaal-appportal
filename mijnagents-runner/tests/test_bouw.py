@@ -1234,6 +1234,11 @@ F.posten_uit_model({"A": "tekst A", "B": "tekst B"}, vraag=lambda s, g, **kw: _p
 F.OFFERTE_NAAR_AI = _aan
 check("posten via het abonnement, zonder gereedschap", _pv and _pv[0][2]["tools"] == () and "INSCHRIJVER A" in _pv[0][1])
 _wv = open(_hier / "werkwijze" / "offertevergelijker.md", encoding="utf-8").read()
+import bord  # noqa: E402
+for _naam, _tekst in (("De Offertevergelijker", _wv), ("De Aannemerszoeker", _ww)):
+    _nooit, _mehdi = bord.grenzen(_tekst)
+    check(f"{_naam}: het bord leest de grenzen uit de werkwijze (live gemeten 01-11-2026: een ingesprongen vervolgregel "
+          "gaf geen grenzen)", bool(_nooit) and bool(_mehdi), f"{len(_nooit)} {len(_mehdi)}")
 check("werkwijzen zeggen: abonnement, nooit een API-sleutel", "nooit met een" in _wv and "API-sleutel" in _wv
       and "Of een scan met OCR gelezen mag worden." in _wv and "API-sleutel" in _ww and "Versie 1.2" in _ww)
 
