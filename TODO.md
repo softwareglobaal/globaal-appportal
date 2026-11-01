@@ -22,6 +22,21 @@ Alles staat op main (commit 4b25b01 en eerder). Niets hiervan is live gezet zond
 
 ## Ai Angel, de Mehdi-agent (31-10-2026)
 
+Overdracht 01-11-2026 (Mehdi neemt over via Claude 1 op de laptop): alles staat op main (laatste eigen commit 24e793e) en
+draait live op de VM. Technische naam `mehdi-agent`, op het bord Ai Angel.
+
+- Waar: code `mijnagents-runner/mehdi_agent.py`, werkwijze `werkwijze/mehdi-agent.md`, ontwerp
+  `docs/ontwerp-mehdi-agent.md`, tests `tests/test_mehdi_agent.py` (alleen verzonnen namen), planning
+  `planning/mehdi-agent.cron`, staat `mijnagents-data/mehdi-agent/staat.json`, log `~/agents/mehdi_agent.log`.
+- Bekijken: mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
+- Nakijken: workflow vm in globaal-vm-beheer met
+  `cd mijnagents-runner && ~/agents/.venv/bin/python controle_agenten.py --agent mehdi-agent --uitleg`.
+- Werkwijze wijzigen: bestand aanpassen, pushen, op de VM `git pull` en `werkwijze_naar_bord.py mehdi-agent --zet`
+  (anders zakt N6). Code wijzigen: tests draaien, pushen, op de VM `git pull`; de volgende ronde op :20 neemt het mee.
+- [ ] Claude 1: Claude op het abonnement in plaats van de API-sleutel (Mehdi, 01-11-2026, PR #153): `vraag_claude` in
+      `mehdi_agent.py` omzetten naar `koppelingen/claude_abonnement.py`. Tot dan kost Ai Angel 15 tot 60 dollar per
+      maand aan API.
+
 - [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
 - [x] Droog geprobeerd op de VM met de dagbestanden van 29 en 30-10 (31-10-2026): 8 taken (6 voor Mehdi, 2 voor een
@@ -31,17 +46,17 @@ Alles staat op main (commit 4b25b01 en eerder). Niets hiervan is live gezet zond
 - [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
       eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).
       De lijst staat op mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
-- [ ] Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
+- [ ] Claude 1: dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
       mij doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
       Werfverslagvoorbereider al doet; eerst een dag meten welke agents taken krijgen, dan de ontvangers een voor een.
       Meting 01-11-2026 (ochtendronde): 9 open, 7 voor Mehdi, 0 voor een collega, 2 voor een agent, beide voor De
       Werfverslagvoorbereider, die elk werfbezoek uit de agenda al vanzelf volgt. Dus eerst niets dubbel: de werkwijze
       zegt sinds 01-11 dat Ai Angel geen taak zet voor werk dat een agent vanzelf doet. Echt doorgeven alleen voor werk
       dat geen agent vanzelf oppakt (punt M10 van het driehoeksoverleg).
-- [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
+- [ ] Claude 1, overdracht Dagboek compleet: de Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
       antwoord wacht, afspraken van morgen, zes keer per dag.
-- [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.
-- [ ] Later, na Mehdi's ja: runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
+- [ ] Mehdi: mag Ai Angel de tekst van berichten lezen (kaart in de chat, nog niet beantwoord).
+- [ ] Later, na Mehdi's ja (Claude 1): runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
 
 ## Pipedrive-backup (19-10-2026)
 
