@@ -47,7 +47,8 @@ VENSTER = 14                                            # zoals de nachtronde va
 INHAAL = 60                                             # na een lange slaap leest een ronde tot zoveel dagen terug (P7)
 KOPIE = Path.home() / "Library/Caches/mijnagents/mac-gesprekken"
 STAAT = Path.home() / "Library/Application Support/mijnagents"
-HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon"}
+HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon",
+          "sms": "be.globaal.mijnagents.kopie-sms"}
 KOPIE_WACHT = 120
 TOKEN_PAD = Path.home() / ".config/mijnagents/token"
 VM = "globaal"
@@ -65,6 +66,9 @@ DEKKING = "buiten:dekking"
 VERVALLEN = "buiten:vervallen"
 WA_STIL = timedelta(hours=48)
 TEL_STIL = timedelta(days=7)
+SMS_STIL = timedelta(days=7)
+# Messages (chat.db): stijl 43 is een groepsgesprek, 45 een gesprek met een persoon (bronproef macOS 14 en 15).
+SMS_GROEP = 43
 # Alleen gewone oproepen en FaceTime (de hele geschiedenis op 26-10-2026: 630 en 11, niets anders): WhatsApp meldt De
 # WhatsApp-wacht, en een andere app (Zoom, Teams) heeft zijn eigen wacht of hoort niet bij de telefoon.
 TEL_DIENSTEN = {"com.apple.Telephony": "telefoon", "com.apple.FaceTime": "FaceTime"}
@@ -81,11 +85,15 @@ SQL_WA_DEELNEMERS = "SELECT Z1PARTICIPANTS, ZJIDSTRING FROM ZWACDCALLEVENTPARTIC
 SQL_CONTACTEN = "SELECT ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER FROM ZWAADDRESSBOOKCONTACT ORDER BY Z_PK"
 SQL_TELEFOON = ("SELECT ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, ZSERVICE_PROVIDER "
                 "FROM ZCALLRECORD ORDER BY ZDATE, ZUNIQUE_ID")
+# Sms en iMessage (31-10-2026): per bericht alleen gesprek, tijdstip (seconden sinds 2001), richting en dienst.
+SQL_SMS_BERICHTEN = "SELECT gesprek, datum, van_mij, dienst FROM BERICHT WHERE datum >= ? AND datum < ?"
+SQL_SMS_GESPREKKEN = "SELECT pk, ident, soort, naam FROM GESPREK ORDER BY pk"
+SQL_SMS_DEELNEMERS = "SELECT gesprek, adres FROM DEELNEMER ORDER BY gesprek, adres"
 SQL_NIEUWSTE = "SELECT waarde FROM META WHERE sleutel = 'nieuwste'"
 SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
 SQL_ANDERE_APPS = "SELECT COUNT(*) FROM ANDERE_APPS WHERE ZDATE >= ? AND ZDATE < ?"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
-       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS)
+       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS, SQL_SMS_BERICHTEN, SQL_SMS_GESPREKKEN, SQL_SMS_DEELNEMERS)
 MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
 NIET_BEVESTIGD = "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt"
 BEZET = 75                                              # exit van een wacht die niet liep omdat er al een ronde liep
@@ -372,6 +380,56 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "overgeslagen": overgeslagen}
 
 
+def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
+    """De sms en iMessages voor de gegeven dagen: per gesprek per dag een rij sms:<sha1 gesprek>:<dag>, zoals WhatsApp,
+    nooit tekst. Geeft (rijen, info): info['nieuwste'] het nieuwste bericht in de hele databank, info['aanwezig'] de dagen
+    met minstens een bericht (voor de dekking). Een adres buiten het adresboek staat er als nummer of mailadres."""
+    van, tot = _venster(dagenlijst)
+    boek = Adresboek(lees(pad, SQL_CONTACTEN))
+    gesprekken = {pk: (str(ident or ""), soort, schoon(naam)) for pk, ident, soort, naam in lees(pad, SQL_SMS_GESPREKKEN)}
+    deelnemers = defaultdict(list)
+    for pk, adres in lees(pad, SQL_SMS_DEELNEMERS):
+        if adres:
+            deelnemers[pk].append(str(adres))
+
+    def wie(adres):
+        adres = str(adres or "")
+        naam = boek.bij_nummer(adres) if "@" not in adres else ""
+        if naam:
+            return naam
+        if not onbekend_als_nummer:
+            return "onbekend"
+        return schoon(re.sub(r"[^\d+*#]", "", adres) if "@" not in adres else adres) or "onbekend"
+
+    def gespreksnaam(pk):
+        ident, soort, naam = gesprekken.get(pk, ("", None, ""))
+        if soort == SMS_GROEP:
+            return "groep: " + (naam or "zonder naam")
+        leden = deelnemers.get(pk) or ([ident] if ident else [])
+        return ", ".join(dict.fromkeys(wie(a) for a in leden)) or "onbekend"
+
+    per, aanwezig = {}, set()
+    for pk, t, van_mij, dienst in lees(pad, SQL_SMS_BERICHTEN, (van, tot)):
+        moment = tijd(t)
+        aanwezig.add(dag_van(moment))
+        if pk not in gesprekken:
+            continue
+        x = per.setdefault((pk, dag_van(moment)), {"in": 0, "uit": 0, "eerste": moment, "laatste": moment, "diensten": {}})
+        x["uit" if van_mij else "in"] += 1
+        x["eerste"], x["laatste"] = min(x["eerste"], moment), max(x["laatste"], moment)
+        d = "sms" if str(dienst or "").upper() in ("SMS", "RCS") else "iMessage"
+        x["diensten"][d] = x["diensten"].get(d, 0) + 1
+    rijen = []
+    for (pk, dag), x in sorted(per.items(), key=lambda kv: (kv[0][1], kv[1]["eerste"], kv[0][0])):
+        ident = gesprekken[pk][0] or f"pk:{pk}"
+        n = x["in"] + x["uit"]
+        diensten = ", ".join(f"{d} {k}" for d, k in sorted(x["diensten"].items()))
+        rijen.append(_rij(f"sms:{hashlib.sha1(ident.encode()).hexdigest()}:{dag}", dag, start_van(x["eerste"]), 0,
+                          gespreksnaam(pk), f"{n} berichten ({x['in']} in, {x['uit']} uit; {diensten}), "
+                          f"{uur_van(x['eerste'])} tot {uur_van(x['laatste'])}", "sms"))
+    return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig}
+
+
 def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig):
     """F5 (contract met dagbundelaar.kanaal_van_dag) en Codex P4: een dag is gelezen als hij voorbij was toen de kopie
     gemaakt werd, de bron die dag zelf gegevens toont, en daarna nog iets nieuws kreeg. Een dag zonder enig bericht of
@@ -384,8 +442,8 @@ def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig):
 def samenvatting(rijen, dag):
     """Aantallen voor een dag, zonder namen: voor de hartslag en het werkverslag."""
     rijen = [r for r in rijen if r["datum"] == dag and r["bron"] != "dekking"]
-    chats = [r for r in rijen if r["uniek"].startswith("whatsapp:")]
-    oproepen = [r for r in rijen if not r["uniek"].startswith("whatsapp:")]
+    chats = [r for r in rijen if r["uniek"].startswith(("whatsapp:", "sms:"))]
+    oproepen = [r for r in rijen if not r["uniek"].startswith(("whatsapp:", "sms:"))]
     gesprek = [r for r in oproepen if not r["dubbel_van"]]
     return {"berichten": sum(int(r["thema"].split()[0]) for r in chats), "gesprekken": len(chats),
             "oproepen": len(gesprek), "minuten": sum(r["minuten"] for r in gesprek),

@@ -1,0 +1,22 @@
+{% extends "basis.html" %}
+{% block inhoud %}
+<header><h1>Dagboek</h1><span class="zacht klein">Wat je elke dag deed, uit De Dagbundelaar. Laatste {{ aantal }} dagen. Klik op een dag.</span>
+  <a href="{{ url_for('bronnen_pagina') }}">alle bronnen</a>
+  <a href="{{ url_for('wachten_pagina') }}">wat de wachten kregen</a></header>
+<main>
+  {% for d in dagen %}
+    {% if d['tegels'] %}
+    <a class="kaart" href="{{ url_for('dag_pagina', dag=d['dag']) }}">
+      <h2>{{ d['naam'] }}</h2>
+      {% with tegels=d['tegels'] %}{% include "tegels.html" %}{% endwith %}
+    </a>
+    {% else %}
+    <a class="kaart" href="{{ url_for('dag_pagina', dag=d['dag']) }}">
+      <h2>{{ d['naam'] }}</h2>
+      <span class="leeg">{{ 'Dagbestand zonder telling.' if d['er'] else 'Nog niet vastgesteld.' }}</span>
+    </a>
+    {% endif %}
+  {% endfor %}
+  <p class="zacht klein">Groen: doorgegaan. Oranje: waarschijnlijk. Rood: geen spoor. Grijs: privé. Een vraagteken is onbekend.</p>
+</main>
+{% endblock %}

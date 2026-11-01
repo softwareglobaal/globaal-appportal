@@ -1,0 +1,86 @@
+{% extends "basis.html" %}
+{% block titel %}Wachten · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>Wachten</h1>
+  <a href="{{ url_for('overzicht') }}">alle dagen</a>
+  <span class="zacht klein">Per wacht wat er binnenkwam. Tik op een wacht om de items te zien.</span>
+</header>
+<main>
+  <nav class="dagkeuze">
+    {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ url_for('wachten_pagina', dag=k['dag']) }}">{{ k['naam'] }}</a>{% endfor %}
+  </nav>
+  {% if not g %}
+    <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
+      <div class="zacht">Daardoor weet het Dagboek nu niet wat de wachten op {{ naam }} kregen. Dat is onbekend, niet leeg.</div></div>
+  {% else %}
+  <div class="kaart samen">
+    <h2>{{ naam }}</h2>
+    <div class="cijfers">
+      <div><span class="groot">{{ g['items'] }}</span> items binnen</div>
+      {% for k, uitleg_ in uitleg.items() %}
+      <div><span class="stip {{ k }}"></span> <span class="groot">{{ g['telling'][k] }}</span> {{ uitleg_ }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% for vak in g['vakken'] %}
+    <h3 class="vak">{{ vak['vak'] }}</h3>
+    {% for w in vak['wachten'] %}
+    <details class="kaart wacht"{% if w['kleur'] == 'rood' %} open{% endif %}>
+      <summary>
+        <span class="stip {{ w['kleur'] }}"></span>
+        <b>{{ w['label'] }}</b>
+        <span class="aantal">{{ w['aantal'] }}</span>
+        <span class="zacht klein oordeel">{{ w['oordeel'] }}{% if w['rondes'] %}, {{ w['rondes'] }} {{ 'regel' if w['rondes'] == 1 else 'regels' }} in het werkverslag{% endif %}{% if w['status'] and w['status']['laatste'] %}, laatst {{ w['status']['laatste'] }}{% endif %}</span>
+      </summary>
+      {% if w['leesfout'] %}<p class="foutregel">Kon niet lezen: {{ w['leesfout'] }}</p>{% endif %}
+      {% for f in w['fouten'] %}<p class="foutregel">{{ f['tijd'] }} fout: {{ f['tekst'] }}</p>{% endfor %}
+      {% for n in w['noden'] %}<p class="nood">Open melding: {{ n }}</p>{% endfor %}
+      {% if w['gedekt'] is not none %}<p class="zacht klein">Dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}.</p>{% endif %}
+      {% if w['items'] %}
+      <table class="lijst">
+        <tr class="kop"><td>Tijd</td><td>Van wie of wat</td><td>Kort</td></tr>
+        {% for it in w['items'] %}
+        <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}</td></tr>
+        {% endfor %}
+      </table>
+      {% else %}
+      <p class="leeg">Niets binnengekomen op deze dag.</p>
+      {% endif %}
+      {% if w['log'] %}
+      <details class="verslag"><summary class="zacht klein">Werkverslag van deze dag ({{ w['rondes'] }} {{ 'regel' if w['rondes'] == 1 else 'regels' }})</summary>
+        <table class="lijst">
+          {% for r in w['log'] %}<tr{% if r['fout'] %} class="fout"{% endif %}><td class="tijd">{{ r['tijd'] }}</td><td class="zacht klein">{{ r['stap'] }}</td><td class="klein">{{ r['tekst'] }}</td></tr>{% endfor %}
+        </table>
+      </details>
+      {% endif %}
+    </details>
+    {% endfor %}
+  {% endfor %}
+  {% endif %}
+  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Nooit de tekst van een bericht.</p>
+</main>
+<style>
+  .dagkeuze{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .dagkeuze a{padding:8px 14px;border:1px solid var(--rand);border-radius:20px;color:var(--tekst);text-decoration:none}
+  .dagkeuze a.aan{background:var(--accent);border-color:var(--accent);color:#0f1115;font-weight:700}
+  .samen .cijfers{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .samen .groot{font-size:24px;font-weight:700}
+  h3.vak{margin:20px 4px 8px;font-size:13px;color:var(--zacht);text-transform:uppercase;letter-spacing:.08em}
+  details.wacht summary{cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;list-style:none}
+  details.wacht summary::-webkit-details-marker{display:none}
+  details.wacht .aantal{margin-left:auto;font-size:20px;font-weight:700}
+  details.wacht .oordeel{flex-basis:100%;padding-left:20px}
+  details.wacht[open] > summary{margin-bottom:10px}
+  table.lijst{border-collapse:collapse;width:100%}
+  table.lijst td{padding:6px;border-top:1px solid var(--rand);vertical-align:top;overflow-wrap:anywhere}
+  td.tijd{white-space:nowrap;width:52px;color:var(--zacht)}
+  tr.kop td{border-top:0;color:var(--zacht);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  tr.fout td{color:var(--rood)}
+  .foutregel{color:var(--rood);margin:4px 0}
+  .nood{color:var(--oranje);margin:4px 0}
+  details.verslag{margin-top:10px}
+  details.verslag summary{cursor:pointer}
+  @media (max-width:600px){table.lijst tr.kop{display:none} table.lijst td{font-size:14px;padding:5px 4px}}
+</style>
+{% endblock %}

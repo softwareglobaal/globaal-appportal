@@ -70,7 +70,7 @@ jobs:
       - run: python3 -B mijnagents-runner/tests/test_twee_letters.py
 
   mac39:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -1,3 +1,5 @@
+> **Uitgevoerd (28-10 tot 01-11-2026).** Ook stap 6: de Dropbox-sync draait op de laptop elke 30 minuten (~/Library/Logs/mijnagents-data-uit-mehdi.log, 01-11 16:54: klaar). Open werk staat in de werkstand; zie WIE-DOET-WAT.md.
+
 # Laptop inrichten voor De Dagbundelaar
 
 Versie 1.0 (28-10-2026). Opdracht voor Claude 1 op Mehdi's laptop. Doel: de wachten
@@ -7,10 +9,11 @@ draaien voortaan op de laptop, zodat de zware pc niet meer nodig is.
 Vaste regels bij deze opdracht:
 
 - Nooit uitloggen of opnieuw inloggen bij Claude. Werk met het account dat er is.
+- Alle toestellen van Mehdi staan in het Engels; menunamen staan hier zoals op het scherm.
 - Niets wissen, niets versturen, niets betalen. Twijfel: stop en meld.
 - Geen wachtwoord, sleutel of token in chat, git of dit document.
 - De oude Mac blijft aan tot stap 8 op de laptop groen is.
-- Wat alleen Mehdi kan (een schakelaar in Systeeminstellingen, een aanmelding bij
+- Wat alleen Mehdi kan (een schakelaar in System Settings, een aanmelding bij
   Plaud in de browser), staat als "Mehdi:" en is één klik of één aanmelding.
 
 Melding achteraf: zet per stap ok of fout, met de foutregel, op het bord als
@@ -24,7 +27,7 @@ Controleer en noteer:
 - Bestaan `~/dev/globaal-appportal` en `~/dev/driehoeksoverleg`? Zo niet: klonen
   uit github.com/softwareglobaal (gh is aangemeld als Mehdi; `gh auth status`).
 - Staan er al taken in `~/Library/LaunchAgents` die beginnen met `be.globaal.`?
-- Zijn WhatsApp (Mac-app), Foto's met iCloud-fotobibliotheek en Dropbox aanwezig,
+- Zijn WhatsApp (Mac-app), Photos met iCloud Photos en Dropbox aanwezig,
   en staat de map `~/TKN-buro Dropbox/Data uit Mehdi` er?
 - Python 3.14 op `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`,
   de Command Line Tools (`xcode-select -p`), Homebrew en `/opt/homebrew/bin/gh`.
@@ -41,13 +44,13 @@ Controleer en noteer:
 
 ## Stap 3. WhatsApp en telefoon iPhone
 
-- Mehdi, eenmalig op de iPhone: Instellingen, Telefoon, Bellen op andere apparaten,
+- Mehdi, eenmalig op de iPhone: Settings, Apps, Phone, Calls on Other Devices,
   aan, en de laptop aanvinken. Zo komen de iPhone-oproepen in de oproepgeschiedenis
   van de laptop.
 - WhatsApp op de laptop openen en aangemeld laten.
 - `zsh ~/dev/globaal-appportal/mijnagents-runner/mac/uitrol_mac_gesprekken.sh`
   (installeert de helper MacGesprekkenKopie, de wachten blijven nog uit).
-- Mehdi: Systeeminstellingen, Privacy en beveiliging, Volledige schijftoegang,
+- Mehdi: System Settings, Privacy & Security, Full Disk Access,
   MacGesprekkenKopie aanzetten (het pad meldt het script).
 - `... uitrol_mac_gesprekken.sh proef`, en pas bij ok `... uitrol_mac_gesprekken.sh aan`.
 - Controle: `... uitrol_mac_gesprekken.sh controleer`.
@@ -57,7 +60,7 @@ Controleer en noteer:
 - `zsh ~/dev/globaal-appportal/mijnagents-runner/mac/uitrol_icloud_wacht.sh`
   (vraagt het Mac-wachtwoord voor sudo; dat typt Mehdi zelf).
 - `... uitrol_icloud_wacht.sh --controleer` moet "gelijk" melden.
-- Mehdi: Volledige schijftoegang voor iCloudWacht.app aanzetten
+- Mehdi: Full Disk Access voor iCloudWacht.app aanzetten
   (`/Library/Application Support/iCloudWacht/iCloudWacht.app`).
 
 ## Stap 5. Plaud
@@ -93,5 +96,5 @@ Niet verplicht: de wachten halen na een slaap tot zestig dagen in. Wil Mehdi het
 ## Stap 9. Driehoeksoverleg
 
 Draai op de laptop het overleg over de bronnen (opdracht staat naast dit document):
-`cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/bronnen-20261028/rapport.md -t "Bronnen Dagbundelaar" < ~/dev/globaal-appportal/mijnagents-runner/docs/opdracht-driehoeksoverleg-bronnen.md`. Het verslag gaat
+`cd ~/dev/driehoeksoverleg && ./overleg.sh -C ~/dev/globaal-appportal -o ~/dev/samenwerking-codex/bronnen-20261028/rapport.md -t "Bronnen Dagbundelaar" < ~/dev/globaal-appportal/mijnagents-runner/docs/dagbundelaar/opdrachten/vervallen/opdracht-driehoeksoverleg-bronnen.md`. Het verslag gaat
 terug naar Mehdi, beslissing bovenaan, hoogstens vijf regels.

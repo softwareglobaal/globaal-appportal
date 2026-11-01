@@ -41,7 +41,16 @@ Mehdi logt nooit uit en opnieuw in bij Claude om een toestel te koppelen. Vraag
 dat niet. Is de laptop niet zichtbaar voor een cloud-sessie, stuur dan geen
 toestemmingskaart (die toont dan alleen Deny), maar schrijf een stappendocument in
 de repo dat Mehdi aan Claude 1 op de laptop geeft. Voorbeeld:
-`mijnagents-runner/docs/laptop-inrichten-voor-de-dagbundelaar.md`.
+`mijnagents-runner/docs/dagbundelaar/opdrachten/laptop-inrichten-voor-de-dagbundelaar.md`.
+Alle toestellen van Mehdi (iPhone, laptop) staan in het Engels: schrijf menunamen in
+stappendocumenten in het Engels, precies zoals op het scherm (Settings, System Settings,
+Privacy & Security, Full Disk Access).
+
+De takenlijst voor de Dagbundelaar, de wachten, het Dagboek en Ai Angel is de werkstand
+(repo softwareglobaal/werkstand, `python3 ~/dev/werkstand/werkstand.py lijst`; wat op Mehdi wacht:
+`voor-mehdi`), zoals voor alle werk (overleg T-0073, ja van Mehdi 01-11-2026). Werk voor een andere
+Claude is een taak met `--voor`. De opdrachten in `mijnagents-runner/docs/dagbundelaar/opdrachten/`
+blijven als uitleg per stap; `WIE-DOET-WAT.md` is alleen nog een verwijzing.
 
 ## Git-workflow: hoe Claude pullt en pusht
 

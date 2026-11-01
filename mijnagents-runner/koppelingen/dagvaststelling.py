@@ -27,6 +27,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 MARGE = timedelta(minutes=15)          # een gesprek dat zo dicht bij een afspraak ligt, hoort er mogelijk bij
 MIN_GESPREK = 2                        # kortere oproepen of sessies zijn geen ongepland gesprek
 MAX_NAAR = 5                           # zoveel ontvangers per postvak staan er bij naam; de rest als aantal
+MAX_SITES = 5                          # zoveel sites staan bij naam in het blok Eigen werk en gezondheid
 PLAUD_SAMEN = 0.5                      # zoveel van een Plaud-opname valt in een Zoom- of Fathom-gesprek: een dubbel
 # Woorden die in titels en namen staan maar geen persoon aanwijzen: Mehdi zelf, firma's, soorten afspraken.
 STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg", "intern", "interne", "bespreking",
@@ -34,10 +35,13 @@ STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg",
         "unabo", "harmoniebouw", "melodie", "reistijd", "rijden", "afspraak", "call", "gesprek", "team", "automation",
         "privé", "prive", "groep", "oproep", "vooroverleg", "werf", "werfbezoek", "stad", "huis", "thuis", "info",
         "noreply", "admin", "kantoor", "office", "mail", "gmail", "hotmail", "outlook"}
-GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon")
-CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:")
-OPROEP_VOORVOEGSELS = ("whatsapp-oproep:", "telefoon:")
-SECTIES = ("Gepland", "Niet gepland", "Communicatie")
+# 31-10-2026: sms en iMessage (De Sms-wacht, sms:<sha1 gesprek>:<dag>, een chat) en Xelion (De Belwacht Xelion,
+# xelion:<oid>, een oproep) erbij.
+GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon", "sms", "xelion")
+CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:", "sms:")
+OPROEP_VOORVOEGSELS = ("whatsapp-oproep:", "telefoon:", "xelion:")
+PRIVEBRONNEN = ("whatsapp", "telefoon", "sms", "xelion")
+SECTIES = ("Gepland", "Niet gepland", "Communicatie", "Eigen werk en gezondheid")
 
 
 # ------------------------------------------------------------------------------------------------- dagen ---
@@ -123,9 +127,9 @@ def soort(g):
 
 
 def is_prive(g):
-    """RZ3-01 en D5: de privévlag of afdeling privé; alles van WhatsApp en telefoon is privé."""
+    """RZ3-01 en D5: de privévlag of afdeling privé; alles van WhatsApp, telefoon, sms en Xelion is privé."""
     return bool(g.get("prive") or str(g.get("afdeling") or "").strip().casefold() in ("prive", "privé")
-                or str(g.get("bron") or "") in ("whatsapp", "telefoon"))
+                or str(g.get("bron") or "") in PRIVEBRONNEN)
 
 
 PARTIKELS = {"de", "den", "der", "van", "von", "la", "le", "du", "del", "da", "di", "ten", "ter", "het", "en"}
@@ -172,6 +176,8 @@ def bron_label(g):
         return "WhatsApp-oproep"
     if u.startswith("telefoon:"):
         return "telefoon"
+    if u.startswith("xelion:"):
+        return "Xelion"
     return {"zoom": "Zoom", "fathom": "Fathom", "plaud": "Plaud"}.get(bron, bron or "gesprek")
 
 
@@ -229,7 +235,7 @@ def bewijs(a, gesprekken, locatie=None):
 
 # ------------------------------------------------------------------------------------------- vaststelling ---
 def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken, zoomstand, mail, kanalen,
-                prive_afspraak, locatiestand="", chatstand=None):
+                prive_afspraak, locatiestand="", chatstand=None, eigen=None, fotos=None):
     """De vaststelling van een dag als gewone gegevens.
 
     afspraken: de afspraken van die dag, met de archiefagenda's (zonder fout, hele dag of rit); ongelezen: de agenda's die
@@ -242,7 +248,12 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     zoomstand: 'volledig', 'ondergrens' of 'onbekend'. mail: van mail_telling, of None. kanalen: {'whatsapp': stand,
     'telefoon': stand} voor deze dag, met stand 'aangesloten', 'niet aangesloten' of een andere tekst ('stil sinds ...',
     'onbekend voor deze dag'): D2 en F5, de hartslag van de wacht en haar dekking van die dag, niet het bestaan van rijen.
-    prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive)."""
+    prive_afspraak: functie afspraak -> bool (agenda_wacht.is_prive).
+    eigen (31-10-2026, Mehdi: Wispr, websites en Apple Watch): {'wispr': {dictaten, woorden, seconden} of None,
+    'websites': {bezoeken, sites, top} of None, 'gezondheid': [regels] of None}; None is onbekend, nooit nul. Zonder
+    eigen (oude aanroep) blijft het blok weg.
+    kanalen kent sinds 31-10-2026 ook 'sms' (De Sms-wacht) en 'xelion' (De Belwacht Xelion). fotos: {'aantal', 'plekken'}
+    van De Fotowacht voor die dag, of None als ze die dag niet las (onbekend, nooit nul)."""
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
     gepland, gebruikt = [], set()
@@ -255,6 +266,8 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     ongepland = [g for g in sorted(praat, key=lambda g: gesprek_venster(g)[0])
                  if g["uniek"] not in gebruikt and int(g.get("minuten") or 0) >= MIN_GESPREK]
     leidend = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and is_leidend(g)]
+    xel_gemist = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and g.get("bron") == "xelion"
+                  and str(g.get("dubbel_van") or "") == "buiten:gemist"]
     # Een Zoom-gesprek met een Fathom-opname staat in de tabel als leidende Fathom-rij (de Zoom-rij is dubbel_van):
     # daarom een totaal over Zoom, Fathom en Plaud, elk gesprek een keer, en geen aparte telling per bron als 'Zoom'.
     vergaderd = [g for g in praat if g.get("bron") in ("zoom", "fathom", "plaud")]
@@ -264,6 +277,8 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     kanalen = kanalen or {}
     wa = [g for g in leidend if g.get("bron") == "whatsapp"]
     tel = [g for g in praat if g.get("bron") == "telefoon"]
+    sms = [g for g in leidend if g.get("bron") == "sms" and soort(g) == "chat"]
+    xel = [g for g in praat if g.get("bron") == "xelion"]
     return {
         "dag": dag,
         "agenda": {"stand": agenda_stand, "ongelezen": sorted(ongelezen or []), "afspraken": gepland},
@@ -279,8 +294,48 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
                      "minuten": sum(int(g.get("minuten") or 0) for g in wa if soort(g) == "oproep")},
         "telefoon": {"stand": kanalen.get("telefoon") or "niet aangesloten", "oproepen": len(tel),
                      "minuten": sum(int(g.get("minuten") or 0) for g in tel)},
+        "sms": {"stand": kanalen.get("sms") or "niet aangesloten", "gesprekken": len(sms),
+                "berichten": sum(_berichten(g) for g in sms)},
+        "xelion": {"stand": kanalen.get("xelion") or "niet aangesloten", "oproepen": len(xel),
+                   "minuten": sum(int(g.get("minuten") or 0) for g in xel), "gemist": len(xel_gemist)},
+        "fotos": fotos,
         "mail": mail,
+        **({"eigen": eigen} if eigen is not None else {}),
     }
+
+
+def eigen_regels(e):
+    """Het blok 'Eigen werk en gezondheid': alleen aantallen en sitenamen, nooit de tekst van een dictaat of een adres."""
+    r = []
+    w = e.get("wispr")
+    if w is None:
+        r.append("- Wispr Flow: onbekend (de Wispr-wacht las deze dag niet)")
+    else:
+        r.append(f"- Wispr Flow: {int(w.get('dictaten') or 0)} dictaten, {int(w.get('woorden') or 0)} woorden, "
+                 f"{round(float(w.get('seconden') or 0) / 60)} min ingesproken")
+    s = e.get("websites")
+    if s is None:
+        r.append("- websites: nog niet aangesloten (Browserwacht op de laptop)")
+    else:
+        top = ", ".join(f"{x[0]} ({x[1]})" for x in (s.get("top") or [])[:MAX_SITES])
+        r.append(f"- websites: {int(s.get('bezoeken') or 0)} bezoeken op {int(s.get('sites') or 0)} sites"
+                 + (f"; meest: {top}" if top else ""))
+    if "youtube" in e:
+        y = e.get("youtube")
+        if y is None:
+            r.append("- YouTube: onbekend (YouTube-wacht las deze dag niet)")
+        else:
+            m = y.get("minuten")
+            titels = "; ".join(f"{str(x[0])[:80]} ({x[1]})" for x in (y.get("top") or [])[:MAX_SITES])
+            r.append(f"- YouTube: {int(y.get('videos') or 0)} video's" + (f", {int(m)} min" if m is not None else "")
+                     + (f"; meest: {titels}" if titels else ""))
+    g = e.get("gezondheid")
+    if not g:
+        r.append("- gezondheid: geen Apple Watch-gegevens (Health Auto Export stuurt nog niets)")
+    else:
+        r.append("- gezondheid (Apple Watch):")
+        r += [f"  - {x}" for x in g]
+    return r
 
 
 def _berichten(g):
@@ -410,6 +465,28 @@ def tekst(v, prive_postvakken=(), over=None):
     else:
         r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min gezien"
                  + ("" if t["stand"] == "aangesloten" else f" ({t['stand']})"))
+    sm = v.get("sms") or {"stand": "niet aangesloten", "gesprekken": 0, "berichten": 0}
+    if sm["stand"] == "niet aangesloten":
+        r.append("- sms en iMessage: nog niet aangesloten")
+    elif sm["stand"] != "aangesloten" and not sm["gesprekken"]:
+        r.append(f"- sms en iMessage: onbekend ({sm['stand']})")
+    else:
+        r.append(f"- sms en iMessage: {sm['berichten']} berichten in {sm['gesprekken']} gesprekken gezien"
+                 + ("" if sm["stand"] == "aangesloten" else f" ({sm['stand']})"))
+    x = v.get("xelion") or {"stand": "niet aangesloten", "oproepen": 0, "minuten": 0, "gemist": 0}
+    if x["stand"] == "niet aangesloten":
+        r.append("- Xelion: nog niet aangesloten")
+    elif x["stand"] != "aangesloten" and not (x["oproepen"] or x["gemist"]):
+        r.append(f"- Xelion: onbekend ({x['stand']})")
+    else:
+        r.append(f"- Xelion: {x['oproepen']} oproepen, {x['minuten']} min, {x['gemist']} gemist gezien"
+                 + ("" if x["stand"] == "aangesloten" else f" ({x['stand']})"))
+    f = v.get("fotos")
+    if f is None:
+        r.append("- foto's: onbekend (De Fotowacht las deze dag niet)")
+    else:
+        r.append(f"- foto's: {int(f.get('aantal') or 0)} foto's op {int(f.get('plekken') or 0)} plekken"
+                 + (f", {int(f['zonder_plaats'])} zonder plaats" if f.get("zonder_plaats") else ""))
     if v["mail"] is None:
         r.append("- mail: niet gelezen")
     else:
@@ -425,6 +502,8 @@ def tekst(v, prive_postvakken=(), over=None):
                 naar = list(dict.fromkeys(p["naar"]))
                 regel += "; naar " + ", ".join(naar[:MAX_NAAR]) + (f" en {len(naar) - MAX_NAAR} meer" if len(naar) > MAX_NAAR else "")
             r.append(regel)
+    if "eigen" in v:
+        r += ["", "## Eigen werk en gezondheid", ""] + eigen_regels(v["eigen"])
     r += ["", "## Over deze vaststelling", ""]
     r += [f"- {x}" for x in over or []]
     return "\n".join(r).rstrip() + "\n"

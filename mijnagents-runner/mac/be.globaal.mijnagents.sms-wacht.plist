@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- De Sms-wacht (sms_wacht.py, 31-10-2026; zoals De WhatsApp-wacht, ontwerp dagvaststelling v2.0, fase 2): elk uur op minuut 22. Sliep de Mac,
+     dan start launchd de gemiste ronde bij het ontwaken. Code uit de eigen worktree op origin/main
+     (mac/uitrol_mac_gesprekken.sh), nooit uit de werkmap van een sessie. Python 3.14 van python.org, geisoleerd (-I).
+     Laden pas na een gecontroleerde eerste ronde: mac/uitrol_mac_gesprekken.sh aan. Uitzetten: ... uit -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>be.globaal.mijnagents.sms-wacht</string>
+  <key>ProgramArguments</key><array>
+    <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/python3</string>
+    <string>-I</string>
+    <string>/Users/mehdichegini/Library/Application Support/mijnagents/repo/mijnagents-runner/sms_wacht.py</string>
+  </array>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>22</integer></dict>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/sms-wacht.log</string>
+  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/sms-wacht.log</string>
+</dict></plist>

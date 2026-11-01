@@ -1,3 +1,5 @@
+> **VERVALLEN (01-11-2026).** De punten zijn intussen gebouwd (pagina Bronnen, laptopwachten, Xelion). Het lopende overleg is opdrachten/driehoeksoverleg-starten-voor-claude-1.md. Niet meer uitvoeren. Zie WIE-DOET-WAT.md.
+
 # Opdracht driehoeksoverleg: Dagbundelaar, bronnen en statuspagina
 
 In drie hoeken overleggen. Claude, Codex en Gemini: stem per punt (eens / oneens / onthouding).

@@ -15,6 +15,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, os.path.join(HIER, "..", "locatie"))
 import bord  # noqa: E402
+import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 import bronbeleid  # noqa: E402  de startgrens van het locatielogboek (opdracht v1.2)
 
 NAAM = "levenscoach"
@@ -40,6 +41,7 @@ def laad_env(pad):
 
 
 laad_env("~/agents/.env")
+sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def bronnen_van(dagen):

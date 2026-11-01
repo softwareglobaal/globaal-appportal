@@ -3,6 +3,8 @@
 # reclame naar Opgeruimd met een proefweek en een exacte domeinvergelijking. Tot dan draaiden test_postvak.py en
 # test_sorteren.py in geen enkele workflow; test_mail.py draait ook in de Docker-build van het bord. Sinds 26-10-2026 ook de
 # serverroute van de hotmail-koppen (driehoeksoverleg 3-0): test_hotmail_server.py.
+# Sinds 01-11-2026: een concept als antwoord op een lange keten (gevouwen References-kop): test_imapbron_koppen.py.
+# Sinds 01-11-2026 ook de doorstuuragent (test_agent.py), die sinds de meerdere regels van 08-09-2026 stuk was en nergens draaide.
 name: mail-grendels
 
 on:
@@ -11,13 +13,17 @@ on:
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
             "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
-            "post/imapbron.py", ".github/workflows/mail-grendels.yml"]
+            "post/imapbron.py", "post/test_imapbron_koppen.py",
+            "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
+            ".github/workflows/mail-grendels.yml"]
   pull_request:
     paths: ["mijnagents-runner/koppelingen/postvak.py", "mijnagents-runner/mail_*.py", "mijnagents-runner/dagbundelaar.py", "mijnagents-runner/bode.py",
             "mijnagents-runner/mailregels/**", "mijnagents-runner/werkwijze/mailwachten.json", "mijnagents-runner/tests/test_postvak.py",
             "mijnagents-runner/koppelingen/hotmail_*.py", "mijnagents-runner/tests/test_hotmail_server.py",
             "mijnagents/app.py", "mijnagents/templates/mail.html", "mijnagents/test_mail.py", "mijnagents/eenmalig_mail_een_bron.py",
-            "post/imapbron.py", ".github/workflows/mail-grendels.yml"]
+            "post/imapbron.py", "post/test_imapbron_koppen.py",
+            "post/doorstuuragent.py", "post/test_agent.py", "post/verzenden.py", "post/config.py",
+            ".github/workflows/mail-grendels.yml"]
 
 jobs:
   grendels:
@@ -28,8 +34,11 @@ jobs:
         with:
           python-version: "3.11"
       - run: python3 -m pip install -r mijnagents/requirements.txt
+      - run: python3 -m pip install PyYAML==6.0.2   # post/config.py, voor test_agent.py
       - run: python3 mijnagents-runner/tests/test_postvak.py
       - run: python3 mijnagents-runner/tests/test_hotmail_server.py
       - run: python3 mijnagents-runner/mailregels/test_sorteren.py
       - run: cd mijnagents && python3 test_mail.py
       - run: cd post && python3 test_imapbron_herkans.py
+      - run: cd post && python3 test_imapbron_koppen.py
+      - run: cd post && python3 test_agent.py

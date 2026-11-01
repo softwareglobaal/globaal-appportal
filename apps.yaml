@@ -157,6 +157,16 @@ apps:
     subdomain: locatie
     roles: [locatie]
     status: active
+  # Dagboek (Mehdi, 30-10-2026): wat hij elke dag deed, alleen uit de dagbestanden
+  # van De Dagbundelaar. Persoonlijk zoals het locatielogboek, dus dezelfde groep
+  # 'locatie' (alleen Mehdi): geen nieuwe groep of gebruiker nodig.
+  - id: dagboek
+    name: Dagboek
+    description: Wat ik elke dag deed, uit De Dagbundelaar
+    subdomain: dagboek
+    roles: [locatie]
+    status: active
+    poort: 3150
   # Organisatie kosten (werknaam Doorbelasting): wat elke firma van de groep
   # maandelijks aan gedeelde kosten draagt, per land, met bron en redenering per
   # regel. Bevat individuele lonen: ENKEL db-alles (Siyan, Mehdi, Angela), bewust

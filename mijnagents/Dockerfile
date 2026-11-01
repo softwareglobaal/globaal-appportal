@@ -38,5 +38,13 @@ RUN python3 test_bronnen.py
 # Grendel op de FelixArchief-pagina (felix.<domein>, Shelton): alleen /felix op dat domein, alleen felix of beheer,
 # geen dubbele aanvragen, opslaan alleen op een klik bij een klare zoektocht met projectnummer. Zie test_felix.py.
 RUN python3 test_felix.py
+# Grendel op het blok Laatst klaargezet op de pagina van een agent (De Mehdi-agent): alleen beheer, de nieuwste
+# takenlijst en het nieuwste verslag, ruwe HTML en markdown-links uit een bron worden tekst. Zie test_klaargezet_pagina.py.
+RUN python3 test_klaargezet_pagina.py
+# Grendel op de groep Dagbundelaar: elke agent van het dagboek op één plek, niets dubbel. Zie test_dagbundelaar_groep.py.
+RUN python3 test_dagbundelaar_groep.py
+# Grendel op /api/wachten/dag: per wacht van de groep Dagbundelaar wat er op een dag binnenkwam, met de juiste kleur.
+# Zie test_wachten_dag.py.
+RUN python3 test_wachten_dag.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]

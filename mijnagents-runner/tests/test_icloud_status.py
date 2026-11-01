@@ -145,6 +145,20 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(self.afgevinkt, [])
         self.assertIn("fotoselectie_leeg", self.statussen[-1][1]["detail"])
 
+    def test_taak_die_op_gegevens_wacht_zet_de_wacht_niet_op_fout(self):
+        # 31-10-2026: oude werfverslagtaken zonder venster of zonder foto's hielden De Fotowacht weken rood.
+        data = self.inhoud()
+        data.pop("start")
+        self.fake_run([], inhoud=data)
+        self.assertEqual(self.statussen[-1][0], "klaar")
+        self.assertIn("wachten op gegevens", self.statussen[-1][1]["taak"])
+        self.statussen.clear()
+        self.fake_run([self.foto("tussen_300_600m", lat=50.004)])
+        self.assertEqual(self.statussen[-1][0], "klaar")
+        self.statussen.clear()
+        self.fake_run([self.foto("eerste"), self.foto("tweede")], geleverd=1)
+        self.assertEqual(self.statussen[-1][0], "fout")
+
     def test_lege_of_gedeeltelijke_export_wordt_nooit_afgevinkt(self):
         for n in (0, 1):
             with self.subTest(geleverd=n):

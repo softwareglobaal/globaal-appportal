@@ -50,6 +50,7 @@ import dagvaststelling as V  # noqa: E402
 import mac_gesprekken as M  # noqa: E402
 import belwacht as BEL  # noqa: E402
 import whatsapp_wacht as WA  # noqa: E402
+import sms_wacht as SMS  # noqa: E402
 sys.argv = _argv
 
 BRUSSEL = M.BRUSSEL
@@ -107,6 +108,52 @@ def maak_telefoon(pad, oproepen=(), contacten=(), nieuwste=None):
 
 DAG = "2026-10-22"
 DAGEN = ["2026-10-21", DAG, "2026-10-23"]
+
+
+def maak_sms(pad, berichten=(), gesprekken=(), deelnemers=(), contacten=(), nieuwste=None):
+    """Een uitvoer van de helper voor de set sms (31-10-2026)."""
+    con = sqlite3.connect(pad)
+    con.executescript("""
+        CREATE TABLE BERICHT(gesprek, datum, van_mij, dienst);
+        CREATE TABLE GESPREK(pk, ident, soort, naam);
+        CREATE TABLE DEELNEMER(gesprek, adres);
+        CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER);
+        CREATE TABLE META(sleutel, waarde);""")
+    con.executemany("INSERT INTO BERICHT VALUES(?,?,?,?)", berichten)
+    con.executemany("INSERT INTO GESPREK VALUES(?,?,?,?)", gesprekken)
+    con.executemany("INSERT INTO DEELNEMER VALUES(?,?)", deelnemers)
+    con.executemany("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(?,?,?,?,?)", contacten)
+    con.execute("INSERT INTO META VALUES('nieuwste', ?)", (nieuwste,))
+    con.commit()
+    con.close()
+    return pad
+
+
+def sms_wereld(map_):
+    """Een dag met een sms-gesprek, een iMessage via mailadres en een groep."""
+    gesprekken = [(1, "+32470000001", 45, ""), (2, "kees@proef.be", 45, ""), (3, "chat99", 43, GROEP)]
+    deelnemers = [(1, "+32470000001"), (2, "kees@proef.be"), (3, "+32470000001"), (3, "+32470000099")]
+    berichten = [(1, a(bxl(2026, 10, 22, 9, 0)), 0, "SMS"), (1, a(bxl(2026, 10, 22, 9, 5)), 1, "SMS"),
+                 (1, a(bxl(2026, 10, 22, 9, 6)), 1, "iMessage"), (2, a(bxl(2026, 10, 22, 15, 0)), 0, "iMessage"),
+                 (3, a(bxl(2026, 10, 22, 20, 0)), 1, "iMessage"), (3, a(bxl(2026, 10, 21, 23, 59)), 0, "iMessage")]
+    contacten = [(1, JAN, "", "", "0470 00 00 01")]
+    return maak_sms(os.path.join(map_, "sms.sqlite"), berichten, gesprekken, deelnemers, contacten,
+                    nieuwste=a(bxl(2026, 10, 23, 8, 0)))
+
+
+def test_sms_per_gesprek_per_dag_zonder_tekst():
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, info = M.sms_rijen(sms_wereld(map_), DAGEN)
+    op = {(r["personen"], r["datum"]): r for r in rijen}
+    jan = op[(JAN, DAG)]
+    assert jan["thema"].startswith("3 berichten (1 in, 2 uit; iMessage 1, sms 2)"), jan
+    assert re.fullmatch(r"sms:[0-9a-f]{40}:" + DAG, jan["uniek"]) and jan["bron"] == "sms" and jan["prive"] == 1
+    assert op[("kees@proef.be", DAG)]["thema"].startswith("1 berichten (1 in, 0 uit; iMessage 1)")
+    assert ("groep: " + GROEP, DAG) in op and ("groep: " + GROEP, "2026-10-21") in op
+    assert info["aanwezig"] == {"2026-10-21", DAG}
+    s = M.samenvatting(rijen, DAG)
+    assert s["berichten"] == 5 and s["gesprekken"] == 3 and s["oproepen"] == 0, s
+    assert V.soort({"uniek": jan["uniek"], "bron": "sms"}) == "chat" and V.is_prive({"bron": "sms"})
 
 
 def whatsapp_wereld(map_):
@@ -520,8 +567,17 @@ def test_belwacht_ronde_zonder_namen():
     assert all(x["bron"] in ("telefoon", "dekking") for x in b.tabel.values())
 
 
+def test_sms_wacht_ronde_zonder_namen():
+    r, b, gedekt, gemeld = _draai(SMS, sms_wereld, "sms")
+    assert r.detail.endswith("; ronde-id:" + "c" * 32) and gedekt == DAG and f"dekking:sms:{DAG}" in b.tabel
+    for naam in (JAN, GROEP, "kees@proef.be", "+32470000001", "+32470000099"):
+        assert naam not in gemeld, naam
+    assert all(x["bron"] in ("sms", "dekking") for x in b.tabel.values())
+    assert "gisteren 0 berichten in 0 gesprekken" in r.detail, r.detail       # de kopie is van 24-10
+
+
 def test_zonder_grenzen_geen_kopie():
-    for module in (WA, BEL):
+    for module in (WA, BEL, SMS):
         gevraagd = []
         r = NepRonde("# Werkwijze zonder grenzen\n\nIk doe maar wat.\n")
         try:
@@ -534,7 +590,7 @@ def test_zonder_grenzen_geen_kopie():
 
 
 def test_taak_noemt_de_databank_en_runners_gaan_door_de_ronde():
-    for module in (WA, BEL):
+    for module in (WA, BEL, SMS):
         assert "databank" in module.TAAK
         bron = Path(module.__file__).read_text(encoding="utf-8")
         assert "with ag.ronde(" in bron
@@ -598,7 +654,7 @@ def test_masker_laat_een_ronde_id_heel():
 
 
 def test_werkwijzen_hebben_grenzen():
-    for naam in ("whatsapp-wacht", "belwacht"):
+    for naam in ("whatsapp-wacht", "belwacht", "sms-wacht"):
         tekst = (RUNNER / "werkwijze" / f"{naam}.md").read_text(encoding="utf-8")
         nooit, beslist = bord.grenzen(tekst)
         assert len(tekst) >= 500 and nooit and beslist, naam
@@ -688,6 +744,63 @@ def test_helper_leest_wal_en_schrijft_geen_tekst():
         assert M.lees(uit, M.SQL_NIEUWSTE)[0][0] < M.apple(datetime.now(timezone.utc)) - 50   # niet die van de status
         assert rijen[0]["personen"] == "Jan Proef"
         assert "Jan Proef" not in r.stdout                                     # stdout is alleen de status
+
+
+def test_helper_sms_schrijft_geen_tekst():
+    """De set sms (31-10-2026): alleen gesprek, tijd, richting en dienst; geen tekst, geen reactie, geen oude dag."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        Path(thuis, "Library/Messages").mkdir(parents=True)
+        Path(thuis, "Library/Caches").mkdir(mode=0o700)
+        db = sqlite3.connect(Path(thuis, "Library/Messages/chat.db"))
+        db.executescript("""
+            CREATE TABLE message(ROWID INTEGER PRIMARY KEY, text, attributedBody, handle_id, service, date, is_from_me,
+                                 item_type, associated_message_type);
+            CREATE TABLE chat(ROWID INTEGER PRIMARY KEY, style, chat_identifier, display_name);
+            CREATE TABLE handle(ROWID INTEGER PRIMARY KEY, id);
+            CREATE TABLE chat_message_join(chat_id, message_id);
+            CREATE TABLE chat_handle_join(chat_id, handle_id);
+            INSERT INTO handle VALUES(1, '+32470000001'), (2, '+32470000099');
+            INSERT INTO chat VALUES(1, 45, '+32470000001', ''), (2, 43, 'chat1', 'Werfgroep Proef');
+            INSERT INTO chat_handle_join VALUES(1, 1), (2, 1), (2, 2);""")
+        nu = M.apple(datetime.now(timezone.utc))
+        for rid, chat, tekst, dienst, t, mij, soort, reactie in (
+                (1, 1, "GEHEIME TEKST", "SMS", nu - 3600, 0, 0, 0), (2, 1, "NOG GEHEIMER", "SMS", nu - 3500, 1, 0, 0),
+                (3, 2, "GROEPSGEHEIM", "iMessage", nu - 60, 1, 0, 0), (4, 2, "REACTIEGEHEIM", "iMessage", nu - 50, 0, 0, 2000),
+                (5, 2, "NAAMGEHEIM", "iMessage", nu - 40, 0, 2, 0), (6, 1, "OUDGEHEIM", "SMS", nu - 90 * 86400, 0, 0, 0)):
+            db.execute("INSERT INTO message VALUES(?,?,?,?,?,?,?,?,?)",
+                       (rid, tekst, tekst.encode(), 1, dienst, int(t * 1e9), mij, soort, reactie))
+            db.execute("INSERT INTO chat_message_join VALUES(?,?)", (chat, rid))
+        db.commit()
+        db.close()
+        wa = Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared")
+        wa.mkdir(parents=True)
+        kont = sqlite3.connect(wa / "ContactsV2.sqlite")
+        kont.execute("CREATE TABLE ZWAADDRESSBOOKCONTACT(Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER)")
+        kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(1, 'Jan Proef', NULL, NULL, '0470 00 00 01')")
+        kont.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(2, 'Buiten Proef', NULL, NULL, '+32479999999')")
+        kont.commit()
+        kont.close()
+        doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken/sms")
+        doel.mkdir(parents=True, mode=0o700)
+        os.chmod(doel.parent, 0o700)
+        os.chmod(doel.parent.parent, 0o755)
+        (doel / "aanvraag").write_text("f" * 32)
+        r = subprocess.run([helper, "sms"], capture_output=True, text=True)
+        status = json.loads((doel / "status.json").read_text())
+        assert r.returncode == 0 and status["uitkomst"] == "ok", (r, status)
+        uit = doel / f"gesprekken-{'f' * 32}.sqlite"
+        ruw = uit.read_bytes()
+        for geheim in (b"GEHEIM", b"Buiten Proef"):
+            assert geheim not in ruw, geheim
+        rijen, _ = M.sms_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert sum(int(x["thema"].split()[0]) for x in rijen) == 3, rijen
+        assert {x["personen"] for x in rijen} == {"Jan Proef", "groep: Werfgroep Proef"}, rijen
 
 
 def test_u1_helper_laat_andere_apps_weg():
@@ -1097,7 +1210,7 @@ def test_r6_drie_uitrollen_en_terug():
         # U2: dezelfde directe aanroep terwijl een andere uitrol alle sloten houdt (nagebootst): ook geweigerd
         houders = []
         for slotpad in (basis / "mac-gesprekken" / ".uitrol.lock", basis / "whatsapp-wacht" / "ronde.lock",
-                        basis / "belwacht" / "ronde.lock"):
+                        basis / "belwacht" / "ronde.lock", basis / "sms-wacht" / "ronde.lock"):
             slotpad.parent.mkdir(parents=True, exist_ok=True)
             houders.append(os.open(slotpad, os.O_CREAT | os.O_RDWR, 0o600))
             fcntl.flock(houders[-1], fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -1,0 +1,18 @@
+# SPIL (test): host-poort van het eigen compose-project, zie spil-test/README.md.
+# Geen forward-auth: SPIL is zelf OIDC-client van authentik.
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name spil-test.${BASE_DOMAIN};
+    include /etc/nginx/snippets/ssl.conf;
+
+    client_max_body_size 50m;
+    proxy_read_timeout 120s;
+    set $app_upstream http://172.17.0.1:8470;
+
+    location / {
+        include /etc/nginx/snippets/proxy-common.conf;
+        proxy_pass $app_upstream;
+    }
+}

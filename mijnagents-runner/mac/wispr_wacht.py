@@ -138,7 +138,9 @@ def main():
     vandaag = per_dag.get(DAG, {"dictaten": 0, "woorden": 0, "seconden": 0})
     uit = bord("/api/klaarzet", {"items": [{"van": NAAM, "voor": "licentiewacht", "soort": "gebruik", "sleutel": GEBRUIKER,
                                             "titel": f"Wispr Flow {GEBRUIKER} {DAG}: {vandaag['dictaten']} dictaten, {vandaag['woorden']} woorden; week {kern['week_woorden']} woorden ({kern['oordeel']})",
-                                            "uniek": f"wispr:{GEBRUIKER}:{DAG}", "inhoud": {"dienst": "Wispr Flow", "gebruiker": GEBRUIKER, "dag": DAG, "vandaag": {k: v for k, v in vandaag.items() if k != "apps"}, **kern}}]})
+                                            "uniek": f"wispr:{GEBRUIKER}:{DAG}", "inhoud": {"dienst": "Wispr Flow", "gebruiker": GEBRUIKER, "dag": DAG, "vandaag": {k: v for k, v in vandaag.items() if k != "apps"}, **kern,
+                                                        # 31-10-2026: per dag, zodat De Dagbundelaar ook een dag na 21:30 volledig ziet
+                                                        "per_dag": {d: {k: v for k, v in r.items() if k != "apps"} for d, r in per_dag.items()}}}]})
     bord("/api/logboek", {"regels": [
         {"naam": NAAM, "onderwerp": f"{GEBRUIKER} {DAG}", "stap": "bron", "tekst": f"{vandaag['dictaten']} dictaten, {vandaag['woorden']} woorden vandaag; laatste 7 dagen {kern['week_dictaten']} dictaten, {kern['week_woorden']} woorden, {kern['week_minuten']} min",
          "detail": "\n".join(f"{a}: {n} woorden" for a, n in kern["apps_week"].items())},

@@ -27,9 +27,32 @@
   .leeg{color:var(--zacht);font-size:12px;font-style:italic}
   .regie{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
   .regie a.naam{background:var(--paper);border:1px solid var(--rand);border-radius:10px;padding:6px 14px}
+  .dagb{width:100%;max-width:none;margin-bottom:14px}
+  .dagb .rij{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 18px}
+  a.laag-kop{display:flex;align-items:center;justify-content:center;gap:9px;font-size:15px;min-width:260px;padding:10px 20px}
+  a.laag-kop .wanneer{margin-left:10px}
+  .vakken{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;width:100%;margin-bottom:8px}
+  .vakken .afd{max-width:none}
+  .scheiding{width:100%;border-top:1px solid var(--rand);margin:18px 0}
+  .top{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+  .kolom{display:flex;flex-direction:column;align-items:center}
+  .vak.smal{min-width:260px;max-width:320px}
+  .hoofd{border-bottom:1px solid var(--rand);margin-bottom:4px;padding-bottom:4px;font-weight:650}
+  .nd{opacity:.75}
+  .nd-kop{width:100%;text-align:center;margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--zacht)}
+  .leegplek{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13px;color:var(--zacht);font-style:italic}
+  .wanneer{margin-left:auto;color:var(--zacht);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
+{% macro rij(a) -%}
+{% if a.get('leeg') %}<span class="naam leegplek"><span class="stip" style="border:1px dashed var(--zacht)"></span>{{ a['label'] }}<span class="wanneer">nog te bouwen</span></span>
+{% else %}<a class="naam" href="{{ url_for('detail', naam=a['naam']) }}" title="{{ a['toestand'] }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}<span class="wanneer">{{ a['laatste'] }}</span></a>
+{% endif %}
+{%- endmacro %}
+{% macro kopblok(a) -%}
+<a class="naam kop laag-kop" href="{{ url_for('detail', naam=a['naam']) }}" title="{{ a['toestand'] }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}<span class="wanneer">{{ a['laatste'] }}</span></a>
+{%- endmacro %}
 <header><h1>Organogram</h1><a href="{{ url_for('bord') }}">← bord</a><a href="{{ url_for('kantoor') }}">kantoor</a></header>
 <main>
   <div class="kop">Mehdi</div>
@@ -40,8 +63,31 @@
     {% endfor %}
   </div>
   <div class="lijn"></div>
+  <div class="top">
+    <div class="kolom">
+      {% for a in dagb_boven %}{{ kopblok(a) }}{% if not loop.last %}<div class="lijn"></div>{% endif %}{% endfor %}
+    </div>
+    {% if naast %}
+    <div class="kolom">
+      {{ kopblok(naast) }}
+      {% if vak_naast %}<div class="lijn"></div>
+      <div class="afd vak smal"><h2>{{ vak_naast[0] }}</h2>{% for a in vak_naast[1] %}{{ rij(a) }}{% endfor %}</div>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="lijn"></div>
+  <div class="vakken">
+    {% for vak, leden in dagb %}
+    <div class="afd vak">
+      <h2>{{ vak }}</h2>
+      {% if hoofd.get(vak) %}<div class="hoofd">{{ rij(hoofd[vak]) }}</div>{% endif %}
+      {% for a in leden %}{{ rij(a) }}{% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="scheiding"></div>
   <div class="laag">
-    {% for afd in afdelingen if afd['naam'] not in ('regie', 'prive', 'prive-communicatie') %}
+    {% for afd in afdelingen if afd['naam'] not in ('regie', 'prive', 'prive-communicatie', 'dagbundelaar') %}
     <div class="afd">
       <h2>{{ afd['label'] }}</h2>
       {% for a in agents if a['type'] == afd['naam'] %}
@@ -49,19 +95,37 @@
       {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
     </div>
     {% endfor %}
+    {% set priv = agents | selectattr('type', 'in', ['prive', 'prive-communicatie']) | list %}
+    {% if priv %}
     <div class="afd groep">
       <h2>Privé</h2>
       {% for a in agents if a['type'] == 'prive' %}
       <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}</a>
       {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+      {% set comm = agents | selectattr('type', 'equalto', 'prive-communicatie') | list %}
+      {% if comm %}
       <div class="sub">
         <h3>Communicatie</h3>
-        {% for a in agents if a['type'] == 'prive-communicatie' %}
+        {% for a in comm %}
         <a class="naam" href="{{ url_for('detail', naam=a['naam']) }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}</a>
-        {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+        {% endfor %}
       </div>
+      {% endif %}
     </div>
+    {% endif %}
   </div>
+  {% if niet_dagelijks %}
+  <div class="scheiding"></div>
+  <div class="laag nd">
+    <h3 class="nd-kop">Niet dagelijks</h3>
+    {% for x in niet_dagelijks %}
+    <div class="afd"><h2>{{ x['label'] }}</h2>
+      {% for a in agents if a['type'] == x['naam'] %}<a class="naam" href="{{ url_for('detail', naam=a['naam']) }}"><span class="stip" style="background:var(--{{ a['toestand'] }})"></span>{{ a['label'] }}</a>
+      {% else %}<div class="leeg">nog geen agent</div>{% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 </main>
 </body>
 </html>

@@ -1,0 +1,25 @@
+# De aankoopagents (driehoeksoverleg 30-10-2026): De Prijsonderzoeker. Geen aanbod zonder gelezen pagina, link, prijs
+# of datum; een totaal pas met verzending, opgeld, veilingkosten en invoer; niet compatibel nooit aanbevolen; alleen
+# de productvraag naar de AI. Sinds overleg 14 (01-11-2026) via het Claude-abonnement, nooit via de API.
+name: aankoop-grendels
+
+on:
+  push:
+    paths: ["mijnagents-runner/aankoop/**", "mijnagents-runner/prijsonderzoeker.py", "mijnagents-runner/werkwijze/prijsonderzoeker.md",
+            "mijnagents-runner/tests/test_aankoop_*.py", "mijnagents-runner/tests/fixtures/claude_stream_*.jsonl",
+            "scripts/claude-abonnement-naar-vm.sh", ".github/workflows/aankoop-grendels.yml"]
+  pull_request:
+    paths: ["mijnagents-runner/aankoop/**", "mijnagents-runner/prijsonderzoeker.py", "mijnagents-runner/werkwijze/prijsonderzoeker.md",
+            "mijnagents-runner/tests/test_aankoop_*.py", "mijnagents-runner/tests/fixtures/claude_stream_*.jsonl",
+            "scripts/claude-abonnement-naar-vm.sh", ".github/workflows/aankoop-grendels.yml"]
+
+jobs:
+  grendels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 mijnagents-runner/tests/test_aankoop_prijs.py
+      - run: bash -n scripts/claude-abonnement-naar-vm.sh
