@@ -177,25 +177,40 @@ def ontdubbel(rijen, telefoon, nummers=None):
     """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam, telt een keer; de iPhone-rij leidt. Een
     paar is: dezelfde persoon (zelfde_wie), beide een gesprek of beide zonder gesprek, het begin hoogstens SAMEN uit
     elkaar en ongeveer even lang (hoogstens een minuut of een vijfde verschil). Elke iPhone-rij hoort bij hoogstens een
-    Xelion-rij, de dichtste wint. Zonder paar verandert niets. Geeft het aantal Xelion-rijen dat dubbel werd."""
+    Xelion-rij: zoveel mogelijk paren, elk eerst met de dichtste. Zonder paar verandert niets. Geeft het aantal
+    Xelion-rijen dat dubbel werd."""
     vrij = [t for t in telefoon if t.get("dubbel_van") in ("", M.GEMIST)]
-    n = 0
-    for x in sorted((x for x in rijen if x["bron"] == KANAAL and x["dubbel_van"] in ("", M.GEMIST)),
-                    key=lambda x: V.gesprek_venster(x)[0]):
+    xel = sorted((x for x in rijen if x["bron"] == KANAAL and x["dubbel_van"] in ("", M.GEMIST)),
+                 key=lambda x: V.gesprek_venster(x)[0])
+    kandidaten = []
+    for x in xel:
         begin, m = V.gesprek_venster(x)[0], int(x["minuten"] or 0)
-        kandidaten = []
-        for t in vrij:
+        bij = []
+        for i, t in enumerate(vrij):
             tm = int(t.get("minuten") or 0)
             afstand = abs(V.gesprek_venster(t)[0] - begin)
             if (t["dubbel_van"] == "") == (x["dubbel_van"] == "") and afstand <= SAMEN \
                     and abs(tm - m) <= max(1, max(tm, m) / 5) and zelfde_wie(x, t, nummers):
-                kandidaten.append((afstand, t["uniek"], t))
-        if kandidaten:
-            _, uniek, t = min(kandidaten, key=lambda k: k[:2])
-            vrij.remove(t)
-            x["dubbel_van"] = uniek
-            n += 1
-    return n
+                bij.append((afstand, t["uniek"], i))
+        kandidaten.append([i for _, _, i in sorted(bij)])
+    # Codex 01-11 (toets 3): zoveel mogelijk paren (Kuhn: een nieuwe Xelion-rij mag een eerdere naar een andere
+    # iPhone-rij laten schuiven), elk eerst met de dichtste
+    paar = {}
+
+    def zoek(xi, gezien):
+        for i in kandidaten[xi]:
+            if i in gezien:
+                continue
+            gezien.add(i)
+            if i not in paar or zoek(paar[i], gezien):
+                paar[i] = xi
+                return True
+        return False
+    for xi in range(len(xel)):
+        zoek(xi, set())
+    for i, xi in paar.items():
+        xel[xi]["dubbel_van"] = vrij[i]["uniek"]
+    return len(paar)
 
 
 def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None, vanaf=None, telefoon=telefoon_lokaal):

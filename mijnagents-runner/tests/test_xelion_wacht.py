@@ -193,6 +193,18 @@ def test_tel6_xelion_en_iphone_tellen_een_keer():
     for ander in ({"personen": "Ander Proef"}, {"personen": "+32470000077"}):
         r4, _ = X.rijen_van(spiegel(), M.dagen(NU))
         assert X.ontdubbel(r4, [dict(telefoon[0], **ander)], nummers) == 0, ander
+    # Codex 01-11 (toets 3): twee paren die elkaar overlappen (Xelion 10:00 en 10:02, iPhone 09:58 en 10:01, dezelfde
+    # beller): beide paren, niet een
+    twee = {"gebruiker": "1", "lijn": "2", "sync": spiegel()["sync"], "rijen": [
+        {"oid": "31", "datum": "2026-10-30T09:00:00Z", "richting": "inkomend", "duur_sec": 120, "beantwoord": True,
+         "extern_nummer": "+32470000001", "extern_naam": "Jan Proef"},
+        {"oid": "32", "datum": "2026-10-30T09:02:00Z", "richting": "inkomend", "duur_sec": 120, "beantwoord": True,
+         "extern_nummer": "+32470000001", "extern_naam": "Jan Proef"}]}
+    r8, _ = X.rijen_van(twee, M.dagen(NU))
+    iphone = [dict(telefoon[0], uniek="telefoon:E-5", start="09:58"), dict(telefoon[0], uniek="telefoon:F-6", start="10:01")]
+    assert X.ontdubbel(r8, iphone, X.nummers_van(twee)) == 2
+    assert {r["uniek"]: r["dubbel_van"] for r in r8 if r["bron"] == "xelion"} == {"xelion:31": "telefoon:E-5",
+                                                                                  "xelion:32": "telefoon:F-6"}, r8
     # Codex 01-11 (toets 2): +31 en +32 met dezelfde laatste negen cijfers zijn twee bellers
     sp = spiegel()
     sp["rijen"][1]["extern_nummer"] = "+31470000002"
