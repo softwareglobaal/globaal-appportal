@@ -55,7 +55,8 @@ SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|l
 RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|prijsindicatie|kostenindicatie|budgetprijs|richtprijs|"
                     r"indicatie(?:f|ve)\s+(?:prijs|prijzen|kost|kosten|bedrag|bedragen|raming|offerte|budget)|"
                     r"globale\s+prijs|onder\s+voorbehoud\s+van\s+opmeting)\b", re.I)
-VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
+# Proefbank 02-11-2026: "29 maart 2026" gaf "btw verlegd" (m-aart 20-26); artikel 20 alleen als los woord en getal
+VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|\bart(?:ikel)?\.?\s*20\b", re.I)
 
 
 ONTKENNING = re.compile(r"\b(?:niet|geen|nooit|vervangt|vervangen|eerdere|vorige|ipv|in\s+plaats\s+van)\b", re.I)
@@ -228,7 +229,7 @@ def lees(tekst_paginas):
     uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": verlegd(tekst),
            "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": is_raming(tekst),
            "redenen": []}
-    excl, incl, kale, nul_btw = [], [], [], False
+    excl, incl, kale, nul_btw, kale_eigen = [], [], [], False, []
     regels = tekst.splitlines()
     for i, regel in enumerate(regels):
         laag = regel.lower()
@@ -244,14 +245,16 @@ def lees(tekst_paginas):
             for soort, b in gelabeld:
                 (excl if soort == "excl" else incl).append((voorrang, b))
             nul_btw = nul_btw or bool(re.search(r"(?<![\d,.])0\s?%", zin))
+            kale_eigen += _losse_bedragen(zin) if not gelabeld else []
             los = _losse_bedragen(zin) if not gelabeld else []
-            if len(los) == 1:
-                # "Totaal  2.069,35€" met het bedrag inclusief btw alleen op de volgende regel
-                kale.append(los[0])
-                volgende = next((r for r in regels[i + 1:i + 3] if r.strip()), "")
-                nog = _losse_bedragen(volgende)
-                if len(nog) == 1 and _woorden(volgende) <= 2:
-                    kale.append(nog[0])
+            if len(los) <= 1:
+                # "Totaal  2.069,35€", dan "BTW", "Totaal (Incl. BTW)", "434,57", "2.503,92€" onder elkaar: de korte
+                # regels erna met een bedrag zijn kandidaten; alleen de btw-som maakt er een totaal van
+                kale += los
+                for volgende in [r for r in regels[i + 1:i + 6] if r.strip()][:4]:
+                    nog = _losse_bedragen(volgende)
+                    if len(nog) == 1 and _woorden(volgende) <= 2:
+                        kale.append(nog[0])
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -274,12 +277,13 @@ def lees(tekst_paginas):
             uit["excl"], uit["incl"] = paar[0], uit["incl"] if uit["incl"] is not None else paar[1]
             uit["btw_tarief"] = uit["btw_tarief"] if uit["btw_tarief"] is not None else paar[2]
             uit["redenen"].append(f"totaal zonder 'excl' of 'incl' erbij; bevestigd door de btw-som ({paar[2]} procent)")
-        elif len(set(kale)) == 1 and uit["incl"] is None and (uit["verlegd"] or nul_btw):
+        elif len(set(kale)) == 1 and uit["incl"] is None and (uit["verlegd"] or nul_btw) and kale_eigen:
             # "729,40 E 0% Totaal": een enkel totaal bij 0 procent btw of verlegd is exclusief en inclusief hetzelfde
             uit["excl"] = kale[0]
             uit["redenen"].append("totaal zonder 'excl' of 'incl' erbij, bij 0 procent btw of verlegd: kijk het na")
-        elif uit["incl"] is None:
-            uit["redenen"].append(f"een totaal zonder 'excl' of 'incl' erbij ({_euro(kale[-1])}): niet gebruikt, kijk het na")
+        elif uit["incl"] is None and kale_eigen:
+            uit["redenen"].append(f"een totaal zonder 'excl' of 'incl' erbij ({_euro(kale_eigen[-1])}): niet gebruikt, "
+                                  "kijk het na")
     if uit["excl"] is None and uit["incl"] is None and (FICHE.search(tekst) or not OFFERTEWOORD.search(tekst)):
         return {"soort": "geen offerte", "redenen": ["geen offerte (technische fiche of ander document zonder totaal): "
                                                      "telt niet mee"]}

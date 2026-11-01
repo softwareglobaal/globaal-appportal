@@ -16,6 +16,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import sys
 import time
 
@@ -61,6 +62,7 @@ class Teller:
         self.verboden_gezien = []
         self.vast = None            # een vast modelantwoord voor deze proef, of None: dan echt Claude
         self.totaal = 0
+        self.antwoorden = []
 
     def vraag(self, *args, **kw):
         begin = time.monotonic()
@@ -85,6 +87,7 @@ class Teller:
                                 "duur": round(time.monotonic() - begin, 1)})
             raise
         stuk = uit if isinstance(uit, dict) else {}
+        self.antwoorden.append(str(stuk.get("tekst") or "")[-20000:])
         self.vragen.append({"tools": list(kw.get("tools") or ()), "tokens": stuk.get("tokens"),
                             "beurten": stuk.get("beurten"), "model": stuk.get("model"),
                             "duur": round(time.monotonic() - begin, 1)})
@@ -190,6 +193,17 @@ def keur(proef, uitslag):
         n = uitslag.get("klaar")
         goed = n is not None and n >= v.get("klaar_min", 0) and n <= v.get("klaar_max", 10 ** 6)
         uit.append((f"firma's klaar tussen {v.get('klaar_min', 0)} en {v.get('klaar_max', '...')}", goed, f"{n} klaar"))
+    if "weggelaten_min" in v:
+        n = uitslag.get("weggelaten")
+        uit.append((f"minstens {v['weggelaten_min']} kandidaten weggelaten", n is not None and n >= v["weggelaten_min"],
+                    f"{n} weggelaten"))
+    if v.get("klaar_binnen_straal"):
+        straal = Q.ontleed(proef["vraag"]).get("straal")
+        klaar = tekst.split("## Klaar om aan te schrijven", 1)[1].split("\n## ", 1)[0] if "## Klaar om" in tekst else ""
+        km = [float(x) for x in re.findall(r"\((\d+(?:\.\d+)?) km\)", klaar)]
+        regels = [r for r in klaar.splitlines() if re.match(r"\d+\. \[", r)]
+        uit.append((f"elke firma onder klaar ligt binnen {straal} km van de KBO-zetel",
+                    len(km) == len(regels) and all(k <= straal for k in km), f"{km}"))
     if "noden_max" in v:
         n = len(uitslag["noden"])
         uit.append((f"hoogstens {v['noden_max']} noden", n <= v["noden_max"], "; ".join(x["tekst"] for x in uitslag["noden"])))
@@ -202,14 +216,12 @@ def keur(proef, uitslag):
     return uit
 
 
-def klaar_uit_log(regels):
+def uit_log(regels, woord):
+    """Het aantal voor 'klaar' of 'weggelaten' uit de beslissingsregel van De Aannemerszoeker, of None."""
     for r in regels:
-        tekst = r.get("tekst") or ""
-        if " klaar, " in tekst and "na te kijken" in tekst:
-            try:
-                return int(tekst.split(": ", 1)[1].split(" klaar", 1)[0])
-            except (IndexError, ValueError):
-                return None
+        m = re.search(rf"(\d+) {woord}\b", r.get("tekst") or "")
+        if m and "na te kijken" in (r.get("tekst") or ""):
+            return int(m.group(1))
     return None
 
 
@@ -217,6 +229,7 @@ def draai_proef(mod, proef, opname, teller):
     opname.schrijf.clear()
     teller.vragen.clear()
     teller.verboden_gezien.clear()
+    teller.antwoorden.clear()
     proef = dict(proef, vraag=vul_in(proef["vraag"]))
     teller.verboden = project_straat(proef["vraag"]) if (proef.get("verwacht") or {}).get("adres_niet_naar_claude") else []
     teller.vast = proef.get("model")
@@ -236,8 +249,10 @@ def draai_proef(mod, proef, opname, teller):
     uitslag = {"id": proef["id"], "vraag": proef["vraag"], "doel": proef.get("doel", ""),
                "duur": round(time.monotonic() - begin, 1), "fout": fout, "items": items(opname),
                "claude": list(teller.vragen), "noden": hart.get("nood") or [], "status": hart.get("status"),
-               "detail": hart.get("detail"), "logboek": regels, "klaar": klaar_uit_log(regels),
+               "detail": hart.get("detail"), "logboek": regels, "klaar": uit_log(regels, "klaar"), "weggelaten": uit_log(regels, "weggelaten"),
                "verboden": list(teller.verboden), "verboden_gezien": list(teller.verboden_gezien),
+               # wat het model teruggaf (zonder de vraag): bouwstof voor een volgende proef met een vast antwoord
+               "model_antwoord": list(teller.antwoorden),
                "scherm": scherm.getvalue()[-4000:]}
     uitslag["keuring"] = [{"toets": t, "goed": g, "toelichting": x} for t, g, x in keur(proef, uitslag)]
     uitslag["geslaagd"] = all(k["goed"] for k in uitslag["keuring"])

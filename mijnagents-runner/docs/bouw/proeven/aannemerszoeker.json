@@ -1,34 +1,192 @@
-{"versie": "0.1 (02-11-2026, voor het driehoeksoverleg)",
- "uitleg": "Proeven voor De Aannemerszoeker. {zetel:HB} wordt bij het draaien de gemeente van die zetel uit kern. Elke proef krijgt ook de algemene toetsen: geen fout, precies een verslag voor Mehdi, geen kenmerk en geen naam van de andere firma.",
+{
+ "versie": "0.2 (02-11-2026, na overleg 28: X1, X2, G1, G2)",
+ "uitleg": "Proeven voor De Aannemerszoeker. {zetel:HB} wordt bij het draaien de gemeente van die zetel uit kern. Elke proef krijgt ook de algemene toetsen: geen fout, precies een verslag voor Mehdi, geen kenmerk en geen naam van de andere firma. Een proef met 'model' krijgt dat vaste antwoord in plaats van Claude, zodat de keuring van de code zelf getoetst wordt met kandidaten die er nooit door mogen.",
  "proeven": [
-  {"id": "A1", "doel": "Harmonie Bouw, gewone vraag: firma's klaar, mail vanuit Harmonie Bouw",
+  {
+   "id": "A1",
+   "doel": "Harmonie Bouw, gewone vraag: firma's klaar, mail vanuit Harmonie Bouw",
    "vraag": "firma: HB; werk: plafonneerwerk binnen; omvang: 120 m2; gemeente: 3020 Herent",
-   "verwacht": {"claude": true, "klaar_min": 1, "bevat": ["Harmonie Bouw"], "duur_max": 480}},
-  {"id": "A2", "doel": "H-Architects, gewone vraag: firma's klaar, mail vanuit H-Architects",
+   "verwacht": {
+    "claude": true,
+    "klaar_min": 1,
+    "bevat": [
+     "Harmonie Bouw"
+    ],
+    "duur_max": 480
+   }
+  },
+  {
+   "id": "A2",
+   "doel": "H-Architects, gewone vraag: firma's klaar, mail vanuit H-Architects",
    "vraag": "firma: HA; werk: plat dak EPDM vernieuwen; omvang: 80 m2; gemeente: 3000 Leuven",
-   "verwacht": {"claude": true, "klaar_min": 1, "bevat": ["H-Architects"], "duur_max": 480}},
-  {"id": "A3", "doel": "Zonder firma: niet starten, Claude niet vragen, geen firmanaam",
+   "verwacht": {
+    "claude": true,
+    "klaar_min": 1,
+    "bevat": [
+     "H-Architects"
+    ],
+    "duur_max": 480
+   }
+  },
+  {
+   "id": "A3",
+   "doel": "Zonder firma: niet starten, Claude niet vragen, geen firmanaam",
    "vraag": "werk: dakwerken; gemeente: 9000 Gent",
-   "verwacht": {"claude": false, "titel_bevat": ["onvolledig"], "niet": ["harmonie", "h-architects"], "noden_max": 0}},
-  {"id": "A4", "doel": "Onbestaande gemeente: niet starten, Claude niet vragen",
+   "verwacht": {
+    "claude": false,
+    "titel_bevat": [
+     "onvolledig"
+    ],
+    "niet": [
+     "harmonie",
+     "h-architects"
+    ],
+    "noden_max": 0
+   }
+  },
+  {
+   "id": "A4",
+   "doel": "Onbestaande gemeente: niet starten, Claude niet vragen",
    "vraag": "firma: HB; werk: tegelwerk vloer; gemeente: 9999 Atlantis",
-   "verwacht": {"claude": false, "titel_bevat": ["gemeente niet gevonden"], "noden_max": 0}},
-  {"id": "A5", "doel": "Persoonsgegevens in de vraag: tegenhouden, niets naar buiten, niets herhalen",
+   "verwacht": {
+    "claude": false,
+    "titel_bevat": [
+     "gemeente niet gevonden"
+    ],
+    "noden_max": 0
+   }
+  },
+  {
+   "id": "A5",
+   "doel": "Persoonsgegevens in de vraag: tegenhouden, niets naar buiten, niets herhalen",
    "vraag": "firma: HA; werk: badkamer renoveren bij Jan Peeters, tel 0478 12 34 56; gemeente: 2800 Mechelen",
-   "verwacht": {"claude": false, "titel_bevat": ["persoonsgegevens"], "niet": ["Peeters", "0478"], "noden_max": 0}},
-  {"id": "A6", "doel": "Geen vakwoord: niet starten, Claude niet vragen",
+   "verwacht": {
+    "claude": false,
+    "titel_bevat": [
+     "persoonsgegevens"
+    ],
+    "niet": [
+     "Peeters",
+     "0478"
+    ],
+    "noden_max": 0
+   }
+  },
+  {
+   "id": "A6",
+   "doel": "Geen vakwoord: niet starten, Claude niet vragen",
    "vraag": "firma: HB; werk: iets moois maken; gemeente: 2000 Antwerpen",
-   "verwacht": {"claude": false, "titel_bevat": ["geen vakwoord"], "noden_max": 0}},
-  {"id": "A7", "doel": "Zoeken rond de zetel van de andere firma: die is nooit een kandidaat en komt nergens voor",
+   "verwacht": {
+    "claude": false,
+    "titel_bevat": [
+     "geen vakwoord"
+    ],
+    "noden_max": 0
+   }
+  },
+  {
+   "id": "A7",
+   "doel": "De andere firma als vaste modeltreffer: nooit een kandidaat, geen mail, nergens genoemd",
    "vraag": "firma: HA; werk: algemene bouwwerken renovatie woning; gemeente: {zetel:HB}",
-   "verwacht": {"claude": true, "klaar_min": 0, "duur_max": 480}},
-  {"id": "A8", "doel": "Kleine straal: alleen firma's binnen 15 km als klaar",
+   "verwacht": {
+    "klaar_max": 0,
+    "weggelaten_min": 1,
+    "noden_max": 0
+   },
+   "model": {
+    "vraag_kort": "renovatie van een woning",
+    "aannames": [],
+    "werkomschrijving": "Renovatie van een woning.",
+    "niet_gevonden": [],
+    "vervolgvraag": null,
+    "firmas": [
+     {
+      "naam": "Harmonie Bouw",
+      "url": "https://www.harmoniebouw.be/",
+      "email": "kantoor@harmoniebouw.be",
+      "ondernemingsnummer": "0537.405.239",
+      "postcode": "3060",
+      "gemeente": "Bertem",
+      "bewijs": "Wij renoveren woningen van A tot Z.",
+      "specialiteit": "renovatie",
+      "waarom": "proef"
+     },
+     {
+      "naam": "Renovatie Proef",
+      "url": "https://renovatie-proef.invalid/",
+      "ondernemingsnummer": null,
+      "postcode": "3000",
+      "gemeente": "Leuven",
+      "bewijs": "Wij renoveren woningen van A tot Z.",
+      "specialiteit": "renovatie",
+      "waarom": "proef"
+     }
+    ]
+   }
+  },
+  {
+   "id": "A8",
+   "doel": "Kleine straal: alleen firma's binnen 15 km als klaar",
    "vraag": "firma: HB; werk: elektriciteitswerken installatie; gemeente: 3500 Hasselt; straal: 15",
-   "verwacht": {"claude": true, "klaar_min": 1, "duur_max": 480}},
-  {"id": "A9", "doel": "Project van H-Architects: gemeente uit de projectmap, de straat gaat nooit naar Claude",
+   "verwacht": {
+    "claude": true,
+    "klaar_min": 1,
+    "duur_max": 480,
+    "klaar_binnen_straal": true
+   }
+  },
+  {
+   "id": "A9",
+   "doel": "Project van H-Architects: gemeente uit de projectmap, de straat gaat nooit naar Claude",
    "vraag": "firma: HA; project: 2602; werk: buitenschrijnwerk ramen en deuren",
-   "verwacht": {"claude": true, "klaar_min": 1, "adres_niet_naar_claude": true, "bevat": ["2602"], "duur_max": 480}},
-  {"id": "A10", "doel": "Zeldzaam vak in een kleine gemeente: eerlijk weinig, niets verzonnen",
-   "vraag": "firma: HB; werk: gevelreiniging en hydrofoberen; gemeente: 2230 Herselt",
-   "verwacht": {"claude": true, "klaar_min": 0, "duur_max": 480}}
- ]}
+   "verwacht": {
+    "claude": true,
+    "klaar_min": 1,
+    "adres_niet_naar_claude": true,
+    "bevat": [
+     "2602"
+    ],
+    "duur_max": 480
+   }
+  },
+  {
+   "id": "A10",
+   "doel": "Een gestopte firma en een site zonder het opgegeven nummer als vaste modeltreffers: geen van beide klaar",
+   "vraag": "firma: HB; werk: gevelreiniging en hydrofoberen; gemeente: 2230 Herselt; straal: 40",
+   "verwacht": {
+    "klaar_max": 0,
+    "weggelaten_min": 1,
+    "noden_max": 0
+   },
+   "model": {
+    "vraag_kort": "gevelreiniging",
+    "aannames": [],
+    "werkomschrijving": "Reinigen en hydrofoberen van een gevel.",
+    "niet_gevonden": [],
+    "vervolgvraag": null,
+    "firmas": [
+     {
+      "naam": "Gestopte Proef",
+      "url": "https://gestopte-proef.invalid/",
+      "ondernemingsnummer": "0400.001.076",
+      "postcode": "2230",
+      "gemeente": "Herselt",
+      "bewijs": "Wij reinigen gevels.",
+      "specialiteit": "gevelreiniging",
+      "waarom": "proef: stopgezet in de KBO"
+     },
+     {
+      "naam": "Gevelrenovaties Van Dun",
+      "url": "https://gevelrenovatiesvandun.be/reinigingswerken/",
+      "ondernemingsnummer": "0412.345.614",
+      "postcode": "2300",
+      "gemeente": "Turnhout",
+      "bewijs": "Gevelreiniging",
+      "specialiteit": "gevelreiniging",
+      "waarom": "proef: dit nummer staat niet op de site"
+     }
+    ]
+   }
+  }
+ ]
+}

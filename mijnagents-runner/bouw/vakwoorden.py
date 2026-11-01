@@ -30,7 +30,10 @@ houtskelet skelet prefab modulair kozijn dorpel venster vensterbank tablet natuu
 composiet keramiek beglaasd draagmuur muur muren balk balken latei kolom ligger welf welfsel holle predal hourdis kanaal
 kanalen ventilatiekanaal rookkanaal afzuig afzuiging dampkap boiler zonneboiler regenput infiltratie bufferbekken pomp
 put gracht beschoeiing drainering grind zand kalk cement mortel lijm egaliseer egalisatie schuur polier coating hars epoxy
+hydrofoob hydrofober hydrofobering impregneer impregnatie
 """.split())
+# Een voegwoord aan het begin of einde blijft niet hangen als het woord erna wegviel ("gevelreiniging en", proefbank 02-11-2026)
+LOS_AAN_RAND = {"en", "of", "met", "zonder", "van", "voor", "bij", "in", "op", "aan", "te", "tot", "en/of"}
 
 FUNCTIE = set("""
 de het een en of met zonder van voor bij in op aan te tot uit naar over onder boven achter naast per inclusief exclusief incl
@@ -93,4 +96,8 @@ def filter_tekst(tekst):
             houden.append(stuk.strip(",;"))
         elif stuk.strip(".,;:()"):
             weg.append(stuk.strip(".,;:()"))
+    while houden and houden[-1].lower() in LOS_AAN_RAND:
+        houden.pop()
+    while houden and houden[0].lower() in LOS_AAN_RAND:
+        houden.pop(0)
     return " ".join(houden).strip(), weg

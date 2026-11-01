@@ -1348,6 +1348,25 @@ _pp = F.per_post([{"onderwerp": "metselwerk", "posten": {"B": ["1"]}}, {"onderwe
                  {"B": {"1": 69800.0}})
 check("een post van een inschrijver telt in een onderdeel, niet in twee", _pp[0]["cellen"]["B"] == 69800.0
       and _pp[1]["cellen"]["B"] is None, _pp)
+check("een datum in maart is geen verlegde btw, artikel 20 wel", not F.verlegd("Open zondag 29 maart 2026.")
+      and F.verlegd("Btw te voldoen door de medecontractant, art. 20 van het KB nr. 1."))
+_p = F.lees(pdf("Klantofferte 670010002", "Totaal  2.069,35€", "BTW", "Totaal (Incl. BTW)", "434,57", "2.503,92€", "€",
+                "Deze offerte wordt een bestelling na betaling van een voorschot."))
+check("totalen onder elkaar in een kolom: de btw-som vindt exclusief en inclusief", _p["excl"] == 2069.35
+      and _p["incl"] == 2503.92 and _p["btw_tarief"] == 21, _p)
+check("hydrofoberen is een vakwoord; een los 'en' op het einde valt weg",
+      W.filter_tekst("gevelreiniging en hydrofoberen")[0] == "gevelreiniging en hydrofoberen"
+      and W.filter_tekst("gevelreiniging en Peeters")[0] == "gevelreiniging")
+_f = {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "telefoon": "0537.405.239", "ondernemingsnummer": None,
+      "bewijs": "Dakwerken, platte daken, EPDM, renovatie", "adres": "Dorpstraat 1", "postcode": "3020", "gemeente": "Herent"}
+_r = Z.keur([_f], GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+_alle = _r["goed"] + _r["na_te_kijken"] + _r["buiten"]
+check("een ondernemingsnummer in het telefoonveld wordt het nummer, nooit een telefoonnummer",
+      _alle and _alle[0]["ondernemingsnummer"] == "0537.405.239" and _alle[0]["telefoon"] is None, _r)
+_zk = lambda q, p: [{"soort": "file", "naam": "06-17 Vergadering dakwerken.mp3", "pad": E.BASIS[S.HA] + "/2999 X/Quotes/06-17 Vergadering dakwerken.mp3"},
+                    {"soort": "file", "naam": "offerte dakwerken.pdf", "pad": E.BASIS[S.HA] + "/2998 Y/Quotes/offerte dakwerken.pdf"}]
+check("een opname of foto in een offertemap is geen eerdere offerte", [t["naam"] for t in E.in_mappen(S.HA, "dakwerken", zoek=_zk)]
+      == ["offerte dakwerken.pdf"])
 from bouw import proefbank as PB  # noqa: E402
 _o = PB.Opname(lambda *a, **k: {"gelezen": True})
 check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",
