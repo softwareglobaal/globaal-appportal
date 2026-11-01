@@ -65,6 +65,8 @@ class Draad:
         self.agents = agents
         self.gestuurd = []
         self.fouten = {}            # pad -> lijst van uitzonderingen die de volgende oproepen op dat pad opwerpen
+        self.na_fouten = {}         # idem, maar het bord nam het verzoek aan: het antwoord ging verloren
+        self.gevraagd = []          # elk pad dat de runner probeerde, ook als het mislukte
 
     def urlopen(self, req, timeout=None, **_):
         url = req.full_url if isinstance(req, urllib.request.Request) else str(req)
@@ -72,8 +74,11 @@ class Draad:
         pad = deel.path + (f"?{deel.query}" if deel.query else "")
         data = req.data if isinstance(req, urllib.request.Request) else None
         payload = json.loads(data.decode()) if data else None
+        self.gevraagd.append(deel.path)
         antwoord = self.antwoord(deel.path, pad, payload)
         self.gestuurd.append((deel.path, payload))       # alleen wat het bord aannam
+        if self.na_fouten.get(deel.path):
+            raise self.na_fouten[deel.path].pop(0)
         return _Antwoord(json.dumps(antwoord).encode())
 
     def antwoord(self, pad, volledig, payload):
@@ -179,7 +184,9 @@ def test_na49_stopsignaal_bij_het_afsluiten_blijft_niet_op_actief():
         assert doorgegaan is onderbreking, f"het signaal hoort door te gaan: {doorgegaan!r}"
         laatste = draad.statussen("proef")[-1]
         assert laatste["status"] == "fout" and type(onderbreking).__name__ in laatste["detail"], draad.statussen("proef")
-        assert [n["tekst"] for n in laatste["nood"]] == ["Oude nood", "Nieuwe nood"], laatste
+        # na een signaal haalt de ronde de noodlijst niet meer op (overleg 13, X5): geen lijst, dus het bord sluit niets,
+        # en wat ze vond staat in het detail
+        assert "nood" not in laatste and "Nieuwe nood" in laatste["detail"], laatste
 
 
 def test_na53_werkfout_en_stopsignaal_bij_het_afsluiten_blijven_allebei_zichtbaar():
@@ -207,19 +214,79 @@ def test_na53_werkfout_en_stopsignaal_bij_het_afsluiten_blijven_allebei_zichtbaa
     assert any(r["tekst"] == "halverwege stuk" for r in draad.logregels()), "het werkverslag ging niet weg"
 
 
-def test_na56_werkverslag_blijft_tot_het_bord_het_aannam():
-    """Codex NA56 (ronde 14): een verzendfout wiste het werkverslag uit het geheugen, zodat ook een volgende poging het
-    niet meer stuurde. Nu blijft het tot het bord het aannam."""
-    draad = Draad()
-    draad.fouten["/api/logboek"] = [urllib.error.URLError("bord weg (proef)")]
+def test_d1_werkverslag_in_hoogstens_een_poging():
+    """Overleg 13, D1 (na Codex NA56 en NA60): het werkverslag gaat in hoogstens een poging naar het bord. Bewaren en
+    opnieuw sturen (NA56) gaf een dubbel verslag als het antwoord verloren ging na een geslaagde boeking (NA60), want het
+    bord herkent geen dubbels. Een mislukte of onderbroken poging wist de regels dus ook."""
+    for fout, aangenomen in ((urllib.error.URLError("bord weg (proef)"), False), (TimeoutError("antwoord kwijt"), True),
+                             (SystemExit(143), False)):
+        draad = Draad()
+        (draad.na_fouten if aangenomen else draad.fouten)["/api/logboek"] = [fout]
+        ag = bord.Agent("proef")
+        with op_het_bord(draad):
+            ag.log("proef", "bron", "regel een")
+            try:
+                ag.log_verstuur()
+            except SystemExit:
+                pass
+            assert not ag._log, f"na {fout!r} hoort de regel weg te zijn: geen tweede poging"
+            ag.log("proef", "bron", "regel twee")
+            ag.log_verstuur()
+        verwacht = (["regel een"] if aangenomen else []) + ["regel twee"]
+        assert [r["tekst"] for r in draad.logregels()] == verwacht, (fout, draad.logregels())
+
+
+def test_x5_signaal_tijdens_het_melden_van_een_breuk():
+    """Overleg 13, X2 en X5 (na Codex NA61): een tweede signaal terwijl de ronde haar breuk meldt (het werkverslag of de
+    noodlijst ophalen) hield de fouthartslag tegen, en dan bleef de agent op actief staan. Dat geldt bij een fout tijdens
+    het starten, bij stoppen zonder regelboek en bij het afsluiten. Nu gaat de fouthartslag altijd uit, zonder noodlijst
+    als die niet op te halen was (het bord sluit dan niets), en gaat de oorspronkelijke oorzaak door."""
+    gevallen = (
+        # (wat, werkwijze, fout in het werk, signaal bij /api/nood, verwachte uitzondering)
+        ("start: onverwachte fout bij het lezen", WW, None, KeyboardInterrupt(), RuntimeError),
+        ("stop zonder regelboek", {}, None, SystemExit(143), SystemExit),
+        ("afsluiten na een werkfout (NA61)", WW, ValueError("werk kapot"), SystemExit(143), SystemExit),
+        ("afsluiten na een signaal in het werk", WW, SystemExit(130), KeyboardInterrupt(), SystemExit),
+    )
+    for wat, werkwijze, werkfout, signaal, verwacht in gevallen:
+        draad = Draad(werkwijze=werkwijze, open_noden=[{"naam": "proef", "tekst": "Oude nood", "wie": "mehdi"}])
+        draad.fouten["/api/nood"] = [signaal]
+        if wat.startswith("start"):
+            draad.fouten["/api/agent/proef/werkwijze"] = [RuntimeError("bord stuk (proef)")]
+        ag = bord.Agent("proef")
+        with op_het_bord(draad):
+            try:
+                with ag.ronde("proef") as r:
+                    r.nood("Nieuwe nood", wie="claude-code")
+                    if werkfout is not None:
+                        raise werkfout
+                doorgegaan = None
+            except BaseException as e:  # noqa: BLE001
+                doorgegaan = e
+        assert isinstance(doorgegaan, verwacht), (wat, repr(doorgegaan))
+        if werkfout is not None and not isinstance(werkfout, Exception):
+            assert doorgegaan is werkfout, (wat, "het oorspronkelijke signaal hoort door te gaan", repr(doorgegaan))
+        fouten = [s for s in draad.statussen("proef") if s["status"] == "fout"]
+        assert len(fouten) == 1 and draad.statussen("proef")[-1]["status"] == "fout", (wat, draad.statussen("proef"))
+        assert "nood" not in fouten[-1] and type(signaal).__name__ in fouten[-1]["detail"], (wat, fouten[-1])
+
+
+def test_x5_na_een_signaal_bij_het_afsluiten_geen_noodlijst_meer():
+    """Overleg 13, X5: kwam bij het afsluiten al een signaal (kennis of werkverslag), dan haalt de ronde de noodlijst niet
+    meer op; de fouthartslag gaat meteen uit, zonder lijst."""
+    draad = Draad(open_noden=[])
+    draad.fouten["/api/logboek"] = [KeyboardInterrupt()]
     ag = bord.Agent("proef")
+    ag.kennis = lambda *a, **k: (_ for _ in ()).throw(SystemExit(143))
     with op_het_bord(draad):
-        ag.log("proef", "bron", "regel een")
-        ag.log_verstuur()
-        assert not draad.logregels() and len(ag._log) == 1, "na een verzendfout hoort de regel bewaard te blijven"
-        ag.log("proef", "bron", "regel twee")
-        ag.log_verstuur()
-    assert [r["tekst"] for r in draad.logregels()] == ["regel een", "regel twee"] and not ag._log, draad.logregels()
+        try:
+            with ag.ronde("proef"):
+                ag.log("proef", "bron", "een regel")
+        except BaseException as e:  # noqa: BLE001
+            doorgegaan = e
+    assert isinstance(doorgegaan, SystemExit), repr(doorgegaan)
+    na_afsluiten = draad.gevraagd[draad.gevraagd.index("/api/logboek"):]
+    assert "/api/nood" not in na_afsluiten and "nood" not in draad.statussen("proef")[-1], (draad.gevraagd, draad.statussen())
 
 
 def test_na57_elk_signaal_bij_het_afsluiten_staat_in_de_fouthartslag():
