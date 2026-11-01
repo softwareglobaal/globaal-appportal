@@ -238,6 +238,13 @@ A.haal_locatie = lambda pad: json.loads(json.dumps(LOC30)) if pad.startswith("/a
 html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
 check("D31 vorige dag: bord-item en ritten samen", "Locatielogboek 2026-10-30" in html and "rit auto, 36,2 km" in html
       and "Thuis" in html and "6</span> items binnen" in html, html[-3000:])
+# Codex-toets 1: haal_wachten geeft een minuut lang hetzelfde (bewaarde) antwoord; twee aanvragen gaven dubbele ritten.
+VAST = json.loads(json.dumps(MET_ITEM))
+A.haal_wachten = lambda dag: VAST
+for _ in range(2):
+    html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
+check("D31 tweede aanvraag: geen dubbels, bewaard antwoord onveranderd", "6</span> items binnen" in html
+      and len(VAST["vakken"][0]["wachten"][2]["items"]) == 1, html[-1500:])
 A.haal_locatie = lambda pad: None
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)

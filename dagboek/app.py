@@ -440,6 +440,8 @@ def wachten_dag(dag):
     gegevens = haal_wachten(dag)
     if not gegevens:
         return None
+    # een kopie: haal_wachten bewaart zijn antwoord een minuut, en hieronder komen de plekken en ritten erbij (Codex-toets 1)
+    gegevens = json.loads(json.dumps(gegevens))
     for vak in gegevens["vakken"]:
         for w in vak.get("wachten") or []:
             if w.get("naam") == "locatie-wacht":
