@@ -451,8 +451,12 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
         from . import webpagina
         haal = webpagina.haal
     systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
-    uit = vraag(systeem, gebruiker, tools=("WebSearch", "WebFetch"), timeout=max(60.0, deadline - time.monotonic() - LEESTIJD),
-                max_beurten=MAX_BEURTEN, max_gereedschap=MAX_GEREEDSCHAP)
+    rest = deadline - time.monotonic() - LEESTIJD
+    if rest < 60:          # Codex, controle 18: nooit voorbij de deadline van de ronde; de vraag wacht
+        import claude_abonnement
+        raise claude_abonnement.Fout(f"te weinig tijd in de ronde ({int(rest)} s)", "tijd")
+    uit = vraag(systeem, gebruiker, tools=("WebSearch", "WebFetch"), timeout=rest, max_beurten=MAX_BEURTEN,
+                max_gereedschap=MAX_GEREEDSCHAP)
     gehaald = [str((inv or {}).get("url") or "") for naam, inv in uit["gereedschap"] if naam == "WebFetch"]
     gegevens = O.json_uit(uit["tekst"])
     gelezen = lees_sites((gegevens or {}).get("firmas"), gehaald, haal, deadline)

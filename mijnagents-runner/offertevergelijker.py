@@ -149,9 +149,11 @@ def een_vraag(r, tekst, vandaag, deadline=None):
                 per_post = F.per_post((gegevens or {}).get("rijen"), {l: p for l, p in posten.items() if p})
         except claude_abonnement.Fout as e:     # zonder Claude blijft de vergelijking van de totalen staan
             ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {str(e)[:200]}")
-            if e.aanmelden or e.limiet:
+            if e.soort in ("aanmelden", "limiet"):
                 r.nood(claude_abonnement.AANMELDEN_NOOD if e.aanmelden else claude_abonnement.LIMIET_NOOD, wie="mehdi")
-            else:
+            elif e.soort == "bron":
+                r.nood(claude_abonnement.BRON_NOOD, wie="claude-code")
+            elif e.soort is None:
                 r.nood("Offerteposten niet uitgelezen door Claude op het abonnement", wie="claude-code")
         except Exception as e:  # noqa: BLE001  zonder model blijft de vergelijking van de totalen staan
             ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {type(e).__name__}: {str(e)[:200]}")

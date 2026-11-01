@@ -3,15 +3,18 @@ token en API kosten ... moet mijn claude account gebruiken").
 
 De agent start Claude Code zonder scherm (`claude -p`) met het langlevende token van `claude setup-token` (een jaar
 geldig), uit ~/appportal/.env onder de naam CLAUDE_CODE_OAUTH_TOKEN. Zonder token start niets: nooit terugvallen op de
-API. Drie grendels tegen aparte kosten (Codex, controle 17):
+API. Grendels tegen aparte kosten (Codex, controle 17 en 18):
   - het kindproces krijgt alleen een korte lijst gewone variabelen en het token, nooit ANTHROPIC_API_KEY of een ander
     geheim, en een eigen lege HOME en configuratiemap: geen instellingen, apiKeyHelper of opgeslagen login van de
     server telt mee;
-  - meldt Claude Code bij de start een andere bron dan het abonnement (apiKeySource niet "none"), dan stopt de code het
-    proces voor er een vraag vertrekt;
-  - meldt het abonnement extra verbruik (isUsingOverage) of een bereikte limiet, dan stopt de code het proces meteen:
-    hoogstens die ene beurt valt buiten het abonnement. Op 01-11-2026 stond extra verbruik op het account aan
-    (overageStatus "allowed"); uitzetten kan alleen Mehdi in zijn account.
+  - voor elke vraag zegt `claude auth status` (zonder model, zonder kosten) in precies die omgeving hoe Claude Code zou
+    aanmelden; alleen "oauth_token" bij Anthropic zelf mag (gemeten 01-11-2026: met een API-sleutel zegt het "api_key");
+    anders start er niets;
+  - meldt Claude Code bij de start toch een andere bron (apiKeySource niet "none"), dan stopt de code het proces meteen;
+  - meldt het abonnement extra verbruik (isUsingOverage), een waarschuwing of een bereikte limiet, dan stopt de code het
+    proces meteen en onthoudt ze dat tot het venster voorbij is (LIMIET_BESTAND): de volgende vraag start dan niet. Op
+    01-11-2026 stond extra verbruik op het account aan (overageStatus "allowed"); dat het nooit een euro kost,
+    garandeert alleen Mehdi door extra verbruik in zijn account uit te zetten.
 
 Claude Code draait in een lege tijdelijke map, zonder CLAUDE.md, skills, hooks of MCP-servers (--safe-mode,
 --restricted, --strict-mcp-config) en met alleen het gereedschap dat de oproep noemt. Het token staat alleen in de
@@ -25,6 +28,7 @@ import signal
 import subprocess
 import tempfile
 import threading
+import time
 
 from sleutelbron import BRON, waarde
 
@@ -34,18 +38,25 @@ MODEL = os.environ.get("ABONNEMENT_MODEL", "opus")
 AANMELDEN_NOOD = ("Claude op de VM is niet aangemeld met je abonnement: dubbelklik op de Mac "
                   "mijnagents-runner/mac/abonnement_aanmelden.command en meld je aan met je Claude-account")
 LIMIET_NOOD = "Je Claude-abonnement zit aan zijn limiet: de agents wachten tot het weer kan, zonder extra verbruik"
+BRON_NOOD = "Claude op de VM zou niet op het abonnement draaien: niets gestart, kijk claude_abonnement na"
+LIMIET_BESTAND = os.path.expanduser(os.environ.get("ABONNEMENT_LIMIET", "~/.cache/claude-abonnement/limiet.json"))
+GRENS = 0.9          # boven dit deel van een venster start de code geen nieuwe vraag (ruimte voor Mehdi zelf)
 AANMELDEN = ("invalid api key", "/login", "oauth", "authentication", "not logged in", "401", "unauthorized")
 
 
 class Fout(RuntimeError):
-    """Claude via het abonnement gaf geen bruikbaar antwoord. aanmelden: het token ontbreekt of wordt geweigerd; dan
-    moet Mehdi opnieuw aanmelden (mac/abonnement_aanmelden.command). limiet: het abonnement zit aan zijn limiet of zou
-    extra verbruik vragen; dan wacht de vraag."""
+    """Claude via het abonnement gaf geen bruikbaar antwoord. soort: "aanmelden" (token ontbreekt of wordt geweigerd;
+    Mehdi meldt opnieuw aan met mac/abonnement_aanmelden.command), "limiet" (limiet, waarschuwing of extra verbruik),
+    "bron" (Claude Code zou niet op het abonnement draaien) of "tijd" (te weinig tijd in de ronde). Met een soort wacht de
+    vraag (wacht); zonder soort is de vraag mislukt."""
 
-    def __init__(self, tekst, aanmelden=False, limiet=False):
+    def __init__(self, tekst, soort=None):
         super().__init__(tekst)
-        self.aanmelden = aanmelden
-        self.limiet = limiet
+        self.soort = soort
+
+    aanmelden = property(lambda self: self.soort == "aanmelden")
+    limiet = property(lambda self: self.soort == "limiet")
+    wacht = property(lambda self: self.soort is not None)
 
 
 def claude_pad():
@@ -88,16 +99,73 @@ def bewaking(regel, staat, max_gereedschap=None):
             return f"Claude zou niet op het abonnement draaien (bron {bron}): gestopt voor de eerste vraag"
     elif d.get("type") == "rate_limit_event":
         info = d.get("rate_limit_info") or {}
-        if info.get("isUsingOverage"):
-            return "limiet: het abonnement zou extra verbruik aanrekenen"
-        if info.get("status") not in (None, "allowed", "allowed_warning"):
-            return f"limiet: het abonnement staat op {info.get('status')}"
+        staat["limiet"] = info
+        return limiet_reden(info)
     elif d.get("type") == "assistant":
         for b in (d.get("message") or {}).get("content") or []:
             if isinstance(b, dict) and b.get("type") == "tool_use":
                 staat["gereedschap"] = staat.get("gereedschap", 0) + 1
         if max_gereedschap and staat.get("gereedschap", 0) > max_gereedschap:
             return f"meer dan {max_gereedschap} zoek- of leesbeurten: gestopt"
+    return None
+
+
+def limiet_reden(info):
+    """De reden om te stoppen of niet te starten volgens een rate_limit_info, of None. Een waarschuwing telt ook:
+    Claude Code stopt dan voor het abonnement op is (Codex, controle 18)."""
+    if not isinstance(info, dict):
+        return None
+    if info.get("isUsingOverage"):
+        return "limiet: het abonnement zou extra verbruik aanrekenen"
+    if info.get("status") not in (None, "allowed"):
+        return f"limiet: het abonnement staat op {info.get('status')}"
+    for naam, venster in (info.get("unifiedWindows") or {}).items():
+        if isinstance(venster, dict) and float(venster.get("utilization") or 0) >= GRENS:
+            return f"limiet: {int(100 * float(venster['utilization']))} procent van het venster {naam} gebruikt"
+    return None
+
+
+def _einde(info):
+    tijden = [info.get("resetsAt")] + [v.get("resetsAt") for v in (info.get("unifiedWindows") or {}).values()
+                                       if isinstance(v, dict)]
+    return max([float(t) for t in tijden if t] or [0])
+
+
+def onthoud_limiet(info, bestand=None):
+    bestand = bestand or LIMIET_BESTAND
+    try:
+        os.makedirs(os.path.dirname(bestand), exist_ok=True)
+        with open(bestand, "w", encoding="utf-8") as f:
+            json.dump({"info": info, "gezien": time.time()}, f)
+    except OSError:
+        pass
+
+
+def bekende_limiet(bestand=None, nu=None):
+    """De reden om niet te starten volgens de laatst geziene limiet, zolang haar venster loopt (zonder eindtijd: een
+    uur); anders None."""
+    try:
+        with open(bestand or LIMIET_BESTAND, encoding="utf-8") as f:
+            d = json.load(f) or {}
+        info, gezien = d.get("info") or {}, float(d.get("gezien") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+    reden = limiet_reden(info)
+    return reden if reden and (nu or time.time()) < (_einde(info) or gezien + 3600) else None
+
+
+def controleer_bron(env, cwd, run=subprocess.run):
+    """None als `claude auth status` in precies deze omgeving het abonnementstoken van Anthropic zelf meldt; anders de
+    reden. Dit roept geen model aan en kost niets."""
+    try:
+        p = run([claude_pad(), "auth", "status"], capture_output=True, text=True, timeout=30, cwd=cwd, env=env)
+        d = json.loads(p.stdout or "{}")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return "aanmelden: de aanmelding van Claude Code is niet te lezen"
+    if not d.get("loggedIn"):
+        return "aanmelden: Claude Code is niet aangemeld"
+    if d.get("authMethod") != "oauth_token" or d.get("apiProvider") != "firstParty" or d.get("apiKeySource"):
+        return f"bron: Claude Code zou aanmelden met {d.get('authMethod')} ({d.get('apiKeySource') or d.get('apiProvider')})"
     return None
 
 
@@ -142,12 +210,13 @@ def _stop(p):
             pass
 
 
-def draai(cmd, invoer, timeout, cwd, env, max_gereedschap=None):
+def draai(cmd, invoer, timeout, cwd, env, max_gereedschap=None, staat=None):
     """(stdout, stderr, returncode, stopreden): Claude Code met bewaking per regel; bij een reden of na de timeout
-    stopt de code het hele proces."""
+    stopt de code het hele proces. staat krijgt de laatst geziene limiet."""
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd,
                          env=env, start_new_session=True)
-    uit, fout, staat, reden = [], [], {}, []
+    uit, fout, reden = [], [], []
+    staat = {} if staat is None else staat
 
     def lees():
         for regel in p.stdout:
@@ -189,21 +258,34 @@ def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25
     gereedschap. Geeft lees_stroom(); een Fout als er geen antwoord is of als een grendel het proces stopte."""
     token = waarde(bron, TOKEN)
     if not token:
-        raise Fout(f"geen {TOKEN} in {bron}", aanmelden=True)
+        raise Fout(f"geen {TOKEN} in {bron}", "aanmelden")
+    gekend = bekende_limiet()
+    if gekend:
+        raise Fout(f"Claude via het abonnement: {gekend} (nog niet voorbij)", "limiet")
+    staat = {}
     with tempfile.TemporaryDirectory(prefix="claude-abonnement-") as werkmap, \
             tempfile.TemporaryDirectory(prefix="claude-thuis-") as thuis:
+        env = omgeving(token, thuis)
+        reden = controleer_bron(env, werkmap)
+        if reden:
+            soort, _, tekst = reden.partition(": ")
+            raise Fout(f"Claude via het abonnement: {tekst}", soort)
         for naam, data in (bestanden or {}).items():
             with open(os.path.join(werkmap, os.path.basename(naam)), "wb") as f:
                 f.write(data)
         try:
             stdout, stderr, code, reden = draai(opdracht(systeem, tools, model, max_beurten), gebruiker, timeout, werkmap,
-                                                omgeving(token, thuis), max_gereedschap)
+                                                env, max_gereedschap, staat)
         except OSError as e:
             raise Fout(f"Claude Code niet te starten ({type(e).__name__})") from None
+    if staat.get("limiet") is not None:
+        onthoud_limiet(staat["limiet"])
     if reden:
-        raise Fout(f"Claude via het abonnement: {reden}", limiet=reden.startswith("limiet"))
+        soort = "limiet" if reden.startswith("limiet") else "bron" if "abonnement draaien" in reden else None
+        raise Fout(f"Claude via het abonnement: {reden}", soort)
     uit = lees_stroom(stdout)
     if uit["fout"] or code:
         reden = uit["fout"] or (stderr or "").strip()[-300:] or f"code {code}"
-        raise Fout(f"Claude via het abonnement: {reden.replace(token, '[token]')}", aanmelden=_aanmelden(reden))
+        raise Fout(f"Claude via het abonnement: {reden.replace(token, '[token]')}",
+                   "aanmelden" if _aanmelden(reden) else None)
     return uit

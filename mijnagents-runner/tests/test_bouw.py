@@ -779,8 +779,10 @@ for regel in open(uit):
     print(regel.rstrip("\n"), flush=True)
 sys.exit(code)
 """
-_echt_opdracht = CA.opdracht
+_echt_opdracht, _echt_bron, _echt_limiet = CA.opdracht, CA.controleer_bron, CA.LIMIET_BESTAND
 with tempfile.TemporaryDirectory() as _d:
+    CA.LIMIET_BESTAND = os.path.join(_d, "limiet.json")
+    CA.controleer_bron = lambda env, cwd: None
     leeg, vol = os.path.join(_d, "leeg.env"), os.path.join(_d, "vol.env")
     open(leeg, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\n")
     open(vol, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-nep\n")
@@ -821,8 +823,8 @@ with tempfile.TemporaryDirectory() as _d:
     _t0 = time.monotonic()
     nep_claude([dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), "SLAAP", KLAAR])
     e = fout_van()
-    check("controle 17: meldt Claude Code een API-sleutel, dan stopt de code voor de eerste vraag", e is not None
-          and "abonnement" in str(e) and time.monotonic() - _t0 < 10)
+    check("controle 17: meldt Claude Code bij de start toch een API-sleutel, dan stopt de code het proces meteen",
+          e is not None and e.soort == "bron" and e.wacht and time.monotonic() - _t0 < 10)
     nep_claude([dict(INIT, apiKeySource="apiKeyHelper"), "SLAAP", KLAAR])
     check("controle 17: ook een apiKeyHelper telt als API-sleutel", fout_van() is not None)
     _t0 = time.monotonic()
@@ -831,9 +833,35 @@ with tempfile.TemporaryDirectory() as _d:
     e = fout_van()
     check("controle 17: extra verbruik boven het abonnement stopt het proces meteen", e is not None and e.limiet
           and time.monotonic() - _t0 < 10)
+    _gestart.clear()
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = fout_van()
+    check("controle 18: na extra verbruik start de volgende vraag niet tot het venster voorbij is", e is not None
+          and e.limiet and not _gestart)
+    CA.draai = _echt_draai
+    os.remove(CA.LIMIET_BESTAND)
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning",
+                                                                      "resetsAt": time.time() + 3600}}, "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 18: een waarschuwing van het abonnement stopt ook", e is not None and e.limiet)
+    json.dump({"info": {"status": "allowed_warning", "resetsAt": time.time() - 10}}, open(CA.LIMIET_BESTAND, "w"))
+    check("een voorbij venster houdt niets meer tegen", CA.bekende_limiet() is None)
+    check("controle 18: boven 90 procent van een venster start geen nieuwe vraag", CA.limiet_reden(
+        {"status": "allowed", "unifiedWindows": {"seven_day": {"utilization": 0.93}}}) is not None
+          and CA.limiet_reden({"status": "allowed", "unifiedWindows": {"seven_day": {"utilization": 0.36}}}) is None)
+    os.remove(CA.LIMIET_BESTAND)
+    CA.controleer_bron = lambda env, cwd: "bron: Claude Code zou aanmelden met api_key (ANTHROPIC_API_KEY)"
+    _gestart.clear()
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = fout_van()
+    check("controle 18: zegt auth status iets anders dan het abonnement, dan start er niets", e is not None
+          and e.soort == "bron" and e.wacht and not _gestart)
+    CA.draai = _echt_draai
+    CA.controleer_bron = lambda env, cwd: None
     nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}}, "SLAAP", KLAAR])
     e = fout_van()
     check("een bereikte limiet laat de vraag wachten", e is not None and e.limiet)
+    os.remove(CA.LIMIET_BESTAND)          # de limiet zonder eindtijd geldt een uur; de volgende proeven beginnen vrij
     nep_claude([INIT, WS, WS, WS, "SLAAP", KLAAR])
     e = fout_van(max_gereedschap=2)
     check("controle 17: een harde grens op zoek- en leesbeurten", e is not None and "zoek- of leesbeurten" in str(e))
@@ -849,7 +877,39 @@ with tempfile.TemporaryDirectory() as _d:
     nep_claude([INIT, {"type": "result", "subtype": "error_max_turns", "is_error": True}], code=1)
     e = fout_van()
     check("te veel beurten is een fout, geen half antwoord", e is not None and not e.aanmelden and not e.limiet)
-CA.opdracht = _echt_opdracht
+CA.opdracht, CA.controleer_bron, CA.LIMIET_BESTAND = _echt_opdracht, _echt_bron, _echt_limiet
+
+
+def _status(uit, fout=None):
+    def run(cmd, **kw):
+        if fout:
+            raise fout
+        _statusrun.append((cmd, kw))
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(uit), "")
+    return run
+
+
+_statusrun = []
+check("auth status met het abonnementstoken: goed", CA.controleer_bron({"HOME": "/x"}, "/y", run=_status(
+    {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"})) is None
+      and _statusrun[0][0][1:] == ["auth", "status"] and _statusrun[0][1]["env"] == {"HOME": "/x"})
+check("auth status met een API-sleutel: niet starten", str(CA.controleer_bron({}, "/y", run=_status(
+    {"loggedIn": True, "authMethod": "api_key", "apiProvider": "firstParty", "apiKeySource": "ANTHROPIC_API_KEY"}))
+    ).startswith("bron"))
+check("auth status zonder login of onleesbaar: aanmelden", str(CA.controleer_bron({}, "/y", run=_status(
+    {"loggedIn": False}))).startswith("aanmelden") and str(CA.controleer_bron({}, "/y", run=_status(
+        {}, OSError("weg")))).startswith("aanmelden"))
+_zv = []
+try:
+    Z.zoek("w", "dak", "3000 Leuven", 25, "uitvoering", deadline=time.monotonic() + Z.LEESTIJD + 10,
+           vraag=lambda *a, **k: _zv.append(1))
+    check("controle 18: te weinig tijd in de ronde: de vraag wacht en Claude start niet", False)
+except CA.Fout as e:
+    check("controle 18: te weinig tijd in de ronde: de vraag wacht en Claude start niet", e.soort == "tijd" and not _zv)
+_t0 = time.monotonic()
+check("controle 18: een trage DNS-opzoeking houdt de code niet op", WP.openbaar_ip(
+    "traag.voorbeeld.com", 443, opzoeken=lambda *a, **k: time.sleep(3) or [], timeout=0.2) is None
+      and time.monotonic() - _t0 < 1)
 check("bewaking: een gewone start en een toegelaten limiet stoppen niets", CA.bewaking(json.dumps(INIT), {}) is None
       and CA.bewaking(json.dumps(LIMIET_OK), {}) is None and CA.bewaking("geen json", {}) is None)
 
@@ -1028,9 +1088,20 @@ _kd = Z.keur(_fd, _db, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, 
 check("controle 17: bij een dubbel blijft de best bewezen kandidaat", [f["naam"] for f in _kd["goed"]] == ["Dak Twee BV"]
       and not _kd["na_te_kijken"])
 _dbp = []
-E._dropbox_zoek("dak", "/x", rpc=lambda m, b: _dbp.append(m) or {"matches": [], "has_more": True, "cursor": "c"},
-                deadline=time.monotonic() - 1)
-check("controle 17: het zoeken in Dropbox stopt na de deadline", len(_dbp) == 1)
+_tr0 = E._dropbox_zoek("dak", "/x", rpc=lambda m, b: _dbp.append(m) or {"matches": [], "has_more": True, "cursor": "c"},
+                       deadline=time.monotonic() - 1)
+check("controle 18: na de deadline start geen verzoek naar Dropbox meer", _dbp == [] and _tr0.volledig is False)
+
+
+def _dbx_traag(m, b):
+    raise TimeoutError("timed out")
+
+
+check("controle 18: een verzoek dat niet voor de deadline antwoordt, maakt de lijst onvolledig",
+      E._dropbox_zoek("dak", "/x", rpc=_dbx_traag, deadline=time.monotonic() + 30).volledig is False)
+_woorden = []
+E.in_mappen(S.HA, "dakwerken epdm", zoek=lambda q, p: _woorden.append(q) or [], deadline=time.monotonic() - 1)
+check("controle 18: geen nieuw zoekwoord na de deadline", _woorden == [])
 
 print("\nEigen mappen: hele woorden, alleen offertemappen (gemeten 01-11-2026)")
 for _naam in ("Fastening Plates", "Platane 6Platane_6.rfa", "04 Percelen Informatie Platform", "Offerte koper dak Platteau.pdf",

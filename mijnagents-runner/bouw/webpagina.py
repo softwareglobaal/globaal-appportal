@@ -8,6 +8,7 @@ adres (Codex, controle 17: geen tweede opzoeking die naar binnen kan wijzen); ht
 naam. Een omleiding volgt de code zelf, met dezelfde keuring, hoogstens MAX_OMLEIDINGEN keer. Hoogstens MAX_BYTES per
 pagina, alleen HTML of tekst, en hoogstens TIMEOUT seconden in totaal per pagina.
 """
+import concurrent.futures
 import http.client
 import ipaddress
 import re
@@ -20,6 +21,8 @@ from urllib.parse import urljoin, urlsplit
 MAX_BYTES = 2_000_000
 TIMEOUT = 10
 MAX_OMLEIDINGEN = 4
+DNS_TIMEOUT = 3
+_DNS = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns")
 SOORTEN = ("text/html", "application/xhtml+xml", "text/plain")
 KOPPEN = {"User-Agent": "Mozilla/5.0 (compatible; mijnagents-bouw)",
           "Accept": "text/html,application/xhtml+xml,text/plain;q=0.8", "Accept-Language": "nl-BE,nl;q=0.9,fr;q=0.5",
@@ -42,13 +45,14 @@ def _doel(url):
     return d.scheme, d.hostname, poort or (443 if d.scheme == "https" else 80), pad
 
 
-def openbaar_ip(host, poort, opzoeken=socket.getaddrinfo):
-    """Het eerste IP-adres van de host als elk adres openbaar is, anders None."""
+def openbaar_ip(host, poort, opzoeken=socket.getaddrinfo, timeout=DNS_TIMEOUT):
+    """Het eerste IP-adres van de host als elk adres openbaar is, anders None; ook None als de opzoeking langer dan
+    timeout seconden duurt (Codex, controle 18)."""
     try:
-        adressen = [a[4][0] for a in opzoeken(host, poort, proto=socket.IPPROTO_TCP)]
+        adressen = [a[4][0] for a in _DNS.submit(opzoeken, host, poort, proto=socket.IPPROTO_TCP).result(timeout=timeout)]
         if adressen and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in adressen):
             return adressen[0]
-    except (OSError, ValueError):
+    except (OSError, ValueError, concurrent.futures.TimeoutError):
         pass
     return None
 
@@ -84,11 +88,14 @@ def _een_verzoek(url, rest, opzoeken, verbinding):
     if not d:
         raise OSError("geen http(s)-adres op poort 80 of 443")
     schema, host, poort, pad = d
-    ip = openbaar_ip(host, poort, opzoeken)
+    begin = time.monotonic()
+    ip = openbaar_ip(host, poort, opzoeken, timeout=min(DNS_TIMEOUT, max(0.1, rest)))
     if not ip:
         raise OSError("geen openbaar adres")
-    begin = time.monotonic()
-    c = verbinding(schema, host, poort, ip, max(1.0, rest))
+    over = rest - (time.monotonic() - begin)
+    if over <= 0:
+        raise OSError("te traag")
+    c = verbinding(schema, host, poort, ip, over)
     try:
         c.request("GET", pad, headers=KOPPEN)
         a = c.getresponse()

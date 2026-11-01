@@ -98,11 +98,11 @@ def _koppen(extra=None):
     return h
 
 
-def _rpc(pad, body):
+def _rpc(pad, body, timeout=60):
     req = urllib.request.Request(f"{API}/2/{pad}", json.dumps(body).encode(),
                                  _koppen({"Content-Type": "application/json"}))
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         if e.code == 409:

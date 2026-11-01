@@ -37,7 +37,7 @@ NAAM = "aannemerszoeker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
 RONDE_SECONDEN = 480            # binnen de 600 s die De Regisseur op een ronde wacht
-MIN_SECONDEN_PER_VRAAG = 150
+MIN_SECONDEN_PER_VRAAG = 240    # eigen mappen (60 s), Claude (minstens 60 s) en de pagina's en de KBO (90 s)
 SOORT = "aannemersverslag"      # niet 'verslag' of 'signaal': die stuurt De Bode vanzelf door
 
 
@@ -235,8 +235,12 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
             klaar += een_vraag(r, tekst, vandaag, deadline)
         except claude_abonnement.Fout as e:
             ag.log("aannemersvraag", "fout", f"vraag {Q.vingerafdruk(tekst, vandaag)}: {str(e)[:300]}")
-            if e.aanmelden or e.limiet:     # de vraag blijft klaarstaan tot Claude weer kan, zonder extra verbruik
-                r.nood(claude_abonnement.AANMELDEN_NOOD if e.aanmelden else claude_abonnement.LIMIET_NOOD, wie="mehdi")
+            if e.wacht:     # de vraag blijft klaarstaan tot Claude weer kan, zonder extra verbruik (Codex, controle 18)
+                nood = {"aanmelden": (claude_abonnement.AANMELDEN_NOOD, "mehdi"),
+                        "limiet": (claude_abonnement.LIMIET_NOOD, "mehdi"),
+                        "bron": (claude_abonnement.BRON_NOOD, "claude-code")}.get(e.soort)
+                if nood:
+                    r.nood(nood[0], wie=nood[1])
                 break
             r.nood("Aannemersvraag mislukt bij Claude op het abonnement", wie="claude-code")
         except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug

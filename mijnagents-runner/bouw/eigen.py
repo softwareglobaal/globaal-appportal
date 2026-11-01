@@ -60,23 +60,34 @@ class Onvolledig(list):
 
 
 def _dropbox_zoek(query, pad, rpc=None, deadline=None):
-    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12) en niet
-    na de deadline (time.monotonic, controle 17): dan zegt het verslag dat er meer zijn."""
+    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12). Met een
+    deadline (time.monotonic, controle 17 en 18) start geen verzoek meer na de deadline en wacht elk verzoek hoogstens tot
+    de deadline; dan zegt het verslag dat er meer zijn."""
     if rpc is None:
         import bronnen
-        rpc = bronnen._rpc
-    uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
+
+        def rpc(p, body):
+            rest = deadline - time.monotonic() if deadline else 60
+            if rest < 1:
+                raise TimeoutError("deadline")
+            return bronnen._rpc(p, body, timeout=min(60, rest))
     treffers = Onvolledig()
-    for _ in range(MAX_PAGINAS):
-        for m in (uit or {}).get("matches") or []:
-            meta = ((m.get("metadata") or {}).get("metadata")) or {}
-            if meta.get("path_display"):
-                treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
-        if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
-            return treffers
+    try:
         if deadline and time.monotonic() > deadline:
-            break
-        uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
+            raise TimeoutError("deadline")
+        uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
+        for _ in range(MAX_PAGINAS):
+            for m in (uit or {}).get("matches") or []:
+                meta = ((m.get("metadata") or {}).get("metadata")) or {}
+                if meta.get("path_display"):
+                    treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
+            if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
+                return treffers
+            if deadline and time.monotonic() > deadline:
+                break
+            uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
+    except TimeoutError:          # ook een verzoek dat niet voor de deadline antwoordt (socket-timeout)
+        pass
     treffers.volledig = False
     return treffers
 
@@ -89,6 +100,9 @@ def in_mappen(firma, werk, zoek=None, maximum=12, deadline=None):
     basis = BASIS[firma]
     gezien, uit = set(), Onvolledig()
     for woord in zoekwoorden(werk):
+        if deadline and time.monotonic() > deadline:      # Codex, controle 18: geen nieuw zoekwoord na de deadline
+            uit.volledig = False
+            break
         treffers = zoek(woord, basis) or []
         if getattr(treffers, "volledig", True) is False:
             uit.volledig = False
