@@ -229,8 +229,8 @@ def bundelen():
                               ("locatie", "Locatiedagboek (Locatiewacht 21:30; tracker aan?)", "mehdi")):
         if soort not in soorten:
             nood.append({"tekst": f"Voor {DAG} geen {tekst}", "wie": wie})
-    # WhatsApp en telefoon meldt de dagvaststelling zelf, op grond van de hartslag van hun wacht (Codex D2)
-    nood.append({"tekst": "Plaud-opnames komen pas als de Plaud-routine op claude.ai draait", "wie": "mehdi"})
+    # WhatsApp en telefoon meldt de dagvaststelling zelf, op grond van de hartslag van hun wacht (Codex D2). Plaud meldt
+    # De Plaudwacht zelf; tot 01-11-2026 stond hier een vaste melding zonder meting (DB-2, T-0120).
     return {"detail": f"{len(per_deal)} bundel(s), {len(vragen)} toe te wijzen", "nood": nood, "bronnen": len(van_dag)}
 
 

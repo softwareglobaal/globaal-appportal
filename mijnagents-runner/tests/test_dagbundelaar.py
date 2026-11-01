@@ -573,6 +573,19 @@ def test_nachtketen_in_het_beheerde_blok():
         assert "keten.py buiten het blok" in str(e), e
 
 
+def test_db2_geen_vaste_plaudmelding():
+    """DB-2 (T-0120): tot 01-11-2026 zette elke ochtendronde zonder meting de nood 'Plaud-opnames komen pas als de
+    Plaud-routine op claude.ai draait' (wie mehdi). Die zei niets over de echte stand; De Plaudwacht meldt die zelf. Een
+    Plaud-transcript wordt nog gewoon gebundeld."""
+    plaud = item(51, "plaud-wacht", "h-architects", "transcript", "2026-10-20 09:00 Plaud: werfoverleg", sleutel="2531",
+                 inhoud={"datum": DAG, "start": "09:00", "minuten": 20}, uniek="plaud:51")
+    for alle in ([WERK], [WERK, plaud]):
+        nb = bundelen(DAG, NepBord(alle))
+        noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+        assert not [t for t in noden if "Plaud" in t], noden
+    assert any(plaud["titel"] in b["inhoud"] for b in nb.bundels if b["uniek"] == f"bundel:{DAG}:2531"), nb.bundels
+
+
 def test_bron_houdt_de_bestaande_grendels():
     """test_postvak.py en test_locatielezers.py lezen de bron van De Dagbundelaar; hun grendels blijven staan."""
     bron = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
