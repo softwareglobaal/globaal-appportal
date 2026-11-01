@@ -104,6 +104,20 @@ def lees_gesprekken(conn, bron, dag):
     return items, gedekt
 
 
+def zoom_gedekt(conn, dag):
+    """T-0120 WACHT-2: De Zoomwacht schrijft geen dekkingsrij; haar dekking staat in de dagregel zoom:dag:<dag>. Helemaal
+    gelezen (True) alleen als die telling volledig is, de stand definitief en elke bron ok; anders nog niet (False). Een
+    dag die nog niet af is (vandaag of later), toont niets (None)."""
+    if dag >= datetime.now(BRUSSEL).date().isoformat():
+        return None
+    r = conn.execute("SELECT inhoud FROM klaarzet WHERE van='zoom-wacht' AND uniek=? AND status!='vervallen'",
+                     (f"zoom:dag:{dag}",)).fetchone()
+    inhoud = _json(r["inhoud"]) if r else None
+    bronnen = inhoud.get("bronnen") if isinstance(inhoud, dict) else None
+    return bool(isinstance(bronnen, dict) and bronnen and all(v == "ok" for v in bronnen.values())
+                and inhoud.get("telling") == "volledig" and inhoud.get("stand") == "definitief")
+
+
 def lees_mail(conn, wacht, dag):
     rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map FROM mailbericht WHERE wacht=? AND dag=? "
                          "ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
@@ -155,6 +169,8 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     try:
         if wacht in GESPREK_BRON:
             items, gedekt = lees_gesprekken(conn, GESPREK_BRON[wacht], dag)
+            if wacht == "zoom-wacht":
+                gedekt = zoom_gedekt(conn, dag)
         elif wacht in MAIL_WACHTEN:
             items = lees_mail(conn, wacht, dag)
         items += lees_klaarzet(conn, wacht, dag, van, tot)
