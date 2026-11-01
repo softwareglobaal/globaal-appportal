@@ -167,9 +167,10 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
             r.nood(f"Prijsvraag niet gedaan, niets via de API: het Claude-abonnement werkt niet op de VM ({str(e)[:160]})",
                    wie="claude-code")
             break
-        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug
+        except Exception as e:  # noqa: BLE001  de vraag blijft klaarstaan, met een nood (Codex controle 21, punt 3)
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
-            r.nood("Prijsvraag mislukt bij het zoeken", wie="claude-code")
+            r.nood("Prijsvraag mislukt bij het zoeken; de vraag blijft klaarstaan", wie="claude-code")
+            break
         gedaan += 1
         if v.get("id"):
             bord.opgepakt(v["id"], NAAM)

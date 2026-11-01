@@ -515,7 +515,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
     if reden == "centraal":
         raise GeenAbonnement("het account krijgt centrale instellingen van een organisatie; meteen gestopt")
-    if reden is None and st.bron != "none":
+    if st.bron != "none":
+        # Bij elk einde, ook na de deadline (Codex controle 21, punt 1).
         raise GeenAbonnement("geen startbericht van claude -p: de bron is niet bewezen (Codex controle 20)")
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):

@@ -572,8 +572,10 @@ check("na de eindregel wacht de runner niet op een stdout die open blijft (Codex
 begin = time.monotonic()
 uit, _, _, _, _ = nep_vraag({"regels": [], "slaap": 60, "lees_niet": True}, vraag="w" * 2_000_000,
                             deadline=time.monotonic() + 3)
-check("een kind dat de vraag niet leest, houdt de deadline niet tegen (Codex 15, punt 4)", isinstance(uit, dict)
-      and uit["reden"] == "tijd" and time.monotonic() - begin < 15, f"{uit!r:.120} {time.monotonic() - begin:.1f}s")
+check("een kind dat de vraag niet leest, houdt de deadline niet tegen (Codex 15, punt 4)",
+      time.monotonic() - begin < 15, f"{uit!r:.120} {time.monotonic() - begin:.1f}s")
+check("ook bij de deadline zonder startbericht is de bron niet bewezen (Codex 21, punt 1)",
+      isinstance(uit, O.GeenAbonnement) and "startbericht" in str(uit), str(uit)[:200])
 vol = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "disabled",
        "unifiedWindows": {"five_hour": {"utilization": 0.93, "status": "allowed"}}}}
 begin = time.monotonic()
@@ -908,6 +910,17 @@ r = NepRonde()
 PO.werk(r, None)
 check("zonder werkend abonnement blijven bordvragen klaarstaan, niets opgepakt (Codex 20, punt 3)",
       opgepakt == [] and "2 wachten" in r.detail, r.detail)
+
+
+def kapotte_vraag(*a, **k):
+    raise RuntimeError("iets anders liep mis")
+
+
+PO.O.onderzoek = kapotte_vraag
+r = NepRonde()
+PO.werk(r, None)
+check("ook bij een andere fout blijft de bordvraag klaarstaan, met een nood (Codex 21, punt 3)",
+      opgepakt == [] and "2 wachten" in r.detail and any("blijft klaarstaan" in n for n in noden), r.detail)
 PO.open_vragen = oud_open
 noden.clear()
 PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",

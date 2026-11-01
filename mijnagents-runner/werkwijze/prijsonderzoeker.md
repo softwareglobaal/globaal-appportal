@@ -98,4 +98,4 @@ WebSearch en lees pagina's alleen met mijn eigen leestool lees_pagina, die mij d
 nakijkt. Per vraag hoogstens zes zoekopdrachten en zes gelezen pagina's (vijf aanbodpagina's en een specificatiebron)
 van elk hoogstens 10.000 tokens, hoogstens dertig beurten en acht minuten per ronde. Het werkverslag bewaart de tokens
 van het abonnement; de limiet van het abonnement deel ik met Mehdi, dus een bereikte limiet meld ik als nood. Een
-vraag die mislukt, komt niet vanzelf terug: ik meld ze als nood.
+vraag die mislukt, blijft klaarstaan en ik meld een nood; zonder werkend abonnement doe ik geen modelvraag.

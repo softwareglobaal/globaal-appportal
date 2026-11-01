@@ -123,3 +123,14 @@ Tests: 242 prijstests groen.
    opgepakt gemarkeerd.
 
 Tests: 246 prijstests groen.
+
+## Verwerking Codex-controle 21 (niet klaar)
+
+1. De broncontrole geldt nu bij elk einde, ook na de deadline: zonder startbericht altijd `GeenAbonnement`.
+2. Punt 2 was opgelost.
+3. Ook bij een andere fout breekt de runner af: de bordvraag blijft klaarstaan, met een nood (werkwijze aangepast).
+- "Live: nee" omdat een vraag met persoonsgegevens zonder token een verslag krijgt: dat is bedoeld. Die vraag gaat nooit
+  naar het model (privacygrendel van overleg X4/K6) en kost niets; mijn voorwaarde "doet niets" was te ruim geformuleerd.
+  Juist is: zonder token en merkteken gaat er geen enkele vraag naar het model.
+
+Tests: 248 prijstests groen.
