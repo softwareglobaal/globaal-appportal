@@ -340,12 +340,12 @@ def whatsapp_rijen(pad, dagenlijst):
             begin_van[ident] = moment
         sleutel = f"{ident}-{int(apple(begin_van[ident]))}"
         x = samen.setdefault(sleutel, {"ident": ident, "begin": moment, "duur": 0.0, "inkomend": inkomend,
-                                       "gemist": bool(gemist), "video": bool(video), "beller": beller, "groep": groep,
+                                       "niet_gemist": False, "video": bool(video), "beller": beller, "groep": groep,
                                        "jids": []})
         x["begin"] = min(x["begin"], moment)
         x["duur"] += float(duur or 0)
         x["video"] |= bool(video)
-        x["gemist"] &= bool(gemist)
+        x["niet_gemist"] |= gemist is not None and not gemist     # WA-3: alleen een uitdrukkelijke ZMISSED 0
         x["jids"] += [j for j in deelnemers.get(pk, []) if j not in x["jids"]]
     for sleutel, x in sorted(samen.items(), key=lambda kv: (kv[1]["begin"], kv[0])):
         if not van <= apple(x["begin"]) < tot:
@@ -365,7 +365,7 @@ def whatsapp_rijen(pad, dagenlijst):
         thema = "WhatsApp-oproep, " + richting + (", video" if x["video"] else "")
         # WA-3: een inkomende oproep zonder duur die WhatsApp niet gemist noemt (ZMISSED 0, waarschijnlijk op de gsm
         # opgenomen), is een oproep met onbekende duur: hij telt als oproep. Alleen ZMISSED 1 is gemist.
-        gesprek = x["duur"] > 0 or (x["inkomend"] == 1 and not x["gemist"])
+        gesprek = x["duur"] > 0 or (x["inkomend"] == 1 and x["niet_gemist"])
         if x["duur"] <= 0:
             thema += (", niet gemist, duur onbekend" if gesprek else ", gemist" if x["inkomend"] == 1
                       else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek")
