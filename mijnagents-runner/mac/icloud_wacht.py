@@ -20,8 +20,9 @@ import sqlite3
 import sys
 import tempfile
 import uuid
+import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from zoneinfo import ZoneInfo
 
@@ -36,6 +37,10 @@ APPLE_EPOCH = 978307200
 EXPORT = os.path.expanduser(os.environ.get("FOTO_EXPORT", "~/TKN-buro Dropbox/H-Architects bvba/Apps/Mehdi Agents/Fotos"))
 LIB = os.path.expanduser("~/Pictures/Photos Library.photoslibrary/originals")
 METADATA_VERSIE = 2  # T-0120 FOTO-8: vanaf versie 2 staan plaats en tijd alleen van werkfoto's in metadata.json
+# T-0120 FOTO-4 (meting 01-11, deel 3): de vlaggen uit Photos.sqlite. Een gezicht van 10% of meer van het beeld is "vooral
+# mensen"; ZIMPORTEDBY 3 en 8 zijn foto's die uit een app bewaard werden (vooral WhatsApp).
+MENSEN_GEZICHT = 0.10
+APP_IMPORT = (3, 8)
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
 VOOR_MIN, NA_MIN = 30, 90  # venster rond de afspraak waarin foto's bij het bezoek horen
@@ -50,7 +55,13 @@ DAG = None
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
         DAG = sys.argv[i + 1]
+DAG_GEGEVEN = DAG is not None
 DAG = DAG or datetime.now().date().isoformat()
+# T-0120 FOTO-2: inhalen vanaf 01-10 (Mehdi, 01-11: "vanaf 01/10"), hoogstens 35 dagen terug.
+INHAAL_VANAF = "2026-10-01"
+INHAAL_DAGEN = 35
+BRON_REGEL = re.compile(r"^(\d+) foto's/video's op (\d{4}-\d{2}-\d{2}), (\d+) plekken, (\d+) zonder GPS")
+METADATA_PER_ITEM = 250
 
 
 def token():
@@ -70,6 +81,12 @@ def bord(pad, payload):
         return json.loads(r.read().decode() or "{}")
 
 
+def bord_lees(pad):
+    req = urllib.request.Request(f"{BORD}{pad}", headers={"X-Agents-Token": TOKEN})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
 def hartslag(status, taak="", detail=""):
     try:
         versie = Path(__file__).with_name("VERSIE").read_text(encoding="utf-8").strip() or "onbekend"
@@ -82,32 +99,59 @@ def hartslag(status, taak="", detail=""):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
+def _kolommen(con, tabel):
+    try:
+        return {r[1] for r in con.execute(f"PRAGMA table_info({tabel})")}
+    except sqlite3.Error:
+        return set()
+
+
 def fotos_van(dag):
+    """De foto's en video's van een Brusselse dag uit Photos.sqlite, alleen lezend (mode=ro). T-0120 FOTO-4: ook de vlaggen
+    die Photos zelf zet, nooit het beeld: scherm (schermafbeelding), app (bewaard uit een app, ZIMPORTEDBY 3 of 8) en
+    mensen (een gezicht van minstens MENSEN_GEZICHT van het beeld, of Photos' vlag 'mensen in beeld'). mensen is None
+    zolang Photos de gezichten niet analyseerde: onbekend, nooit 'geen mensen'. Een kolom die deze versie van Photos niet
+    heeft, geeft None (oudere schema's blijven werken)."""
     d0 = datetime.fromisoformat(dag).replace(tzinfo=ZoneInfo("Europe/Brussels"))
     van = d0.timestamp() - APPLE_EPOCH
     tot = (d0 + timedelta(days=1)).timestamp() - APPLE_EPOCH
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    basis = ("SELECT a.ZUUID, a.ZFILENAME, a.ZDATECREATED, a.ZLATITUDE, a.ZLONGITUDE, a.ZKIND "
-             "FROM ZASSET a WHERE a.ZDATECREATED >= ? AND a.ZDATECREATED < ? "
-             "AND a.ZTRASHEDSTATE = 0 ORDER BY a.ZDATECREATED")
     try:
-        try:
-            rijen = con.execute(
-                "SELECT a.ZUUID, a.ZFILENAME, a.ZDATECREATED, a.ZLATITUDE, a.ZLONGITUDE, a.ZKIND, "
-                "aa.ZORIGINALFILENAME FROM ZASSET a LEFT JOIN ZADDITIONALASSETATTRIBUTES aa ON aa.ZASSET = a.Z_PK "
-                "WHERE a.ZDATECREATED >= ? AND a.ZDATECREATED < ? AND a.ZTRASHEDSTATE = 0 "
-                "ORDER BY a.ZDATECREATED", (van, tot)).fetchall()
-        except sqlite3.OperationalError:
-            rijen = [(*rij, None) for rij in con.execute(basis, (van, tot)).fetchall()]
+        za, aa, df = (_kolommen(con, t) for t in ("ZASSET", "ZADDITIONALASSETATTRIBUTES", "ZDETECTEDFACE"))
+        join = "ZASSET" in aa and "Z_PK" in za
+
+        def kol(bron, naam, alias):
+            return f"{alias}.{naam}" if naam in bron and (alias == "a" or join) else "NULL"
+        gezicht = "NULL"
+        if {"ZASSETFORFACE", "ZSIZE"} <= df and "Z_PK" in za:
+            gezicht = ("(SELECT MAX(f.ZSIZE) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK"
+                       + (" AND COALESCE(f.ZHIDDEN, 0) = 0)" if "ZHIDDEN" in df else ")"))
+        velden = ["a.ZUUID", "a.ZFILENAME", "a.ZDATECREATED", "a.ZLATITUDE", "a.ZLONGITUDE", "a.ZKIND",
+                  kol(aa, "ZORIGINALFILENAME", "aa"), kol(za, "ZISDETECTEDSCREENSHOT", "a"), kol(aa, "ZIMPORTEDBY", "aa"),
+                  kol(aa, "ZFACEANALYSISVERSION", "aa"), kol(aa, "ZHASPEOPLESCENEMIDORGREATERCONFIDENCE", "aa"), gezicht]
+        rijen = con.execute(
+            f"SELECT {', '.join(velden)} FROM ZASSET a"
+            + (" LEFT JOIN ZADDITIONALASSETATTRIBUTES aa ON aa.ZASSET = a.Z_PK" if join else "")
+            + " WHERE a.ZDATECREATED >= ? AND a.ZDATECREATED < ? AND a.ZTRASHEDSTATE = 0 ORDER BY a.ZDATECREATED",
+            (van, tot)).fetchall()
     finally:
         con.close()
     uit = []
-    for uuid, naam, t, lat, lon, kind, origineel in rijen:
+    for uuid, naam, t, lat, lon, kind, origineel, scherm, door, analyse, mensvlag, gezicht in rijen:
         gps = lat is not None and lon is not None and lat > -180 and lon > -180
+        schermnaam = re.match(r"(?i)^(?:screenshot|screen shot|schermafbeelding)(?:[\s_.-]|$)", os.path.basename(str(origineel or "")))
+        if (gezicht is not None and gezicht >= MENSEN_GEZICHT) or mensvlag == 1:
+            mensen = True
+        elif analyse:
+            mensen = False
+        else:
+            mensen = None
         uit.append({"uuid": uuid, "bestand": naam, "origineel": origineel,
                     "tijd": datetime.fromtimestamp(t + APPLE_EPOCH).strftime("%H:%M"),
                     "vastgelegd_utc": datetime.fromtimestamp(t + APPLE_EPOCH, timezone.utc).isoformat(),
-                    "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1})
+                    "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1,
+                    "scherm": True if scherm == 1 or schermnaam else (None if scherm is None else False),
+                    "app": None if door is None else door in APP_IMPORT, "mensen": mensen})
     return uit
 
 
@@ -855,29 +899,97 @@ def _werk():
         hartslag("fout", taak="fotobibliotheek niet gevonden", detail=DB)
         sys.exit(1)
     hartslag("actief", taak=f"foto's van {DAG} lezen")
-    fotos = fotos_van(DAG)
+    dagen, melding = dagen_te_lezen(date.fromisoformat(DAG))
+    if melding:
+        bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": "inhalen", "stap": "melding", "tekst": melding}]})
+    gelezen = [lees_dag(dag, volledig) for dag, volledig in dagen]
+    n = sum(x["fotos"] for x in gelezen)
+    ingehaald = [x["dag"] for x in gelezen if not x["volledig"]]
+    hartslag("klaar", taak=f"foto's van {DAG} klaargezet" + (f", {len(ingehaald)} dagen ingehaald" if ingehaald else ""),
+             detail=f"{n} foto's op {len(gelezen)} dagen ({', '.join(x['dag'] for x in gelezen)}); "
+                    + "; ".join(f"{x['dag']}: {x['fotos']} foto's, {x['plekken']} plekken, {x['zonder_gps']} zonder GPS" for x in gelezen[-2:]))
+    for x in gelezen:
+        print(f"{x['dag']}: {x['fotos']} foto's, {x['plekken']} groepen, {x['werk']} werkfoto's" + ("" if x["volledig"] else " (ingehaald, alleen metadata)"))
+
+
+def dagen_te_lezen(vandaag):
+    """T-0120 FOTO-2: welke dagen de avondronde leest, als (dag, volledig). Altijd gisteren en vandaag volledig: wat na 21:15
+    genomen werd of laat in de bibliotheek kwam, komt zo de volgende avond binnen (oktober: 53 foto's). Daarvoor elke dag
+    sinds INHAAL_VANAF, hoogstens INHAAL_DAGEN terug, zonder bronregel in het werkverslag: alleen metadata, geen export van
+    originelen en niets in Dropbox. Met --dag alleen die dag. Een onleesbaar werkverslag slaat het inhalen over (melding)."""
+    if DAG_GEGEVEN:
+        return [(DAG, True)], ""
+    gisteren = vandaag - timedelta(days=1)
+    eerste = max(date.fromisoformat(INHAAL_VANAF), vandaag - timedelta(days=INHAAL_DAGEN))
+    inhaal, melding = [], ""
+    if eerste < gisteren:
+        try:
+            gelezen = gelezen_dagen(eerste, gisteren - timedelta(days=1))
+        except Exception as e:  # noqa: BLE001
+            gelezen, melding = None, f"inhalen overgeslagen: werkverslag niet gelezen ({type(e).__name__})"
+        dag = eerste
+        while gelezen is not None and dag < gisteren:
+            if dag.isoformat() not in gelezen:
+                inhaal.append(dag.isoformat())
+            dag += timedelta(days=1)
+    return [(d, False) for d in inhaal] + [(gisteren.isoformat(), True), (vandaag.isoformat(), True)], melding
+
+
+def gelezen_dagen(eerste, laatste):
+    """De dagen in [eerste, laatste] met een bronregel van deze wacht, zoals De Dagbundelaar ze leest (dagbundelaar.lees_fotos):
+    'N foto's/video's op <dag>, M plekken, K zonder GPS'. Eén vraag per maand; een fout gaat naar de beller."""
+    maanden = sorted({(eerste + timedelta(days=i)).strftime("%Y-%m") for i in range((laatste - eerste).days + 1)})
+    uit = set()
+    for maand in maanden:
+        d = bord_lees(f"/api/logboek/{NAAM}?" + urllib.parse.urlencode({"onderwerp": f"dag {maand}", "n": 300}))
+        for r in d.get("regels") or []:
+            m = BRON_REGEL.match(str(r.get("tekst") or ""))
+            if r.get("stap") == "bron" and m:
+                uit.add(m.group(2))
+    return uit
+
+
+def lees_dag(dag, volledig):
+    """Een dag lezen en melden. Volledig (gisteren en vandaag): werkafspraken, export van de werkfoto's en metadata.json
+    (FOTO-8). Ingehaald: alleen metadata. Altijd de bronregel en de foto-metadata voor de indeling op de VM (FOTO-4)."""
+    fotos = fotos_van(dag)
     groepen = groepeer(fotos)
     zonder_gps = sum(1 for f in fotos if f["lat"] is None)
-    afspraken = werkafspraken(DAG)
-    n_werk = koppel_werk(fotos, afspraken)
-    gek, via, nog = exporteer(fotos, DAG, groepen) if fotos else (0, 0, 0)
-    items = []
-    for i, g in enumerate(groepen, 1):
-        items.append({"van": NAAM, "voor": "mehdi", "soort": "foto", "sleutel": DAG,
-                      "titel": f"{DAG} {g['van']}-{g['tot']}: {len(g['fotos'])} foto's" + (f" bij {g['lat']},{g['lon']}" if g["lat"] is not None else " zonder plaats"),
-                      "uniek": f"fotos:{DAG}:{i}:{g['fotos'][0]['uuid'][:8]}",
-                      "inhoud": {"datum": DAG, "van": g["van"], "tot": g["tot"], "lat": g["lat"], "lon": g["lon"], "aantal": len(g["fotos"]),
-                                 "fotos": g["fotos"][:200], "export_map": os.path.join(EXPORT, DAG),
-                                 "naar_projectmap": "pas na validatie op het bord (runbook); het origineel blijft in de export-map"}})
-    uit = bord("/api/klaarzet", {"items": items}) if items else {"nieuw": 0, "bestaand": 0}
-    bord("/api/logboek", {"regels": [
-        {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "bron", "tekst": f"{len(fotos)} foto's/video's op {DAG}, {len(groepen)} plekken, {zonder_gps} zonder GPS",
-         "detail": "\n".join(f"{g['van']}-{g['tot']} {len(g['fotos'])} foto's {g['lat']},{g['lon']}" for g in groepen)},
-        {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf", "tekst": f"{len(afspraken)} werkafspraken met adres; {n_werk} foto's horen erbij (binnen {STRAAL_M} m en venster) en zijn geexporteerd naar {os.path.join(EXPORT, DAG)}: {gek} lokaal, {via} via Photos, {nog} nog niet; {len(fotos) - n_werk} foto's blijven in Photos (metadata alleen)",
-         "detail": "\n".join(f"{a['start']}-{a['einde']} {a['titel'][:50]} @ {a['adres'][:40]} -> {'coord' if a.get('coord') else 'adres niet gevonden'}" for a in afspraken)},
-        {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf", "tekst": f"klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend"}]})
-    hartslag("klaar", taak=f"foto's van {DAG} klaargezet", detail=f"{len(fotos)} foto's in {len(groepen)} plekken, {zonder_gps} zonder GPS; export {len(fotos) - nog} van {len(fotos)}")
-    print(f"{DAG}: {len(fotos)} foto's, {len(groepen)} groepen, {len(afspraken)} werkafspraken, {n_werk} werkfoto's; export {gek} lokaal + {via} via Photos, {nog} ontbrekend; klaargezet {uit.get('nieuw', 0)} nieuw")
+    # Geen coördinaten in het werkverslag: dat gaat via de export van het bord naar Data uit Mehdi (FOTO-8).
+    regels = [{"naam": NAAM, "onderwerp": f"dag {dag}", "stap": "bron",
+               "tekst": f"{len(fotos)} foto's/video's op {dag}, {len(groepen)} plekken, {zonder_gps} zonder GPS",
+               "detail": "\n".join(f"{g['van']}-{g['tot']} {len(g['fotos'])} foto's" + ("" if g["lat"] is not None else " zonder plaats")
+                                   for g in groepen)}]
+    n_werk = 0
+    if volledig:
+        afspraken = werkafspraken(dag)
+        n_werk = koppel_werk(fotos, afspraken)
+        gek, via, nog = exporteer(fotos, dag, groepen) if fotos else (0, 0, 0)
+        regels.append({"naam": NAAM, "onderwerp": f"dag {dag}", "stap": "schrijf", "tekst": f"{len(afspraken)} werkafspraken met adres; {n_werk} foto's horen erbij (binnen {STRAAL_M} m en venster) en zijn geexporteerd naar {os.path.join(EXPORT, dag)}: {gek} lokaal, {via} via Photos, {nog} nog niet; {len(fotos) - n_werk} foto's blijven in Photos (metadata alleen)",
+                       "detail": "\n".join(f"{a['start']}-{a['einde']} {a['titel'][:50]} @ {a['adres'][:40]} -> {'coord' if a.get('coord') else 'adres niet gevonden'}" for a in afspraken)})
+    else:
+        regels.append({"naam": NAAM, "onderwerp": f"dag {dag}", "stap": "schrijf",
+                       "tekst": "ingehaald (T-0120 FOTO-2): alleen metadata voor de indeling; geen export van originelen, niets in Dropbox"})
+    uit = bord("/api/klaarzet", {"items": metadata_items(dag, fotos)})
+    regels.append({"naam": NAAM, "onderwerp": f"dag {dag}", "stap": "schrijf",
+                   "tekst": f"foto-metadata klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt, {uit.get('bestaand', 0)} al bekend"})
+    bord("/api/logboek", {"regels": regels})
+    return {"dag": dag, "volledig": volledig, "fotos": len(fotos), "plekken": len(groepen), "zonder_gps": zonder_gps, "werk": n_werk}
+
+
+def metadata_items(dag, fotos):
+    """T-0120 FOTO-4: per foto alleen tijd, GPS, soort en de vlaggen van Photos, voor de indeling op de VM
+    (koppelingen/fotoindeling.py). Geen bestandsnaam en geen beeld. De sleutel draagt geen volgnummer van een groep
+    (FOTO-2): een tweede lezing van dezelfde dag werkt hetzelfde item bij. Hoogstens METADATA_PER_ITEM foto's per item
+    (het bord bewaart 60.000 tekens); 'prive' houdt de inhoud uit de export naar Dropbox (bord_export.is_prive)."""
+    rijen = [{"id": f["uuid"], "utc": f["vastgelegd_utc"], "lat": f["lat"], "lon": f["lon"], "video": bool(f.get("video")),
+              "scherm": f.get("scherm"), "app": f.get("app"), "mensen": f.get("mensen")} for f in fotos]
+    delen = [rijen[i:i + METADATA_PER_ITEM] for i in range(0, len(rijen), METADATA_PER_ITEM)] or [[]]
+    return [{"van": NAAM, "voor": "fotoindeling", "soort": "fotometadata", "sleutel": dag, "uniek": f"fotodag:{dag}:{i}",
+             "titel": f"{dag} foto-metadata: {len(fotos)} foto's/video's voor de indeling (tijd, plaats en vlaggen, geen beeld)"
+                      + (f", deel {i} van {len(delen)}" if len(delen) > 1 else ""),
+             "inhoud": {"prive": True, "datum": dag, "versie": 1, "aantal": len(fotos), "deel": i, "delen": len(delen),
+                        "fotos": deel}} for i, deel in enumerate(delen, 1)]
 
 
 def main():

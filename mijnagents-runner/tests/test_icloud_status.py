@@ -47,6 +47,8 @@ class ICloudStatus(unittest.TestCase):
         self.module.exporteer_jpg_naar = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.exporteer = lambda *a: self.fail("geweigerde bron mag niet worden geëxporteerd")
         self.module.bord = lambda *a: self.fail("deze fout mag geen inhoud publiceren")
+        # Geen netwerk in de proef: het werkverslag op het bord is leeg (dan haalt de avondronde vanaf 01-10 in, FOTO-2).
+        self.module.bord_lees = lambda pad: {"regels": []}
 
     def test_fototaak_met_authorization_denied_blijft_open_en_gaat_op_fout(self):
         m = self.module
@@ -420,6 +422,94 @@ class ICloudStatus(unittest.TestCase):
         con.commit()
         con.close()
         self.assertIsNone(m.fotos_van("2026-10-14")[0]["origineel"])
+
+    def test_foto4_vlaggen_scherm_app_en_mensen_uit_photos_sqlite(self):
+        # T-0120 FOTO-4: de vlaggen die Photos zelf zet (gemeten met PRAGMA op 01-11), nooit het beeld. Een gezicht van 10%
+        # of meer, of de vlag 'mensen in beeld', is mensen; niet geanalyseerd is onbekend (None), nooit 'geen mensen'.
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, "
+                    "ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER, ZISDETECTEDSCREENSHOT INTEGER)")
+        con.execute("CREATE TABLE ZADDITIONALASSETATTRIBUTES (ZASSET INTEGER, ZORIGINALFILENAME TEXT, ZIMPORTEDBY INTEGER, "
+                    "ZFACEANALYSISVERSION INTEGER, ZHASPEOPLESCENEMIDORGREATERCONFIDENCE INTEGER)")
+        con.execute("CREATE TABLE ZDETECTEDFACE (ZASSETFORFACE INTEGER, ZSIZE REAL, ZHIDDEN INTEGER)")
+        rijen = [  # pk, uuid, scherm, importedby, analyse, mensvlag, gezichten (grootte, verborgen)
+            (1, "werf", 0, 1, 12, 0, [(0.04, 0)]), (2, "portret", 0, 1, 12, 0, [(0.31, 0)]), (3, "groep", 0, 2, 12, 1, []),
+            (4, "scherm", 1, 1, 12, 0, []), (5, "app", 0, 8, 12, 0, []), (6, "nieuw", 0, 1, 0, 0, []),
+            (7, "verborgen", 0, 1, 12, 0, [(0.5, 1)])]
+        for pk, uid, scherm, door, analyse, vlag, gezichten in rijen:
+            con.execute("INSERT INTO ZASSET VALUES (?, ?, 'X.HEIC', ?, 50, 4, 0, 0, ?)", (pk, uid, t + pk, scherm))
+            con.execute("INSERT INTO ZADDITIONALASSETATTRIBUTES VALUES (?, 'IMG.HEIC', ?, ?, ?)", (pk, door, analyse, vlag))
+            for grootte, verborgen in gezichten:
+                con.execute("INSERT INTO ZDETECTEDFACE VALUES (?, ?, ?)", (pk, grootte, verborgen))
+        con.commit()
+        con.close()
+        uit = {f["uuid"]: (f["scherm"], f["app"], f["mensen"]) for f in m.fotos_van("2026-10-14")}
+        self.assertEqual(uit, {"werf": (False, False, False), "portret": (False, False, True), "groep": (False, False, True),
+                               "scherm": (True, False, False), "app": (False, True, False), "nieuw": (False, False, None),
+                               "verborgen": (False, False, False)})
+
+    def nep_avond(self, vandaag, fotos_per_dag, gelezen=()):
+        """Een avondronde tegen een nep-bord: klaarzet op uniek zoals mijnagents/app.py, het werkverslag met GET op onderwerp."""
+        m = self.module
+        m.DAG, m.DAG_GEGEVEN = vandaag, False
+        self.bak = getattr(self, "bak", {})
+        self.verslag = getattr(self, "verslag", [{"naam": "icloud-wacht", "onderwerp": f"dag {d}", "stap": "bron",
+                                                  "tekst": f"1 foto's/video's op {d}, 1 plekken, 0 zonder GPS"} for d in gelezen])
+        self.uitvoer = []
+
+        def bord(pad, data):
+            if pad == "/api/klaarzet":
+                uit = {"nieuw": 0, "bestaand": 0, "bijgewerkt": 0}
+                for it in data["items"]:
+                    oud = self.bak.get(it["uniek"])
+                    uit["nieuw" if oud is None else "bestaand" if oud == it else "bijgewerkt"] += 1
+                    self.bak[it["uniek"]] = it
+                return uit
+            self.verslag.extend(data.get("regels", []))
+            return {"ok": True}
+
+        def bord_lees(pad):
+            q = parse_qs(urlsplit(pad).query)
+            return {"regels": [r for r in self.verslag if q["onderwerp"][0] in r["onderwerp"]][-int(q["n"][0]):]}
+        m.bord, m.bord_lees = bord, bord_lees
+        m.fotos_van = lambda dag: [dict(f) for f in fotos_per_dag.get(dag, [])]
+        m.werkafspraken = lambda dag: []
+        m.exporteer = lambda fotos, dag, groepen: self.uitvoer.append(dag) or (0, 0, 0)
+        with patch.object(m.os.path, "exists", return_value=True):
+            return m.main()
+
+    def test_foto2_gemiste_dagen_en_gisteren_worden_ingehaald_zonder_dubbel(self):
+        # T-0120 FOTO-2: in oktober las de wacht 4 van de 31 dagen, en een dag alleen om 21:15 van die dag. Nu leest de
+        # avondronde gisteren opnieuw en haalt ze elke dag zonder bronregel in, alleen als metadata (geen export).
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        f = lambda uid, lat=50.0: {"uuid": uid, "tijd": "10:00", "vastgelegd_utc": "2026-10-01T08:00:00+00:00", "lat": lat, "lon": 4.0,
+                                   "video": False, "scherm": False, "app": False, "mensen": False}
+        bib = {"2026-10-01": [f("a1"), f("a2")], "2026-10-02": [f("b1"), f("b2-laat")], "2026-10-03": [f("c1")]}
+        self.assertEqual(self.nep_avond("2026-10-03", bib, gelezen=["2026-10-02"]), 0)
+        bron = [r["onderwerp"] for r in self.verslag if r["stap"] == "bron"]
+        self.assertEqual(bron, ["dag 2026-10-02", "dag 2026-10-01", "dag 2026-10-02", "dag 2026-10-03"])
+        self.assertEqual(self.uitvoer, ["2026-10-02", "2026-10-03"])  # de ingehaalde dag: geen export
+        self.assertIn("2 foto's/video's op 2026-10-02", [r["tekst"] for r in self.verslag if r["stap"] == "bron"][2])
+        self.assertEqual(sorted(self.bak), ["fotodag:2026-10-01:1", "fotodag:2026-10-02:1", "fotodag:2026-10-03:1"])
+        self.assertTrue(all(it["inhoud"]["prive"] and it["voor"] == "fotoindeling" for it in self.bak.values()))
+        self.assertNotIn("bestand", json.dumps(self.bak))
+        # tweede ronde dezelfde avond: geen dubbel item, en de ingehaalde dag niet opnieuw
+        self.nep_avond("2026-10-03", bib)
+        self.assertEqual(len(self.bak), 3)
+        self.assertEqual([r["onderwerp"] for r in self.verslag if r["stap"] == "bron"][4:], ["dag 2026-10-02", "dag 2026-10-03"])
+        self.assertFalse([r for r in self.verslag if "50.0" in str(r.get("detail", "")) + r["tekst"]])
+
+    def test_foto2_onleesbaar_werkverslag_slaat_alleen_het_inhalen_over(self):
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        m.bord_lees = lambda pad: (_ for _ in ()).throw(urllib.error.URLError("fictief"))
+        dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
+        self.assertEqual(dagen, [("2026-10-04", True), ("2026-10-05", True)])
+        self.assertIn("inhalen overgeslagen", melding)
 
     def test_tkn_tijd_aliasen_en_alleen_fotos_naar_bestaande_fotomap(self):
         data = self.inhoud_tkn()
