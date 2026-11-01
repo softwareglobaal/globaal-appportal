@@ -767,6 +767,43 @@ def test_archiefmap_zoekt_op_het_id_zelf_en_niet_op_een_stukje_tekst():
     assert AR.geval_van(g, [], {})["map"] == juist and AR.geval_van(g, [], {}, "")["map"] == ""
 
 
+
+# ------------------------------------------------------------------------------- Codex T-0120 toets 3 ---
+def test_de_dagteller_telt_proefvragen_niet_dubbel():
+    """Twee proefvragen, een nachtvraag, daarna een nieuwe proef: die mag nog twee vragen doen (2 + 1 + 2 = 5)."""
+    vraag = NepVraag()
+    pad, u, *_ = _proef(True, vraag, naam="proefdata-dubbel")
+    uitvoer = os.path.join(THUIS, "proefdata-dubbel", "gespreksanalist")
+    assert u["modelvragen"] == 2
+    with vervangen((GA, "MODEL_AAN", True), (GA, "UITVOER", uitvoer)):
+        nacht = GA.Budget("2026-11-02", limiet=LIMIET)
+        _meet(0.40)
+        assert GA.verwerk(_plaud()[0], nacht, vraag)[1] == "model"
+        assert json.load(open(os.path.join(uitvoer, "teller.json")))["vragen"] == 1, "alleen de nachtvraag in de teller"
+        assert GA.Budget("2026-11-02", limiet=LIMIET).vandaag == 3
+    with vervangen((GA, "UITVOER", uitvoer)):
+        pad, u, *_ = _proef(True, NepVraag(), naam="proefdata-dubbel")
+    assert u["modelvragen"] == 2, u["modelvragen"]
+
+
+def test_de_labelronde_volgt_geen_oud_pad_naar_een_ander_gesprek():
+    ander = os.path.join(DATA, "fathom-data", "2026-10-22 0800 ander gesprek labelronde")
+    _schrijf(os.path.join(ander, "gesprek.json"), {"recording_id": "rec98001"})
+    _schrijf(os.path.join(ander, "transcript.md"), "# kop\n\n[00:00:01] Proefpersoon Zeta: een ander gesprek")
+    juist = os.path.join(DATA, "fathom-data", "2026-10-22 0900 hernoemd labelronde")
+    _schrijf(os.path.join(juist, "gesprek.json"), {"recording_id": "rec9800"})
+    _schrijf(os.path.join(juist, "transcript.md"), "# kop\n\n[00:00:01] Proefpersoon Zeta: het juiste gesprek")
+    gelezen = []
+
+    def model(g, tekst, *a):
+        gelezen.append(tekst)
+        return {"label": "HA sales", "zekerheid": "middel", "reden": "proef"}, 5
+    ag, r = _labelronde([{"datum": "2026-10-22", "start": "09:00", "uniek": "fathom:rec9800", "archief": ander}], model)
+    assert gelezen and "het juiste gesprek" in gelezen[0], gelezen
+    assert json.load(open(os.path.join(juist, "gesprek.json"), encoding="utf-8"))["archivaris"]["label"] == "HA sales"
+    assert "archivaris" not in json.load(open(os.path.join(ander, "gesprek.json"), encoding="utf-8")), "het andere gesprek bleef ongemoeid"
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in list(globals().items()):

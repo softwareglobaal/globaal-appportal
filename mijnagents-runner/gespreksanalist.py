@@ -404,7 +404,14 @@ class Budget:
         self.bestand = os.path.join(UITVOER, "teller.json")
         self.proefmap = proefmap or os.path.join(UITVOER, "proef")
         self.teller = self.bestand if teller == "" else teller
-        self.vandaag, self.sinds, self.stop, self.fout = self._stand() + proefvragen(self.dag, self.proefmap), None, None, None
+        # drie tellers: de nachtronde (teller.json), de proeven (hun bestanden) en deze ronde; in teller.json komt alleen
+        # nacht plus eigen, anders telde een volgende ronde de proefvragen dubbel (Codex T-0120 toets 3)
+        self.nacht, self.proeven, self.eigen = self._stand(), proefvragen(self.dag, self.proefmap), 0
+        self.sinds, self.stop, self.fout = None, None, None
+
+    @property
+    def vandaag(self):
+        return self.nacht + self.proeven + self.eigen
 
     def _stand(self):
         try:
@@ -431,9 +438,9 @@ class Budget:
         return self.stop
 
     def tel(self):
-        self.vandaag, self.sinds = self.vandaag + 1, self.klok()
+        self.eigen, self.sinds = self.eigen + 1, self.klok()
         if self.teller:
-            schrijf_600(self.teller, {"dag": self.dag, "vragen": self.vandaag})
+            schrijf_600(self.teller, {"dag": self.dag, "vragen": self.nacht + self.eigen})
 
 
 # ----------------------------------------------------------------------------------------------- uitvoer ---
