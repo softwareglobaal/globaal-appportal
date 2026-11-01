@@ -1359,6 +1359,37 @@ def test_t0120_arch3_alleen_de_echte_keten_telt():
                 p.wait()
 
 
+def test_t0120_arch5_een_later_bestand_krijgt_een_tweede_beschrijving():
+    """ARCH-5 (Codex, meting 01-11-2026): opname.json kwam er een keer per meeting; kreeg een gesprek later nog een
+    bestand, dan stond dat in geen enkele beschrijving. Nu krijgt een meeting met een nieuw bewezen bestand een tweede
+    beschrijving naast de eerste (opname-2.json) met alle bestanden; de eerste blijft staan, nooit overschreven. Een
+    beschrijving van voor deze regel krijgt een basis uit wat er nu bewezen is, zonder nieuwe beschrijving."""
+    z, d, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    m = z.meeting("u1", start, bestanden=DRIE)
+    ronde()
+    kaart = ZA.mapnaam(m)
+    eerste = d.bestanden[kaart + "/opname.json"]
+    assert len(json.loads(eerste)["bestanden"]) == 3
+    staat = ZA.lees_staat()
+    del staat["beschreven"]["u1"]                     # zoals een staat van voor ARCH-5
+    ZA.schrijf_staat(staat)
+    ronde(nu=NU + timedelta(hours=1))
+    assert sorted(ZA.lees_staat()["beschreven"]["u1"]["ids"]) == sorted(f["id"] for f in m["bestanden"])
+    assert kaart + "/opname-2.json" not in d.bestanden, "een oude beschrijving krijgt alleen een basis"
+    z.inhoud["u1-later"] = b"chat"
+    z.meetings["u1"]["bestanden"].append({"id": "u1-later", "soort": "CHAT", "status": "completed", "start": start,
+                                          "einde": start, "grootte": 4, "opnametype": "chat_file", "extensie": "CHAT",
+                                          "link": True})
+    r, uit = ronde(nu=NU + timedelta(hours=2))
+    assert uit["gedaan"] == 1 and d.bestanden[kaart + "/opname.json"] == eerste, "de eerste blijft staan"
+    tweede = json.loads(d.bestanden[kaart + "/opname-2.json"])
+    assert len(tweede["bestanden"]) == 4 and tweede["versie"] == 2 and tweede["eerder"] == ["opname.json"], tweede
+    assert "download_url" not in json.dumps(tweede) and ZA.lees_staat()["beschreven"]["u1"]["versie"] == 2
+    ronde(nu=NU + timedelta(hours=3))
+    assert kaart + "/opname-3.json" not in d.bestanden, "zonder nieuw bestand geen derde beschrijving"
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in sorted(globals().items()):

@@ -21,7 +21,8 @@ Elke ronde (cron elk uur, onder een eigen slot, nooit tijdens de gesprekkenketen
 4. bewezen is een bestand pas als Dropbox dezelfde grootte en content_hash geeft; dan pas komt het in de staat
    (mijnagents-data/zoom-archief/staat.json, atomisch geschreven). Het tijdelijke bestand gaat altijd weg, ook bij een
    stopsignaal. Elke ronde kijkt ook alle eerdere bewijzen na tegen wat nu in Dropbox staat;
-5. per meeting een opname.json zodra al haar bestanden bewezen zijn;
+5. per meeting een opname.json zodra al haar bestanden bewezen zijn; komt er later een bewezen bestand bij, dan een
+   volgende beschrijving ernaast (opname-2.json), nooit overschreven (ARCH-5);
 6. de dekking in mijnagents-data/zoom-archief/dekking.json, elke ronde opnieuw uit wat die ronde zelf zag: ja pas als
    alles wat Zoom heeft al bewezen was voor de ronde begon, niets in verwerking is, elk bewijs klopte, en niets
    verdwenen (tenzij Mehdi dat ene verlies aanvaardde), onvolledig of geblokkeerd is. Daarnaast wisregel_veilig: niets
@@ -104,7 +105,7 @@ class Stop(RuntimeError):
 
 # ------------------------------------------------------------------ staat ---
 LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "vervallen": {}, "fouten": {},
-              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "inventaris": "",
+              "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "beschreven": {}, "inventaris": "",
               "dekking": False, "dropbox": ""}
 
 
@@ -278,14 +279,23 @@ def kopieer(f, pad, werkmap, bewaker=None):
             os.remove(tmp)
 
 
-def opname_json(m, bewezen):
-    """De beschrijving van een meeting voor naast de bestanden, zonder een enkele link of toegangscode."""
-    return {"uuid": m["uuid"], "nummer": m.get("nummer", ""), "onderwerp": m.get("onderwerp", ""), "start": m["start"],
-            "duur_min": m.get("duur", 0),
-            "bestanden": [{"id": f["id"], "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
-                           "start": f.get("start", ""), "einde": f.get("einde", ""),
-                           "grootte": bewezen[f["id"]]["grootte"], "content_hash": bewezen[f["id"]]["hash"],
-                           "naam": bewezen[f["id"]]["pad"].rsplit("/", 1)[-1]} for f in m["bestanden"]]}
+def opname_json(m, bewezen, versie=1):
+    """De beschrijving van een meeting voor naast de bestanden, zonder een enkele link of toegangscode. Een volgende
+    versie (ARCH-5) noemt ook de beschrijvingen die er al naast staan."""
+    uit = {"uuid": m["uuid"], "nummer": m.get("nummer", ""), "onderwerp": m.get("onderwerp", ""), "start": m["start"],
+           "duur_min": m.get("duur", 0),
+           "bestanden": [{"id": f["id"], "soort": f.get("soort", ""), "opnametype": f.get("opnametype", ""),
+                          "start": f.get("start", ""), "einde": f.get("einde", ""),
+                          "grootte": bewezen[f["id"]]["grootte"], "content_hash": bewezen[f["id"]]["hash"],
+                          "naam": bewezen[f["id"]]["pad"].rsplit("/", 1)[-1]} for f in m["bestanden"]]}
+    if versie > 1:
+        uit.update(versie=versie, eerder=[beschrijving_naam(v) for v in range(1, versie)])
+    return uit
+
+
+def beschrijving_naam(versie):
+    """opname.json, en voor een later bestand opname-2.json, opname-3.json (ARCH-5)."""
+    return "opname.json" if versie == 1 else f"opname-{versie}.json"
 
 
 def schrijf_beschrijving(inhoud, pad, werkmap, bewaker=None):
@@ -777,21 +787,30 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             if gestopt:
                 break
             ids = [f.get("id") for f in m["bestanden"]]
-            if (ids and all(ids) and m["uuid"] not in staat["meetings"]
+            u = m["uuid"]
+            if u in staat["meetings"] and u not in staat["beschreven"]:
+                # ARCH-5: een beschrijving van voor deze regel. Wat nu bewezen is, staat erin (in oktober 2026 kreeg geen
+                # enkel gesprek een later bestand, meting 01-11-2026); wat er daarna bij komt, krijgt een volgende.
+                staat["beschreven"][u] = {"ids": sorted(i for i in ids if i in staat["bestanden"]), "versie": 1}
+            vorige = staat["beschreven"].get(u)
+            if (ids and all(ids) and (u not in staat["meetings"] or set(ids) - set(vorige["ids"]))
                     and all(f.get("status") == "completed" for f in m["bestanden"])
                     and all(i in staat["bestanden"] for i in ids)):
-                inhoud, pad = opname_json(m, staat["bestanden"]), f"{mapnaam(m)}/opname.json"
+                versie = vorige["versie"] + 1 if u in staat["meetings"] else 1
+                kaart = staat["meetings"].get(u) or mapnaam(m)   # een volgende komt naast de eerste, in dezelfde map
+                inhoud, pad = opname_json(m, staat["bestanden"], versie), f"{kaart}/{beschrijving_naam(versie)}"
                 try:
                     bewaker()
                     schrijf_beschrijving(inhoud, pad, werkmap, bewaker=bewaker)
-                    staat["meetings"][m["uuid"]] = staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
-                    staat["blokkades"].pop(f"opname:{m['uuid']}", None)
-                    staat["beschrijvingen"].pop(m["uuid"], None)
+                    staat["meetings"][u] = staat["meetings"].get(u) or staat["bestanden"][ids[0]]["pad"].rsplit("/", 1)[0]
+                    staat["beschreven"][u] = {"ids": sorted(ids), "versie": versie}
+                    staat["blokkades"].pop(f"opname:{u}", None)
+                    staat["beschrijvingen"].pop(u, None)
                 except (Stop, D.TijdOp) as e:
                     gestopt = str(e)
                 except Exception:  # noqa: BLE001  blijft gemeld tot het lukt (Codex controle 4, punt 23)
-                    staat["blokkades"][f"opname:{m['uuid']}"] = OPNAME_JSON
-                    staat["beschrijvingen"][m["uuid"]] = {"inhoud": inhoud, "pad": pad}
+                    staat["blokkades"][f"opname:{u}"] = OPNAME_JSON
+                    staat["beschrijvingen"][u] = {"inhoud": inhoud, "pad": pad, "versie": versie}
         # Codex controle 5, punt 28: een beschrijving die niet lukte, probeer ik opnieuw met de bewaarde gegevens, ook als
         # de meeting intussen uit Zoom weg is; de nood blijft tot het lukt
         for uuid, b in list(staat["beschrijvingen"].items()):
@@ -800,7 +819,9 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             try:
                 bewaker()
                 schrijf_beschrijving(b["inhoud"], b["pad"], werkmap, bewaker=bewaker)
-                staat["meetings"][uuid] = b["pad"].rsplit("/", 1)[0]
+                staat["meetings"][uuid] = staat["meetings"].get(uuid) or b["pad"].rsplit("/", 1)[0]
+                staat["beschreven"][uuid] = {"ids": sorted(f["id"] for f in b["inhoud"]["bestanden"]),
+                                             "versie": b.get("versie", 1)}
                 staat["blokkades"].pop(f"opname:{uuid}", None)
                 del staat["beschrijvingen"][uuid]
             except (Stop, D.TijdOp) as e:
