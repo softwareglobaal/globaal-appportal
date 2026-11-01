@@ -35,6 +35,7 @@ APPLE_EPOCH = 978307200
 # origineel blijft hier staan, zodat de agents er later uit kunnen leren.
 EXPORT = os.path.expanduser(os.environ.get("FOTO_EXPORT", "~/TKN-buro Dropbox/H-Architects bvba/Apps/Mehdi Agents/Fotos"))
 LIB = os.path.expanduser("~/Pictures/Photos Library.photoslibrary/originals")
+METADATA_VERSIE = 2  # T-0120 FOTO-8: vanaf versie 2 staan plaats en tijd alleen van werkfoto's in metadata.json
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
 VOOR_MIN, NA_MIN = 30, 90  # venster rond de afspraak waarin foto's bij het bezoek horen
@@ -166,21 +167,49 @@ def exporteer(fotos, dag, groepen):
             print("Photos-export niet gelukt:", e, file=sys.stderr)
         shutil.rmtree(tmp, ignore_errors=True)
     nog = [f for f in werk if not f.get("geexporteerd")]
-    json.dump({"datum": dag, "geschreven": datetime.now().astimezone().isoformat(), "aantal": len(fotos), "werk": len(werk),
-               "geexporteerd": len(werk) - len(nog), "ontbrekend": len(nog), "regel": f"alleen foto's binnen {STRAAL_M} m en het tijdvenster van een werkafspraak worden geexporteerd; de rest blijft in Photos", "fotos": fotos,
-               "groepen": [{"van": g["van"], "tot": g["tot"], "lat": g["lat"], "lon": g["lon"], "aantal": len(g["fotos"])} for g in groepen]},
+    if oude_metadata(doel):
+        # VOL-20: een metadata.json van voor FOTO-8 (met privé-GPS) blijft staan; weghalen alleen na Mehdi's ja.
+        print("bestaande metadata.json van voor FOTO-8 blijft staan:", dag, file=sys.stderr)
+        return gekopieerd, via_photos, len(nog)
+    # T-0120 FOTO-8: plaats en tijd alleen van werkfoto's; de andere foto's en plekken alleen geteld. Tot 01-11 stonden
+    # hier tijd en GPS van elke foto, ook privé, in de H-A-Dropbox (en via de Mac-sync in Data uit Mehdi/Fotos).
+    werkgroepen = [g for g in groepen if any(f.get("werk") for f in g["fotos"])]
+    andere = [f for f in fotos if not f.get("werk")]
+    json.dump({"datum": dag, "versie": METADATA_VERSIE, "geschreven": datetime.now().astimezone().isoformat(),
+               "aantal": len(fotos), "werk": len(werk), "geexporteerd": len(werk) - len(nog), "ontbrekend": len(nog),
+               "regel": f"alleen foto's binnen {STRAAL_M} m en het tijdvenster van een werkafspraak worden geexporteerd; de rest blijft in Photos",
+               "privacy": "plaats en tijd alleen van werkfoto's; de andere foto's alleen geteld (T-0120 FOTO-8)",
+               "fotos": werk,
+               "groepen": [{"van": g["van"], "tot": g["tot"], "lat": g["lat"], "lon": g["lon"], "aantal": len(g["fotos"]),
+                            "werk": sum(1 for f in g["fotos"] if f.get("werk"))} for g in werkgroepen],
+               "niet_werk": {"aantal": len(andere), "video": sum(1 for f in andere if f.get("video")),
+                             "zonder_gps": sum(1 for f in andere if f.get("lat") is None),
+                             "plekken": len(groepen) - len(werkgroepen)}},
               open(os.path.join(doel, "metadata.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     regels = [f"# Foto's {dag}", "", f"{len(fotos)} foto's/video's op de telefoon, {len(groepen)} plekken. {len(werk)} horen bij een werkafspraak en zijn geexporteerd "
-              f"({len(nog)} daarvan nog niet uit iCloud). De andere {len(fotos) - len(werk)} blijven in Photos; hier alleen tijd en plek.", "",
-              "| van | tot | aantal | plaats (lat, lon) | werkafspraak | bestanden |", "|---|---|---|---|---|---|"]
-    for g in groepen:
+              f"({len(nog)} daarvan nog niet uit iCloud). De andere {len(andere)} blijven in Photos; hier alleen het aantal, geen tijd of plek.", ""]
+    if werkgroepen:
+        regels += ["| van | tot | aantal | plaats (lat, lon) | werkafspraak | bestanden |", "|---|---|---|---|---|---|"]
+    for g in werkgroepen:
         w = sorted({f["werk"] for f in g["fotos"] if f.get("werk")})
-        regels.append(f"| {g['van']} | {g['tot']} | {len(g['fotos'])} | {g['lat']}, {g['lon']} | {'; '.join(w)[:60] or 'geen (niet geexporteerd)'} | "
+        regels.append(f"| {g['van']} | {g['tot']} | {sum(1 for f in g['fotos'] if f.get('werk'))} | {g['lat']}, {g['lon']} | {'; '.join(w)[:60]} | "
                       + ", ".join(os.path.basename(f["export"]) for f in g["fotos"] if f.get("export"))[:200] + " |")
     if nog:
         regels += ["", "## Nog in iCloud (niet lokaal, Photos-export niet gelukt)", ""] + [f"- {f['tijd']} {f['bestand']}" for f in nog]
     open(os.path.join(doel, "overzicht.md"), "w", encoding="utf-8").write("\n".join(regels) + "\n")
     return gekopieerd, via_photos, len(nog)
+
+
+def oude_metadata(doel):
+    """Staat er in de dagmap al een metadata.json van voor FOTO-8 (zonder versie 2)? Onleesbaar telt als oud: niet aanraken."""
+    pad = os.path.join(doel, "metadata.json")
+    if not os.path.exists(pad):
+        return False
+    try:
+        with open(pad, encoding="utf-8") as f:
+            return int(json.load(f).get("versie") or 0) < METADATA_VERSIE
+    except (OSError, ValueError, AttributeError, TypeError):
+        return True
 
 
 def werkafspraken(dag):

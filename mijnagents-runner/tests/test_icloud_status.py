@@ -36,6 +36,7 @@ class ICloudStatus(unittest.TestCase):
             spec.loader.exec_module(self.module)
         self.module.TOKEN = "alleen-fictief-testtoken"
         self.export_orig = self.module.exporteer_naar
+        self.exporteer_dag_orig = self.module.exporteer
         self.export_jpg_orig = self.module.exporteer_jpg_naar
         self.hartslag_orig = self.module.hartslag
         self.module.DROPBOX_LOKAAL = str(Path(self.home.name) / "Dropbox")
@@ -345,6 +346,45 @@ class ICloudStatus(unittest.TestCase):
         selected, onbeslist = m.selecteer(fotos, start, einde, (50.0, 4.0), 300)
         self.assertEqual([f["uuid"] for f in selected], ["eerste_0230"])
         self.assertEqual(onbeslist, 0)
+
+    def test_foto8_metadata_zonder_werkafspraak_heeft_geen_plaats(self):
+        # T-0120 FOTO-8: metadata.json en overzicht.md in de H-A-Dropbox droegen tijd en GPS van alle foto's, ook privé.
+        # Nu alleen werkfoto's met plaats en tijd; de rest alleen geteld. VOL-20: een bestaand oud bestand blijft staan.
+        m = self.module
+        m.EXPORT = str(Path(self.home.name) / "export")
+        m.LIB = str(Path(self.home.name) / "originelen")
+        fotos = [dict(self.foto("prive-1", lat=50.12345, lon=4.12345), tijd="10:01"),
+                 dict(self.foto("prive-2", lat=None, lon=None), tijd="10:02")]
+        for f in fotos:
+            f["werk"] = ""
+        self.exporteer_dag_orig(fotos, "2026-10-14", m.groepeer(fotos))
+        doel = Path(m.EXPORT, "2026-10-14")
+        meta, overzicht = (doel / "metadata.json").read_text(), (doel / "overzicht.md").read_text()
+        for tekst in (meta, overzicht):
+            self.assertNotIn("50.12345", tekst)
+            self.assertNotIn("10:01", tekst)
+            self.assertNotIn("prive-1", tekst)
+        d = json.loads(meta)
+        self.assertEqual((d["aantal"], d["werk"], d["fotos"], d["groepen"]), (2, 0, [], []))
+        self.assertNotIn('"lat"', meta)
+        # met een werkfoto: alleen die draagt plaats en tijd
+        werk = dict(self.foto("werk-1", lat=50.5, lon=4.5), tijd="11:00", werk="Plaatsbezoek 9999", bestand="w.jpg")
+        bron = Path(m.LIB) / "w" / "werk-1.jpg"
+        bron.parent.mkdir(parents=True)
+        bron.write_bytes(b"fictief")
+        self.exporteer_dag_orig(fotos + [werk], "2026-10-15", m.groepeer(fotos + [werk]))
+        d = json.loads(Path(m.EXPORT, "2026-10-15", "metadata.json").read_text())
+        self.assertEqual([(f["uuid"], f["lat"]) for f in d["fotos"]], [("werk-1", 50.5)])
+        self.assertEqual([g["aantal"] for g in d["groepen"]], [1])
+        self.assertNotIn("50.12345", Path(m.EXPORT, "2026-10-15", "overzicht.md").read_text())
+        # VOL-20: een metadata.json van voor deze versie wordt niet overschreven
+        oud = Path(m.EXPORT, "2026-10-16")
+        oud.mkdir()
+        (oud / "metadata.json").write_text('{"datum": "2026-10-16", "fotos": [{"lat": 50.1}]}')
+        (oud / "overzicht.md").write_text("oud overzicht\n")
+        self.exporteer_dag_orig(fotos, "2026-10-16", m.groepeer(fotos))
+        self.assertEqual((oud / "metadata.json").read_text(), '{"datum": "2026-10-16", "fotos": [{"lat": 50.1}]}')
+        self.assertEqual((oud / "overzicht.md").read_text(), "oud overzicht\n")
 
     def test_meer_dan_80_fictieve_originelen_hervat_alleen_ontbrekende(self):
         m = self.module

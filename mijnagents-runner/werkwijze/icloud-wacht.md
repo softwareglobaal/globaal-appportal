@@ -47,8 +47,10 @@ komen nooit op Dropbox. Dus:
 
 1. Ik lees elke avond de **metadata** van alle foto's van de dag (tijd, GPS, uuid, groep per
    plek) en schrijf die als `metadata.json` en `overzicht.md` in `Fotos/<JJJJ-MM-DD>/`
-   (Mehdi's Dropbox-app-map Apps/Mehdi Agents, ook in Data uit Mehdi/Fotos). Van
-   privéfoto's staat daar alleen tijd en plek, geen bestand.
+   (Mehdi's Dropbox-app-map Apps/Mehdi Agents, ook in Data uit Mehdi/Fotos). Sinds T-0120
+   FOTO-8 (01-11-2026, `versie` 2) staan daar tijd en plek alleen van werkfoto's; de andere
+   foto's alleen geteld (`niet_werk`), zonder tijd of plek. Een bestaande metadata.json van
+   voor die versie laat ik staan (VOL-20); weghalen alleen na Mehdi's ja.
 2. Ik haal de **werkafspraken met adres** van die dag uit de bak van De Agendawacht en
    zoek de coördinaten van het adres op (OpenStreetMap, met cache op de Mac).
 3. Een foto **hoort bij een bezoek** als ze binnen 300 m van het adres genomen is, tussen
