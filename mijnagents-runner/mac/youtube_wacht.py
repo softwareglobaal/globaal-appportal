@@ -46,6 +46,9 @@ DAG = DAG or datetime.now(BRUSSEL).date().isoformat()
 
 CHROME_EPOCH = 11644473600      # Chrome: microseconden sinds 1601-01-01
 SAFARI_EPOCH = 978307200        # Safari: seconden sinds 2001-01-01
+# WEB-3: alleen de bezoeken van deze Mac; history_visits.origin 1 komt via iCloud van een ander toestel. Een oudere
+# Safari zonder die kolom kent geen oorsprong: dan telt alles (zonder_oorsprong), nooit "onleesbaar".
+DEZE_MAC = "v.origin = 0"
 # (browser, glob van de databank, query die (epoch-seconden, adres, titel, seconden open of NULL) geeft)
 BRONNEN = (
     ("Chrome", "Library/Application Support/Google/Chrome/*/History",
@@ -57,10 +60,9 @@ BRONNEN = (
     ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
      "SELECT v.visit_date / 1000000.0, p.url, p.title, NULL FROM moz_historyvisits v "
      "JOIN moz_places p ON p.id = v.place_id WHERE p.url LIKE '%youtu%'"),
-    # WEB-3: alleen de bezoeken van deze Mac (origin 0); origin 1 komt via iCloud van een ander toestel (de gsm)
     ("Safari", "Library/Safari/History.db",
      f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url, v.title, NULL FROM history_visits v "
-     "JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%' AND v.origin = 0"),
+     f"JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%' AND {DEZE_MAC}"),
 )
 
 
@@ -140,6 +142,13 @@ def titel_schoon(t):
     return re.sub(r"\s+", " ", t)[:120] or "zonder titel"
 
 
+def zonder_oorsprong(c, query):
+    """De vraag zonder de voorwaarde DEZE_MAC als de databank geen kolom history_visits.origin heeft."""
+    if DEZE_MAC in query and "origin" not in {r[1] for r in c.execute("PRAGMA table_info(history_visits)")}:
+        return query.replace(DEZE_MAC, "1")
+    return query
+
+
 def lees_bestand(pad, query, sinds):
     """(epoch, video, titel, seconden) uit een kopie van de databank (de browser houdt hem open en vergrendeld)."""
     tmp = tempfile.mkdtemp(prefix="youtube-")
@@ -152,7 +161,7 @@ def lees_bestand(pad, query, sinds):
         c = sqlite3.connect(f"file:{doel}?mode=ro", uri=True)
         try:
             uit = []
-            for t, a, titel, sec in c.execute(query):
+            for t, a, titel, sec in c.execute(zonder_oorsprong(c, query)):
                 vid = video(a)
                 if t and t >= sinds and vid:
                     uit.append((t, vid, titel_schoon(titel), sec))

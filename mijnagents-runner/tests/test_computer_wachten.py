@@ -6,7 +6,8 @@ Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.p
 - C02 (WEB-2): leest De Websitewacht geen enkele browser, dan zet ze niets klaar (onbekend is nooit 0 bezoeken): alleen
   een foute hartslag en een foutregel in het werkverslag;
 - C03 (WEB-3): Safari telt alleen de bezoeken van deze Mac (origin 0), niet die van een ander toestel via iCloud
-  (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube;
+  (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube; een oudere Safari zonder kolom origin blijft
+  leesbaar en telt mee (Codex-toets 1), ook naast een lege Chrome;
 - C04 (WISPR-2): de inhaalweg van De Wispr-wacht (--dag voor een vroegere dag): per_dag is precies het venster tot die
   dag, ook een dag zonder dictaat (0, de wacht keek), niets erna; de titel is de telling van die dag; het rapport in
   Dropbox blijft staan (het toont de stand van vandaag); een gewone ronde van vandaag schrijft het wel.
@@ -138,6 +139,32 @@ check("C03 websites: alleen Safari van deze Mac", sites == ["proef-werk.test", "
 q = next(x for b, _, x in Y.BRONNEN if b == "Safari")
 videos = [v for _, v, _, _ in Y.lees_bestand(pad, q, 0)]
 check("C03 YouTube: alleen Safari van deze Mac", videos == ["werkvideo1"], videos)
+# Codex-toets 1: een Safari zonder kolom origin naast een lege Chrome gaf 0 bezoeken met "Safari onleesbaar".
+thuis = tempfile.mkdtemp()
+c = sqlite3.connect(bestand(thuis, "Library/Safari/History.db"))
+c.execute("CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT)")
+c.execute("CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, title TEXT)")
+c.execute("INSERT INTO history_items VALUES (1, 'https://www.youtube.com/watch?v=oudevideo1')")
+c.execute("INSERT INTO history_visits VALUES (1, 1, ?, 'Proef oud')", (middag - SAFARI_EPOCH,))
+c.commit()
+c.close()
+c = sqlite3.connect(bestand(thuis, "Library/Application Support/Google/Chrome/Default/History"))
+c.execute("CREATE TABLE urls (id INTEGER PRIMARY KEY, url TEXT, title TEXT)")
+c.execute("CREATE TABLE visits (id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER, visit_duration INTEGER)")
+c.commit()
+c.close()
+B = laad("browser_wacht")
+B.DAGEN = 3
+rc, nep = ronde(B, thuis)
+inh = nep.naar("/api/klaarzet")[-1]["items"][0]["inhoud"] if nep.naar("/api/klaarzet") else {}
+check("C03 websites: Safari zonder origin telt mee naast een lege Chrome", rc == 0 and inh.get("onleesbaar") == {}
+      and inh["per_dag"]["2026-10-30"]["per_browser"] == {"Safari": 1}, (rc, inh))
+Y = laad("youtube_wacht")
+Y.DAGEN = 3
+rc, nep = ronde(Y, thuis)
+inh = nep.naar("/api/klaarzet")[-1]["items"][0]["inhoud"] if nep.naar("/api/klaarzet") else {}
+check("C03 YouTube: Safari zonder origin telt mee", rc == 0 and inh.get("onleesbaar") == {}
+      and inh["per_dag"]["2026-10-30"]["keer"] == 1, (rc, inh))
 
 # C04 (WISPR-2): een verzonnen flow.sqlite; de middag in UTC is in elke tijdzone van Europa dezelfde dag.
 map_ = tempfile.mkdtemp()
