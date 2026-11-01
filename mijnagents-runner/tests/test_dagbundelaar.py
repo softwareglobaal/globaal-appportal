@@ -637,31 +637,41 @@ def test_db7_ochtendronde_bladert_terug():
 def test_db3_maandag_bundelt_het_weekend():
     """DB-3 (T-0120): de ochtendronde draait alleen op werkdagen (keten.py) en bundelde alleen gisteren, dus vrijdag en
     zaterdag kregen nooit een Dagverslag (oktober: 10 van de 31 dagen) en hun items bleven op klaar. Nu bundelt ze gisteren
-    en elke dag ervoor zonder Dagverslag, tot de vorige geslaagde ochtendronde, oplopend. Een dinsdag geeft er een."""
-    donderdag = item(60, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-22", sleutel="2026-10-22",
-                     uniek="dagverslag:2026-10-22", status="klaar")
+    en elke dag van de week ervoor zonder Dagverslag, oplopend. Een dinsdag geeft er een."""
+    # de ochtenden van maandag tot vrijdag liepen: de Dagverslagen van 19-10 tot 22-10 staan op het bord
+    donderdag = [item(56 + i, "dagbundelaar", "mehdi", "dagbundel", f"Dagverslag {d}", sleutel=d, uniek=f"dagverslag:{d}",
+                      status="klaar") for i, d in enumerate(("2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22"))]
     werk = {d: item(61 + i, "fathom-wacht", "h-architects", "transcript", f"{d}T11:00 Fathom: klant 2531 · overleg", sleutel="2531",
                     inhoud={"datum": d, "start": "11:00"}, uniek=f"fathom:{d}")
             for i, d in enumerate(("2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"))}
     oud = (D.V.gisteren, D.DAG_GEGEVEN)
     try:
         D.V.gisteren = lambda nu: "2026-10-25"
-        nb = NepBord([donderdag] + list(werk.values()))
+        nb = NepBord(donderdag + list(werk.values()))
         bundelen("2026-10-25", nb, gepland=True)
         verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
         assert verslagen == ["dagverslag:2026-10-23", "dagverslag:2026-10-24", "dagverslag:2026-10-25"], verslagen
         assert sorted(nb.opgepakt) == [62, 63, 64], nb.opgepakt
         assert all(f"bundel:{d}:2531" in {b["uniek"] for b in nb.bundels} for d in ("2026-10-23", "2026-10-24", "2026-10-25"))
         assert nb.harten[-1]["fout"] is None and "2026-10-24:" in nb.harten[-1]["detail"], nb.harten[-1]
-        # dinsdag: zondag heeft zijn Dagverslag, dus alleen gisteren
+        # dinsdag: maandag bundelde vrijdag tot zondag, dus alleen gisteren
         D.V.gisteren = lambda nu: "2026-10-26"
-        zondag = item(70, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-25", sleutel="2026-10-25",
-                      uniek="dagverslag:2026-10-25", status="klaar")
-        nb = NepBord([zondag, item(71, "fathom-wacht", "h-architects", "transcript", "2026-10-26T11:00 Fathom: klant 2531",
+        zondag = [item(70 + i, "dagbundelaar", "mehdi", "dagbundel", f"Dagverslag {d}", sleutel=d, uniek=f"dagverslag:{d}",
+                       status="klaar") for i, d in enumerate(("2026-10-23", "2026-10-24", "2026-10-25"))]
+        nb = NepBord(donderdag + zondag + [item(79, "fathom-wacht", "h-architects", "transcript", "2026-10-26T11:00 Fathom: klant 2531",
                                    sleutel="2531", inhoud={"datum": "2026-10-26"}, uniek="fathom:26")])
         bundelen("2026-10-26", nb, gepland=True)
         verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
         assert verslagen == ["dagverslag:2026-10-26"], verslagen
+        # Codex-toets 1: zaterdag is met de hand gebundeld (--dag), vrijdag ontbreekt: maandag bundelt vrijdag en zondag
+        D.V.gisteren = lambda nu: "2026-10-25"
+        zaterdag = item(80, "dagbundelaar", "mehdi", "dagbundel", "Dagverslag 2026-10-24", sleutel="2026-10-24",
+                        uniek="dagverslag:2026-10-24", status="klaar")
+        nb = NepBord(donderdag + [zaterdag] + list(werk.values()))
+        bundelen("2026-10-25", nb, gepland=True)
+        verslagen = [b["uniek"] for b in nb.bundels if b["uniek"].startswith("dagverslag:")]
+        assert verslagen == ["dagverslag:2026-10-23", "dagverslag:2026-10-25"], verslagen
+        D.V.gisteren = lambda nu: "2026-10-26"
         # na een week zonder geslaagde ochtend: hoogstens BUNDEL_INHAAL dagen
         nb = NepBord([])
         bundelen("2026-10-26", nb, gepland=True)

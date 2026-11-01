@@ -412,17 +412,17 @@ def main():
 def bundeldagen(nu):
     """DB-3 (T-0120): de dagen die de ochtendronde uit de keten bundelt. Ze draait alleen op werkdagen (keten.py) en
     bundelde tot 01-11-2026 alleen gisteren: vrijdag en zaterdag kregen nooit een Dagverslag en hun items bleven op klaar.
-    Nu gisteren en elke dag ervoor zonder Dagverslag op het bord, tot de vorige geslaagde ochtendronde (de eerste dag
-    met een Dagverslag), hoogstens BUNDEL_INHAAL dagen. Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
+    Nu gisteren en elke dag van de BUNDEL_INHAAL dagen ervoor zonder Dagverslag op het bord. Codex-toets 1: ook voorbij
+    een dag met een Dagverslag, want dat kan van een ronde met de hand zijn (zaterdag met --dag, vrijdag ontbreekt).
+    Oplopend: een nagekomen Zoom-dagregel komt zo bij zijn eigen dag."""
     g = date.fromisoformat(V.gisteren(nu))
     uit = [g.isoformat()]
     for i in range(1, BUNDEL_INHAAL):
         dag = (g - timedelta(days=i)).isoformat()
         terug = (bord.call("/api/klaarzet?" + urllib.parse.urlencode(
             {"uniek": f"dagverslag:{dag}", "status": "alle", "n": 5})) or {}).get("items") or []
-        if any(x.get("uniek") == f"dagverslag:{dag}" for x in terug):
-            break
-        uit.append(dag)
+        if not any(x.get("uniek") == f"dagverslag:{dag}" for x in terug):
+            uit.append(dag)
     return sorted(uit)
 
 
