@@ -63,6 +63,19 @@ t["mail"] = None
 json.dump(t, open(os.path.join(MAP, gisteren[:4], f"{gisteren}.json"), "w"))
 html = C.get("/", headers=MET).get_data(as_text=True)
 check("D06 onbekend is een vraagteken", '<div class="groot">?</div>' in html and "niet gelezen" in html)
+# WA-6 (T-0120): WhatsApp en telefoon onbekend (getallen None, stand niet aangesloten) tonen een vraagteken, nooit een 0
+tg = {x["naam"]: x for x in A.tegels(dict(t, whatsapp={"stand": "stil sinds 27-10 10:07", "gesprekken": None,
+                                                        "berichten": None, "oproepen": None, "minuten": None},
+                                          telefoon={"stand": "onbekend voor deze dag", "oproepen": None,
+                                                    "minuten": None}))}
+check("D06 WA-6 WhatsApp onbekend: vraagteken, geen 0", tg["WhatsApp"]["groot"] == "?"
+      and tg["WhatsApp"]["klein"] == "berichten, ? oproepen (stil sinds 27-10 10:07)", tg["WhatsApp"])
+check("D06 WA-6 telefoon onbekend: vraagteken, geen 0", tg["Telefoon"]["groot"] == "?"
+      and tg["Telefoon"]["klein"] == "oproepen, ? (onbekend voor deze dag)", tg["Telefoon"])
+tg = {x["naam"]: x for x in A.tegels(dict(t, whatsapp={"stand": "aangesloten", "gesprekken": 0, "berichten": 0,
+                                                        "oproepen": 0, "minuten": 0}))}
+check("D06 WA-6 aangesloten zonder bericht blijft 0", tg["WhatsApp"]["groot"] == 0
+      and tg["WhatsApp"]["klein"] == "berichten, 0 oproepen", tg["WhatsApp"])
 open(os.path.join(MAP, gisteren[:4], f"{gisteren}.json"), "w").write("{kapot")
 check("D06 kapotte telling valt niet", C.get("/", headers=MET).status_code == 200)
 alles = html + C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)

@@ -250,7 +250,8 @@ def tegels(t):
                              "klein": f"verzonden, {'?' if getal(mail.get('binnen')) is None else mail['binnen']} binnen"
                                       + (" (onvolledig)" if mail.get("onvolledig") else "")})},
         {"naam": "WhatsApp", **kanaal(wa, "?" if getal(wa.get("berichten")) is None else wa["berichten"],
-                                      f"berichten, {getal(wa.get('oproepen')) or 0} oproepen")},
+                                      f"berichten, {'?' if getal(wa.get('oproepen')) is None else wa['oproepen']} "
+                                      "oproepen")},
         {"naam": "Telefoon", **kanaal(tel, "?" if getal(tel.get("oproepen")) is None else tel["oproepen"],
                                       f"oproepen, {min_tekst(tel.get('minuten'))}")},
     ]

@@ -50,6 +50,18 @@ def _getal(x):
     return int(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else None
 
 
+def _kanaal(x, sleutels):
+    """WA-6 (T-0120): een kanaal van de Mac dat die dag niet aangesloten was en geen enkele rij had, is onbekend: de
+    getallen zijn None, nooit 0, zoals in de dagtekst ('onbekend (stil sinds ...)'). Wat wel gezien is, blijft staan als
+    ondergrens; een aangesloten dag zonder rij is een echte nul."""
+    x = x if isinstance(x, dict) else {}
+    stand = x.get("stand") or "niet aangesloten"
+    getallen = {k: _getal(x.get(k)) for k in sleutels}
+    if stand != "aangesloten" and not any(getallen.values()):
+        getallen = dict.fromkeys(sleutels)
+    return {"stand": stand, **getallen}
+
+
 def dag_samenvatting(dag, v, dagversie=None):
     """De telling van een dag uit het dict van dagvaststelling.vaststellen, of 'niet vastgesteld' zonder dict."""
     if not v:
@@ -90,15 +102,11 @@ def dag_samenvatting(dag, v, dagversie=None):
                        if zoom_onbekend and not _getal(gesprekken.get("aantal")) else
                        {k: _getal(gesprekken.get(k)) for k in ("aantal", "minuten", "met_opname", "alleen_zoom")}),
         "zoom_chats": None if chatstand == ONBEKEND and not _getal(zoom.get("chats")) else _getal(zoom.get("chats")),
-        "whatsapp": {"stand": wa.get("stand") or "niet aangesloten",
-                     **{k: _getal(wa.get(k)) for k in ("gesprekken", "berichten", "oproepen", "minuten")}},
-        "telefoon": {"stand": tel.get("stand") or "niet aangesloten",
-                     **{k: _getal(tel.get(k)) for k in ("oproepen", "minuten")}},
+        "whatsapp": _kanaal(wa, ("gesprekken", "berichten", "oproepen", "minuten")),
+        "telefoon": _kanaal(tel, ("oproepen", "minuten")),
         # 31-10-2026: sms en iMessage, Xelion en foto's; foto's None is onbekend (De Fotowacht las die dag niet).
-        "sms": {"stand": (v.get("sms") or {}).get("stand") or "niet aangesloten",
-                **{k: _getal((v.get("sms") or {}).get(k)) for k in ("gesprekken", "berichten")}},
-        "xelion": {"stand": (v.get("xelion") or {}).get("stand") or "niet aangesloten",
-                   **{k: _getal((v.get("xelion") or {}).get(k)) for k in ("oproepen", "minuten", "gemist")}},
+        "sms": _kanaal(v.get("sms"), ("gesprekken", "berichten")),
+        "xelion": _kanaal(v.get("xelion"), ("oproepen", "minuten", "gemist")),
         "fotos": None if not isinstance(v.get("fotos"), dict) else
         {k: _getal(v["fotos"].get(k)) for k in ("aantal", "plekken")},
         # Alleen de totalen: de postvakken dragen namen van ontvangers en blijven in het dagbestand.

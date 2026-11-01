@@ -197,6 +197,30 @@ w4 = WO.samenvatten("2026-W43", {"2026-10-23": (V4, 1)}, p, "x")["totaal"]
 check("week (Codex fase 2, punt 1): een onbekende WhatsApp-dag is nooit 'niet aangesloten'",
       w4["whatsapp"]["stand"] == "onbekend" and "WhatsApp op een dag onbekend" in w4["voorbehoud"]
       and "WhatsApp niet aangesloten" not in w4["voorbehoud"], json.dumps(w4["whatsapp"]))
+# WA-6 (T-0120): een kanaal dat die dag niet aangesloten was en geen rij had, is onbekend (None), nooit 0. Wat wel gezien
+# is, blijft als ondergrens; een aangesloten dag zonder rij is een echte nul.
+_stil = {"whatsapp": "stil sinds 27-10 10:07", "telefoon": "onbekend voor deze dag", "sms": "stil sinds 27-10 10:07",
+         "xelion": "onbekend voor deze dag"}
+d6 = WO.dag_samenvatting("2026-10-13", V.vaststellen("2026-10-13", [], set(), [], {}, [], "volledig", MAIL, _stil,
+                                                      lambda a: False), 3)
+check("dag (WA-6): stil of onbekend en geen rij is onbekend, geen 0",
+      all(v is None for k in ("whatsapp", "telefoon", "sms", "xelion") for s_, v in d6[k].items() if s_ != "stand")
+      and d6["whatsapp"]["stand"] == "stil sinds 27-10 10:07" and d6["telefoon"]["stand"] == "onbekend voor deze dag",
+      json.dumps({k: d6[k] for k in ("whatsapp", "telefoon", "sms", "xelion")}))
+_wa = [{"uniek": "whatsapp:0a1b:2026-10-13", "datum": "2026-10-13", "start": "09:00", "minuten": 0,
+        "personen": "Lien Proef", "thema": "5 berichten (2 in, 3 uit), 09:00 tot 09:30", "prive": 1, "bron": "whatsapp", "dubbel_van": ""}]
+d6b = WO.dag_samenvatting("2026-10-13", V.vaststellen("2026-10-13", [], set(), _wa, {}, [], "volledig", MAIL, _stil,
+                                                       lambda a: False), 3)
+d6c = WO.dag_samenvatting("2026-10-13", V.vaststellen("2026-10-13", [], set(), [], {}, [], "volledig", MAIL,
+                                                       {k: "aangesloten" for k in _stil}, lambda a: False), 3)
+check("dag (WA-6): wat gezien is, blijft een ondergrens; aangesloten zonder rij is 0",
+      d6b["whatsapp"]["berichten"] == 5 and d6b["whatsapp"]["oproepen"] == 0 and d6b["telefoon"]["oproepen"] is None
+      and d6c["whatsapp"]["berichten"] == 0 and d6c["telefoon"]["oproepen"] == 0 and d6c["xelion"]["gemist"] == 0,
+      json.dumps([d6b["whatsapp"], d6c["whatsapp"]]))
+check("week (WA-6): een onbekende dag telt niet mee en geeft geen fout",
+      WO.samenvatten("2026-W42", {"2026-10-13": (V.vaststellen("2026-10-13", [], set(), [], {}, [], "volledig", MAIL,
+                                                               _stil, lambda a: False), 3)}, p, "x")["totaal"]
+      ["whatsapp"]["stand"] == "onbekend")
 
 # Codex-controle fase 2, ronde 3 (K5): een bewaarde dagtelling met een onverwacht naamveld, ook genest
 _vies = dict(d1, naam="Jozef Lekker", afspraken=dict(d1["afspraken"], wie="Karel Lekker"),
