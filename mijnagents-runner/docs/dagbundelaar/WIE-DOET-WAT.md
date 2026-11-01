@@ -22,7 +22,7 @@ zoals het was.
 | Rij | Wat | Werkstand |
 |---|---|---|
 | 0 | Regel over de takenlijst in de eigen instellingen | Niet uitgevoerd; de regel staat in werkstand/instructies (T-0073) |
-| 1 | Laptopkant: Sms-, WhatsApp- en Belwacht, Fotowacht, YouTube-wacht | T-0069 (sms, WhatsApp en Belwacht aan sinds 01-11 16:16; YouTube-wacht nog open), T-0042 (Fotowacht) |
+| 1 | Laptopkant: Sms-, WhatsApp- en Belwacht, Fotowacht, YouTube-wacht | T-0069 (sms, WhatsApp en Belwacht aan sinds 01-11 16:16), T-0042 (Fotowacht), T-0088 (YouTube-wacht) |
 | 2 | Websitewacht aan, Wispr-wacht draaien | T-0077 |
 | 3 | Health Auto Export op de iPhone, map nakijken | T-0078 (wacht op Mehdi) |
 | 4 | Driehoeksoverleg Dagboek compleet en Ai Angel | T-0079 |
@@ -32,8 +32,10 @@ zoals het was.
 | 8 | Dagbundelaar: samenvatting, actiepunten, wie wacht, afspraken morgen | T-0081 |
 | 9 | Ai Angel geeft taken echt door | T-0082 |
 | 10 | Agendawacht: meldingen over titels en adressen | T-0083 |
-| 11 | Laptopwachten groen op het bord | Nagekeken 01-11 16:16 (T-0069) |
+| 11 | Laptopwachten groen op het bord | T-0088 (na het herstel van de YouTube-wacht) |
 | 12 | Oproepen dubbel tellen (Xelion en iPhone), vanaf 08-11 | T-0084 |
-| 13 | Claude 2 leest de nieuwe werkwijze | T-0085 |
+| 13 (Mehdi) | Ja of nee: pagina Wachten in het Dagboek live | T-0087 (wacht op Mehdi) |
+| 14 | Na die ja: bord en Dagboek opnieuw bouwen, pagina nakijken | T-0087 |
+| 13 (Claude 2) | De nieuwe werkwijze lezen en toepassen, eigen id | T-0085 |
 
 De oude tabel staat in de git-geschiedenis van dit bestand (laatste versie: commit b85103a).
