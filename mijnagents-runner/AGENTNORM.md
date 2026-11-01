@@ -1,5 +1,7 @@
 # De Agentnorm
 
+Versie 1.16, 01-11-2026 (NA09-rest, T-0075, overleg 12): geen eigen leesweg meer voor een werkwijze; De Contractmaker, De Archivaris, De Levenscoach, De Fathomwacht en de Agendawacht gaan door de ronde, De Plaudwacht slaat haar opnames over zonder personentabel, en `noden_onbekend` is de route om een nood toe te voegen zonder te sluiten (hoofdstuk 5).
+
 Versie 1.15, 23-10-2026: een agent met cadans exact `op verzoek` houdt na een geslaagde ronde zijn kennis en eindhartslag geldig tot de volgende vraag. Bij WhatsApp-wacht moeten de kennistekst en de laatste eindhartslag dezelfde ronde-ID dragen; een fout of vastgelopen actieve ronde blijft zichtbaar.
 
 Versie 1.14, 22-10-2026 (RZ4-03, RZ4-05 en RZ4-07: De Bode telt een bericht pas als gelezen als het verstuurd is of in een bundel zit, ook onder de eerste pagina van het bord; een agent met geplande taken past zijn grenzen toe voor de taakloper; de werkwijzen van De Bode, De Regisseur en De Zoomwacht gaan alleen als voorstel naar het bord; v1.13 dezelfde dag, RZ3-01 en RZ3-02: privé is ook een gesprek met afdeling prive, bij elke agent en lezer, en de stand van BUNDELEN staat als vaste regel in de werkwijze van De Bode, niet meer in de code; v1.12 dezelfde dag, RZ2-01: een privégesprek draagt ook in het klaarzet-item, de bundel van De Dagbundelaar en de export van het bord geen naam of onderwerp, bij De Fathomwacht en De Plaudwacht; v1.11 21-10-2026 BAS-01: het werkverslag draagt geen privé, van een privégesprek staat er alleen wanneer en hoe lang, en De Regisseur filtert wat hij leest; bij een omschakeling van BUNDELEN verdwijnt niets; v1.10 dezelfde dag, ontwerp regie-zoom v1.2, G2 en L7: De Regisseur en De Zoomwacht lezen hun regels niet meer als leeg bij onbekend; een signaal voor Mehdi komt op een vast moment, het ochtendbericht of de avondbundel; een nood voor Mehdi bereikt hem in het ochtendbericht; een agent aanspreken met "Naam, vraag"; de ronde neemt noden van voor de ronde mee en sluit ook bij een stopsignaal af; db_lees is de enige leesweg naar de databank van het bord; v1.9 16-10-2026 NA08 en NA09 in de code: zonder regelboek geen ronde, en de generator controleert eerst en geeft de cron pas na een gecontroleerde eerste ronde; v1.8 16-10-2026 hoofdstuk 8: van idee tot live, controle voor registratie en actief pas na een gecontroleerde eerste ronde; v1.7 26-09-2026 een agent die Mehdi wil laten bellen, zet een oproep klaar; v1.6 25-09-2026 N14: elke agent kent zijn collega's, levend van het bord; v1.5 24-09-2026 N13 en het gedeelde lessenboek: wat een agent leert, leest elke agent; v1.4 20-09-2026 N12 en het minimum: de gedeelde ronde; v1.3 het woord stil in een signaaltitel belt Mehdi op; v1.2 N11 hartslag, en hoe een agent Mehdi bereikt nu zijn laptop 's ochtends slaapt; v1.1 N10, S1, de Normwacht en het logboek; v1.0 dezelfde dag).
@@ -144,22 +146,33 @@ nood "Werkwijze niet gelezen: <reden>" (voor claude-code); is ze leeg, dan "Werk
 leeg op het bord" (voor Mehdi). De hartslag "fout" laat N11 en de Normwacht het zien.
 Er gaat geen kennis mee, want er is niets gelezen, en de noden die al open stonden
 blijven open: of die intussen opgelost zijn, weet deze ronde niet. Dezelfde regel
-geldt in `ag.werkwijze()`, waarmee vier oudere runners (agenda-wacht, archivaris,
-fathom-wacht, levenscoach) hun werkwijze nog buiten de ronde lezen: ook hun werk
-stopt (Codex NA11). Ze horen alsnog door de ronde te gaan.
+geldt in `ag.werkwijze()` (Codex NA11), voor wie zijn werkwijze buiten een ronde nodig
+heeft. Weet de ronde de open noden niet, dan stuurt ze geen lijst; de nieuwe nood staat
+dan alleen in het detail van de fouthartslag. Een agent die zijn werk wel deed maar niet
+weet welke van zijn noden nog gelden, zet `r.noden_onbekend = True`: dan gaan zijn noden
+mee met `nood_sluiten` false, komen ze erbij en sluit het bord niets (NA16, sinds 27-10-2026).
 
-Open, gemeten op 16-10-2026 en opnieuw op 21-10-2026: vier plekken lezen een werkwijze
-nog met eigen code en maken van onbekend een lege tekst: `contracten_agent.py`
-(`werkwijze_van_bord`), `plaud_wacht.py` (de personentabel van fathom-wacht),
-`mac/mail_wacht.py` en `zelfcontrole.py`. Die horen `ag.werkwijze()` of
-`werkwijze_lezen()` te gebruiken. Sinds 21-10-2026 (ontwerp regie-zoom v1.2) niet meer
-`regisseur.py`, die zijn eigen werkwijze als `r.werkwijze` uit de ronde leest en een
-onleesbare werkwijze van een andere agent als onbekend meldt, en niet meer
-`zoom_wacht.py`, die de personentabel van fathom-wacht met `werkwijze_lezen()` leest:
-is die onbekend, dan volgt een nood en is elke sessie met een onbekende privé. En weet de ronde de open
-noden niet, dan stuurt ze geen lijst; de nieuwe nood staat dan alleen in het
-detail van de fouthartslag. Een nood toevoegen zonder de lijst te vervangen,
-vraagt een route op het bord (Codex NA16).
+**Geen eigen leesweg meer** (NA09-rest, T-0075, 01-11-2026, overleg 12 3-0). Elke runner
+in deze repo leest een werkwijze van het bord langs `koppelingen/bord.py`, en de vier
+oudere runners gaan door de ronde. Per plek wat er bij onbekend gebeurt
+(`tests/test_na09_rest.py`, en voor De Fathomwacht en De Plaudwacht in
+`tests/test_bord_lees.py` en `tests/test_plaud_wacht.py`; elke toets faalt op de code van
+voor die dag):
+
+| plek | bij onbekend of leeg |
+|---|---|
+| `contracten_agent.py`, `archivaris.py`, `levenscoach.py`, `fathom_wacht.py`, `agenda_wacht.py` (de volledige ronde) | door `with ag.ronde(...)`: geen werk, nood, hartslag fout, exit 1. De Werkinstructie van De Contractmaker en `agenda-taken.json` gaan mee als bron. Een dagronde van de Agendawacht (`--dag`) zet `noden_onbekend` (F8) |
+| `agenda_wacht.py --taken` en `--terugkijken` | bewust buiten de ronde, want een ronde daar overschrijft de hartslag en de kennis van de echte ronde; `ag.werkwijze()` stopt streng, zonder hartslag of kennis als het lukt |
+| `plaud_wacht.py`, de personentabel van De Fathomwacht | onbekend of een lege tabel: nood, deze ronde geen opname herkend of gepubliceerd (ze wacht ongemoeid), wel het toezicht; code DEELS. Niet alles privé zoals De Zoomwacht, want een transcript in een verkeerde dossiermap is niet zomaar terug te halen |
+| `zelfcontrole.py` (Agendawacht, bord tegenover repo) | "niet te lezen (<soort>)" of "leeg", nooit meer drift met de hash van een lege tekst |
+| `mac/mail_wacht.py` (staat uit, `mail-mch.plist.uit`) | nood, hartslag fout met `nood_sluiten` false en exit 1, voor wachtwoord en postvak; de publieke ingang geeft de werkwijze niet, dus aanzetten kan alleen via de tunnel (hieronder) |
+| `goudstandaard.py` | `werkwijze_van_bord()` stopt (RondeGestopt), ook bij een bevroren invoer zonder werkwijze |
+| `planning/naamstructuur_installeren.py` | stopt; het zaad komt alleen op een bewezen lege werkwijze, na de registratie |
+
+`regisseur.py` leest zijn eigen werkwijze uit de ronde. Open, gemeten op 01-11-2026: voor
+het dossier van een collega (`regisseur.py:1274`, `dossier`) wordt een antwoord zonder
+werkwijze-veld nog een lege tekst; een fout van het bord wordt wel "onbekend". Dat bestand
+lag die dag bij een andere sessie (afdeling Bouw).
 
 Een runner op de Mac kan ook door de ronde (sinds 19-10-2026, De Tekenaar, `tekenaar.py`). De publieke ingang van
 het bord laat alleen hartslag, klaarzet, gesprekken en logboek door, niet de werkwijze, de kennis, de noden of de
