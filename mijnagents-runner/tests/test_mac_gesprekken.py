@@ -427,7 +427,7 @@ def test_dagoverzicht_toont_gezien_zonder_namen():
     tekst = V.tekst(v)
     # Jan Proef 3, de groep 1, het LID-gesprek 1 (00:01 Brussel); de oproepen met duur: 5, 2 en 10 min
     assert "- WhatsApp: 5 berichten in 3 gesprekken, 3 oproepen, 17 min gezien" in tekst, tekst
-    assert "- telefoon: 3 oproepen, 4 min gezien" in tekst, tekst
+    assert "- telefoon: 3 oproepen, 4 min, 2 gemist gezien" in tekst, tekst     # TEL-5: U2 gemist, U6 niet beantwoord
     for naam in (JAN, PIET, GROEP, "Kees Proef", "+32470000099"):
         assert naam not in tekst, naam
     # niet gepland: een WhatsApp- of telefoonoproep van minstens twee minuten, als privé

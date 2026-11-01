@@ -268,6 +268,9 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     leidend = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and is_leidend(g)]
     xel_gemist = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and g.get("bron") == "xelion"
                   and str(g.get("dubbel_van") or "") == "buiten:gemist"]
+    # TEL-5: ook de gemiste en niet beantwoorde iPhone-oproepen, zoals bij Xelion (ze tellen niet als gesprek)
+    tel_gemist = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and g.get("bron") == "telefoon"
+                  and str(g.get("dubbel_van") or "") == "buiten:gemist"]
     # Een Zoom-gesprek met een Fathom-opname staat in de tabel als leidende Fathom-rij (de Zoom-rij is dubbel_van):
     # daarom een totaal over Zoom, Fathom en Plaud, elk gesprek een keer, en geen aparte telling per bron als 'Zoom'.
     vergaderd = [g for g in praat if g.get("bron") in ("zoom", "fathom", "plaud")]
@@ -293,7 +296,7 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
                      "oproepen": len([g for g in wa if soort(g) == "oproep"]),
                      "minuten": sum(int(g.get("minuten") or 0) for g in wa if soort(g) == "oproep")},
         "telefoon": {"stand": kanalen.get("telefoon") or "niet aangesloten", "oproepen": len(tel),
-                     "minuten": sum(int(g.get("minuten") or 0) for g in tel)},
+                     "minuten": sum(int(g.get("minuten") or 0) for g in tel), "gemist": len(tel_gemist)},
         "sms": {"stand": kanalen.get("sms") or "niet aangesloten", "gesprekken": len(sms),
                 "berichten": sum(_berichten(g) for g in sms)},
         "xelion": {"stand": kanalen.get("xelion") or "niet aangesloten", "oproepen": len(xel),
@@ -460,10 +463,10 @@ def tekst(v, prive_postvakken=(), over=None):
     t = v["telefoon"]
     if t["stand"] == "niet aangesloten":
         r.append("- telefoon: nog niet aangesloten")
-    elif t["stand"] != "aangesloten" and not t["oproepen"]:
+    elif t["stand"] != "aangesloten" and not (t["oproepen"] or t.get("gemist")):
         r.append(f"- telefoon: onbekend ({t['stand']})")
     else:
-        r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min gezien"
+        r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min, {t.get('gemist', 0)} gemist gezien"
                  + ("" if t["stand"] == "aangesloten" else f" ({t['stand']})"))
     sm = v.get("sms") or {"stand": "niet aangesloten", "gesprekken": 0, "berichten": 0}
     if sm["stand"] == "niet aangesloten":
