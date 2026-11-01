@@ -7779,15 +7779,19 @@ def main():
     _slot = slot_nemen()  # noqa: F841  blijft open tot het einde van de ronde
     global WACHTRIJ_KLAAR
     WACHTRIJ_KLAAR = _wachtrij_begin()
-    if not agenda.beschikbaar():
-        ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
-        print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
-        return 78                        # niet 0: niets verwerkt (A6)
-    # De gedeelde ronde (N12, NA09-rest 01-11-2026, overleg 12): de werkwijze van het bord, of geen ronde; en wat ik las
-    # (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, met een eigen kennisregel.
-    # De terugkijkstand en het kleurherstel gaan bewust niet door de ronde: ze zouden de hartslag en de kennis van deze
-    # ronde overschrijven.
     try:
+        # Eerst het regelboek, zoals voordien, en pas dan "actief" (Codex NA76): zonder regelboek meld ik fout zonder
+        # eerst actief te zeggen; komt die melding niet aan, dan blijft mijn vorige status staan. De ronde leest het
+        # daarna nog eens, voor haar kennis.
+        ag.werkwijze(taak="agenda in het oog")
+        if not agenda.beschikbaar():
+            ag.hartslag("fout", taak="geen agendatoegang", detail="GOOGLE_AGENDA_* ontbreekt in ~/appportal/.env")
+            print("geen agendatoegang: GOOGLE_AGENDA_* ontbreekt", file=sys.stderr)
+            return 78                    # niet 0: niets verwerkt (A6)
+        # De gedeelde ronde (N12, NA09-rest 01-11-2026, overleg 12): de werkwijze van het bord, of geen ronde; en wat ik
+        # las (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, met een eigen
+        # kennisregel. De terugkijkstand en het kleurherstel gaan bewust niet door de ronde: ze zouden de hartslag en de
+        # kennis van deze ronde overschrijven.
         with ag.ronde("agenda in het oog") as r:
             _ronde(r)
     except bord.RondeGestopt as e:

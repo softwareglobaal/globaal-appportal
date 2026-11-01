@@ -763,6 +763,26 @@ def test_na75_mac_mailwacht_zet_pas_actief_na_regelboek_en_wachtwoord():
             pass
     assert "actief" not in [s["status"] for s in draad.statussen("mail-proef")], draad.statussen("mail-proef")
 
+
+def test_na76_agendawacht_zegt_geen_actief_zonder_regelboek():
+    """Codex NA76: de Agendawacht las op main haar regelboek voor ze actief meldde. In de ronde kwam actief eerst; kwamen
+    daarna beide fouthartslagen niet aan, dan bleef ze op actief, waar main de vorige status liet staan. Nu leest ze
+    eerst streng het regelboek, zoals voordien."""
+    import agenda_wacht as AW  # noqa: PLC0415
+    draad = Draad(werkwijze="", open_noden=[])
+    echt = draad.antwoord
+
+    def antwoord(pad, volledig, payload):
+        if pad == "/agent-status" and payload.get("status") == "fout":
+            raise urllib.error.URLError("bord even weg (proef)")
+        return echt(pad, volledig, payload)
+
+    draad.antwoord = antwoord
+    with op_het_bord(draad), vervangen((AW.agenda, "beschikbaar", lambda: True), (AW, "slot_nemen", lambda *a, **k: None),
+                                       (AW, "_wachtrij_begin", lambda: True), (AW, "_ronde", lambda rd: None)):
+        uit = AW.main()
+    assert uit == 1 and "actief" not in [s["status"] for s in draad.statussen("agenda-wacht")], (uit, draad.statussen())
+
 if __name__ == "__main__":
     import traceback
     goed = fout = 0
