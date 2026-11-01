@@ -560,6 +560,14 @@ def _vingerafdruk(map_):
     return uit
 
 
+class _NaDeProeven(PR.datetime):
+    """De klok van main() in _proef: vast op 04-11. De proeven zelf staan vast op 02-11; met de echte klok deelde main()
+    op 02-11 de dag met hen en telden de modelvragen anders (T-0120 samen, 02-11-2026)."""
+    @classmethod
+    def now(cls, tz=None):
+        return PR.datetime(2026, 11, 4, 4, 0, tzinfo=tz)
+
+
 def _proef(model_aan, vraag, zonder=True, keer=1, naam=None):
     basis, fathom, plaud, zoom, rijen = _proefdata(zonder, naam)
     uitvoer = os.path.join(basis, "gespreksanalist")
@@ -573,7 +581,8 @@ def _proef(model_aan, vraag, zonder=True, keer=1, naam=None):
         for i in range(keer):
             pad, u = PR.proef("2026-10", vraag, nu=AR.datetime(2026, 11, 2, 3, 0, i).astimezone())
         scherm = io.StringIO()
-        with contextlib.redirect_stdout(scherm), vervangen((sys, "argv", ["proef", "--maand", "2026-10"])):
+        with contextlib.redirect_stdout(scherm), vervangen((sys, "argv", ["proef", "--maand", "2026-10"]),
+                                                           (PR, "datetime", _NaDeProeven)):
             PR.main()
     na = {p: h for p, h in _vingerafdruk(THUIS).items() if p != LIMIET}     # de hele tijdelijke HOME
     nieuw = sorted(set(na) - set(voor))
