@@ -3,6 +3,23 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Overdracht Dagboek compleet (01-11-2026, naar Claude 1 op de laptop)
+
+Alles staat op main (commit 4b25b01 en eerder). Niets hiervan is live gezet zonder ja van Mehdi.
+
+- [x] Live: locatie (Onderweg, Waar was ik), blok Zoom, Fathom en Plaud, pagina Bronnen in het Dagboek.
+- [ ] Live zetten (wacht op ja van Mehdi): blok "Eigen werk en gezondheid" (Wispr, websites, Apple Watch).
+      Op de VM: `cd ~/appportal && git pull && docker compose up -d --build app-dagboek`; de Dagbundelaar neemt het
+      blok mee in zijn volgende nachtronde.
+- [ ] Claude 1, laptop: Browserwacht en nieuwe Wispr-wacht aanzetten, stappen in
+      `mijnagents-runner/docs/wispr-websites-gezondheid-naar-het-dagboek.md`.
+- [ ] Mehdi, iPhone: Health Auto Export aanzetten (zelfde document, onderaan). Daarna controleert Claude 1 of
+      gezondheid-wacht "gegevens aanwezig" meldt.
+- [ ] Claude 1: driehoeksoverleg Dagboek compleet (P1 tot P8) starten met
+      `mijnagents-runner/docs/driehoeksoverleg-starten-voor-claude-1.md`; daarna bouwen wat 3-0 of 2-1 is aangenomen.
+- [ ] Thread "Laat alle wachten werken": Fotowacht, sms en iMessage, Xelion, YouTube (regel in het blok Eigen werk).
+- [ ] Getypte tekst: niet gebouwd, advies nee (toetsenbordregistratie ziet wachtwoorden). Keuze van Mehdi.
+
 ## Ai Angel, de Mehdi-agent (31-10-2026)
 
 - [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
