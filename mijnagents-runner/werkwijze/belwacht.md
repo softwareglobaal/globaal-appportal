@@ -1,6 +1,6 @@
 # Werkwijze van De Belwacht (Privé · Communicatie)
 
-Versie 2.0 (26-10-2026). Vervangt versie 1 van 10-09-2026, die op Xelion wachtte.
+Versie 2.1 (01-11-2026: ook de namen uit Contacts, en een inhaalronde vanaf een dag). Versie 2.0 (26-10-2026). Vervangt versie 1 van 10-09-2026, die op Xelion wachtte.
 Mehdi besliste op 26-10-2026: de telefoongesprekken van zijn iPhone komen met
 namen in de gesprekkentabel, maar alleen wie, wanneer en hoe lang. Zijn iPhone
 zet zijn oproepen op zijn Mac; daar lees ik ze. Zo kan De Dagbundelaar elke nacht
@@ -15,7 +15,7 @@ Leest elk uur, als de Mac wakker is, een kopie van de oproepgeschiedenis van de 
 | Wat | Waar |
 |---|---|
 | Oproepen van de iPhone: tijdstip, duur, in of uit, beantwoord, nummer | CallHistory.storedata op de Mac, via een kopie |
-| Naam bij een nummer | het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2.sqlite), via een kopie |
+| Naam bij een nummer | het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2.sqlite), en voor een nummer dat WhatsApp niet kent het adresboek van Contacts op de Mac (alleen naam en nummer), via een kopie |
 
 De geschiedenis zelf leest alleen een vast hulpprogramma, MacGesprekkenKopie. Dat
 is het enige programma met volledige schijftoegang; Mehdi zette die toestemming

@@ -1,6 +1,6 @@
 # Werkwijze van De Sms-wacht (Privé · Communicatie)
 
-Versie 1.0 (31-10-2026). Mehdi, 31-10-2026: "al mijn kanalen moeten erbij komen, zodat we
+Versie 1.1 (01-11-2026: ook de namen uit Contacts, een afzender in letters, en een inhaalronde vanaf een dag). Versie 1.0 (31-10-2026). Mehdi, 31-10-2026: "al mijn kanalen moeten erbij komen, zodat we
 weten wat voor kanalen er zijn en hoeveel daar is binnengekomen". Zijn sms en iMessages
 komen via Messages in iCloud en Text Message Forwarding op zijn laptop; daar lees ik ze,
 zoals De WhatsApp-wacht WhatsApp leest.
@@ -15,7 +15,7 @@ Leest elk uur, als de laptop wakker is, een kopie van de berichtendatabank van M
 |---|---|
 | Berichten: gesprek, tijdstip, in of uit, sms of iMessage | chat.db van Messages op de laptop, via een kopie |
 | Deelnemers van een gesprek: nummer of mailadres, groepsnaam | chat.db, via een kopie |
-| Naam bij een nummer | het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2.sqlite), via een kopie |
+| Naam bij een nummer | het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2.sqlite), en voor een nummer dat WhatsApp niet kent het adresboek van Contacts op de Mac (alleen naam en nummer), via een kopie |
 
 De databank zelf leest alleen het vaste hulpprogramma MacGesprekkenKopie, met de set
 sms. Dat is het enige programma met volledige schijftoegang; Mehdi zette die toestemming
