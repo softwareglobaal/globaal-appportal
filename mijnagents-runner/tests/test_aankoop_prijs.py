@@ -1082,6 +1082,15 @@ r = NepRonde()
 PO.werk(r, None, False, begin=time.monotonic() - PO.RONDE_SECONDEN)
 check("zonder tijd over blijft een klaargezette vraag staan (Codex X6)", opgepakt == [] and "2 wachten" in r.detail, r.detail)
 
+rij = {"compatibiliteit": {"netspanning 220 V": {"oordeel": "ja", "citaat": "220-240 V", "bewijs_url": "https://w.be/h.pdf"},
+                           GEHEIM: "onbekend"}, "per_eis": ["ja", "onbekend"]}
+regels = PO.per_eis(rij, ["netspanning 220 V", GEHEIM])
+check("het werkverslag toont per eis het oordeel van model en code, een eigen eis zonder haar woorden",
+      regels == [{"eis": "netspanning 220 V", "model": "ja", "citaat": "220-240 V", "bewijs_url": "https://w.be/h.pdf",
+                  "code": "ja"},
+                 {"eis": "eis 2", "model": "onbekend", "citaat": None, "bewijs_url": None, "code": "onbekend"}]
+      and GEHEIM not in str(regels), str(regels))
+
 bron = open(Path(PO.__file__), encoding="utf-8").read()
 check("de runner zet geen API-sleutel klaar voor de prijsvraag (overleg 14)", "sleutelbron" not in bron
       and "zet_anthropic" not in bron and "anthropic" not in bron.lower().replace("claude-abonnement", ""))

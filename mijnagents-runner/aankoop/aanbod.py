@@ -538,6 +538,16 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
     paginas is {genormaliseerde url: tekst} van de gelezen pagina's."""
     if not eisen:
         return "ja"
+    waarden = oordeel_per_eis(aanbod, eisen, alle_tekst, eigen_tekst, paginas)
+    if "nee" in waarden:
+        return "nee"
+    if all(w == "ja" for w in waarden):
+        return "ja"
+    return "onbekend"
+
+
+def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
+    """Het oordeel van de code per eis, in de volgorde van eisen (zie compatibel), voor compatibel en het werkverslag."""
     oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
     waarden = []
     for eis in eisen:
@@ -569,11 +579,7 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
             if not bewezen:
                 oordeel = "onbekend"
         waarden.append(oordeel)
-    if "nee" in waarden:
-        return "nee"
-    if all(w == "ja" for w in waarden):
-        return "ja"
-    return "onbekend"
+    return waarden
 
 
 def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
@@ -644,6 +650,7 @@ def verwerk(aanbiedingen, vandaag, koersen, eisen=(), paginas=None):
             totaal(a, koersen, winkeltekst(a["url"]), tekst, verzendtekst(a["url"])) if paginas is not None
             else totaal(a, koersen))
         rij["compatibel"] = compatibel(a, eisen, alle_tekst, tekst, paginas)
+        rij["per_eis"] = oordeel_per_eis(a, eisen, alle_tekst, tekst, paginas) if eisen else []
         rij["context"] = contexten(a, tekst) if paginas is not None else {}
         (niet_compatibel if rij["compatibel"] == "nee" else goed).append(rij)
     goed.sort(key=lambda r: (r["totaal_eur"] is None, r["compatibel"] != "ja",
