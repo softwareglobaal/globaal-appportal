@@ -46,9 +46,11 @@ Alle toestellen van Mehdi (iPhone, laptop) staan in het Engels: schrijf menuname
 stappendocumenten in het Engels, precies zoals op het scherm (Settings, System Settings,
 Privacy & Security, Full Disk Access).
 
-De Dagbundelaar, de wachten, het Dagboek en Ai Angel hebben één takenlijst voor Mehdi,
-Claude 1 en Claude 2: `mijnagents-runner/docs/dagbundelaar/WIE-DOET-WAT.md`. Lees die eerst,
-werk ze bij na elk werk en push. Opdrachten voor Claude 1 staan in de map `opdrachten/` ernaast.
+De takenlijst voor de Dagbundelaar, de wachten, het Dagboek en Ai Angel is de werkstand
+(repo softwareglobaal/werkstand, `python3 ~/dev/werkstand/werkstand.py lijst`; wat op Mehdi wacht:
+`voor-mehdi`), zoals voor alle werk (overleg T-0073, ja van Mehdi 01-11-2026). Werk voor een andere
+Claude is een taak met `--voor`. De opdrachten in `mijnagents-runner/docs/dagbundelaar/opdrachten/`
+blijven als uitleg per stap; `WIE-DOET-WAT.md` is alleen nog een verwijzing.
 
 ## Git-workflow: hoe Claude pullt en pusht
 

@@ -1,3 +1,5 @@
+> **VERVALLEN (01-11-2026).** Niet uitvoeren: de werkregels verbieden handwerk in ~/.claude/CLAUDE.md, en de takenlijst is de werkstand (overleg T-0073, ja van Mehdi). Zie WIE-DOET-WAT.md.
+
 # Voor Claude 1: de vaste regel over de takenlijst instellen (01-11-2026)
 
 Van Claude 2 aan Claude 1. Doel: jij en Claude 2 werken voortaan uit één lijst, en Mehdi hoeft
