@@ -191,6 +191,20 @@ def paginas(data):
 # te betalen. Deze kosten betreffen 50 euro" werd 50 euro het totaal inclusief btw; "totale bedragen" is geen totaal.
 TOTAALWOORD = re.compile(r"\btota(?:al\w*|l|len)\b|te\s+betalen|eindbedrag", re.I)
 ZINSEINDE = re.compile(r"(?<=[a-zà-ÿ)])[.!?]\s+(?=[A-ZÀ-Ý])")
+# Na een afkorting eindigt geen zin: "Totaal excl. BTW 10.000,00" is een zin (zelf gevonden 02-11-2026)
+AFKORTING = re.compile(r"(?:\b(?:excl|incl|art|nr|ca|bv|bvb|bijv|max|min|tel|gsm|st|vb|enz|ref|blz|resp|dhr|mevr|mr|tav|"
+                       r"afz|ex|ing|ir|zgn|evt|incl|exkl|inkl|tov|o\.a|m\.a\.w)|\b[a-zà-ÿ]{1,2})$", re.I)
+
+
+def _zinnen(regel):
+    """De zinnen van een regel; een punt na een afkorting of een woord van een of twee letters is geen zinseinde."""
+    uit, begin = [], 0
+    for m in ZINSEINDE.finditer(regel):
+        if AFKORTING.search(regel[begin:m.start()]):
+            continue
+        uit.append(regel[begin:m.start() + 1])
+        begin = m.end()
+    return uit + [regel[begin:]]
 BTW_TARIEVEN = (21, 6, 12)
 
 
@@ -235,7 +249,7 @@ def lees(tekst_paginas):
         laag = regel.lower()
         # "Incl B.T.W. 5 786,21": een korte regel met incl en btw is ook een totaalregel (proefbank 02-11-2026)
         btw_regel = INCL.search(laag) and re.search(r"b\.?\s?t\.?\s?w|\btva\b|\bvat\b", laag) and _woorden(regel) <= 4
-        zinnen = [z for z in ZINSEINDE.split(regel) if TOTAALWOORD.search(z)] or ([regel] if btw_regel else [])
+        zinnen = [z for z in _zinnen(regel) if TOTAALWOORD.search(z)] or ([regel] if btw_regel else [])
         for zin in zinnen:
             zlaag = zin.lower()
             if SUBTOTAAL.search(zlaag) and not re.search(r"\bna\b.{0,20}korting", zlaag):
@@ -508,6 +522,17 @@ def versie(naam):
     return nr + (100 if re.search(r"\bgetekend\b|\bondertekend\b", laag) else 0)
 
 
+def zelfde_bron(a, b):
+    """Zelfde map, of dezelfde bestandsnaam op een kopienummer of versiewoord na."""
+    def kern(naam):
+        n = str(naam).rsplit("/", 1)[-1].lower()
+        n = re.sub(r"\.pdf$", "", n)
+        n = re.sub(r"\s*\((?:\d+|tweede|derde|vierde|vijfde)(?:\s+versie)?\)\s*$|\s+\d{1,2}$|\s+v\d{1,2}$", "", n)
+        return n.strip()
+    map_a, map_b = (str(x).rsplit("/", 1)[0] if "/" in str(x) else "" for x in (a, b))
+    return map_a == map_b or kern(a) == kern(b)
+
+
 def versies(bestanden):
     """(tellen, oudere): bestanden die een offertenummer delen zijn versies van dezelfde offerte en alleen de nieuwste
     telt (proefbank 02-11-2026: versie 1 en 2 van een offerte stonden als twee inschrijvers naast elkaar).
@@ -516,7 +541,9 @@ def versies(bestanden):
     for b in sorted(bestanden, key=lambda b: (versie(b["naam"]), b.get("gewijzigd") or "", b["naam"].lower()),
                     reverse=True):
         nrs = offertenummers(b["naam"])
-        nieuwer = next((nummer[n] for n in sorted(nrs) if n in nummer), None)
+        # Twee inschrijvers met toevallig hetzelfde nummer in de naam vallen nooit samen: een versie staat in dezelfde map,
+        # of heeft dezelfde naam op een kopienummer na ("Nieuwe offerte/Kosztorys X.pdf" en "Kosztorys X 2.pdf")
+        nieuwer = next((nummer[n] for n in sorted(nrs) if n in nummer and zelfde_bron(b["naam"], nummer[n]["naam"])), None)
         if nieuwer is not None:
             oudere.append((b, nieuwer))
             continue

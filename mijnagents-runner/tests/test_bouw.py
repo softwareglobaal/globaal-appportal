@@ -1367,6 +1367,16 @@ _zk = lambda q, p: [{"soort": "file", "naam": "06-17 Vergadering dakwerken.mp3",
                     {"soort": "file", "naam": "offerte dakwerken.pdf", "pad": E.BASIS[S.HA] + "/2998 Y/Quotes/offerte dakwerken.pdf"}]
 check("een opname of foto in een offertemap is geen eerdere offerte", [t["naam"] for t in E.in_mappen(S.HA, "dakwerken", zoek=_zk)]
       == ["offerte dakwerken.pdf"])
+for _t, _e, _i in (("Totaal excl. BTW 10.000,00", 10000.0, None), ("Totaal incl. BTW: 12.100,00", None, 12100.0),
+                   ("TOTAAL EXCL. BTW 9.000,00 EUR", 9000.0, None), ("Totaal excl. Btw 9.000,00 EUR", 9000.0, None)):
+    _p = F.lees(pdf("Offerte", _t))
+    check(f"'{_t}': de punt na de afkorting is geen zinseinde", _p["excl"] == _e and _p["incl"] == _i, _p)
+_tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026050.pdf", "gewijzigd": "2026-05-01"},
+                        {"naam": "Dak Twee/Offerte 2026050 dakwerken.pdf", "gewijzigd": "2026-05-02"},
+                        {"naam": "Kosztorys OF_26_1098155.pdf", "gewijzigd": "2026-09-01"},
+                        {"naam": "Nieuwe offerte/Kosztorys OF_26_1098155 2.pdf", "gewijzigd": "2026-09-20"}])
+check("twee inschrijvers met toevallig hetzelfde nummer blijven apart; een kopie in een andere map is een versie",
+      len(_tel) == 3 and [o[0]["naam"] for o in _oud] == ["Kosztorys OF_26_1098155.pdf"], [b["naam"] for b in _tel])
 from bouw import proefbank as PB  # noqa: E402
 _o = PB.Opname(lambda *a, **k: {"gelezen": True})
 check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",
