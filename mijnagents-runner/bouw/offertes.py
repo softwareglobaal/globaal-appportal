@@ -193,11 +193,12 @@ TOTAALWOORD = re.compile(r"\btota(?:al\w*|l|len)\b|te\s+betalen|eindbedrag", re.
 ZINSEINDE = re.compile(r"(?<=[a-zà-ÿ)])[.!?]\s+(?=[A-ZÀ-Ý])")
 # Na een afkorting eindigt geen zin: "Totaal excl. BTW 10.000,00" is een zin (zelf gevonden 02-11-2026)
 AFKORTING = re.compile(r"(?:\b(?:excl|incl|art|nr|ca|bv|bvb|bijv|max|min|tel|gsm|st|vb|enz|ref|blz|resp|dhr|mevr|mr|tav|"
-                       r"afz|ex|ing|ir|zgn|evt|incl|exkl|inkl|tov|o\.a|m\.a\.w)|\b[a-zà-ÿ]{1,2})$", re.I)
+                       r"afz|ex|ing|ir|zgn|evt|exkl|inkl|tov|o\.a|m\.a\.w))$", re.I)
 
 
 def _zinnen(regel):
-    """De zinnen van een regel; een punt na een afkorting of een woord van een of twee letters is geen zinseinde."""
+    """De zinnen van een regel; een punt na een gekende afkorting is geen zinseinde (Codex 29: een kort woord als 'af'
+    wel)."""
     uit, begin = [], 0
     for m in ZINSEINDE.finditer(regel):
         if AFKORTING.search(regel[begin:m.start()]):
@@ -210,6 +211,14 @@ BTW_TARIEVEN = (21, 6, 12)
 
 def _woorden(regel):
     return len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", regel))
+
+
+# Codex 29: "Optie 1.210,00 EUR" of "Transport incl. BTW 50,00 EUR" is geen totaal; alleen deze woorden mogen naast het bedrag
+KAAL_WOORD = {"eur", "euro", "incl", "inclusief", "btw", "tvac", "totaal", "total", "bedrag", "te", "betalen"}
+
+
+def alleen_bedrag(regel):
+    return all(w.lower() in KAAL_WOORD for w in re.findall(r"[A-Za-zÀ-ÿ]{2,}", regel))
 
 
 def _losse_bedragen(regel):
@@ -248,7 +257,7 @@ def lees(tekst_paginas):
     for i, regel in enumerate(regels):
         laag = regel.lower()
         # "Incl B.T.W. 5 786,21": een korte regel met incl en btw is ook een totaalregel (proefbank 02-11-2026)
-        btw_regel = INCL.search(laag) and re.search(r"b\.?\s?t\.?\s?w|\btva\b|\bvat\b", laag) and _woorden(regel) <= 4
+        btw_regel = INCL.search(laag) and re.search(r"b\.?\s?t\.?\s?w|\btva\b|\bvat\b", laag) and alleen_bedrag(regel)
         zinnen = [z for z in _zinnen(regel) if TOTAALWOORD.search(z)] or ([regel] if btw_regel else [])
         for zin in zinnen:
             zlaag = zin.lower()
@@ -267,7 +276,7 @@ def lees(tekst_paginas):
                 kale += los
                 for volgende in [r for r in regels[i + 1:i + 6] if r.strip()][:4]:
                     nog = _losse_bedragen(volgende)
-                    if len(nog) == 1 and _woorden(volgende) <= 2:
+                    if len(nog) == 1 and alleen_bedrag(volgende):
                         kale.append(nog[0])
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
@@ -530,7 +539,8 @@ def zelfde_bron(a, b):
         n = re.sub(r"\s*\((?:\d+|tweede|derde|vierde|vijfde)(?:\s+versie)?\)\s*$|\s+\d{1,2}$|\s+v\d{1,2}$", "", n)
         return n.strip()
     map_a, map_b = (str(x).rsplit("/", 1)[0] if "/" in str(x) else "" for x in (a, b))
-    return map_a == map_b or kern(a) == kern(b)
+    # Codex 29: twee verschillende submappen zijn twee inschrijvers; alleen de lotmap zelf en een submap kunnen een kopie delen
+    return map_a == map_b or ("" in (map_a, map_b) and kern(a) == kern(b))
 
 
 def versies(bestanden):

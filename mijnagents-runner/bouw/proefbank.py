@@ -267,9 +267,13 @@ def afschermen():
     bordhost = urllib.parse.urlsplit(bord.PLATFORM).netloc
 
     def urlopen(req, *args, **kw):
-        if isinstance(req, urllib.request.Request) and urllib.parse.urlsplit(req.full_url).netloc == bordhost \
-                and req.get_method() != "GET":
-            raise PermissionError(f"proefbank: {req.get_method()} naar het bord geweigerd")
+        if isinstance(req, urllib.request.Request):
+            url, methode = req.full_url, req.get_method()
+        else:   # Codex 29: ook een gewone URL met data is een POST
+            data = args[0] if args else kw.get("data")
+            url, methode = str(req), ("POST" if data is not None else "GET")
+        if urllib.parse.urlsplit(url).netloc == bordhost and methode != "GET":
+            raise PermissionError(f"proefbank: {methode} naar het bord geweigerd")
         return echt(req, *args, **kw)
     urllib.request.urlopen = urlopen
 

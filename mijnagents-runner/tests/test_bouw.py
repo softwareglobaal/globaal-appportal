@@ -1378,6 +1378,28 @@ _tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026050.pdf", "gewijzigd": "20
 check("twee inschrijvers met toevallig hetzelfde nummer blijven apart; een kopie in een andere map is een versie",
       len(_tel) == 3 and [o[0]["naam"] for o in _oud] == ["Kosztorys OF_26_1098155.pdf"], [b["naam"] for b in _tel])
 from bouw import proefbank as PB  # noqa: E402
+_p = F.lees(pdf("Offerte 12", "Totaal 1.000,00 EUR", "Optie 1.210,00 EUR", "Voorwaarden volgen."))
+check("Codex 29: een optie op de regel na een kaal totaal is geen inclusief", _p["incl"] is None and _p["excl"] is None, _p)
+_p = F.lees(pdf("Offerte 13", "Transport incl. BTW 50,00 EUR", "Voorwaarden volgen."))
+check("Codex 29: 'Transport incl. BTW 50,00' is geen totaal", _p["incl"] is None, _p)
+_p = F.lees(pdf("Offerte 14", "De vorige som 210,00 EUR is af. Totaal 1.000,00 EUR", "Incl. BTW 1.210,00 EUR", "Einde."))
+check("Codex 29: na een kort woord als 'af' eindigt de zin wel", _p["excl"] == 1000.0 and _p["incl"] == 1210.0, _p)
+_tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026001.pdf", "gewijzigd": "2026-05-01"},
+                        {"naam": "Dak Twee/Offerte 2026001.pdf", "gewijzigd": "2026-05-02"}])
+check("Codex 29: dezelfde naam in twee inschrijversmappen is geen versie", len(_tel) == 2 and not _oud)
+import urllib.request as _ur  # noqa: E402
+_echt_open = _ur.urlopen
+_gezien = []
+_ur.urlopen = lambda *a, **k: _gezien.append(a) or "doorgelaten"
+PB.afschermen()
+try:
+    _ur.urlopen(PB.bord.PLATFORM + "/api/klaarzet", b"{}")
+    check("Codex 29: een gewone URL met data naar het bord wordt geweigerd", False)
+except PermissionError:
+    check("Codex 29: een gewone URL met data naar het bord wordt geweigerd", not _gezien)
+finally:
+    _ur.urlopen = _echt_open
+
 _o = PB.Opname(lambda *a, **k: {"gelezen": True})
 check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",
       _o.call("/api/klaarzet", {"items": [{"titel": "t"}]}) == {"nieuw": 1, "bestaand": 0} and len(_o.schrijf) == 1
