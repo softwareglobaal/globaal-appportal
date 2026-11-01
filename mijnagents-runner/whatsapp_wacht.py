@@ -11,6 +11,8 @@ de gedeelde ronde (N4, N10 tot N14). Daarna leest hij de rijen, de hartslag en d
 
     whatsapp_wacht.py           een ronde
     whatsapp_wacht.py --droog   de bestaande kopie lezen en per dag de aantallen tonen; niets naar het bord
+    whatsapp_wacht.py --inhaal-vanaf 2026-10-01   (of --vanaf)
+                                eenmalig vanaf die dag lezen (WA-1, hoogstens 60 dagen terug); met --droog alleen tonen
 """
 import argparse
 import os
@@ -68,14 +70,15 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
     return max(gedekt) if gedekt else None
 
 
-def droog():
-    """Zonder bord en zonder nieuwe kopie: wat de bestaande kopie per dag zou geven, alleen aantallen."""
+def droog(vanaf=None):
+    """Zonder bord en zonder nieuwe kopie: wat de bestaande kopie per dag zou geven, alleen aantallen. Met vanaf de dagen
+    van een inhaalronde vanaf die dag (WA-1)."""
     kopie = M.KOPIE / KANAAL / "gesprekken.sqlite"
     if not kopie.exists():
         print("geen kopie; maak er eerst een met MacGesprekkenKopie whatsapp")
         return 1
     nu = datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
     rijen, info = M.whatsapp_rijen(kopie, dagen)
     rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"], M.oproepen_vanaf(info["oudste_oproep"], nu))
     for dag in dagen:
@@ -89,9 +92,11 @@ def droog():
 def main(argv=None):
     p = argparse.ArgumentParser(description="De WhatsApp-wacht: de WhatsApp-databank op de Mac lezen.")
     p.add_argument("--droog", action="store_true", help="de bestaande kopie lezen, niets naar het bord")
+    p.add_argument("--inhaal-vanaf", "--vanaf", dest="inhaal_vanaf", type=M.inhaal_vanaf, metavar="JJJJ-MM-DD",
+                   help="eenmalig vanaf die dag lezen (hoogstens 60 dagen terug); de stand op de Mac zakt niet")
     a = p.parse_args(argv)
     if a.droog:
-        return droog()
+        return droog(a.inhaal_vanaf)
     ronde_id = secrets.token_hex(16)
     try:
         with M.slot(NAAM):
@@ -101,7 +106,7 @@ def main(argv=None):
                 with M.tunnel() as url:
                     bord.PLATFORM, bord.TOKEN = url, token
                     with ag.ronde(TAAK) as r:
-                        gedekt = werk(r, ronde_id, stand.get("gedekt_tot"))
+                        gedekt = werk(r, ronde_id, M.inhaal_grens(stand.get("gedekt_tot"), a.inhaal_vanaf))
                     if not M.eindcontrole(ag, NAAM, TAAK, ronde_id):
                         # P8 en Q6: het slot houdt een tweede ronde van mij op deze Mac tegen, dus de status op het bord
                         # is van mij; zonder bevestiging staat ze op fout met een nood, nooit op een oude klaar.

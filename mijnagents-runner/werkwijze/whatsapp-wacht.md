@@ -33,7 +33,8 @@ nooit tekst. Ik lees alleen wat het wegschreef, en wis het na het lezen.
 2. Ik vraag MacGesprekkenKopie een verse kopie. Komt die niet binnen twee minuten,
    of weigert macOS de toegang, dan meld ik een nood en lees ik niets.
 3. Ik lees de laatste veertien Brusselse dagen; na een lange slaap van de Mac tot
-   zestig dagen terug, vanaf de laatste dag die ik las. Per gesprek per dag een rij met het
+   zestig dagen terug, vanaf de laatste dag die ik las; met --inhaal-vanaf eenmalig
+   vanaf een gegeven dag, ook hoogstens zestig dagen terug (WA-1). Per gesprek per dag een rij met het
    aantal berichten, hoeveel in en uit, het eerste en laatste uur, en de naam van
    het gesprek; een groep als "groep:" met haar naam. Groepsmeldingen,
    systeemmeldingen en de melding van een oproep tellen niet als bericht.

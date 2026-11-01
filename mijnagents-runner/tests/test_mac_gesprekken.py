@@ -612,6 +612,48 @@ def test_wa2_ronde_schrijft_berichten_maar_geen_dekking_voor_de_oproepgeschieden
     assert gedekt == DAG and "pas vanaf" not in r.detail, r.detail
 
 
+def test_wa1_inhaal_vanaf_een_dag():
+    """WA-1: --inhaal-vanaf 2026-10-01 (of --vanaf) laat De WhatsApp-wacht eenmalig vanaf 01-10 lezen: werk() krijgt
+    30-09 als laatste gedekte dag, dus 32 dagen op 01-11, en de stand op de Mac zakt niet. --droog leest dan ook vanaf
+    die dag. Zonder optie blijft alles zoals het was. Gebouwd, niet gedraaid (X6, X7)."""
+    import contextlib
+    nu = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+    assert len(M.dagen(nu, M.inhaal_grens("2026-10-31", "2026-10-01"))) == 32
+    gezien, geschreven, droog = [], [], []
+    oud = (M.slot, M.lees_token, M.stand_lezen, M.tunnel, WA.ag.ronde, WA.werk, M.eindcontrole, M.stand_schrijven,
+           M.inhaal_vanaf, WA.droog)
+    M.slot = lambda naam: contextlib.nullcontext()
+    M.lees_token = lambda: "proef"
+    M.stand_lezen = lambda naam: {"gedekt_tot": "2026-10-31"}
+    M.tunnel = lambda: contextlib.nullcontext("http://127.0.0.1:1")
+    WA.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde(""))
+    WA.werk = lambda r, ronde_id, gedekt_tot=None: (gezien.append(gedekt_tot), "2026-10-31")[1]
+    M.eindcontrole = lambda *x, **k: True
+    M.stand_schrijven = lambda naam, stand: geschreven.append(stand)
+    M.inhaal_vanaf = lambda tekst, _echt=oud[8]: _echt(tekst, nu)
+    WA.droog = lambda vanaf=None: droog.append(vanaf) or 0
+    oud_platform, oud_token = bord.PLATFORM, bord.TOKEN
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            assert WA.main(["--inhaal-vanaf", "2026-10-01"]) == 0
+            assert WA.main(["--vanaf", "2026-10-01"]) == 0
+            assert WA.main([]) == 0
+            assert WA.main(["--droog", "--vanaf", "2026-10-01"]) == 0 and WA.main(["--droog"]) == 0
+            for slecht in ("2026-09-02", "2026-11-02", "gisteren"):
+                try:
+                    WA.main(["--vanaf", slecht])
+                    raise AssertionError(slecht)
+                except SystemExit as e:
+                    assert e.code == 2, slecht
+    finally:
+        (M.slot, M.lees_token, M.stand_lezen, M.tunnel, WA.ag.ronde, WA.werk, M.eindcontrole, M.stand_schrijven,
+         M.inhaal_vanaf, WA.droog) = oud
+        bord.PLATFORM, bord.TOKEN = oud_platform, oud_token
+    assert gezien == ["2026-09-30", "2026-09-30", "2026-10-31"], gezien
+    assert geschreven == [], geschreven                                 # de stand zakt niet en blijft 31-10
+    assert droog == ["2026-10-01", None], droog
+
+
 def test_belwacht_ronde_zonder_namen():
     r, b, gedekt, gemeld = _draai(BEL, telefoon_wereld, "telefoon")
     assert r.detail.endswith("; ronde-id:" + "c" * 32) and gedekt == DAG
