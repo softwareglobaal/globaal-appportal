@@ -137,11 +137,8 @@ def een_vraag(r, tekst, vandaag, deadline=None):
     gelezen, teksten = F.lees_bestanden(letters, bronnen.download, deadline)
     uit = F.vergelijk(gelezen, vandaag)
     per_post, post_redenen = None, {}
-    soort = {g["letter"]: g["lees"].get("soort") for g in gelezen}
-    offerte_teksten = {l: t for l, t in teksten.items() if soort.get(l) == "offerte"}
-    # Live gemeten 01-11-2026: een fiche telde mee voor de twee, dus kreeg Claude een enkele offerte. Alleen met
-    # minstens twee echte offertes gaat er iets naar Claude op het abonnement.
-    if F.OFFERTE_NAAR_AI and len(offerte_teksten) >= 2:
+    offerte_teksten = F.voor_claude(gelezen, teksten)     # minstens twee echte offertes, anders leeg
+    if F.OFFERTE_NAAR_AI and offerte_teksten:
         extra = [x for x in (v.get("project"), werfstraat(v)) if x]
         geredigeerd = {l: F.redigeer(t, extra) for l, t in offerte_teksten.items()}
         try:

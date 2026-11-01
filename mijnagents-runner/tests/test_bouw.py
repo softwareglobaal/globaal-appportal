@@ -1210,6 +1210,15 @@ _vs = V.vergelijkingsverslag({"firma": S.HB}, "lot 06", [("A", {}, "a"), ("B", {
                              F.vergelijk([{"letter": "A", "lees": F.lees(["Offerte" + VUL2 + "\nTotaal excl. btw 10.000,00\n"])},
                                           {"letter": "B", "lees": F.lees(["Technische fiche EPDM" + VUL2])}], date(2026, 11, 1)),
                              None, {}, "2026-11-01", True, 2)
+_gl = [{"letter": "A", "lees": {"soort": "offerte"}}, {"letter": "B", "lees": {"soort": "geen offerte"}},
+       {"letter": "C", "lees": {"soort": "scan"}}]
+check("controle 25: een offerte met een fiche en een scan gaat niet naar Claude", F.voor_claude(
+    _gl, {"A": "offerte", "B": "fiche", "C": "stukje scan"}) == {})
+check("controle 25: twee echte offertes wel, zonder de fiche", F.voor_claude(
+    _gl + [{"letter": "D", "lees": {"soort": "offerte"}}], {"A": "a", "B": "fiche", "D": "d"}) == {"A": "a", "D": "d"})
+_ov = open(_hier / "offertevergelijker.py", encoding="utf-8").read()
+check("controle 25: de vergelijker roept Claude alleen via voor_claude aan", "F.voor_claude(gelezen, teksten)" in _ov
+      and "len(teksten) >= 2" not in _ov)
 check("controle live 01-11: met een offerte zegt het verslag dat er niets per post te vergelijken is",
       "minder dan twee leesbare offertes" in _vs and "niet betrouwbaar" not in _vs)
 check("het verslag telt fiches apart, ook de overgeslagen", "1 offertes gelezen" in _vs and "3 documenten die geen offerte zijn" in _vs,
