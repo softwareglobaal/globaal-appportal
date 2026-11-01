@@ -400,6 +400,15 @@ O.CLAUDE = os.path.join(NEPMAP, "claude")
 with open(O.CLAUDE, "w") as f:
     f.write(f"#!{sys.executable}\n" + NEP)
 os.chmod(O.CLAUDE, 0o700)
+O.MERK_BESTAND = os.path.join(NEPMAP, "abonnement-bewezen.json")
+
+
+def merk_voor(token, vensters=("five_hour",)):
+    with open(O.MERK_BESTAND, "w") as f:
+        json.dump({"token": O.vingerafdruk_token(token), "vensters": list(vensters)}, f)
+
+
+merk_voor("sk-ant-oat01-nep")
 
 
 def nep_vraag(spec, vraag="Vloerwasser X1 voor Suriname", werkwijze="WERKWIJZE", eisen=("netfrequentie 60 Hz",), **kw):
@@ -603,6 +612,14 @@ check("weigert de hook niet, dan stopt de runner bij de zevende zoekopdracht (K3
 uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + [assistent({"type": "text", "text": "."})] * (O.MAX_BEURTEN + 1)))
 check("meer dan MAX_BEURTEN beurten stopt de runner (K4)", isinstance(uit, dict) and uit["reden"] == "beurten")
 check("de grenzen: 6 zoek, 6 lees, 10.000 tokens per pagina (G2, G5)", (O.MAX_ZOEKEN, O.MAX_LEZEN, O.MAX_PAGINA_TOKENS) == (6, 6, 10000))
+merk_voor("sk-ant-oat01-ander")
+uit, args, _, _, _ = nep_vraag(GEWOON)
+check("zonder geslaagde abonnementsproef voor dit token start claude niet (overleg 19)", isinstance(uit, O.GeenAbonnement)
+      and "abonnementsproef" in str(uit) and args is None, str(uit))
+os.remove(O.MERK_BESTAND)
+uit, args, _, _, _ = nep_vraag(GEWOON)
+check("zonder merkteken ook niet", isinstance(uit, O.GeenAbonnement) and args is None)
+merk_voor("sk-ant-oat01-nep")
 oud_bestand = O.TOKEN_BESTAND
 O.TOKEN_BESTAND = os.path.join(NEPMAP, "bestaat-niet")
 uit, args, _, _, _ = nep_vraag(GEWOON, token=None)
@@ -637,6 +654,16 @@ json.dump({"regels": [INIT, uit_meld, dict(EINDE, result="ok")]}, open(os.path.j
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef zegt 'werkt' bij bron none, extra verbruik uit en een gewoon einde (X7)",
       gelukt and "werkt via het abonnement oauth_token" in melding and "disabled" in melding, melding)
+check("een geslaagde proef schrijft het merkteken voor dit token, rechten 600 (overleg 19)", O.bewezen("sk-ant-oat01-nep")
+      and not O.bewezen("sk-ant-oat01-ander") and os.stat(O.MERK_BESTAND).st_mode & 0o077 == 0)
+os.remove(O.MERK_BESTAND)
+zonder_venster = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
+                  "overageStatus": "disabled"}}
+json.dump({"regels": [INIT, zonder_venster, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("zonder abonnementsvensters slaagt de proef niet en komt er geen merkteken", not gelukt and "persoonlijk" in melding
+      and not os.path.exists(O.MERK_BESTAND), melding)
+merk_voor("sk-ant-oat01-nep")
 json.dump({"regels": [INIT, aan, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef faalt zolang Usage credits aanstaan, met wat Mehdi moet doen", not gelukt

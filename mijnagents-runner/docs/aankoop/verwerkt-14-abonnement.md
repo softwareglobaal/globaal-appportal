@@ -91,3 +91,24 @@ Tests: 233 prijstests groen.
   - het geldt voor alle agents op het abonnement.
 - **Afwijking van X5:** dat script neemt `setup-token` kort op in een tijdelijk bestand (0600, daarna overschreven en
   gewist) om plakken te vermijden. Mehdi wil niets plakken. Het nakijken van dat script hoort bij de bouwsessie.
+
+## Verwerking Codex-controle 18 en overleg 19 (bewijs van een persoonlijk abonnement)
+
+- Codex 18, punt 2 (De Offertevergelijker): die fout kwam van main (#153) en is daar al hersteld (#155). Deze tak
+  raakt dat bestand niet.
+- Codex 18, punt 1: met een setup-token is er geen bewijs van het abonnementstype zonder modelvraag. Overleg 19:
+  - X1 (2-1): de vensters in de stream onderscheiden persoonlijk en Enterprise niet zeker; Mehdi's bevestiging dat hij
+    met zijn persoonlijke account aanmeldt sluit dat;
+  - X2 (3-0): een merkteken bewijst alleen de toestand tijdens de proef;
+  - G2, K3 (3-0): geen nieuwe grens voor Mehdi; X3 (0-3) verworpen;
+  - K2 (3-0): de grendels werken ook tijdens elke vraag (stop bij `overageStatus: "allowed"`, `isUsingOverage`, 90 procent).
+- Gebouwd (A als poort, met B):
+  - `proef_abonnement` slaagt alleen met de vensters `five_hour` of `seven_day`, `overageStatus` niet `allowed` en bron `none`;
+  - dan schrijft de proef `~/.config/prijsonderzoeker/abonnement-bewezen.json` (600) met de vingerafdruk van het token;
+  - `onderzoek()` start alleen als dat merkteken bij het huidige token hoort; een nieuw token vraagt een nieuwe proef.
+- De proef draait pas nadat Mehdi in de chat bevestigt:
+  - hij meldt aan met zijn persoonlijke account;
+  - Usage credits staan uit.
+  Die bevestiging komt in de werkstand (T-0037).
+
+Tests: 242 prijstests groen.
