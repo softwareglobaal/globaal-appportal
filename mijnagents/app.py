@@ -3774,6 +3774,10 @@ mcp_bode.registreer(app, gebruiker, groepen, db, nu)
 import felix_pagina  # noqa: E402
 felix_pagina.registreer(app, gebruiker, groepen, md, nu)
 
+# Voorvertoningen van werkfoto's (fotovoorbeeld.py, T-0120 FOTO-5): de Mac stuurt ze, het Dagboek toont ze.
+import fotovoorbeeld  # noqa: E402
+fotovoorbeeld.registreer(app, TOKEN, os.path.dirname(DB_PAD))
+
 # Genummerde werfmigraties bij startup; /api/werf-context zelf voert uitsluitend SELECT uit.
 with sqlite3.connect(DB_PAD) as _werf_start:
     _werfbezoek_tabel(_werf_start)

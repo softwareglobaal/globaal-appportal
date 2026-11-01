@@ -5,6 +5,7 @@
   <h1>{{ w['label'] if w else naam }}</h1>
   <a href="{{ url_for('wachten_pagina', dag=dag) }}">alle wachten van {{ dagnaam_ }}</a>
   {% if vak %}<span class="zacht klein">vak {{ vak }}</span>{% endif %}
+  {% if naam == 'icloud-wacht' %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
 </header>
 <main>
   <nav class="dagkeuze">

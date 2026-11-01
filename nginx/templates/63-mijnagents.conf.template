@@ -51,6 +51,15 @@ server {
         proxy_set_header X-authentik-groups "";
         proxy_pass $app_upstream;
     }
+    # Voorvertoningen van werkfoto's van de Fotowacht op de Mac (T-0120 FOTO-5); Flask toetst het agententoken en
+    # aanvaardt alleen een kleine JPEG van een werkfoto uit de indeling van die dag (mijnagents/fotovoorbeeld.py).
+    location = /api/fotovoorbeeld {
+        client_max_body_size 256k;
+        proxy_set_header Host $host;
+        proxy_set_header X-authentik-username "";
+        proxy_set_header X-authentik-groups "";
+        proxy_pass $app_upstream;
+    }
 
     # Werf-only werkvoorraad en gelezen dossiercontext; Flask toetst het bestaande agententoken.
     location ^~ /api/werfopdrachten {

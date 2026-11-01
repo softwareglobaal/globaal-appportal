@@ -6,20 +6,24 @@ gegroepeerd per plek. De Dagbundelaar legt ze naast de locatie en de agenda; Meh
 valideert op het bord; pas dan gaan ze via een runbook naar de projectmap.
 
 Token: ~/.config/mijnagents/token (AGENTS_TOKEN van het bord). Bord:
-https://mijnagents.globaal.be (de routes /agent-status, /api/klaarzet en
-/api/logboek passeren de forward-auth en toetsen het token).
+https://mijnagents.globaal.be (de routes /agent-status, /api/klaarzet, /api/logboek en
+/api/fotovoorbeeld passeren de forward-auth en toetsen het token).
 Gebruik: icloud_wacht.py [--dag JJJJ-MM-DD] | icloud_wacht.py --taken
   --taken: de foto-taken van de Werfverslag voorbereider uitvoeren (klaarzet soort taak, voor icloud-wacht):
   foto's van de bezoekdag binnen de straal van het werfadres exporteren naar <bezoekmap>/fotos/ in Dropbox.
 """
+import base64
+import glob
 import hashlib
 import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import uuid
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -62,6 +66,10 @@ INHAAL_VANAF = "2026-10-01"
 INHAAL_DAGEN = 35
 BRON_REGEL = re.compile(r"^(\d+) foto's/video's op (\d{4}-\d{2}-\d{2}), (\d+) plekken, (\d+) zonder GPS")
 METADATA_PER_ITEM = 250
+# T-0120 FOTO-5: een kleine voorvertoning van een werkfoto, naar de VM (POST /api/fotovoorbeeld), nooit naar Dropbox.
+VOORBEELD_PX = 480
+VOORBEELD_MAX = 150_000            # zoals mijnagents/fotovoorbeeld.MAX_BYTES
+VOORBEELD_PER_RONDE = 200
 
 
 def token():
@@ -903,13 +911,30 @@ def _werk():
     if melding:
         bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": "inhalen", "stap": "melding", "tekst": melding}]})
     gelezen = [lees_dag(dag, volledig) for dag, volledig in dagen]
+    try:
+        vv = voorvertoningen()
+    except Exception as e:  # noqa: BLE001  de dagen zijn gelezen; de voorvertoningen proberen het de volgende avond weer
+        vv = {"verstuurd": 0, "zonder_beeld": 0, "niet_toegelaten": 0, "fouten": [f"indeling_niet_gelezen_{type(e).__name__}"]}
+    if vv["verstuurd"] or vv["zonder_beeld"] or vv["niet_toegelaten"] or vv["fouten"]:
+        regels = [{"naam": NAAM, "onderwerp": "voorvertoning", "stap": "schrijf",
+                   "tekst": f"voorvertoningen van werkfoto's naar de VM: {vv['verstuurd']} verstuurd, {vv['zonder_beeld']} zonder lokaal "
+                            f"beeld (alleen in iCloud), {vv['niet_toegelaten']} niet toegelaten (mensen, video of onbekend)"}]
+        if vv["fouten"]:
+            regels.append({"naam": NAAM, "onderwerp": "voorvertoning", "stap": "fout",
+                           "tekst": f"voorvertoningen mislukt: {len(vv['fouten'])}", "detail": ", ".join(sorted(set(vv["fouten"])))})
+        bord("/api/logboek", {"regels": regels})
     n = sum(x["fotos"] for x in gelezen)
     ingehaald = [x["dag"] for x in gelezen if not x["volledig"]]
-    hartslag("klaar", taak=f"foto's van {DAG} klaargezet" + (f", {len(ingehaald)} dagen ingehaald" if ingehaald else ""),
+    hartslag("fout" if vv["fouten"] else "klaar",
+             taak=("voorvertoningen mislukt; " if vv["fouten"] else "") + f"foto's van {DAG} klaargezet"
+                  + (f", {len(ingehaald)} dagen ingehaald" if ingehaald else ""),
              detail=f"{n} foto's op {len(gelezen)} dagen ({', '.join(x['dag'] for x in gelezen)}); "
-                    + "; ".join(f"{x['dag']}: {x['fotos']} foto's, {x['plekken']} plekken, {x['zonder_gps']} zonder GPS" for x in gelezen[-2:]))
+                    + "; ".join(f"{x['dag']}: {x['fotos']} foto's, {x['plekken']} plekken, {x['zonder_gps']} zonder GPS" for x in gelezen[-2:])
+                    + f"; voorvertoningen {vv['verstuurd']} verstuurd")
     for x in gelezen:
         print(f"{x['dag']}: {x['fotos']} foto's, {x['plekken']} groepen, {x['werk']} werkfoto's" + ("" if x["volledig"] else " (ingehaald, alleen metadata)"))
+    print("voorvertoningen:", json.dumps(vv, sort_keys=True))
+    return 1 if vv["fouten"] else 0
 
 
 def dagen_te_lezen(vandaag):
@@ -971,6 +996,79 @@ def lees_dag(dag, volledig):
                    "tekst": f"foto-metadata klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt, {uit.get('bestaand', 0)} al bekend"})
     bord("/api/logboek", {"regels": regels})
     return {"dag": dag, "volledig": volledig, "fotos": len(fotos), "plekken": len(groepen), "zonder_gps": zonder_gps, "werk": n_werk}
+
+
+def beeld_lokaal(f):
+    """Een lokaal beeld van deze foto, zonder iets uit iCloud te halen: eerst de kleinere JPEG die Photos zelf bewaart
+    (resources/derivatives), anders het lokale origineel. None als alleen iCloud het beeld heeft."""
+    uid = str(f.get("uuid") or "")
+    if not re.fullmatch(r"[0-9A-Fa-f-]{8,64}", uid):
+        return None
+    bib = os.path.dirname(LIB)
+    kandidaten = [p for sub in ("resources/derivatives", "resources/derivatives/masters")
+                  for p in glob.glob(os.path.join(bib, sub, uid[0], uid + "_*.jpeg")) if os.path.isfile(p) and os.path.getsize(p) > 0]
+    if kandidaten:
+        return max(kandidaten, key=os.path.getsize)
+    ext = os.path.splitext(str(f.get("bestand") or ""))[1]
+    bron = os.path.join(LIB, uid[0], uid + ext)
+    return bron if ext and os.path.isfile(bron) and os.path.getsize(bron) > 0 else None
+
+
+def maak_voorbeeld(bron, map_):
+    """Een kleine JPEG (sips, hoogstens VOORBEELD_PX, kwaliteit 60) in map_, als bytes; None als het niet lukt."""
+    doel = os.path.join(map_, "voorbeeld.jpg")
+    for px in (VOORBEELD_PX, 320):
+        try:
+            r = subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "60", "-Z", str(px), bron, "--out", doel],
+                               capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if r.returncode == 0 and os.path.isfile(doel) and 0 < os.path.getsize(doel) <= VOORBEELD_MAX:
+            with open(doel, "rb") as f:
+                return f.read()
+    return None
+
+
+def voorvertoningen():
+    """T-0120 FOTO-5: de voorvertoningen die de indeling op de VM vraagt (item 'fotoindeling', voorbeeld_nodig). De Mac
+    kijkt zelf nog eens na in Photos.sqlite en opent alleen een foto zonder mensen (Photos analyseerde de gezichten en
+    vond er geen groot), geen video, geen schermafbeelding of app-foto: een foto van mensen wordt nooit geopend. Alleen
+    een lokaal beeld; wat alleen in iCloud staat, wordt niet opgehaald. Geeft de tellingen; 'fouten' zijn eigen fouten."""
+    d = bord_lees("/api/klaarzet?" + urllib.parse.urlencode({"voor": "fotoindeling", "soort": "fotoindeling", "status": "alle", "n": 60}))
+    uit = {"verstuurd": 0, "zonder_beeld": 0, "niet_toegelaten": 0, "fouten": []}
+    for it in d.get("items") or []:
+        if it.get("van") != NAAM:
+            continue
+        try:
+            inhoud = json.loads(it.get("inhoud") or "{}") if isinstance(it.get("inhoud"), str) else (it.get("inhoud") or {})
+        except ValueError:
+            continue
+        dag, nodig = str(inhoud.get("datum") or ""), [x for x in inhoud.get("voorbeeld_nodig") or [] if isinstance(x, str)]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", dag) or not nodig:
+            continue
+        hier = {f["uuid"]: f for f in fotos_van(dag)}
+        for fid in nodig:
+            if uit["verstuurd"] + len(uit["fouten"]) >= VOORBEELD_PER_RONDE:
+                return uit
+            f = hier.get(fid)
+            if not f or f.get("mensen") is not False or f.get("video") or f.get("scherm") or f.get("app"):
+                uit["niet_toegelaten"] += 1
+                continue
+            bron = beeld_lokaal(f)
+            if not bron:
+                uit["zonder_beeld"] += 1
+                continue
+            with tempfile.TemporaryDirectory(prefix="icloud-voorbeeld-") as tmp:
+                jpeg = maak_voorbeeld(bron, tmp)
+            if jpeg is None:
+                uit["fouten"].append("omzetting_mislukt")
+                continue
+            try:
+                bord("/api/fotovoorbeeld", {"dag": dag, "id": fid, "jpeg": base64.b64encode(jpeg).decode()})
+                uit["verstuurd"] += 1
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                uit["fouten"].append(f"bord_{getattr(e, 'code', type(e).__name__)}")
+    return uit
 
 
 def metadata_items(dag, fotos):

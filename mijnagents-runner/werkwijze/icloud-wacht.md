@@ -1,7 +1,7 @@
 # Werkwijze van De iCloud-wacht (Privé)
 
-Versie 3 (22-10-2026: root-eigen app en wachtrondes voor TKN; v2 21-10-2026,
-v1 09-09-2026).
+Versie 4 (01-11-2026, T-0120: indeling per project, inhalen, voorvertoningen; v3 22-10-2026 root-eigen app en
+wachtrondes voor TKN; v2 21-10-2026, v1 09-09-2026).
 Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
 zijn Mac (de fotobibliotheek staat alleen daar; de VM ziet haar niet) en meld
 aan het bord. Elke avond zet ik de foto's van de dag klaar: tijd, plaats,
@@ -102,3 +102,25 @@ Voor TKN-taken blijft de taak open tot de fotoselectie in twee wachtrondes die m
 worden in de volgende ronde alsnog geleverd. H-A-taken volgen hun bestaande regeling.
 Nood: controleer Full Disk Access en Photos Automation voor de root-eigen iCloudWacht.app;
 geef deze rechten niet aan de algemene Python-interpreter.
+
+## Indeling per project, inhalen en voorvertoningen (T-0120, 01-11-2026)
+
+Mehdi, 01-11-2026: "voor de fotos zijn de projecten van de bedrijven belangrijk niet de fotos van de mensen" en "ik wil
+elke foto en elke file van wachter kunnen zien en begrijpen".
+
+- **Elke avond twee dagen en de gemiste dagen** (FOTO-2): ik lees vandaag en gisteren (late foto's), en elke dag sinds
+  01-10 (hoogstens 35 dagen terug) waarvoor nog geen foto-metadata op het bord staat. Een ingehaalde dag levert alleen
+  metadata: geen export van originelen, niets in Dropbox.
+- **Alleen metadata naar het bord** (FOTO-4): per dag een item `fotometadata` (voor `fotoindeling`, privé gemarkeerd)
+  met per foto tijd, GPS, soort en de vlaggen van Photos: schermafbeelding, bewaard uit een app, mensen (een gezicht van
+  10% of meer van het beeld, of de vlag "mensen in beeld"; niet geanalyseerd is onbekend). Nooit een beeld of bestandsnaam.
+- **De indeling gebeurt op de VM** (`koppelingen/fotoindeling.py`, planning `planning/foto.cron`): werf zeker (binnen
+  150 m van een buitenafspraak met firmacode of van de auto bij een project), werkkandidaat (alleen bij een projectplek),
+  mensen, privé, scherm of app, onbeslist. Per werfgroep en kandidaat een item voor Mehdi; wat geen werk is alleen als
+  telling, zonder plaats. Welke firma's projectplekken krijgen, kiest Mehdi (LOC-3, VOL-8).
+- **Voorvertoningen** (FOTO-5): alleen van een werkfoto zonder mensen, uit het lokale beeld (nooit uit iCloud gehaald),
+  hoogstens 480 px, naar de VM (`/api/fotovoorbeeld`), nooit naar Dropbox. Mehdi ziet ze op dagboek.globaal.be/fotos/<dag>.
+  Een foto van mensen open ik nooit.
+- **Fototaken** (FOTO-1, FOTO-6): een taak die op gegevens van de voorbereider wacht, is een melding (hoogstens één per
+  taak per dag), geen fout; exit 1 alleen bij een eigen fout. Een nieuw `00 fotos*.md` alleen als de lijst verandert.
+  De TKN-taken van de keten Barsten en scheuren leveren zoals voorheen (VOL-18).

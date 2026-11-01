@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Geen foto-I/O/export/netwerk: geweigerde bron blijft als fout zichtbaar."""
+import base64
 import importlib.util
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
@@ -512,6 +513,46 @@ class ICloudStatus(unittest.TestCase):
         dagen, melding = m.dagen_te_lezen(datetime.fromisoformat("2026-10-05").date())
         self.assertEqual(dagen, [("2026-10-04", True), ("2026-10-05", True)])
         self.assertIn("inhalen overgeslagen", melding)
+
+    def test_foto5_voorvertoning_alleen_van_een_werkfoto_zonder_mensen(self):
+        # T-0120 FOTO-5: de Mac maakt alleen de voorvertoningen die de indeling vraagt, kijkt zelf de vlaggen na en opent
+        # nooit een foto van mensen (of onbekend), een video of een foto die alleen in iCloud staat.
+        m = self.module
+        bib = Path(self.home.name) / "Bibliotheek.photoslibrary"
+        m.LIB = str(bib / "originals")
+        uid = lambda n: f"aaaaaaa{n}-0000-4000-8000-000000000000"
+        rij = lambda n, **k: dict({"uuid": uid(n), "bestand": f"{uid(n)}.HEIC", "video": False, "scherm": False, "app": False,
+                                   "mensen": False}, **k)
+        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6)]
+        afgeleid = bib / "resources/derivatives/a" / f"{uid(1)}_1_105_c.jpeg"
+        afgeleid.parent.mkdir(parents=True)
+        afgeleid.write_bytes(b"fictieve afgeleide")
+        for n in (2, 3, 4, 6):
+            origineel = bib / "originals/a" / f"{uid(n)}.HEIC"
+            origineel.parent.mkdir(parents=True, exist_ok=True)
+            origineel.write_bytes(b"fictief origineel")
+        m.fotos_van = lambda dag: [dict(f) for f in fotos]
+        m.bord_lees = lambda pad: {"items": [{"van": "icloud-wacht", "soort": "fotoindeling", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 8)]})}]}
+        geopend, gepost = [], []
+
+        def sips(cmd, **kw):
+            geopend.append(Path(cmd[-3]).name)
+            Path(cmd[-1]).write_bytes(b"\xff\xd8\xff fictieve kleine jpeg \xff\xd9")
+            return SimpleNamespace(returncode=0, stderr="")
+        m.bord = lambda pad, data: gepost.append((pad, data)) or {"ok": True}
+        with patch.object(m.subprocess, "run", sips):
+            uit = m.voorvertoningen()
+        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 4, "fouten": []})
+        self.assertEqual(geopend, [afgeleid.name, f"{uid(6)}.HEIC"])
+        self.assertEqual([(p, d["id"]) for p, d in gepost], [("/api/fotovoorbeeld", uid(1)), ("/api/fotovoorbeeld", uid(6))])
+        self.assertTrue(base64.b64decode(gepost[0][1]["jpeg"]).startswith(b"\xff\xd8\xff"))
+        # het bord weigert: een eigen fout, zichtbaar
+        def weiger(pad, data):
+            raise urllib.error.HTTPError(pad, 409, "fictief", {}, None)
+        m.bord = weiger
+        with patch.object(m.subprocess, "run", sips):
+            self.assertEqual(m.voorvertoningen()["fouten"], ["bord_409", "bord_409"])
 
     def test_tkn_tijd_aliasen_en_alleen_fotos_naar_bestaande_fotomap(self):
         data = self.inhoud_tkn()
