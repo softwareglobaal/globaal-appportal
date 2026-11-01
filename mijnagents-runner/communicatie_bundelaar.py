@@ -51,7 +51,7 @@ KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("p
            ("whatsapp-oproep:", "whatsapp-oproep"), ("whatsapp:", "whatsapp"), ("telefoon:", "telefoon"), ("sms:", "sms"),
            ("xelion:", "xelion"))
 MAC_CHATS = ("whatsapp:", "sms:")   # een groep van de Mac heet 'groep: naam' in personen
-MAC_KANALEN = ("whatsapp", "whatsapp-oproep", "telefoon", "sms", "xelion")
+MAC = ("whatsapp-oproep:", "whatsapp:", "telefoon:", "sms:", "xelion:")
 # chat, sms en mail hebben geen duur: weggelaten, nooit 0
 MET_DUUR = ("video", "ter plaatse", "whatsapp-oproep", "telefoon", "xelion")
 
@@ -192,7 +192,9 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
             opgevallen["telt_niet"] += in_dagen   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
         k = kanaal(r.get("uniek"), r.get("personen"))
-        prive = prive_groep(r)
+        # CB-1: een rij van de Mac of Xelion is privé, ook zonder vlag, tot de keuze CB-2 (Codex-toets 1). Laat CB-2
+        # ooit werkcontacten bij naam toe, dan blijft een groep (is_groep, ook een groepsoproep) erbuiten.
+        prive = prive_groep(r) or str(r.get("uniek") or "").startswith(MAC)
         if k != "mail":
             # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
             # Een privérij van elk kanaal, ook een onbekend, maakt iemand privé (controle 5); bekend maakt alleen een
@@ -223,8 +225,8 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
         if prive:
             _tel(d["prive_per_kanaal"], k, minuten)   # alleen een aantal: geen naam, ook niet van de andere deelnemers
             continue
-        if k in ("groepschat", "overig") or (k in MAC_KANALEN and is_groep(r.get("personen"))):
-            continue   # de naam is die van een kanaal, een groep of onbekend van soort: alleen het aantal in kanalen
+        if k in ("groepschat", "overig"):
+            continue   # de naam is die van een kanaal of onbekend van soort: alleen het aantal in kanalen
         gezien = set()
         for n in namen(r.get("personen")):
             soort, wie = p.persoon(n)

@@ -324,11 +324,21 @@ def test_cb1_mac_kanalen_eigen_kanaal_en_prive_geteld():
     assert d["personen"] == [] and d["contacten"] == 8, d
     for naam in ("Lien", "Werfgroep", "Proefgroep", "Omega", "32470000099"):
         assert naam not in json.dumps(gezet) and naam not in r.detail, naam
-    # Een groep is nooit een persoon, ook niet als een Mac-rij ooit niet privé zou zijn (keuze CB-2)
-    _, _, dagen, _ = ronde(rijen=[rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0),
-                                  rij("whatsapp-oproep:G1-1", "groep: Werfgroep Proef", 5),
-                                  rij("whatsapp-oproep:G2-2", "groep", 3)])
-    assert dagen[DAG]["personen"] == [] and dagen[DAG]["kanalen"] == {"groepschat": 1, "whatsapp-oproep": 2}, dagen[DAG]
+    # Codex-toets 1: ook een Mac-rij zonder privévlag geeft nooit een naam of nummer (tot de keuze CB-2), en een groep
+    # is nooit een persoon
+    r, gezet, dagen, _ = ronde(rijen=[rij("whatsapp:0a1b:2026-10-25", "Lien Proef", 0),
+                                      rij("telefoon:U2-2000", "+32470000098", 3),
+                                      rij("sms:0e5f:2026-10-25", "Klant Omega", 0),
+                                      rij("xelion:X2", "Klant Omega", 2),
+                                      rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0),
+                                      rij("whatsapp-oproep:G1-1", "groep: Werfgroep Proef", 5),
+                                      rij("whatsapp-oproep:G2-2", "groep", 3)])
+    d = dagen[DAG]
+    assert d["personen"] == [] and d["kanalen"] == {"groepschat": 1, "sms": 1, "telefoon": 1, "whatsapp": 1,
+                                                    "whatsapp-oproep": 2, "xelion": 1}, d
+    assert sum(c["aantal"] for c in d["prive_per_kanaal"].values()) == 7, d["prive_per_kanaal"]
+    for naam in ("Lien", "32470000098", "Omega", "Werfgroep"):
+        assert naam not in json.dumps(gezet) and naam not in r.detail, naam
     assert C.kanaal("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef") == "groepschat"
     assert C.kanaal("whatsapp:0a1b:2026-10-25", "Lien Proef") == "whatsapp" and C.kanaal("fax:1") is None
     assert C.kanaal("zoom:chat:kanaal-proef-123:2026-10-25") == "groepschat", "Zoom zoals het was"
