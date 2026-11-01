@@ -3691,6 +3691,70 @@ def test_t0120_wacht4_droog_legt_de_rijen_naast_de_dagregel():
     assert not [(p, q) for p, q in w.bord.oproepen if q is not None and p != "db_lees"], "--droog stuurt niets naar het bord"
 
 
+@bord_nodig
+def test_t0120_wacht1_chatstuk_over_de_wintertijd_blijft_korter_dan_28_dagen():
+    """WACHT-1 (Codex, toets 1): 28 Brusselse dagen over 25-10 (een dag van 25 uur) zijn in UTC langer dan 28 dagen.
+    De chat gaat daarom in stukken van 27 Brusselse dagen: elk stuk blijft korter dan 28 dagen in UTC."""
+    w = Wereld()
+    w.zoom.chat = [_rz13_chat(dag="2026-10-25")]
+    assert w.ronde(datetime(2026, 11, 8, 7, 20, tzinfo=UTC), "--inhaal", "35") is None
+    tijd = lambda t: datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    paren = sorted((tijd(q["from"]), tijd(q["to"])) for q in _zoom_vragen(w, f"/chat/users/{IK['id']}/sessions"))
+    assert len(paren) == 2 and any(a <= tijd("2026-10-25T12:00:00Z") <= b for a, b in paren), paren
+    assert all(b - a < timedelta(days=28) for a, b in paren), [(b - a) for a, b in paren]
+    _, inhoud = w.dagregel("2026-10-25")
+    assert inhoud["chat"]["gesprekken"] == 1, inhoud["chat"]
+
+
+@bord_nodig
+def test_t0120_wacht1_oud_herzien_omzeilt_zoo01_en_zoo05_niet():
+    """WACHT-1 (Codex, toets 1): --oud-herzien heft alleen TERUGBLIK op. Faalt een Zoom-bron, dan gaat een oude opgepakte
+    regel niet terug met een lagere telling (ZOO-01); kan de ronde Zoom niet lezen, dan wordt een bekende telling niet
+    onbekend (ZOO-05)."""
+    w = Wereld()
+    w.fathom_opname("710", w.zoom.sessie("P", bxl("2026-10-12 09:00"), 30))
+    w.fathom_opname("711", meeting_van_een_ander(w, start="2026-10-12 11:00"), eigen=False)
+    assert w.ronde(datetime(2026, 10, 13, 7, 20, tzinfo=UTC)) is None
+    it, inhoud = w.dagregel("2026-10-12")
+    assert (inhoud["gesprekken"], inhoud["telling"]) == (2, "volledig"), inhoud
+    w.bord.call(f"/api/klaarzet/{it['id']}/opgepakt", {"door": "dagbundelaar"})
+    nu = datetime(2026, 11, 1, 7, 20, tzinfo=UTC)
+    w.zoom.fout = {"/report/"}
+    assert w.ronde(nu, "--inhaal", "21", "--oud-herzien") is None
+    na = w.bord.item("zoom:dag:2026-10-12")
+    assert na["status"] == "opgepakt" and json.loads(na["inhoud"])["telling"] == "volledig", na
+    assert not w.bord.sql("SELECT * FROM klaarzet_revisie WHERE uniek='zoom:dag:2026-10-12'")
+    assert ("dag 2026-10-12", "dagregel niet herzien naar een lagere telling: deze ronde faalde een Zoom-bron") in besluiten(w), besluiten(w)
+    w.zoom.fout = {"/report/", "/past_meetings/", f"/users/{IK['id']}/meetings", f"/users/{IK['id']}/recordings"}
+    assert isinstance(w.ronde(nu + timedelta(minutes=5), "--inhaal", "21", "--oud-herzien"), RuntimeError)
+    na = w.bord.item("zoom:dag:2026-10-12")
+    assert na["status"] == "opgepakt" and json.loads(na["inhoud"])["telling"] == "volledig", na
+    assert ("dag 2026-10-12", "dagregel niet overschreven: deze ronde kon Zoom niet lezen") in besluiten(w), besluiten(w)
+
+
+@bord_nodig
+def test_t0120_wacht6_elke_onleesbare_sessie_telt_in_een_stuk_en_een_keer_over_stukken():
+    """WACHT-6 (Codex, toets 1): twee onleesbare sessies met dezelfde sleutel tellen in een gewoon venster als twee, zoals
+    voor de stukken; een gesprek dat in twee stukken staat, telt een keer, ook zonder bestemming."""
+    w = Wereld()
+    w.zoom.chat = [({"type": "1:1", "peer_contact_email": "theta@elders.test", "name": "Proefpersoon Theta", "weg": True,
+                     "last_message_sent_time": "2026-10-19T09:00:00Z"}, []),
+                   ({"type": "1:1", "peer_contact_email": "theta@elders.test", "name": "Proefpersoon Theta", "weg": True,
+                     "last_message_sent_time": "2026-10-14T06:00:00Z"}, [])]
+    assert w.ronde(NU) is None
+    bron = _bronregel(w)
+    assert "2 chatgesprek(ken) niet leesbaar" in bron and "(per soort: niet leesbaar 2 1:1)" in bron, bron
+    assert "1 jonger dan 2 dagen, 1 ouder dan 7 dagen" in bron, bron
+    w2 = Wereld()
+    w2.zoom.chat = [({"type": "group", "channel_id": "kanaal-c", "name": "Proefkanaal Gamma", "weg": True}, []),
+                    ({"type": "1:1", "peer_contact_email": "", "name": "Proefpersoon Iota"}, [])]
+    assert w2.ronde(datetime(2026, 11, 1, 7, 20, tzinfo=UTC), "--inhaal", "35") is None
+    assert len(_zoom_vragen(w2, f"/chat/users/{IK['id']}/sessions")) == 2
+    bron = _bronregel(w2)
+    assert "1 chatgesprek(ken) niet leesbaar, 1 chatgesprek(ken) zonder bestemming" in bron, bron
+    assert "(per soort: niet leesbaar 1 kanaal; zonder bestemming 1 1:1)" in bron, bron
+
+
 if __name__ == "__main__":
     import traceback
     goed = fout = over = 0

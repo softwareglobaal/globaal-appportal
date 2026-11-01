@@ -538,31 +538,38 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None, soorten=
     (live 22-10-2026 maakte zo een enkel oud gesprek de hele chat onbekend). 'N chatgesprek(ken) zonder bestemming' is
     een sessie zonder adres of kanaal (RZ10-01: die werd stil overgeslagen). Een fout van de sessielijst, of een andere
     fout dan 404, gaat door: dan las deze ronde de chat niet.
-    Het venster gaat in stukken van hoogstens STUK_DAGEN dagen, die op een Brusselse dag aansluiten (WACHT-1): zo komt
-    elke dag uit een stuk, en telt een gesprek dat in twee stukken staat een keer als niet leesbaar of zonder bestemming.
+    Het venster gaat in stukken van hoogstens STUK_DAGEN - 1 Brusselse dagen, die op een Brusselse dag aansluiten
+    (WACHT-1): zo komt elke dag uit een stuk, en blijft een stuk ook over de overgang naar wintertijd (een dag van 25 uur)
+    korter dan STUK_DAGEN dagen in UTC (Codex, toets 1). Een gesprek dat in twee stukken staat, telt een keer als niet
+    leesbaar of zonder bestemming; binnen een stuk telt elke sessie.
     soorten (WACHT-6, een Counter): per (reden, soort) hoeveel gesprekken, met soort 1:1 of kanaal, nooit een naam: zo is
     te zien wat voor gesprekken Zoom niet geeft, voor iemand een oorzaak zoekt."""
-    rijen, weg, zonder = [], {}, Counter()
+    rijen, weg, zonder, weg_tijden = [], Counter(), Counter(), defaultdict(list)
     laatste = (date.fromisoformat(tot_dag) - timedelta(days=1)).isoformat()
-    for a, b in stukken(van_dag, laatste):
+    for a, b in stukken(van_dag, laatste, STUK_DAGEN - 1):
         # Zoom leest from en to van de chat alleen als datum met tijd in UTC: met alleen een datum negeert hij ze en geeft
         # /messages enkel de laatste dag terug (gemeten 22-10-2026: voor 20-10 36 berichten met tijd, 0 zonder).
         tot = (date.fromisoformat(b) + timedelta(days=1)).isoformat()
         venster = {"from": zoom_tijd(dag_grenzen(a)[0]), "to": zoom_tijd(dag_grenzen(tot)[0] - timedelta(seconds=1))}
-        rijen += _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder)
+        rijen += _chat_stuk(ik, venster, personen, domeinen, weg, zonder, weg_tijden)
+    if ouderdom is not None:
+        for k, n in sorted(weg.items()):
+            ouderdom.extend(weg_tijden[k][:n])
     if soorten is not None:
-        for sleutel, soort in weg.items():
-            soorten[("niet leesbaar", soort)] += 1
+        for (soort, _), n in weg.items():
+            soorten[("niet leesbaar", soort)] += n
         for (soort, _), n in zonder.items():
             soorten[("zonder bestemming", soort)] += n
-    return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((len(weg), "niet leesbaar"), (sum(zonder.values()), "zonder bestemming")) if n]
+    return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((sum(weg.values()), "niet leesbaar"), (sum(zonder.values()), "zonder bestemming")) if n]
 
 
-def _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder):
-    """De chatrijen van een stuk van het venster (chat_rijen). weg: sleutel -> soort van de gesprekken met een 404, over
-    de stukken heen; zonder: per (soort, sleutel) het hoogste aantal gesprekken zonder bestemming in een stuk."""
+def _chat_stuk(ik, venster, personen, domeinen, weg, zonder, weg_tijden):
+    """De chatrijen van een stuk van het venster (chat_rijen). weg en zonder: per (soort, sleutel) het hoogste aantal
+    sessies met een 404 of zonder bestemming in een stuk, over de stukken heen: zo telt elke sessie in een stuk, en een
+    gesprek dat in twee stukken staat een keer (Codex, toets 1). weg_tijden: per (soort, sleutel) het laatste bericht
+    van elke onleesbare sessie, voor de ouderdom."""
     sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
-    rijen, zonder_hier = [], Counter()
+    rijen, zonder_hier, weg_hier, tijd_hier = [], Counter(), Counter(), defaultdict(list)
     for s in sessies:
         p = dict(venster, page_size=50)
         een_op_een = s.get("type") == "1:1"
@@ -576,10 +583,8 @@ def _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder):
             continue
         berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if berichten is None:
-            if chat_sleutel(s) not in weg:
-                weg[chat_sleutel(s)] = soort
-                if ouderdom is not None:
-                    ouderdom.append(s.get("last_message_sent_time"))
+            weg_hier[(soort, chat_sleutel(s))] += 1
+            tijd_hier[(soort, chat_sleutel(s))].append(s.get("last_message_sent_time"))
             continue
         if not berichten:
             continue
@@ -624,6 +629,9 @@ def _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder):
                           "opgenomen_door": "Zoom-chat", "bron": "zoom"})
     for k, n in zonder_hier.items():
         zonder[k] = max(zonder[k], n)
+    for k, n in weg_hier.items():
+        if n > weg[k]:
+            weg[k], weg_tijden[k] = n, tijd_hier[k]
     return rijen
 
 
