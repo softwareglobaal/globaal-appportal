@@ -515,6 +515,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
     if reden == "centraal":
         raise GeenAbonnement("het account krijgt centrale instellingen van een organisatie; meteen gestopt")
+    if reden is None and st.bron != "none":
+        raise GeenAbonnement("geen startbericht van claude -p: de bron is niet bewezen (Codex controle 20)")
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
         raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
@@ -528,6 +530,10 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         stop = "fout"
     else:
         stop = "klaar"
+    if stop == "klaar" and (not st.vensters & {"five_hour", "seven_day"} or st.extra_verbruik is None):
+        # Elke vraag moet zelf tonen dat ze binnen het abonnement bleef (overleg 19, K2; Codex controle 20).
+        raise GeenAbonnement("geen limietmelding van het abonnement in deze vraag: niet na te gaan of ze binnen het "
+                             "abonnement bleef")
     tekst = str(einde.get("result") or "".join(st.teksten[-1:])).strip()
     gebruik = einde.get("usage") or {}
     tellers = {"input": gebruik.get("input_tokens", 0) or 0, "output": gebruik.get("output_tokens", 0) or 0,
@@ -577,6 +583,8 @@ def proef_abonnement(token=None, wacht=120):
         if reden == "extra_aan":
             return False, "Usage credits staan aan op dit account: zet ze uit in claude.ai, Settings > Usage"
     einde = st.einde or {}
+    if st.bron != "none":
+        return False, "geen startbericht van claude -p: de bron is niet bewezen"
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]

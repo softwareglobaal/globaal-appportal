@@ -444,7 +444,10 @@ JSON = ('```json\n{"vraag_kort": "vloerwasser X1 voor Suriname", "eisen": [], '
         '{"titel": "X1 verzonnen", "url": "https://verzonnen.voorbeeld.com/z", "soort": "nieuw", "prijs": 10, "munt": "EUR", '
         '"land": "BE", "verzending": 0}], "advies": "Koop X1 verzonnen, die is het goedkoopst."}\n```')
 ZOEKUIT = zoekuit(("X1 tweedehands 380 euro", "https://markt.voorbeeld.com/a"), ("X1 kopen", "https://media.voorbeeld.com/x1"))
-GEWOON = {"regels": [INIT, assistent({"type": "tool_use", "name": O.ZOEK, "input": {"query": "x1"}}), ZOEKUIT,
+# Een limietmelding van een abonnement met Usage credits uit; elke vraag moet er een tonen (Codex controle 20).
+ABO = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "disabled",
+       "unifiedWindows": {"five_hour": {"utilization": 0.1, "status": "allowed"}}}}
+GEWOON = {"regels": [INIT, ABO, assistent({"type": "tool_use", "name": O.ZOEK, "input": {"query": "x1"}}), ZOEKUIT,
                      assistent({"type": "tool_use", "name": O.LEES, "input": {"url": "https://winkel.voorbeeld.com/x1"}}),
                      assistent({"type": "text", "text": JSON}), dict(EINDE, result=JSON)],
           "lees": [{"url": "https://winkel.voorbeeld.com/x1", "eind_url": "https://www.winkel.voorbeeld.com/x1/", "ok": True,
@@ -544,6 +547,12 @@ uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, is_error=True, result=
 check("een andere fout wordt stop 'fout'", isinstance(uit, dict) and uit["stop"] == "fout")
 uit, _, _, _, _ = nep_vraag({"regels": [INIT]})
 check("zonder eindregel geen 'klaar'", isinstance(uit, dict) and uit["stop"] == "fout")
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, result=JSON)]})
+check("een vraag zonder limietmelding van het abonnement is nooit 'klaar' (overleg 19, K2; Codex 20, punt 2)",
+      isinstance(uit, O.GeenAbonnement) and "limietmelding" in str(uit), str(uit)[:200])
+uit, _, _, _, _ = nep_vraag({"regels": [ABO, dict(EINDE, result=JSON)]})
+check("een vraag zonder startbericht bewijst de bron niet (Codex 20, punt 1)", isinstance(uit, O.GeenAbonnement)
+      and "startbericht" in str(uit), str(uit)[:200])
 begin = time.monotonic()
 uit, _, _, _, m = nep_vraag({"regels": [INIT], "slaap": 60, "kind": True}, deadline=time.monotonic() + 3)
 duur = time.monotonic() - begin
@@ -557,7 +566,7 @@ except OSError:
 check("de deadline van de ronde stopt claude en zijn leestool samen (X4)", isinstance(uit, dict) and uit["stop"] == "plafond"
       and uit["reden"] == "tijd" and duur < 15 and not kind_leeft, f"{uit!r:.200} {duur:.1f}s kind {kind_leeft}")
 begin = time.monotonic()
-uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, result=JSON)], "slaap": 60}, deadline=time.monotonic() + 40)
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, ABO, dict(EINDE, result=JSON)], "slaap": 60}, deadline=time.monotonic() + 40)
 check("na de eindregel wacht de runner niet op een stdout die open blijft (Codex 15, punt 4)", isinstance(uit, dict)
       and uit["stop"] == "klaar" and time.monotonic() - begin < 15, f"{time.monotonic() - begin:.1f}s")
 begin = time.monotonic()
@@ -677,6 +686,12 @@ json.dump({"regels": [dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), dict(EINDE, 
           open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef faalt als Claude Code een API-sleutel gebruikt", not gelukt and "ANTHROPIC_API_KEY" in melding)
+os.remove(O.MERK_BESTAND)
+json.dump({"regels": [ABO, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("een proef zonder startbericht slaagt niet en schrijft geen merkteken (Codex 20, punt 1)", not gelukt
+      and "startbericht" in melding and not os.path.exists(O.MERK_BESTAND), melding)
+merk_voor("sk-ant-oat01-nep")
 json.dump({"regels": [INIT, dict(EINDE, is_error=True, result="Invalid token sk-ant-oat01-geheim-123")]},
           open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
@@ -887,6 +902,13 @@ PO.werk(NepRonde(), "vloerwasser X1")
 check("zonder werkend abonnement een nood met de reden, en niets via de API (overleg 14, K1)",
       any("Claude-abonnement werkt niet" in n and "niets via de API" in n and "geen abonnementstoken" in n for n in noden),
       str(noden))
+oud_open = PO.open_vragen
+PO.open_vragen = lambda: [{"id": 7, "inhoud": "lidar"}, {"id": 8, "inhoud": "drone"}]
+r = NepRonde()
+PO.werk(r, None)
+check("zonder werkend abonnement blijven bordvragen klaarstaan, niets opgepakt (Codex 20, punt 3)",
+      opgepakt == [] and "2 wachten" in r.detail, r.detail)
+PO.open_vragen = oud_open
 noden.clear()
 PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
                                   "tokens": 600000, "tellers": [], "leesbeurten": (0, 0), "zoekopdrachten": 0,

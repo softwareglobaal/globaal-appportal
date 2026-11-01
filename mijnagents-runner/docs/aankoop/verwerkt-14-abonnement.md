@@ -112,3 +112,14 @@ Tests: 233 prijstests groen.
   Die bevestiging komt in de werkstand (T-0037).
 
 Tests: 242 prijstests groen.
+
+## Verwerking Codex-controle 20 (niet klaar)
+
+1. Een proef zonder startbericht (`init`) slaagt niet meer en schrijft geen merkteken; een vraag zonder startbericht
+   geeft `GeenAbonnement`.
+2. Een vraag is alleen `klaar` als ze zelf een limietmelding van het abonnement toonde (`five_hour` of `seven_day`, en
+   `overageStatus`); anders `GeenAbonnement` en geen verslag.
+3. Werkt het abonnement niet, dan breekt de runner af: de bordvraag en de volgende blijven klaarstaan, niets wordt als
+   opgepakt gemarkeerd.
+
+Tests: 246 prijstests groen.

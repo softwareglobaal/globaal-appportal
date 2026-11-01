@@ -161,10 +161,12 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
         try:
             aanbod += een_vraag(r, tekst, koersdatum, koersen, vandaag, deadline)
         except O.GeenAbonnement as e:
-            # Nooit terug naar de API (overleg 14, K1): de vraag stopt en wacht op een werkend token.
+            # Nooit terug naar de API (overleg 14, K1). De vraag blijft klaarstaan tot het abonnement werkt, en de
+            # volgende vragen ook: niets wordt als opgepakt gemarkeerd zonder verslag (Codex controle 20, punt 3).
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: geen abonnement: {str(e)[:300]}")
             r.nood(f"Prijsvraag niet gedaan, niets via de API: het Claude-abonnement werkt niet op de VM ({str(e)[:160]})",
                    wie="claude-code")
+            break
         except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Prijsvraag mislukt bij het zoeken", wie="claude-code")
