@@ -103,7 +103,7 @@ class Stop(RuntimeError):
 
 
 # ------------------------------------------------------------------ staat ---
-LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "fouten": {},
+LEGE_STAAT = {"bestanden": {}, "meetings": {}, "gezien": {}, "verdwenen": {}, "gemist": {}, "vervallen": {}, "fouten": {},
               "voorstellen": {}, "onvolledig": {}, "blokkades": {}, "beschrijvingen": {}, "inventaris": "",
               "dekking": False, "dropbox": ""}
 
@@ -343,6 +343,90 @@ def problemen(m):
             uit[f"bestand:{m['uuid']}:{kort(kenmerk, 16)}:{tel[kenmerk]}"] = (
                 "bestand zonder id, downloadlink of bekende status", f.get("id", ""))
     return uit
+
+
+# ------------------------------------------------------------ vervangen ---
+def vervanging(fid, oud, per_meeting, geclaimd):
+    """ARCH-1 (meting 01-11-2026): Zoom vervangt een bestand in verwerking door de afgewerkte bestanden, met andere id's.
+    Een verwerkings-id dat uit de lijst weg is, is geen verlies als dezelfde meeting nu een afgewerkt bestand van
+    dezelfde soort (en, als ik die kende, hetzelfde opnametype) heeft dat nog niet bewezen was toen ik het in
+    verwerking zag, en dat geen ander verdwenen id al als vervanging nam. Geeft het id van die vervanging, of leeg:
+    dan is het verdwenen. Een geval zonder meeting, status of soort (van voor deze regel) heeft nooit een vervanging."""
+    m = per_meeting.get(oud.get("uuid") or "")
+    if oud.get("status") != "processing" or not oud.get("soort") or not m:
+        return ""
+    kandidaten = [f["id"] for f in m["bestanden"] if f.get("id") and f["id"] != fid and f.get("status") == "completed"
+                  and f.get("soort") == oud["soort"] and f["id"] not in (oud.get("al_bewezen") or ())
+                  and (not oud.get("opnametype") or f.get("opnametype") == oud["opnametype"])
+                  and f["id"] not in geclaimd]
+    if oud.get("vervangen_door") in kandidaten:
+        return oud["vervangen_door"]
+    return kandidaten[0] if kandidaten else ""
+
+
+def vervangen_afronden(staat, moment):
+    """ARCH-1: een verwerkings-id waarvan de vervanging nu bewezen in Dropbox staat, gaat met dat bewijs naar
+    'vervallen' (nooit gewist). Geeft het aantal."""
+    n = 0
+    for fid, oud in list(staat["gezien"].items()):
+        door = oud.get("vervangen_door")
+        if door and door in staat["bestanden"]:
+            staat["vervallen"][fid] = {**oud, "vervallen": moment, "door": door,
+                                       "reden": "vervangen door een bewezen afgewerkt bestand van dezelfde soort"}
+            del staat["gezien"][fid]
+            n += 1
+    return n
+
+
+OUD_SOORTEN = ["json", "mp4", "vtt"]   # tijdlijn, video en transcript: wat elk gesprek van oktober 2026 had (meting)
+
+
+def oud_vervallen(staat, moment):
+    """ARCH-1 en VOL-20, eenmalig (--vervallen-markeren): de verdwenen gevallen van voor de regel in vervanging()
+    bewaarden geen meeting, status of soort. Een oud geval vervalt alleen met het bewijs uit de meting van 01-11-2026:
+    een bestand dat ik in verwerking zag (grootte 0, geen meeting- of bestandsleutel), en een map met precies drie
+    bewezen bestanden met dezelfde starttijd tot op de seconde, video, tijdlijn en transcript, bewezen in de ronde
+    waarin het verdween. Het gaat met dat bewijs naar 'vervallen'; niets gaat uit de staat. Elk ander geval blijft
+    verdwenen, voor Mehdi. Geeft de vervallen id's."""
+    uit = []
+    for fid, v in sorted(staat["verdwenen"].items()):
+        st, sinds = _utc(v.get("start")), _utc(v.get("sinds"))
+        if fid.startswith(("meeting:", "bestand:")) or v.get("grootte") or not st or not sinds:
+            continue
+        zelfde = {i: b for i, b in staat["bestanden"].items() if _utc(b.get("start")) == st}
+        mappen = {b["pad"].rsplit("/", 1)[0] for b in zelfde.values()}
+        soorten = sorted(b["pad"].rsplit(".", 1)[-1].lower() for b in zelfde.values())
+        tijden = [_utc(b.get("ts")) for b in zelfde.values()]
+        in_ronde = all(t and timedelta(0) <= t - sinds <= timedelta(seconds=BUDGET + NA_BUDGET) for t in tijden)
+        if len(mappen) != 1 or soorten != OUD_SOORTEN or not in_ronde:
+            continue
+        staat["vervallen"][fid] = {**v, "vervallen": moment, "reden": "oud geval: vervangen volgens de meting van 01-11-2026",
+                                   "bewijs": {"bewezen": sorted(zelfde), "soorten": soorten,
+                                              "bewezen_om": sorted(b["ts"] for b in zelfde.values())}}
+        del staat["verdwenen"][fid]
+        uit.append(fid)
+    return uit
+
+
+def vervallen_voorstellen(staat):
+    """De voorstellen 'als gemist aanvaarden' die ik zette voor een geval dat nu vervallen is of niet meer verdwenen
+    (het kwam terug): die mogen op het bord vervallen. Alleen de actie (met de korte sleutel), nooit een onderwerp."""
+    return sorted(f"{GEMIST_ACTIE} ({sleutel})" for sleutel, v in staat["voorstellen"].items()
+                  if v.get("fid") not in staat["verdwenen"])
+
+
+def vervallen_markeren(droog=False):
+    """--vervallen-markeren: oud_vervallen op de staat, zonder Zoom, Dropbox of bord. Met --droog alleen tonen."""
+    staat = lees_staat()
+    moment = nu().isoformat(timespec="seconds")
+    weg = oud_vervallen(staat, moment)
+    print(f"{'(droog) ' if droog else ''}{len(weg)} oud geval vervalt met bewijs; {len(staat['verdwenen'])} blijven "
+          f"verdwenen, voor Mehdi")
+    for actie in vervallen_voorstellen(staat):
+        print(f"   voorstel mag vervallen: {actie}")
+    if not droog and weg:
+        schrijf_staat(staat)
+    return 0
 
 
 # ------------------------------------------------------------ Mehdi beslist ---
@@ -623,14 +707,30 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                                                  "andere grootte dan de kopie in Dropbox", "tijdelijk": False,
                                         "pogingen": 1}
     te_doen = [f for f in klaar if f["id"] not in staat["bestanden"]]
-    # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8).
-    for fid, oud in list(staat["gezien"].items()):
+    # Een opname die ik zag en die nu uit Zoom (lijst en prullenbak) weg is voor ze bewezen was: verdwenen (K8), tenzij
+    # Zoom ze in verwerking had en dezelfde meeting nu een vervanging heeft (ARCH-1): dan wacht ze op het bewijs daarvan.
+    per_meeting = {m["uuid"]: m for m in meetings}
+    vorige = {fid: oud["vervangen_door"] for fid, oud in staat["gezien"].items() if oud.get("vervangen_door")}
+    geclaimd = {v["door"] for v in staat["vervallen"].values() if v.get("door")} | set(vorige.values())
+    for fid, oud in sorted(staat["gezien"].items()):
         if fid not in per_id and fid not in staat["bestanden"]:
-            staat["verdwenen"][fid] = {**oud, "sinds": moment}
+            door = vervanging(fid, oud, per_meeting, geclaimd - {vorige.get(fid)})
+            if door:
+                staat["gezien"][fid] = {**oud, "vervangen_door": door}
+                geclaimd.add(door)
+                continue
+            staat["verdwenen"][fid] = {**{k: v for k, v in oud.items() if k != "vervangen_door"}, "sinds": moment}
             del staat["gezien"][fid]
             staat["fouten"].pop(fid, None)
     for f in te_doen + bezig:  # Codex controle 4, punt 20: elk onbewezen bestand, ook in verwerking, wordt bijgehouden
+        eerder = staat["gezien"].get(f["id"]) or {}
         staat["gezien"][f["id"]] = {"start": f.get("start", ""), "grootte": f.get("grootte", 0)}
+        if f.get("status") == "processing":
+            # ARCH-1: genoeg om later een vervanging te bewijzen; al_bewezen blijft die van de eerste keer dat ik het zag
+            m = per_id[f["id"]][0]
+            staat["gezien"][f["id"]].update(
+                uuid=m["uuid"], status="processing", soort=f.get("soort", ""), opnametype=f.get("opnametype", ""),
+                al_bewezen=eerder.get("al_bewezen", sorted(g["id"] for g in m["bestanden"] if g.get("id") in staat["bestanden"])))
     volgorde = sorted(te_doen, key=lambda f: (not f.get("prullenbak"), _utc(f.get("start")) or datetime.min.replace(
         tzinfo=timezone.utc)))
     if proef:
@@ -717,6 +817,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
             except bord.BordOnbekend:
                 pass
 
+    vervangen = vervangen_afronden(staat, moment)
     rest = [f for f in klaar if f["id"] not in staat["bestanden"]]
     onbewezen = rest + bezig
     for fid in list(staat["fouten"]):
@@ -771,6 +872,7 @@ def _ronde(r, staat, droog, budget, proef, klok, nu_utc, begin, hard, bewaker, s
                 f"dan {WISREGEL_DAGEN} dagen allemaal in Dropbox: {'ja' if not oud_open else 'nee'}; dekking: "
                 f"{'ja' if dekking else 'nee'}"
                 + (f"; verdwenen {len(staat['verdwenen'])}" if staat["verdwenen"] else "")
+                + (f"; vervangen {vervangen}" if vervangen else "")
                 + (f"; bewijs niet meer in Dropbox {nagekeken_weg}" if nagekeken_weg > 0 else "")
                 + (f"; fouten {len(staat['fouten'])}" if staat["fouten"] else "") + (f"; gestopt: {gestopt}" if gestopt else ""))
     ag.log("archief", "ronde", r.detail)
@@ -787,6 +889,8 @@ def main(argv=None):
     p.add_argument("--droog", action="store_true", help="alleen tellen, niets kopiëren")
     p.add_argument("--budget", type=int, default=BUDGET, help="seconden voor er geen nieuw bestand meer begint")
     p.add_argument("--proef", type=int, default=0, help="alleen de N kleinste bestanden (de proefronde, K8)")
+    p.add_argument("--vervallen-markeren", dest="vervallen", action="store_true",
+                   help="eenmalig (ARCH-1): oude verdwenen gevallen met bewijs naar vervallen, alleen in de staat")
     a = p.parse_args(argv)
     os.makedirs(DATA, exist_ok=True)
     slot = open(os.path.join(DATA, ".slot"), "w")
@@ -795,6 +899,8 @@ def main(argv=None):
     except OSError:
         print("een andere ronde van De Zoomarchivaris loopt nog; niets gedaan")
         return 0
+    if a.vervallen:
+        return vervallen_markeren(droog=a.droog)
     signal.signal(signal.SIGTERM, _stopsignaal)
     werkmap = os.path.join(DATA, "werk")
     if os.path.isdir(werkmap):

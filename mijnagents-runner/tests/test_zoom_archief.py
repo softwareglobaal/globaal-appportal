@@ -7,6 +7,7 @@ van het bord en de klok.
 Draaien: python3 mijnagents-runner/tests/test_zoom_archief.py
 """
 import contextlib
+import io
 import json
 import os
 import re
@@ -1175,6 +1176,158 @@ def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
     assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
 
 # ------------------------------------------------------------------------- T-0120 (meting 01-10 tot 01-11) ---
+VERDWENEN = "Zoom-opname verdwenen voor ze in Dropbox stond"
+
+
+def _in_verwerking(z, uuid, start, soort="MP4", opnametype="shared_screen_with_speaker_view"):
+    """Een meeting waarvan Zoom nog een bestand verwerkt: status processing, nog zonder grootte."""
+    m = z.meeting(uuid, start, bestanden=[(soort, opnametype, b"")])
+    m["bestanden"][0].update(status="processing", grootte=None, link=False)
+    return m["bestanden"][0]["id"]
+
+
+def _afgewerkt(z, uuid, start, voorvoegsel, bestanden):
+    """Dezelfde meeting na de verwerking: afgewerkte bestanden met nieuwe id's (zoals Zoom het doet)."""
+    m = z.meeting(uuid, start, bestanden=bestanden)
+    for f in m["bestanden"]:
+        oud = f["id"]
+        f["id"] = voorvoegsel + oud
+        z.inhoud[f["id"]] = z.inhoud.pop(oud)
+    return m
+
+
+DRIE = [("MP4", "shared_screen_with_speaker_view", b"video"), ("TIMELINE", "timeline", b"{}"),
+        ("TRANSCRIPT", "audio_transcript", b"WEBVTT")]
+
+
+def test_t0120_arch1_verwerking_vervangen_door_bewezen_bestanden_is_geen_verlies():
+    """ARCH-1 (meting 01-11-2026): Zoom vervangt een bestand in verwerking door de afgewerkte bestanden met andere id's;
+    de agent noemde het oude id dan verdwenen, met een nood voor Mehdi en een voorstel per geval (22 open). Nu: een
+    verdwenen verwerkings-id is geen verlies als dezelfde meeting nu een bewezen afgewerkt bestand van dezelfde soort
+    heeft dat er nog niet was toen ik het zag; het geval gaat met dat bewijs naar 'vervallen'. Elk ander ontbrekend
+    bestand blijft verdwenen."""
+    z, _, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    x = _in_verwerking(z, "u1", start)
+    ronde()
+    assert x in ZA.lees_staat()["gezien"] and ZA.lees_staat()["gezien"][x]["status"] == "processing"
+    m = _afgewerkt(z, "u1", start, "klaar-", DRIE)
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    staat = ZA.lees_staat()
+    assert uit["gedaan"] == 3 and not staat["verdwenen"] and VERDWENEN not in teksten(r) and not VOORSTELLEN, (staat["verdwenen"], teksten(r))
+    assert x in staat["vervallen"] and staat["vervallen"][x]["door"] == m["bestanden"][0]["id"], staat["vervallen"]
+    assert staat["vervallen"][x]["reden"].startswith("vervangen"), staat["vervallen"][x]
+    assert x not in staat["gezien"] and "vervangen 1" in r.detail, r.detail
+    _, uit = ronde(nu=NU + timedelta(hours=2))
+    assert uit["dekking"], "na de vervanging en een tweede inventaris: dekking ja"
+
+
+def test_t0120_arch1_een_ander_ontbrekend_bestand_blijft_verdwenen():
+    """ARCH-1: alleen een bewezen vervanging telt. Een verwerkt geluidsbestand dat verdwijnt terwijl alleen video,
+    tijdlijn en transcript komen, blijft verdwenen; zo ook een tweede video in verwerking in een meeting die al een
+    bewezen video had (die was er al toen ik ze zag), en een verwerkingsbestand van een meeting die helemaal weg is."""
+    z, _, _ = opzet()
+    a = _in_verwerking(z, "geluid", "2026-10-28T09:00:00Z", soort="M4A", opnametype="audio_only")
+    ronde()
+    _afgewerkt(z, "geluid", "2026-10-28T09:00:00Z", "klaar-", DRIE)
+    r, _ = ronde(nu=NU + timedelta(hours=1))
+    assert a in ZA.lees_staat()["verdwenen"] and VERDWENEN in teksten(r), ZA.lees_staat()["verdwenen"]
+
+    z, _, _ = opzet()
+    m = z.meeting("twee", "2026-10-28T10:00:00Z", bestanden=DRIE)
+    ronde()
+    tweede = {"id": "twee-tweede", "soort": "MP4", "status": "processing", "start": "2026-10-28T10:30:00Z", "einde": "",
+              "grootte": None, "opnametype": "shared_screen_with_speaker_view", "extensie": "MP4", "link": False}
+    m["bestanden"].append(tweede)
+    ronde(nu=NU + timedelta(hours=1))
+    m["bestanden"].remove(tweede)
+    r, _ = ronde(nu=NU + timedelta(hours=2))
+    assert "twee-tweede" in ZA.lees_staat()["verdwenen"] and VERDWENEN in teksten(r), "een oud bewijs is geen vervanging"
+
+    z, _, _ = opzet()
+    b = _in_verwerking(z, "weg", "2026-10-28T11:00:00Z")
+    ronde()
+    del z.meetings["weg"]
+    r, _ = ronde(nu=NU + timedelta(hours=1))
+    assert b in ZA.lees_staat()["verdwenen"] and VERDWENEN in teksten(r)
+
+
+def test_t0120_arch1_een_vervanging_die_zelf_verdwijnt_voor_ze_bewezen_is():
+    """ARCH-1: een vervanging telt pas als ze bewezen is. Lukt de kopie niet, dan wacht het verwerkingsbestand (geen nood,
+    de vervanging zelf houdt de dekking tegen); verdwijnt de vervanging dan ook, dan zijn beide verdwenen."""
+    z, _, _ = opzet()
+    start = "2026-10-28T09:00:00Z"
+    x = _in_verwerking(z, "u1", start)
+    ronde()
+    m = _afgewerkt(z, "u1", start, "klaar-", DRIE[:1])
+    y = m["bestanden"][0]["id"]
+    z.fout[y] = Z.ZoomFout("download: HTTP 500")
+    r, uit = ronde(nu=NU + timedelta(hours=1))
+    staat = ZA.lees_staat()
+    assert not staat["verdwenen"] and staat["gezien"][x]["vervangen_door"] == y and not uit["dekking"], staat["gezien"]
+    del z.meetings["u1"]
+    r, _ = ronde(nu=NU + timedelta(hours=2))
+    staat = ZA.lees_staat()
+    assert x in staat["verdwenen"] and y in staat["verdwenen"] and VERDWENEN in teksten(r), staat["verdwenen"]
+
+
+def _oude_staat():
+    """Een staat zoals op de VM na 27-10: drie verdwenen gevallen van voor ARCH-1 (zonder meeting of soort). Het eerste
+    heeft een map met video, tijdlijn en transcript met dezelfde starttijd, bewezen in de ronde waarin het verdween; het
+    tweede heeft dat bewijs maar mist het transcript; het derde is een meeting zonder bestanden."""
+    staat = ZA.lees_staat()
+    st, sinds = "2026-10-28T09:00:05Z", "2026-10-28T10:05:00+00:00"
+    staat["verdwenen"] = {
+        "oud-a": {"start": st, "grootte": 0, "sinds": sinds},
+        "oud-b": {"start": "2026-10-29T09:00:05Z", "grootte": 0, "sinds": "2026-10-29T10:05:00+00:00"},
+        "meeting:oud-c": {"start": "2026-10-29T12:00:00Z", "grootte": 0, "sinds": sinds}}
+    kaart = "/Zoom/2026-10-28 1000 Proefgesprek Zeta abcd1234"
+    for i, (soort, ext) in enumerate((("scherm en spreker", "mp4"), ("tijdlijn", "json"), ("transcript", "vtt"))):
+        staat["bestanden"][f"nieuw-a{i}"] = {"pad": f"{kaart}/100005 {soort} a{i}.{ext}", "grootte": 10, "hash": "h",
+                                             "start": st, "ts": "2026-10-28T10:20:00+00:00"}
+    kaart_b = "/Zoom/2026-10-29 1000 Proefgesprek Eta bcde2345"
+    for i, (soort, ext) in enumerate((("scherm en spreker", "mp4"), ("tijdlijn", "json"))):
+        staat["bestanden"][f"nieuw-b{i}"] = {"pad": f"{kaart_b}/100005 {soort} b{i}.{ext}", "grootte": 10, "hash": "h",
+                                             "start": "2026-10-29T09:00:05Z", "ts": "2026-10-29T10:20:00+00:00"}
+    staat["voorstellen"] = {ZA._gemist_sleutel(f, v): {"fid": f, "ts": v["sinds"]} for f, v in staat["verdwenen"].items()}
+    staat["voorstellen"]["terug1234"] = {"fid": "kwam-terug", "ts": "2026-10-27T13:06:00+00:00"}
+    ZA.schrijf_staat(staat)
+    return json.loads(json.dumps(staat))
+
+
+def test_t0120_arch1_oude_gevallen_vervallen_met_bewijs_en_niets_uit_de_staat():
+    """ARCH-1 en VOL-20: de 21 oude gevallen bewaarden geen meeting of soort. Met de eenmalige vlag --vervallen-markeren
+    vervalt een oud geval alleen met het bewijs uit de meting (bestand in verwerking gezien, een map met precies video,
+    tijdlijn en transcript met dezelfde starttijd tot op de seconde, bewezen in de ronde waarin het verdween). Het gaat
+    met dat bewijs naar 'vervallen': niets gaat uit staat.json. Elk ander geval blijft verdwenen, voor Mehdi. --droog
+    toont alleen. Het bord raakt de vlag niet: ze noemt de voorstellen die mogen vervallen."""
+    opzet()
+    voor = _oude_staat()
+    uit = io.StringIO()
+    with contextlib.redirect_stdout(uit):
+        assert ZA.main(["--vervallen-markeren", "--droog"]) == 0
+    assert ZA.lees_staat() == voor, "--droog schrijft niets"
+    assert "1 oud geval vervalt" in uit.getvalue(), uit.getvalue()
+    uit = io.StringIO()
+    with contextlib.redirect_stdout(uit):
+        assert ZA.main(["--vervallen-markeren"]) == 0
+    staat = ZA.lees_staat()
+    assert set(staat["verdwenen"]) == {"oud-b", "meeting:oud-c"} and set(staat["vervallen"]) == {"oud-a"}, staat["vervallen"]
+    a = staat["vervallen"]["oud-a"]
+    assert {k: a[k] for k in voor["verdwenen"]["oud-a"]} == voor["verdwenen"]["oud-a"], "het oude geval blijft heel"
+    assert sorted(a["bewijs"]["bewezen"]) == ["nieuw-a0", "nieuw-a1", "nieuw-a2"] and a["bewijs"]["soorten"] == ["json", "mp4", "vtt"]
+    assert a["reden"].startswith("oud geval"), a
+    assert staat["bestanden"] == voor["bestanden"] and staat["voorstellen"] == voor["voorstellen"], "niets anders veranderd"
+    tekst = uit.getvalue()
+    sleutel = ZA._gemist_sleutel("oud-a", voor["verdwenen"]["oud-a"])
+    assert f"{ZA.GEMIST_ACTIE} ({sleutel})" in tekst and f"{ZA.GEMIST_ACTIE} (terug1234)" in tekst, tekst
+    assert f"{ZA.GEMIST_ACTIE} ({ZA._gemist_sleutel('oud-b', voor['verdwenen']['oud-b'])})" not in tekst, tekst
+    assert "Proefgesprek" not in tekst and "/Zoom/" not in tekst, "geen onderwerp of pad op het scherm"
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert ZA.main(["--vervallen-markeren"]) == 0
+    assert ZA.lees_staat() == staat, "een tweede keer verandert niets"
+
+
 def test_t0120_arch3_alleen_de_echte_keten_telt():
     """ARCH-3 (meting 01-11-2026): op 30-10 09:06 stopte een ronde met "de gesprekkenketen begint" terwijl er geen keten
     liep. pgrep -f 'mijnagents-runner/keten.py' vond elk proces met die tekst in zijn opdrachtregel, ook een lezer van
