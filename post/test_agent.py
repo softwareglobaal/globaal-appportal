@@ -32,6 +32,7 @@ def maak_agent(tmp, onderwerp="Your receipt from Anthropic, PBC",
     os.environ["POSTBUS_AGENT_BACKFILL"] = "ja" if backfill else ""
     os.environ["POSTBUS_AGENT_PAUZE"] = "0"   # geen wachttijd in de test
     os.environ["POSTBUS_DOORSTUREN"] = "ja"   # noodrem aan voor de test
+    os.environ.pop("POSTBUS_AGENT_REGELS", None)  # de losse variabelen gelden
     for mod in ("doorstuuragent", "verzenden"):
         sys.modules.pop(mod, None)
     import doorstuuragent as agent
@@ -46,9 +47,11 @@ class NepInbox:
         self.berichten = berichten          # lijst dicts, nieuwste eerst
         self.doorgestuurd = []              # (uid, naar) die 'verstuurd' zijn
 
-    def lijst(self, mailbox, mapnaam, onderwerp=None, maximaal=100, vanaf=0):
+    def lijst(self, mailbox, mapnaam, van=None, onderwerp=None, maximaal=100,
+              vanaf=0):
         treffers = [b for b in self.berichten
-                    if onderwerp.lower() in b["onderwerp"].lower()]
+                    if onderwerp.lower() in b["onderwerp"].lower()
+                    and (not van or van.lower() in b["van"].lower())]
         venster = treffers[vanaf:vanaf + maximaal]
         return {"berichten": venster,
                 "meer": len(treffers) > vanaf + len(venster),
@@ -59,8 +62,8 @@ class NepInbox:
         return {"verstuurd": True, "kopie_in_verzonden": True, "naar": naar}
 
 
-def bericht(uid, mid, onderwerp):
-    return {"uid": uid, "message_id": mid, "onderwerp": onderwerp}
+def bericht(uid, mid, onderwerp, van="invoice@voorbeeld.test"):
+    return {"uid": uid, "message_id": mid, "onderwerp": onderwerp, "van": van}
 
 
 def gelijk(gekregen, verwacht, wat):
@@ -75,7 +78,8 @@ def draai(agent, inbox):
                "smtp_host": "send.one.com"}
     agent.imapbron.lijst = inbox.lijst
     agent.verzenden.doorsturen = inbox.verstuur
-    agent._ronde(mailbox)
+    regel = agent._regels()[0]              # de regel uit de losse variabelen
+    agent._ronde(mailbox, regel, eerste_regel=True)
 
 
 ANT = "Your receipt from Anthropic, PBC #{}"
@@ -91,7 +95,25 @@ def test_eerste_start_stuurt_geschiedenis_niet_door():
         gelijk(inbox.doorgestuurd, [],
                "bestaande facturen worden bij de eerste start niet verstuurd")
         status = json.load(open(agent.STATUSPAD, encoding="utf-8"))
-        gelijk(len(status["gezien"]), 3, "ze zijn wel als gezien vastgelegd")
+        regelstatus = list(status["regels"].values())
+        gelijk(len(regelstatus[0]["gezien"]), 3, "ze zijn wel als gezien vastgelegd")
+
+
+def test_oude_status_gaat_naar_de_eerste_regel():
+    # Status van voor de meerdere regels (8-9-2026): plat, zonder 'regels'.
+    with tempfile.TemporaryDirectory() as tmp:
+        agent = maak_agent(tmp)
+        with open(agent.STATUSPAD, "w", encoding="utf-8") as f:
+            json.dump({"gestart": "2026-09-01T00:00:00+00:00",
+                       "gezien": ["<a@x>"]}, f)
+        inbox = NepInbox([bericht(2, "<b@x>", ANT.format(2)),
+                          bericht(1, "<a@x>", ANT.format(1))])
+        draai(agent, inbox)
+        gelijk(inbox.doorgestuurd, [(2, "ap@unabo.be")],
+               "na de omzetting gaat alleen het nieuwe bericht door")
+        status = json.load(open(agent.STATUSPAD, encoding="utf-8"))
+        gelijk("__oud__" in status["regels"], False,
+               "de oude status hangt nu aan de regel")
 
 
 def test_nieuwe_na_de_start_gaat_wel_door():
