@@ -22,6 +22,7 @@ krijgt dubbel_van telefoon:<uniek>: de iPhone-rij telt, de Xelion-rij niet (TEL-
 import argparse
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -42,6 +43,7 @@ CONTAINER = os.environ.get("XELION_CONTAINER", "appportal-app-communicatie-1")
 GEBRUIKER = os.environ.get("XELION_GEBRUIKER", "Mehdi")             # xelion_gebruiker.gebruikersnaam
 LIJN = os.environ.get("XELION_LIJN", "Mehdi Chegini gsm")           # xelion_lijn.naam
 SAMEN = timedelta(minutes=2)    # TEL-6: zo dicht bij elkaar begint dezelfde oproep in Xelion en op de iPhone
+NUMMER = r"[+\d*#\s().-]+"         # wie als nummer, niet als naam
 ag = bord.Agent(NAAM)
 
 # De vraag loopt in de container van de communicatie-app (node en pg staan daar al). Alleen SELECT, met parameters.
@@ -135,22 +137,47 @@ def terug_lokaal(kanaal, van, tot):
 
 
 def telefoon_lokaal(van, tot, db=None):
-    """De iPhone-oproepen van De Belwacht op het bord (datum van tot en met tot): uniek, datum, start, minuten en
-    dubbel_van, nooit wie of het thema. Alleen lezen."""
+    """De iPhone-oproepen van De Belwacht op het bord (datum van tot en met tot): uniek, datum, start, minuten,
+    dubbel_van en wie (naam of nummer, alleen om een paar te herkennen; het verlaat deze ronde nooit). Alleen lezen."""
     con = sqlite3.connect(f"file:{db or bordstand.DB}?mode=ro", uri=True)
     try:
-        rijen = con.execute("SELECT uniek, datum, start, minuten, COALESCE(dubbel_van, '') FROM gesprek_log "
-                            "WHERE datum BETWEEN ? AND ? AND substr(uniek, 1, 9) = 'telefoon:'", (van, tot)).fetchall()
+        rijen = con.execute("SELECT uniek, datum, start, minuten, COALESCE(dubbel_van, ''), COALESCE(personen, '') "
+                            "FROM gesprek_log WHERE datum BETWEEN ? AND ? AND substr(uniek, 1, 9) = 'telefoon:'",
+                            (van, tot)).fetchall()
     finally:
         con.close()
-    return [dict(zip(("uniek", "datum", "start", "minuten", "dubbel_van"), r)) for r in rijen]
+    return [dict(zip(("uniek", "datum", "start", "minuten", "dubbel_van", "personen"), r)) for r in rijen]
 
 
-def ontdubbel(rijen, telefoon):
+def nummers_van(spiegel):
+    """{xelion:<oid>: nummersleutel van het externe nummer}: om een paar met de iPhone te herkennen, ook als Xelion
+    een naam kent."""
+    uit = {}
+    for x in spiegel.get("rijen") or []:
+        oid = "".join(c for c in str(x.get("oid") or "") if c.isalnum())
+        if oid:
+            uit[f"xelion:{oid}"] = M.nummer_sleutel(x.get("extern_nummer") or "")
+    return uit
+
+
+def zelfde_wie(x, t, nummers=None):
+    """Codex 01-11: twee gelijktijdige oproepen van verschillende mensen zijn geen paar. Hetzelfde nummer, of (als de
+    iPhone een naam toont) dezelfde naam; een verborgen of onbekend nummer is nooit zeker, dus geen paar."""
+    tp, xp = M.schoon(t.get("personen") or ""), M.schoon(x.get("personen") or "")
+    if not tp or tp in ("nummer verborgen", "onbekend nummer") or xp in ("nummer verborgen", "onbekend nummer"):
+        return False
+    if re.fullmatch(NUMMER, tp):
+        sleutel = M.nummer_sleutel(tp)
+        xs = (nummers or {}).get(x["uniek"]) or (M.nummer_sleutel(xp) if re.fullmatch(NUMMER, xp) else "")
+        return len(sleutel) >= 6 and sleutel == xs
+    return tp.casefold() == xp.casefold()
+
+
+def ontdubbel(rijen, telefoon, nummers=None):
     """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam, telt een keer; de iPhone-rij leidt. Een
-    paar is: beide een gesprek of beide zonder gesprek, het begin hoogstens SAMEN uit elkaar en ongeveer even lang
-    (hoogstens een minuut of een vijfde verschil). Elke iPhone-rij hoort bij hoogstens een Xelion-rij, de dichtste wint.
-    Zonder paar verandert niets. Geeft het aantal Xelion-rijen dat dubbel werd."""
+    paar is: dezelfde persoon (zelfde_wie), beide een gesprek of beide zonder gesprek, het begin hoogstens SAMEN uit
+    elkaar en ongeveer even lang (hoogstens een minuut of een vijfde verschil). Elke iPhone-rij hoort bij hoogstens een
+    Xelion-rij, de dichtste wint. Zonder paar verandert niets. Geeft het aantal Xelion-rijen dat dubbel werd."""
     vrij = [t for t in telefoon if t.get("dubbel_van") in ("", M.GEMIST)]
     n = 0
     for x in sorted((x for x in rijen if x["bron"] == KANAAL and x["dubbel_van"] in ("", M.GEMIST)),
@@ -161,7 +188,7 @@ def ontdubbel(rijen, telefoon):
             tm = int(t.get("minuten") or 0)
             afstand = abs(V.gesprek_venster(t)[0] - begin)
             if (t["dubbel_van"] == "") == (x["dubbel_van"] == "") and afstand <= SAMEN \
-                    and abs(tm - m) <= max(1, max(tm, m) / 5):
+                    and abs(tm - m) <= max(1, max(tm, m) / 5) and zelfde_wie(x, t, nummers):
                 kandidaten.append((afstand, t["uniek"], t))
         if kandidaten:
             _, uniek, t = min(kandidaten, key=lambda k: k[:2])
@@ -180,7 +207,7 @@ def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None, vanaf=No
     try:
         spiegel = lezer(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1])))
         rijen, info = rijen_van(spiegel, dagen)
-        dubbel = ontdubbel(rijen, telefoon(dagen[0], dagen[-1]))
+        dubbel = ontdubbel(rijen, telefoon(dagen[0], dagen[-1]), nummers_van(spiegel))
         ag.prive(M.maskerwoorden(rijen))
         vervallen = M.schrijf_en_lees_terug(KANAAL, rijen, dagen[0], dagen[-1], bord.call, terug)
     except M.MacFout as e:
@@ -207,8 +234,9 @@ def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None, vanaf=No
 def droog(vanaf=None):
     nu = datetime.now(timezone.utc)
     dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
-    rijen, info = rijen_van(spiegel_lezen(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1]))), dagen)
-    ontdubbel(rijen, telefoon_lokaal(dagen[0], dagen[-1]))
+    spiegel = spiegel_lezen(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1])))
+    rijen, info = rijen_van(spiegel, dagen)
+    ontdubbel(rijen, telefoon_lokaal(dagen[0], dagen[-1]), nummers_van(spiegel))
     for dag in dagen:
         n = [x for x in rijen if x["datum"] == dag and x["bron"] == KANAAL]
         print(f"{dag}: {len([x for x in n if not x['dubbel_van']])} oproepen, "

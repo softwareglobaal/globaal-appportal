@@ -163,16 +163,23 @@ def test_tel2_inhaal_vanaf_01_10():
 
 
 def test_tel6_xelion_en_iphone_tellen_een_keer():
-    """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam (zelfde begin binnen twee minuten, ongeveer
-    even lang, allebei gesprek of allebei gemist), krijgt dubbel_van telefoon:<uniek>; de dag telt die oproep een keer.
-    Een oproep die vijf minuten later begint of veel langer duurt, is een andere."""
+    """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam (dezelfde persoon, zelfde begin binnen
+    twee minuten, ongeveer even lang, allebei gesprek of allebei gemist), krijgt dubbel_van telefoon:<uniek>; de dag telt
+    die oproep een keer. Een oproep die vijf minuten later begint, veel langer duurt, of van iemand anders komt (Codex:
+    twee gelijktijdige bellers), is een andere; een verborgen nummer is nooit zeker."""
     rijen, _ = X.rijen_van(spiegel(), M.dagen(NU))
-    # in Brussel: xelion:11 om 10:00 (2 min), xelion:12 om 11:00 gemist, xelion:13 om 12:00 (1 min)
-    telefoon = [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": ""},
-                {"uniek": "telefoon:B-2", "datum": DAG, "start": "11:00", "minuten": 0, "dubbel_van": M.GEMIST},
-                {"uniek": "telefoon:C-3", "datum": DAG, "start": "12:05", "minuten": 1, "dubbel_van": ""},
-                {"uniek": "telefoon:D-4", "datum": DAG, "start": "10:00", "minuten": 30, "dubbel_van": ""}]
-    assert X.ontdubbel(rijen, telefoon) == 2
+    nummers = X.nummers_van(spiegel())
+    # in Brussel: xelion:11 om 10:00 (2 min, Jan Proef), xelion:12 om 11:00 gemist (+32470000002), xelion:13 om 12:00
+    # (1 min, nummer verborgen)
+    telefoon = [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": "",
+                 "personen": "+32 470 00 00 01"},
+                {"uniek": "telefoon:B-2", "datum": DAG, "start": "11:00", "minuten": 0, "dubbel_van": M.GEMIST,
+                 "personen": "0470000002"},
+                {"uniek": "telefoon:C-3", "datum": DAG, "start": "12:05", "minuten": 1, "dubbel_van": "",
+                 "personen": "nummer verborgen"},
+                {"uniek": "telefoon:D-4", "datum": DAG, "start": "10:00", "minuten": 30, "dubbel_van": "",
+                 "personen": "Jan Proef"}]
+    assert X.ontdubbel(rijen, telefoon, nummers) == 2
     op = {r["uniek"]: r for r in rijen}
     assert op["xelion:11"]["dubbel_van"] == "telefoon:A-1" and op["xelion:12"]["dubbel_van"] == "telefoon:B-2"
     assert op["xelion:13"]["dubbel_van"] == "", op["xelion:13"]
@@ -182,6 +189,15 @@ def test_tel6_xelion_en_iphone_tellen_een_keer():
     v = V.vaststellen(DAG, [], set(), alles, {}, [], "volledig", None, kanalen, lambda a: False)
     assert v["xelion"]["oproepen"] == 1 and v["xelion"]["gemist"] == 0, v["xelion"]
     assert v["telefoon"]["oproepen"] == 3, v["telefoon"]                  # A, C en D; xelion:11 telt niet opnieuw
+    # Codex: twee mensen die op hetzelfde moment even lang bellen, een op Xelion en een op de iPhone: twee oproepen
+    for ander in ({"personen": "Ander Proef"}, {"personen": "+32470000077"}):
+        r4, _ = X.rijen_van(spiegel(), M.dagen(NU))
+        assert X.ontdubbel(r4, [dict(telefoon[0], **ander)], nummers) == 0, ander
+    # dezelfde naam als Xelion kent, ook zonder nummer op de iPhone; een verborgen nummer op beide kanten nooit
+    r5, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(r5, [dict(telefoon[0], personen="jan proef")], nummers) == 1
+    r6, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(r6, [dict(telefoon[2], start="12:00")], nummers) == 0
     # zonder iPhone-rijen verandert niets
     rijen2, _ = X.rijen_van(spiegel(), M.dagen(NU))
     assert X.ontdubbel(rijen2, []) == 0 and {r["uniek"]: r["dubbel_van"] for r in rijen2}["xelion:12"] == M.GEMIST
@@ -199,7 +215,8 @@ def test_tel6_xelion_en_iphone_tellen_een_keer():
         con.commit()
         con.close()
         gelezen = X.telefoon_lokaal("2026-10-17", "2026-10-31", db=db)
-    assert gelezen == [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": ""}], gelezen
+    assert gelezen == [{"uniek": "telefoon:A-1", "datum": DAG, "start": "10:01", "minuten": 2, "dubbel_van": "",
+                        "personen": "Jan Proef"}], gelezen
     # een vervallen iPhone-rij is geen paar
     rijen3, _ = X.rijen_van(spiegel(), M.dagen(NU))
     assert X.ontdubbel(rijen3, [dict(telefoon[0], dubbel_van=M.VERVALLEN)]) == 0

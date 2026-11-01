@@ -34,8 +34,9 @@ de spiegel binnen de container van die app, in een leestransactie, met vaste vra
 5. Alle rijen zijn privé. Ik lees ze meteen terug op het bord. Een rij die de spiegel niet
    meer toont, markeer ik als vervallen.
 6. Een oproep die ook als iPhone-oproep van De Belwacht op het bord staat (doorgeschakeld naar
-   de gsm: begin hoogstens twee minuten uit elkaar, ongeveer even lang), markeer ik als dubbel
-   van die iPhone-rij. Zo telt de dag die oproep een keer.
+   de gsm: dezelfde persoon, begin hoogstens twee minuten uit elkaar, ongeveer even lang),
+   markeer ik als dubbel van die iPhone-rij. Zo telt de dag die oproep een keer. Bij een
+   verborgen nummer weet ik dat niet zeker, en dan tellen ze allebei.
 7. Alleen op vraag, eenmalig: met --inhaal-vanaf lees ik vanaf een dag, hoogstens zestig dagen
    terug, in plaats van veertien dagen.
 
