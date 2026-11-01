@@ -720,6 +720,14 @@ def test_vol6_alleen_de_bronnen_van_de_dag():
     wagen = item(1, "wagenpark-wacht", "mehdi", "liters", "Tankbeurt proefwagen", sleutel=DAG, inhoud={"datum": DAG})
     nb = bundelen(DAG, NepBord([wagen, WERK]))
     assert 1 not in nb.opgepakt and 3 in nb.opgepakt, nb.opgepakt
+    # Codex-toets 1: een foto van een agent buiten de lijst verbergt niet dat De Fotowacht niets gaf
+    vreemd = item(2, "werfverslag-voorbereider", "mehdi", "foto", "werffoto", sleutel=DAG)
+    nb = bundelen(DAG, NepBord([vreemd, WERK]))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert [t for t in noden if t.startswith(f"Voor {DAG} geen Foto's")], noden
+    nb = bundelen(DAG, NepBord([dict(vreemd, van="icloud-wacht"), WERK]))
+    noden = [n["tekst"] for n in nb.harten[-1]["nood"]]
+    assert not [t for t in noden if t.startswith(f"Voor {DAG} geen Foto's")], noden
     # B&S: een taak van het Commandocentrum en een afspraak met dossier gaan zoals voor VOL-6 mee; een cc-taak blijft open
     bs = [item(11, "commandocentrum", "andere-agent", "taak", "Gewone taak", sleutel="49001", inhoud={"datum": DAG},
                uniek="zelfstandige-taak"),

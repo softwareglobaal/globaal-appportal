@@ -282,7 +282,10 @@ def bundelen(voor_dag=None):
     # Werkwijze stap 8: welke bronnen ontbraken, en wat ik nodig heb om ze te krijgen.
     # Een locatiedagboek telt alleen voor precies deze dag en uit de actieve reeks. Tot 05-10-2026
     # telde elk locatie-item, ook een oud telefoondagboek, en verborg zo een ontbrekend dagboek.
-    soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG and it.get("soort") != "locatie"}
+    # VOL-6, Codex-toets 1: alleen een bron uit de witte lijst bewijst dat een soort er is; een foto van een andere agent
+    # verborg anders dat de Fotowacht niets gaf
+    soorten = {it.get("soort") for it in items if (it.get("sleutel") or "")[:10] == DAG and it.get("soort") != "locatie"
+               and it.get("van") in bronnen}
     if LC.dag_heeft_dagboek(DAG, items):
         soorten.add("locatie")
     nood = []
