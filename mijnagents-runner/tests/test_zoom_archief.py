@@ -35,6 +35,7 @@ import zoom_archief as ZA  # noqa: E402
 from test_zoom_archief_bouwstenen import _Dropbox  # noqa: E402
 
 ECHT_RONDE_GESLAAGD = ZA_ACC.archief_ronde_geslaagd
+ECHTE_KETEN_DRAAIT = ZA.keten_draait   # opzet() vervangt haar; test_t0120_arch3 toetst de echte
 
 # na de import: de bouwstenentest wist bij het laden elke DROPBOX_-sleutel
 os.environ.update(DROPBOX_PRIVE_APP_KEY="k", DROPBOX_PRIVE_APP_SECRET="g", DROPBOX_PRIVE_REFRESH_TOKEN="t",
@@ -1172,6 +1173,38 @@ def test_codex38_een_droge_of_proefronde_bevestigt_geen_ja():
     finally:
         ZA_ACC.bord.db_lees, ZA_ACC.archief_ronde_geslaagd = oud_lees, oud_geslaagd
     assert ZA.TAAK == "opnames naar Dropbox", "de taak van een echte ronde is wat De Zoomwacht verwacht"
+
+# ------------------------------------------------------------------------- T-0120 (meting 01-10 tot 01-11) ---
+def test_t0120_arch3_alleen_de_echte_keten_telt():
+    """ARCH-3 (meting 01-11-2026): op 30-10 09:06 stopte een ronde met "de gesprekkenketen begint" terwijl er geen keten
+    liep. pgrep -f 'mijnagents-runner/keten.py' vond elk proces met die tekst in zijn opdrachtregel, ook een lezer van
+    dat bestand. Nu telt alleen een python die precies dat keten.py draait (verankerd); een ander proces met het pad
+    in zijn opdrachtregel niet. Met echte processen en de echte pgrep."""
+    import subprocess
+    import time as _tijd
+    map_ = tempfile.mkdtemp(prefix="keten-", dir=MAP)
+    keten = os.path.join(map_, "appportal", "mijnagents-runner", "keten.py")
+    os.makedirs(os.path.dirname(keten))
+    with open(keten, "w", encoding="utf-8") as f:
+        f.write("import time\ntime.sleep(30)\n")
+    oud = ZA.KETEN_PY
+    ZA.KETEN_PY = keten
+    lezer = echt = None
+    try:
+        assert re.fullmatch(r"\^.*\( \|\$\)", ZA.keten_patroon()), ZA.keten_patroon()
+        lezer = subprocess.Popen(["/bin/sh", "-c", "sleep 30; :", keten])           # zoals cat of less op keten.py
+        _tijd.sleep(0.5)
+        assert ECHTE_KETEN_DRAAIT() is False, "een lezer van keten.py is geen keten"
+        echt = subprocess.Popen([sys.executable, keten, "--nacht"])
+        _tijd.sleep(0.5)
+        assert ECHTE_KETEN_DRAAIT() is True, "de echte keten telt"
+    finally:
+        ZA.KETEN_PY = oud
+        for p in (lezer, echt):
+            if p:
+                p.kill()
+                p.wait()
+
 
 if __name__ == "__main__":
     goed = fout = 0

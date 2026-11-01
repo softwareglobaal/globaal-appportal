@@ -69,6 +69,7 @@ EERSTE_DAG = date(2018, 1, 1)     # elke ronde leest alles vanaf hier (Codex con
 BUDGET = 45 * 60                  # na zoveel seconden begint de ronde geen nieuw bestand meer
 NA_BUDGET = 10 * 60               # zoveel later breekt ze ook een lopend bestand af (geen bewijs, volgende ronde opnieuw)
 KETEN_UTC = ((7, 0), (13, 0), (23, 30))   # de gesprekkenketen (planning/gesprekken.cron)
+KETEN_PY = os.path.join(HIER, "keten.py")  # het pad waarmee planning/gesprekken.cron de keten start
 KETEN_MARGE = 10 * 60             # zoveel seconden voor de keten begint er geen nieuw bestand meer
 KETEN_HARD = 5 * 60               # zoveel seconden voor de keten breekt alles af, ook de inventaris
 VRIJ_MARGE = 2 * 1024 ** 3        # zoveel schijf moet er naast het bestand vrij blijven op de VM
@@ -388,11 +389,25 @@ def gemist_voorstellen(staat):
 
 
 # ----------------------------------------------------------------- ronde ---
+def _ere(tekst):
+    """Tekst letterlijk in een uitgebreide reguliere uitdrukking (pgrep -f)."""
+    return re.sub(r"([.\[\](){}*+?|^$\\])", r"\\\1", tekst)
+
+
+def keten_patroon():
+    """ARCH-3 (meting 01-11-2026): alleen de echte keten, verankerd: een python (in de cron die van ~/agents/.venv)
+    gevolgd door precies het pad van keten.py, dan een spatie of het einde. Tot dan telde elke opdrachtregel met
+    'mijnagents-runner/keten.py', ook een lezer van dat bestand of flock dat op het slot wacht: op 30-10 09:06 stopte
+    zo een ronde zonder keten. Elke python, niet alleen die van de venv: een python die zichzelf opnieuw start
+    (macOS) of python3 met de hand blijft een keten."""
+    return rf"^([^ ]*/)?[Pp]ython[0-9.]* {_ere(KETEN_PY)}( |$)"
+
+
 def keten_draait():
     """Draait de gesprekkenketen nu? True, False, of None als ik het niet kan nagaan (Codex controle 6, punt 30: dat
     is geen "nee"). Alleen kijken, nooit het slot van de keten nemen (dan zou de keten overslaan)."""
     try:
-        code = subprocess.run(["pgrep", "-f", "mijnagents-runner/keten.py"], capture_output=True, timeout=10).returncode
+        code = subprocess.run(["pgrep", "-f", keten_patroon()], capture_output=True, timeout=10).returncode
     except (OSError, subprocess.SubprocessError):
         return None
     return True if code == 0 else False if code == 1 else None
