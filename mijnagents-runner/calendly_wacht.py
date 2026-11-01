@@ -55,13 +55,32 @@ BEWUST_LEEG = {
     "Bespreking", "H-Architects: Klant",
 }
 
-# De negen types uit tabel J van het agenda-document, met de naam zoals ze in
-# Calendly heten. Alles daarbuiten meld ik als "kent het document niet".
-DOCUMENT_TYPES = {
-    "HA: Klant", "HA: Advies (Prospect)", "HA: Prospect (Kennismaking)",
-    "UNABO: Klant", "UNABO: Offerte", "Harmoniebouw: Prospect",
-    "EE: Energy", "Contrax: Klant", "Intern Overleg",
-}
+# De types die het agenda-document kent, met de naam zoals ze in Calendly heten: de vaste lijst in
+# werkwijze/agenda-taken.json (calendly_types.bekend). Tot 01-11-2026 stond hier een kopie met de negen types van
+# tabel J, en meldde ik elke dag de vijf drukste kanalen als onbekend (T-0120 CL-3).
+AGENDA_TAKEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "werkwijze", "agenda-taken.json")
+
+
+def bekende_types():
+    """De set bekende typenamen uit agenda-taken.json, of None als die lijst niet te lezen is. None is onbekend, niet
+    leeg: dan sla ik de controle over en meld ik dat, in plaats van elk type als onbekend te melden."""
+    try:
+        lijst = (json.load(open(AGENDA_TAKEN, encoding="utf-8")).get("calendly_types") or {}).get("bekend")
+    except (OSError, ValueError):
+        return None
+    return {x for x in lijst if isinstance(x, str)} if isinstance(lijst, list) and lijst else None
+
+
+def dubbele_types(accounts):
+    """naam -> accountnamen, voor een typenaam die actief op twee of meer verschillende accounts staat (T-0120 CL-3).
+    Een inactief type telt niet, en dezelfde naam twee keer in hetzelfde account is geen dubbel over accounts: tot
+    01-11-2026 kwam zo elke dag 'New Meeting' (twee inactieve types in een account) als dubbel binnen."""
+    waar = collections.defaultdict(dict)
+    for a in accounts:
+        for t in a.get("types") or []:
+            if t.get("active"):
+                waar[t.get("name") or ""][a.get("uri") or a.get("naam")] = a.get("naam") or "?"
+    return {nm: sorted(w.values()) for nm, w in waar.items() if len(w) > 1}
 
 
 def env(sleutel):
@@ -219,19 +238,20 @@ def main():
                 if lok > nu_b:
                     geannuleerd[u].append(f"{lok:%Y-%m-%d %H:%M} {nm}")
 
-    namen = collections.defaultdict(list)
     regels = []
+    bekend = bekende_types()
+    if bekend is None:
+        noden.append({"tekst": "lijst bekende Calendly-types in werkwijze/agenda-taken.json niet te lezen", "wie": "claude-code"})
     for a in accounts:
         t_tel = tel[a["uri"]] if a["uri"] in tel else tel[None]
         dood = []
         for t in a["types"]:
             nm = t.get("name") or ""
-            namen[nm].append(a["naam"])
             if not t.get("active"):
                 continue
             if t_tel[nm] == 0 and nm not in BEWUST_LEEG:
                 dood.append(f"{nm} ({t.get('duration')} min)")
-            if nm not in DOCUMENT_TYPES and nm not in BEWUST_LEEG:
+            if bekend is not None and nm not in bekend and nm not in BEWUST_LEEG:
                 signalen.append(f"{a['naam']}: type '{nm}' staat niet in het agenda-document")
         for afw in duur_afwijkend(a["types"]):
             signalen.append(f"{a['naam']}: duur wijkt af van de afspraak: {afw}")
@@ -249,10 +269,9 @@ def main():
                          f"{t.get('duration')}m  {t.get('name')}" + ("" if t.get("active") else "  (inactief)")
                          for t in sorted(a["types"], key=lambda x: -t_tel[x.get("name", "")])))
 
-    for nm, waar in namen.items():
-        if len(waar) > 1:
-            signalen.append(f"type '{nm}' staat op meerdere accounts ({', '.join(waar)}): "
-                            "boekingen komen dan op verschillende agenda's")
+    for nm, waar in sorted(dubbele_types(accounts).items()):
+        signalen.append(f"type '{nm}' staat op meerdere accounts ({', '.join(waar)}): "
+                        "boekingen komen dan op verschillende agenda's")
 
     zonder = []
     if google_agenda is not None:
