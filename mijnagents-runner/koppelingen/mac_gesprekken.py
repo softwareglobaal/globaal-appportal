@@ -363,10 +363,14 @@ def whatsapp_rijen(pad, dagenlijst):
             persoon = "onbekend"
         richting = {1: "inkomend", 0: "uitgaand"}.get(x["inkomend"], "richting onbekend")
         thema = "WhatsApp-oproep, " + richting + (", video" if x["video"] else "")
+        # WA-3: een inkomende oproep zonder duur die WhatsApp niet gemist noemt (ZMISSED 0, waarschijnlijk op de gsm
+        # opgenomen), is een oproep met onbekende duur: hij telt als oproep. Alleen ZMISSED 1 is gemist.
+        gesprek = x["duur"] > 0 or (x["inkomend"] == 1 and not x["gemist"])
         if x["duur"] <= 0:
-            thema += ", gemist" if x["inkomend"] == 1 else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek"
+            thema += (", niet gemist, duur onbekend" if gesprek else ", gemist" if x["inkomend"] == 1
+                      else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek")
         rijen.append(_rij(f"whatsapp-oproep:{sleutel}", dag_van(x["begin"]), start_van(x["begin"]), minuten(x["duur"]),
-                          persoon, thema, "whatsapp", "" if x["duur"] > 0 else GEMIST))
+                          persoon, thema, "whatsapp", "" if gesprek else GEMIST))
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "oudste_oproep": oudste}
 
 

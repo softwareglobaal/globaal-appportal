@@ -261,6 +261,31 @@ def test_whatsapp_oproepen():
     assert vier["personen"] == "groep: " + GROEP and vier["minuten"] == 10, vier
 
 
+def test_wa3_niet_gemist_zonder_duur_telt_als_oproep():
+    """WA-3: WhatsApp zegt met ZMISSED of een inkomende oproep gemist is. Niet gemist en zonder duur (waarschijnlijk op de
+    gsm opgenomen) is een oproep met onbekende duur, geen gemiste: zonder buiten:gemist, dus telt hij als oproep. Alleen
+    ZMISSED=1 is gemist; een uitgaande oproep zonder duur blijft 'niet beantwoord'."""
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0)]
+    oproepen = [(11, "OPROEPA", a(bxl(2026, 10, 22, 9, 0)), 0.0, 21, "32470000001@s.whatsapp.net", None),
+                (12, "OPROEPB", a(bxl(2026, 10, 22, 10, 0)), 0.0, 22, "32470000001@s.whatsapp.net", None),
+                (13, "OPROEPC", a(bxl(2026, 10, 22, 11, 0)), 0.0, 23, None, None)]
+    aggregaten = [(21, 1, 0, 0), (22, 1, 1, 0), (23, 0, 0, 0)]
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_whatsapp(os.path.join(map_, "wa.sqlite"), (), sessies, oproepen, aggregaten,
+                            nieuwste=a(bxl(2026, 10, 23, 20, 0)))
+        rijen, _ = M.whatsapp_rijen(pad, DAGEN)
+    op = {r["uniek"].split(":")[1].split("-")[0]: r for r in rijen}
+    a_, b_, c_ = op["OPROEPA"], op["OPROEPB"], op["OPROEPC"]
+    assert a_["thema"] == "WhatsApp-oproep, inkomend, niet gemist, duur onbekend" and a_["dubbel_van"] == "", a_
+    assert a_["minuten"] == 0 and a_["personen"] == JAN and V.is_leidend(a_) and V.soort(a_) == "oproep"
+    assert b_["thema"] == "WhatsApp-oproep, inkomend, gemist" and b_["dubbel_van"] == M.GEMIST, b_
+    assert c_["thema"] == "WhatsApp-oproep, uitgaand, niet beantwoord" and c_["dubbel_van"] == M.GEMIST, c_
+    s = M.samenvatting(rijen, DAG)
+    assert s["oproepen"] == 1 and s["minuten"] == 0 and s["gemist"] == 2, s
+    v = V.vaststellen(DAG, [], [], rijen, {}, [], "volledig", None, {"whatsapp": "aangesloten"}, lambda x: False, "volledig")
+    assert v["whatsapp"]["oproepen"] == 1, v["whatsapp"]
+
+
 # ------------------------------------------------------------------------------------------- telefoon ---
 def test_telefoon_namen_nummers_en_diensten():
     with tempfile.TemporaryDirectory() as map_:

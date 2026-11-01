@@ -40,6 +40,8 @@ nooit tekst. Ik lees alleen wat het wegschreef, en wis het na het lezen.
    systeemmeldingen en de melding van een oproep tellen niet als bericht.
 4. Per oproep een rij: begin, minuten, in of uit, video, met wie. Een oproep zonder
    duur (gemist of niet beantwoord) staat in de tabel, maar telt niet als gesprek.
+   Gemist is wat WhatsApp gemist noemt: een inkomende oproep zonder duur die
+   WhatsApp niet gemist noemt, is een oproep met onbekende duur en telt wel (WA-3).
 5. Per dag die voorbij was toen de kopie gemaakt werd, die zelf berichten of
    oproepen toont en waarna de databank nog iets nieuws kreeg, een dekkingsrij. Zo
    weet De Dagbundelaar welke dagen ik echt gelezen heb. Een dag zonder dekking is
