@@ -403,6 +403,12 @@ def _stukken(bron):
     return [s for s in stukken if len(s) >= 6]
 
 
+def corpus_van(bundels, gezegd):
+    """Waar een bron letterlijk in moet staan: de dagbundel (tekst en telling) en Mehdi's woorden, genormaliseerd."""
+    return normaal(" \n ".join([b["dagbestand"] + " " + json.dumps(b["telling"], ensure_ascii=False) for b in bundels]
+                               + [g["tekst"] for g in gezegd or []]))
+
+
 def bron_in(bron, corpus):
     """Staat de bron letterlijk in de bundel of in Mehdi's woorden? Een datum vooraan (de dag staat al apart) en een
     lijstteken tellen niet mee. Een weglating (... of het teken voor drie puntjes) mag: dan moet elk stuk van minstens
@@ -414,18 +420,21 @@ def bron_in(bron, corpus):
 def bron_prive(bron, bundels):
     """Komt de bron uit een regel van de dagbundel die privé zegt, of uit een blok dat privé is (een kop met privé, of
     Eigen werk en gezondheid)? Dan is de taak privé, ook als het woord niet in de taak zelf staat (Codex, toets 1 van
-    T-0120)."""
+    T-0120). Elk stuk van de bron moet in die ene regel of dat ene blok staan: een projectnaam die ook in een privéblok
+    voorkomt, maakt een gewone taak niet privé (toets 2). Op elke dag van de bundel: een verkeerde dag van het model
+    mag een privébron niet verbergen; wat zo te veel privé wordt, blijft alleen bij Mehdi."""
     stukken = _stukken(bron)
     for b in bundels if stukken else []:
         kop, blok = "", []
         for regel in b["dagbestand"].splitlines() + ["## einde"]:
             if regel.startswith("## "):
-                if (PRIVE.search(kop) or kop.startswith(PRIVE_KOPPEN)) and any(s in normaal(" ".join(blok)) for s in stukken):
+                tekst = normaal(" ".join(blok))
+                if (PRIVE.search(kop) or kop.startswith(PRIVE_KOPPEN)) and all(s in tekst for s in stukken):
                     return True
                 kop, blok = normaal(regel[3:]), []
                 continue
             blok.append(regel)
-            if PRIVE.search(regel) and any(s in normaal(regel) for s in stukken):
+            if PRIVE.search(regel) and all(s in normaal(regel) for s in stukken):
                 return True
     return False
 
@@ -478,8 +487,7 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
     staat = json.loads(json.dumps(staat))
     taken, afgerond = staat["taken"], staat["afgerond"]
     nummers = staat.get("nummers") or {}
-    corpus = normaal(" \n ".join([b["dagbestand"] + " " + json.dumps(b["telling"], ensure_ascii=False) for b in bundels]
-                                 + [g["tekst"] for g in gezegd or []]))
+    corpus = corpus_van(bundels, gezegd)
     nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
     laatste_dag = bundels[0]["dag"] if bundels else brussel(nu).date().isoformat()
     al_af = {t.get("id") for t in afgerond}
@@ -673,20 +681,26 @@ def klaarzet_items(antwoord):
     return items_
 
 
-def doorgeef_besluiten(staat, agents, ontvangers=None, aan=None):
+def doorgeef_besluiten(staat, agents, bundels, gezegd=(), ontvangers=None, aan=None):
     """Per open taak voor een agent die nog niet weg is, wat De Doorgever ermee doet: [{id, naar, besluit}]. naar is de
-    agent als de taak deze ronde weggaat (met de vlag uit: zou weggaan), anders leeg. Zet niets (droog en test)."""
+    agent als de taak deze ronde weggaat (met de vlag uit: zou weggaan), anders leeg. Elke bewaarde taak gaat opnieuw
+    langs de bundel van nu, ook een oude die Claude deze ronde wegliet: is de bron privé of niet meer na te gaan, dan
+    blijft ze bij Mehdi (Codex, toets 2). Zet niets (droog en test)."""
     ontvangers = ONTVANGERS if ontvangers is None else ontvangers
     aan = DOORGEVEN if aan is None else aan
+    corpus = corpus_van(bundels, gezegd)
     uit, n = [], 0
     for t in open_taken(staat):
         if t.get("voor") != "agent" or t.get("doorgegeven"):
             continue
         naam = agent_naam(t.get("wie"), agents)
-        if t.get("prive") or PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))):
+        if t.get("prive") or PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))) \
+                or bron_prive(t.get("bron"), bundels):
             reden = "privé"                              # privé gaat nooit naar een ander
         elif t.get("teruggekomen"):
             reden = "ging al eens terug"                 # een agent liet ze liggen: nu is ze van Mehdi
+        elif not bron_in(t.get("bron"), corpus):
+            reden = "bron niet meer na te gaan in de dagbundel"
         elif not naam:
             reden = "de agent staat niet op het bord"
         elif naam not in ontvangers:
@@ -702,7 +716,14 @@ def doorgeef_besluiten(staat, agents, ontvangers=None, aan=None):
     return uit
 
 
-def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None, aan=None):
+def door_ontvanger(door, naar):
+    """Pakte de bedoelde ontvanger het item op? Agents zetten hun naam als opgepakt_door, soms met een toevoeging na een
+    dubbele punt. Mehdi, een andere agent, ik zelf of geen naam is geen beweging van de ontvanger (Codex, toets 2)."""
+    door = str(door or "").strip()
+    return bool(naar) and (door == naar or door.startswith(f"{naar}:"))
+
+
+def doorgeven(staat, nu, agents, bundels, gezegd=(), zet=None, lees=None, pak=None, ontvangers=None, aan=None):
     """De Doorgever (ANGEL-9). Eerst wat al weg is teruglezen: opgepakt is beweging. Ligt het na STIL_DAGEN nog klaar, of
     staat het niet meer klaar, dan neem ik het item terug (opgepakt door mij, zodat het niet dubbel gebeurt) en is de taak
     weer voor Mehdi. Is de taak intussen afgerond of niet meer voor die agent (Mehdi of het model veranderde ze), dan
@@ -714,7 +735,7 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
     zet = zet or ag.klaarzet
     if not aan:
         # vlag uit: geen bordhandeling, ook niet voor wat al weg was (dat blijft staan tot de vlag weer aan staat)
-        return doorgeef_besluiten(staat, agents, ontvangers, aan), Counter()
+        return doorgeef_besluiten(staat, agents, bundels, gezegd, ontvangers, aan), Counter()
     lees = lees or (lambda uniek: klaarzet_items(bord.call(
         "/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"}))))
     pak = pak or (lambda kid: bord.opgepakt(kid, NAAM))
@@ -732,7 +753,7 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
             terug = lees(weg["uniek"])
             if not isinstance(terug, list) or not all(isinstance(x, dict) for x in terug):
                 raise bord.BordOnbekend("klaarzet: geen lijst van items")
-            if any(x.get("status") == "opgepakt" and x.get("opgepakt_door") != NAAM for x in terug):
+            if any(x.get("status") == "opgepakt" and door_ontvanger(x.get("opgepakt_door"), weg["naar"]) for x in terug):
                 weg["status"] = "opgepakt"
                 telling["opgepakt_door_agent"] += 1
                 continue
@@ -757,7 +778,7 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
         t["teruggekomen"] = sorted(set(t.get("teruggekomen") or []) | {weg["naar"]})
         del t["doorgegeven"]
         telling["terug_naar_mehdi"] += 1
-    besluiten = doorgeef_besluiten(staat, agents, ontvangers, aan)
+    besluiten = doorgeef_besluiten(staat, agents, bundels, gezegd, ontvangers, aan)
     nieuw = []
     for b in besluiten:
         t = staat["taken"].get(b["id"]) if b["naar"] else None
@@ -864,7 +885,7 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         if ontbreekt:
             # alleen het aantal: de tekst kan een naam dragen, en die hoort niet in het werkverslag (werkwijze, nooit)
             ag.log("dagbundel", "bron", f"{len(ontbreekt)} punten gemist in de dagbundel; ze staan onderaan de takenlijst")
-    _, door = (doorgeef or doorgeven)(staat, nu, r.collegas)       # De Doorgever (ANGEL-9); met de vlag uit zet hij niets
+    _, door = (doorgeef or doorgeven)(staat, nu, r.collegas, bundels, gezegd_lijst)   # De Doorgever (ANGEL-9)
     telling.update(door)
     if door.get("niet_gelezen") or door.get("niet_gezet"):
         r.nood("Een doorgegeven taak staat niet zo op het bord", wie="claude-code")
@@ -922,9 +943,9 @@ def droog(argv):
 
     besluiten = {}
 
-    def doorgeef(staat, nu, agents):
+    def doorgeef(staat, nu, agents, bundels, gezegd):
         # droog: niets doorgeven of terugnemen, alleen zeggen wat er zou gebeuren (ANGEL-9)
-        besluiten.update({b["id"]: b["besluit"] for b in doorgeef_besluiten(staat, agents)})
+        besluiten.update({b["id"]: b["besluit"] for b in doorgeef_besluiten(staat, agents, bundels, gezegd)})
         return [], Counter()
 
     staat = werk(d, zet=zet, lees=lambda uniek: [x for x in ag.maskeer(gezet) if x["uniek"] == uniek],

@@ -66,6 +66,7 @@ DAGBESTAND = """# Dag 2026-10-30 vastgesteld
 - versie 2, gemaakt 31-10-2026 00:31
 """
 TELLING = {"dag": GISTEREN, "whatsapp": {"berichten": 40}, "telefoon": {"oproepen": 3}}
+BUNDELS = [{"dag": GISTEREN, "dagbestand": DAGBESTAND, "telling": TELLING}]
 KERN = [
     {"naam": "Proefpersoon Zeta", "voornaam": "Zeta", "functie": "tekenaar", "afdeling": "Architecture", "firma": "Proeffirma"},
     {"naam": "Proefpersoon Eta", "voornaam": "Eta", "functie": "boekhouder", "afdeling": "Finance", "firma": "Proeffirma"},
@@ -129,7 +130,9 @@ class Omgeving:
         x = self.bord.get(uniek)
         if x is None:
             return []
-        return [dict(x, status="opgepakt" if uniek in self.opgepakt else "klaar")]
+        if uniek in self.opgepakt:          # de ontvanger zelf pakte het op, zoals agents dat doen (opgepakt_door NAAM)
+            return [dict(x, status="opgepakt", opgepakt_door=x["voor"])]
+        return [dict(x, status="klaar")]
 
     def ronde(self, uit=None, nu=OCHTEND_UTC, moment=None, fout=None, werkwijze=None):
         r = NepRonde(werkwijze)
@@ -674,19 +677,19 @@ def test_doorgever_besluit_per_taak_zonder_iets_te_zetten():
                        "t-3": _agenttaak("t-3", bron="14:00 (privé): geen spoor"),
                        "t-4": _agenttaak("t-4", wie="De Onbekende Wacht"),
                        "t-5": dict(_agenttaak("t-5"), voor="mehdi", wie="")}}
-    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE)}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), BUNDELS)}
     assert besluit == {"t-1": ("", "blijft bij Mehdi: zoom-wacht staat niet op de witte lijst"),
                        "t-2": ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst"),
                        "t-3": ("", "blijft bij Mehdi: privé"),
                        "t-4": ("", "blijft bij Mehdi: de agent staat niet op het bord")}, besluit
     lijst = {"zoom-wacht": "zoekt een opname"}
-    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, lijst, aan=False)}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), lijst, aan=False)}
     assert besluit["t-1"] == ("zoom-wacht", "zou naar zoom-wacht (doorgeven staat uit)")
     assert besluit["t-2"] == ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst")   # De Plaudwacht niet
-    assert besluit["t-3"][0] == "" and M.doorgeef_besluiten(staat, AGENTS_TWEE, lijst, aan=True)[0]["besluit"] == \
+    assert besluit["t-3"][0] == "" and M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), lijst, aan=True)[0]["besluit"] == \
         "gaat naar zoom-wacht"
     veel = {"taken": {f"t-{i}": _agenttaak(f"t-{i}") for i in range(7)}}
-    besluiten = M.doorgeef_besluiten(veel, AGENTS, lijst, aan=True)
+    besluiten = M.doorgeef_besluiten(veel, AGENTS, BUNDELS, (), lijst, aan=True)
     assert sum(1 for b in besluiten if b["naar"]) == M.MAX_DOORGEVEN == 5
     assert sum(1 for b in besluiten if b["besluit"] == "blijft bij Mehdi: hoogstens 5 per ronde") == 2
 
@@ -696,8 +699,8 @@ def test_doorgever_zet_als_voorstel_leest_terug_en_geeft_na_drie_dagen_terug_aan
     lijst = {"zoom-wacht": "zoekt een opname"}
     gepakt = []
 
-    def doorgeef(staat, nu, agents):
-        return M.doorgeven(staat, nu, agents, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+    def doorgeef(staat, nu, agents, bundels, gezegd):
+        return M.doorgeven(staat, nu, agents, bundels, gezegd, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
 
     try:
         r = NepRonde()
@@ -714,17 +717,17 @@ def test_doorgever_zet_als_voorstel_leest_terug_en_geeft_na_drie_dagen_terug_aan
         assert "Doorgegeven aan zoom-wacht" in o.bord["mehdi-agent:taken:2026-10-31"]["inhoud"]
         assert "1 doorgegeven" in r.detail and "Omega" not in r.detail, r.detail
         # een dag later ligt het nog klaar: niets verandert, en het gaat niet een tweede keer weg
-        _, telling = M.doorgeven(staat, datetime(2026, 11, 1, 6, 20, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 1, 6, 20, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
                                  lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
         assert sum(telling.values()) == 0 and staat["taken"][tid]["voor"] == "agent" and gepakt == []
         # na drie dagen nog altijd klaar: terug naar Mehdi, en het item neem ik terug zodat het niet dubbel gebeurt
-        _, telling = M.doorgeven(staat, datetime(2026, 11, 3, 6, 21, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 3, 6, 21, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
                                  lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
         t = staat["taken"][tid]
         assert telling["terug_naar_mehdi"] == 1 and t["voor"] == "mehdi" and t["wie"] == "" and "doorgegeven" not in t
         assert gepakt == [it["id"]] and t["teruggekomen"] == ["zoom-wacht"]
         t["voor"], t["wie"] = "agent", "De Zoomwacht"                      # het model zet het opnieuw bij de agent
-        (b,) = M.doorgeef_besluiten(staat, AGENTS, lijst, aan=True)
+        (b,) = M.doorgeef_besluiten(staat, AGENTS, BUNDELS, (), lijst, aan=True)
         assert b["naar"] == "" and b["besluit"] == "blijft bij Mehdi: ging al eens terug"
     finally:
         M.ag._log.clear()
@@ -736,9 +739,9 @@ def test_doorgever_opgepakt_is_beweging_en_onleesbaar_bord_beslist_niets():
     lijst = {"zoom-wacht": "zoekt een opname"}
     try:
         staat = {"taken": {"t-1": _agenttaak("t-1")}}
-        M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=None, ontvangers=lijst, aan=True)
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=None, ontvangers=lijst, aan=True)
         o.opgepakt.add("mehdi-agent:taak:t-1")
-        _, telling = M.doorgeven(staat, datetime(2026, 11, 5, 6, 20, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 5, 6, 20, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
                                  lees=o.lees, pak=None, ontvangers=lijst, aan=True)
         assert telling["opgepakt_door_agent"] == 1 and staat["taken"]["t-1"]["doorgegeven"]["status"] == "opgepakt"
         assert staat["taken"]["t-1"]["voor"] == "agent"
@@ -748,7 +751,7 @@ def test_doorgever_opgepakt_is_beweging_en_onleesbaar_bord_beslist_niets():
         def stuk(uniek):
             raise bord.BordOnbekend("bord weg")
 
-        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=stuk, pak=None, ontvangers=lijst, aan=True)
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=stuk, pak=None, ontvangers=lijst, aan=True)
         assert telling["niet_gelezen"] == 1 and staat["taken"]["t-2"]["voor"] == "agent"     # onbekend is niet leeg
     finally:
         o.weg()
@@ -760,25 +763,25 @@ def test_doorgever_neemt_terug_wat_afgerond_of_niet_meer_voor_die_agent_is():
     gepakt = []
     try:
         staat = {"taken": {"t-1": _agenttaak("t-1"), "t-2": _agenttaak("t-2")}, "afgerond": []}
-        M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
         assert all(staat["taken"][k].get("doorgegeven") for k in ("t-1", "t-2"))
         staat["afgerond"].append(dict(staat["taken"].pop("t-1"), status="gedaan"))     # "1 is gedaan"
         staat["taken"]["t-2"].update(voor="mehdi", wie="")                             # "2 doe ik zelf"
-        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append,
                                  ontvangers=lijst, aan=True)
         assert telling["ingetrokken"] == 2 and sorted(gepakt) == sorted(o.bord[f"mehdi-agent:taak:t-{i}"]["id"] for i in (1, 2))
         assert staat["afgerond"][0]["doorgegeven"]["status"] == "ingetrokken" and "doorgegeven" not in staat["taken"]["t-2"]
         assert staat["taken"]["t-2"]["voor"] == "mehdi" and staat["taken"]["t-2"]["teruggekomen"] == ["zoom-wacht"]
-        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append,
                                  ontvangers=lijst, aan=True)
         assert sum(telling.values()) == 0 and len(gepakt) == 2                          # een keer terugnemen is genoeg
         staat["taken"]["t-2"].update(voor="agent", wie="De Zoomwacht")                 # weer bij de agent: niet opnieuw
-        assert [b["besluit"] for b in M.doorgeef_besluiten(staat, AGENTS, lijst, aan=True)] == [
+        assert [b["besluit"] for b in M.doorgeef_besluiten(staat, AGENTS, BUNDELS, (), lijst, aan=True)] == [
             "blijft bij Mehdi: ging al eens terug"]
         # wat ik zelf terugnam, is geen beweging van de ontvanger
         weg = {"naar": "zoom-wacht", "uniek": "u-3", "ts": "2026-10-20T06:20:00+00:00"}
         staat = {"taken": {"t-3": dict(_agenttaak("t-3"), doorgegeven=weg)}, "afgerond": []}
-        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, pak=gepakt.append, ontvangers=lijst, aan=True,
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, pak=gepakt.append, ontvangers=lijst, aan=True,
                                  lees=lambda uniek: [{"id": 9, "status": "opgepakt", "opgepakt_door": "mehdi-agent"}])
         assert telling == {"terug_naar_mehdi": 1} and staat["taken"]["t-3"]["voor"] == "mehdi", telling
     finally:
@@ -814,7 +817,7 @@ def test_doorgever_met_de_vlag_uit_raakt_het_bord_niet():
     def nooit(*a, **k):
         raise AssertionError("bord geraakt met de vlag uit")
 
-    besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=nooit, lees=nooit, pak=nooit,
+    besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=nooit, lees=nooit, pak=nooit,
                                      ontvangers={"zoom-wacht": "zoekt een opname"}, aan=False)
     assert json.dumps(staat, sort_keys=True) == voor and sum(telling.values()) == 0
     assert [(b["id"], b["naar"]) for b in besluiten] == [("t-2", "zoom-wacht")]          # alleen: zou naar
@@ -839,7 +842,8 @@ def test_taak_uit_een_priveblok_of_priveregel_gaat_nooit_naar_een_ander():
     assert telling["prive_bij_mehdi"] >= 1
     t = per["Zoek de tekening op"]
     t["voor"], t["wie"] = "agent", "De Zoomwacht"           # ook als het later toch bij een agent staat: nooit weg
-    (b,) = [b for b in M.doorgeef_besluiten(staat, AGENTS, {"zoom-wacht": "zoekt"}, aan=True) if b["id"] == t["id"]]
+    (b,) = [b for b in M.doorgeef_besluiten(staat, AGENTS, bundels, (), {"zoom-wacht": "zoekt"}, aan=True)
+            if b["id"] == t["id"]]
     assert b == {"id": t["id"], "naar": "", "besluit": "blijft bij Mehdi: privé"}
 
 
@@ -855,9 +859,64 @@ def test_doorgever_een_onvolledig_bordantwoord_beslist_niets():
     weg = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-20T06:20:00+00:00"}
     for terug in (None, {}, "x"):
         staat = {"taken": {"t-1": dict(_agenttaak("t-1"), doorgegeven=dict(weg))}, "afgerond": []}
-        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=None, lees=lambda uniek, terug=terug: terug,
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=None, lees=lambda uniek, terug=terug: terug,
                                  pak=None, ontvangers={"zoom-wacht": "zoekt"}, aan=True)
         assert telling == {"niet_gelezen": 1} and staat["taken"]["t-1"]["voor"] == "agent", (terug, telling)
+
+
+def test_doorgever_gaat_elke_bewaarde_taak_na_tegen_de_bundel_van_nu():
+    """Codex toets 2, bezwaar 1: een oude taak zonder privévlag, die Claude deze ronde wegliet, gaat niet weg als haar
+    bron privé is of niet meer in de bundel staat."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n\n## Over deze vaststelling")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    staat = {"taken": {"t-1": _agenttaak("t-1", bron="2 uur aan tekening Proefplan"),
+                       "t-2": _agenttaak("t-2", bron="12:00 Zoom, met Klant Psi, 30 min"),
+                       "t-3": _agenttaak("t-3")}, "afgerond": []}
+    o = Omgeving()
+    try:
+        besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, bundels, zet=o.zet, lees=o.lees, pak=None,
+                                         ontvangers={"zoom-wacht": "zoekt"}, aan=True)
+        assert {b["id"]: b["besluit"] for b in besluiten} == {
+            "t-1": "blijft bij Mehdi: privé", "t-2": "blijft bij Mehdi: bron niet meer na te gaan in de dagbundel",
+            "t-3": "gaat naar zoom-wacht"}
+        assert list(o.bord) == ["mehdi-agent:taak:t-3"] and telling == {"doorgegeven": 1}
+    finally:
+        o.weg()
+
+
+def test_een_gedeelde_projectnaam_maakt_een_gewone_taak_niet_prive():
+    """Codex toets 2, bezwaar 2: elk stuk van de bron moet in dezelfde privéregel of hetzelfde privéblok staan."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n\n## Over deze vaststelling").replace(
+        "Zeta tekent het plan.", "Zeta tekent het plan Proefplan.")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    assert not M.bron_prive("Zeta tekent het plan ... Proefplan", bundels)
+    assert not M.bron_prive("Zeta tekent het plan Proefplan", bundels)
+    assert M.bron_prive("2 uur aan tekening ... op de computer", bundels)
+    staat, _, _ = M.verwerk(antwoord([taak("Teken het plan", "Zeta tekent het plan ... Proefplan", voor="collega",
+                                           wie="Zeta")]), M.laad_staat("/nergens/staat.json"), bundels, [], KERN, AGENTS,
+                            OCHTEND_UTC)
+    (t,) = staat["taken"].values()
+    assert t["voor"] == "collega" and t["wie"] == "Proefpersoon Zeta" and not t.get("prive")
+
+
+def test_doorgever_alleen_de_ontvanger_zelf_is_beweging():
+    """Codex toets 2, bezwaar 3: opgepakt door Mehdi, een andere agent of zonder naam is geen beweging van de ontvanger."""
+    weg = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-31T06:20:00+00:00"}
+    for door, beweging in (("zoom-wacht", True), ("zoom-wacht: opname gevonden", True), ("mehdi (op het bord)", False),
+                           ("plaud-wacht", False), ("", False), (None, False), ("mehdi-agent", False),
+                           ("zoom-wachter", False)):
+        assert M.door_ontvanger(door, "zoom-wacht") is beweging, door
+        staat = {"taken": {"t-1": dict(_agenttaak("t-1"), doorgegeven=dict(weg))}, "afgerond": []}
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=None, pak=None, ontvangers={"zoom-wacht": "x"},
+                                 aan=True, lees=lambda uniek, door=door: [{"id": 3, "status": "opgepakt",
+                                                                           "opgepakt_door": door}])
+        t = staat["taken"]["t-1"]
+        if beweging:
+            assert telling == {"opgepakt_door_agent": 1} and t["doorgegeven"]["status"] == "opgepakt", (door, telling)
+        else:
+            assert telling == {"terug_naar_mehdi": 1} and t["voor"] == "mehdi", (door, telling)
 
 
 def test_droog_toont_per_taak_waar_ze_heen_zou_gaan():
