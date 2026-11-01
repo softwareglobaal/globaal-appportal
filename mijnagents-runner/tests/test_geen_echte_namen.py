@@ -52,7 +52,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "dagboek/test_fotos.py",
     "mijnagents/test_gesprekken_api.py",
-    "mijnagents/test_fotovoorbeeld.py",
+    "mijnagents/test_fotowacht.py",
 )
 
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige

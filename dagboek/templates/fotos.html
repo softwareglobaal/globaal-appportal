@@ -23,9 +23,10 @@
   {% for g in ind['werf'] %}
   <div class="kaart">
     <h2><span class="stip groen"></span> {{ g['firma'] }} {{ g['nummer'] }} {{ g['naam'] }}</h2>
-    <p class="zacht">{{ g['aantal'] }} werkfoto's, {{ g['van'] }} tot {{ g['tot'] }}{% if g['met_mensen'] %}, {{ g['met_mensen'] }} met mensen (niet getoond){% endif %}{% if g['zonder_plaats'] %}, {{ g['zonder_plaats'] }} zonder plaats{% endif %}{% if g['video'] %}, {{ g['video'] }} video{% endif %}.
+    <p class="zacht">{{ g['aantal'] }} werkfoto's{% if g['van'] %}, {{ g['van'] }} tot {{ g['tot'] }}{% endif %}{% if g['met_mensen'] %}, {{ g['met_mensen'] }} met mensen (niet getoond){% endif %}{% if g['zonder_plaats'] %}, {{ g['zonder_plaats'] }} zonder plaats{% endif %}{% if g['video'] %}, {{ g['video'] }} video{% endif %}.
       {% if g['anker']['soort'] == 'afspraak' %}Bij de afspraak "{{ g['anker']['titel'] }}" ({{ g['anker']['start'] }} tot {{ g['anker']['einde'] }}){% else %}De auto stond bij het project ({{ g['anker']['aankomst'] }} tot {{ g['anker']['vertrek'] }}){% endif %}{% if g['auto_min'] %}; de auto stond er {{ g['auto_min'] }} min{% endif %}.
-      {% if g['link'] %}<a href="{{ g['link'] }}">project openen</a>{% endif %}</p>
+      {% if g['link'] %}<a href="{{ g['link'] }}">project openen</a>{% endif %}
+      {% if g.get('bezoek') %}<a href="{{ g['bezoek']['pagina'] }}">werfbezoek openen</a> <span class="klein">bezoekmap: {{ g['bezoek']['bezoekmap'] }}</span>{% endif %}</p>
     <div class="beelden">
       {% for f in g['fotos'] %}
       {% if f['beeld'] %}<figure><img src="{{ url_for('fotos_voorbeeld', dag=dag, fid=f['id']) }}" alt="werkfoto {{ f['tijd'] }}" loading="lazy"><figcaption>{{ f['tijd'] }}</figcaption></figure>

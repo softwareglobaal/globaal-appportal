@@ -111,9 +111,14 @@ elke foto en elke file van wachter kunnen zien en begrijpen".
 - **Elke avond twee dagen en de gemiste dagen** (FOTO-2): ik lees vandaag en gisteren (late foto's), en elke dag sinds
   01-10 (hoogstens 35 dagen terug) waarvoor nog geen foto-metadata op het bord staat. Een ingehaalde dag levert alleen
   metadata: geen export van originelen, niets in Dropbox.
-- **Alleen metadata naar het bord** (FOTO-4): per dag een item `fotometadata` (voor `fotoindeling`, privé gemarkeerd)
-  met per foto tijd, GPS, soort en de vlaggen van Photos: schermafbeelding, bewaard uit een app, mensen (een gezicht van
-  10% of meer van het beeld, of de vlag "mensen in beeld"; niet geanalyseerd is onbekend). Nooit een beeld of bestandsnaam.
+- **Alleen metadata naar de VM** (FOTO-4): per dag `/api/fotometadata` met per foto tijd, GPS, soort en de vlaggen van
+  Photos: schermafbeelding, bewaard uit een app, mensen (een gezicht van 10% of meer van het beeld, of de vlag "mensen in
+  beeld"; niet geanalyseerd is onbekend). Nooit een beeld of bestandsnaam. Het bord bewaart dat als bestand
+  (`mijnagents-data/fotometadata/<dag>.json`, alleen voor de VM-gebruiker), niet in zijn databank en niet in Dropbox; op
+  het bord staat per dag alleen een merkteken met aantallen. Lukte het lezen van de werkafspraken niet, dan is dat
+  onbekend: geen export, en de dag komt later opnieuw volledig.
+- **Een foto met mensen** wordt nooit als werkfoto naar Dropbox geëxporteerd en nooit geopend; een privé- of online
+  afspraak maakt geen werkfoto.
 - **De indeling gebeurt op de VM** (`koppelingen/fotoindeling.py`, planning `planning/foto.cron`): werf zeker (binnen
   150 m van een buitenafspraak met firmacode of van de auto bij een project), werkkandidaat (alleen bij een projectplek),
   mensen, privé, scherm of app, onbeslist. Per werfgroep en kandidaat een item voor Mehdi; wat geen werk is alleen als

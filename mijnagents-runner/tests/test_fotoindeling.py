@@ -94,14 +94,16 @@ class Regels(unittest.TestCase):
         for x in ("gezicht", '"q0"', str(PRIVE[0]), "21:00", "20:00"):
             self.assertNotIn(x, tekst)
 
-    def test_mensen_binnen_werk_geteld_nooit_voorvertoning(self):
+    def test_mensen_binnen_werk_geteld_zonder_id_tijd_of_voorvertoning(self):
         a = bij((P1["lat"], P1["lon"]))
-        fotos = [foto("w1", "10:15", *a), foto("mens", "10:20", *a, mensen=True), foto("onbekend", "10:25", *a, mensen=None),
+        fotos = [foto("w1", "10:15", *a), foto("mens", "10:50", *a, mensen=True), foto("onbekend", "10:25", *a, mensen=None),
                  foto("film", "10:30", *a, video=True)]
         ind = FI.indeel("2026-10-29", fotos, [P1], [afspraak("HARC", "9001", "2026-10-29", "10:00", "11:00", (P1["lat"], P1["lon"]))], [])
         g = ind["werf"][0]
-        self.assertEqual((g["aantal"], g["met_mensen"], g["video"]), (4, 1, 1))
+        self.assertEqual((g["aantal"], g["met_mensen"], g["video"], g["van"], g["tot"]), (4, 1, 1, "10:15", "10:30"))
         self.assertEqual([f["id"] for f in g["fotos"] if f["voorbeeld"]], ["w1"])
+        self.assertNotIn("mens", [f["id"] for f in g["fotos"]])
+        self.assertNotIn("10:50", json.dumps(ind))
 
     def test_scherm_bij_een_project_is_geen_werk(self):
         a = bij((P1["lat"], P1["lon"]))
@@ -148,20 +150,21 @@ class Ronde(unittest.TestCase):
     def setUp(self):
         self.map = tempfile.TemporaryDirectory()
         self.addCleanup(self.map.cleanup)
-        self.oud = (FI.UIT, FI.VOORBEELD, FI.AGENDA_ADRESSEN)
+        self.oud = (FI.UIT, FI.VOORBEELD, FI.AGENDA_ADRESSEN, FI.METADATA)
         FI.UIT, FI.VOORBEELD = os.path.join(self.map.name, "fotoindeling"), os.path.join(self.map.name, "fotovoorbeeld")
+        FI.METADATA = os.path.join(self.map.name, "fotometadata")
         FI.AGENDA_ADRESSEN = os.path.join(self.map.name, "agenda-adressen.json")
         Path(FI.AGENDA_ADRESSEN).write_text(json.dumps({"proefstraat 1, 9999 proefdorp": [P1["lat"], P1["lon"]]}))
         self.addCleanup(lambda: setattr(FI, "UIT", self.oud[0]) or setattr(FI, "VOORBEELD", self.oud[1])
-                        or setattr(FI, "AGENDA_ADRESSEN", self.oud[2]))
+                        or setattr(FI, "AGENDA_ADRESSEN", self.oud[2]) or setattr(FI, "METADATA", self.oud[3]))
         self.bak, self.gepost, self.verslag = [], [], []
         self.context = {"dag": "2026-10-29", "bronbeleid": "1", "verblijven": []}
 
         def db_lees(sql, args=()):
-            if "soort = 'fotometadata'" in sql and "DISTINCT" in sql:
-                return [{"sleutel": s} for s in sorted({json.loads(r["inhoud"])["datum"] for r in self.bak if r["soort"] == "fotometadata"})]
-            soort = "fotometadata" if "fotometadata" in sql else "afspraak"
-            return [r for r in self.bak if r["soort"] == soort and (soort != "fotometadata" or r["uniek"].startswith(args[-1].rstrip("%")))]
+            self.assertNotIn("fotometadata", sql, "de metadata staat niet meer in de databank van het bord (Codex 1)")
+            if "FROM werfbezoek" in sql:
+                return [{"dossier": "9001", "volgnr": 2, "bezoekmap": "/Work All/01. H-A WORK/9001 Proef/20261029 bezoek 2"}]
+            return [r for r in self.bak if r["soort"] == "afspraak"]
         self.patches = [patch.object(FI.bord, "db_lees", db_lees),
                         patch.object(FI.bord, "call", lambda pad, data=None: self.gepost.append(data) or {"nieuw": len(data["items"])}),
                         patch.object(FI.LC, "context", lambda dag: self.context)]
@@ -174,10 +177,11 @@ class Ronde(unittest.TestCase):
                 self.verslag.append((onderwerp, stap, tekst))
         self.ag = Ag()
 
-    def zet(self, dag, fotos):
-        self.bak = [r for r in self.bak if not r["uniek"].startswith(f"fotodag:{dag}:")]
-        self.bak.append({"soort": "fotometadata", "uniek": f"fotodag:{dag}:1", "voor": "fotoindeling",
-                         "inhoud": json.dumps({"prive": True, "datum": dag, "aantal": len(fotos), "deel": 1, "delen": 1, "fotos": fotos})})
+    def zet(self, dag, fotos, aantal=None):
+        """Zoals mijnagents/fotowacht.py het bestand van de Mac bewaart."""
+        os.makedirs(FI.METADATA, exist_ok=True)
+        Path(FI.METADATA, f"{dag}.json").write_text(json.dumps({"datum": dag, "versie": 1, "fotos": fotos,
+                                                                "aantal": len(fotos) if aantal is None else aantal}))
 
     def test_ronde_schrijft_indeling_en_items_zonder_privé(self):
         fotos, _, _ = dag_29()
@@ -188,6 +192,10 @@ class Ronde(unittest.TestCase):
         self.bak.append({"soort": "afspraak", "uniek": "agenda:x:2", "voor": "prive", "inhoud": json.dumps(
             {"datum": "2026-10-29", "start": "2026-10-29T18:00:00+01:00", "einde": "2026-10-29T19:00:00+01:00",
              "titel": "privé", "firma": "PRIVE", "locatie": "Ergens 1"})})
+        self.bak.append({"soort": "afspraak", "uniek": "agenda:x:3", "voor": "h-architects", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "start": "2026-10-29T18:00:00+01:00", "einde": "2026-10-29T19:00:00+01:00",
+             "titel": "[HA] 9001 online overleg", "firma": "HARC", "nummer": "9001", "locatie": "Microsoft Teams Meeting"})})
+        self.assertEqual([a["titel"] for a in FI.afspraken_van("2026-10-29")], ["[HA] 9001 proefbezoek"])
         uit = FI.deel_in("2026-10-29", self.ag, [P1, P2])
         self.assertIn("2 werkfoto's in 1 werfgroepen", uit)
         ind = json.loads(Path(FI.UIT, "2026", "2026-10-29.json").read_text())
@@ -195,6 +203,8 @@ class Ronde(unittest.TestCase):
         titels = [it["titel"] for it in items]
         self.assertIn("2026-10-29 10:15-10:20: HARC 9001 Proefwoning Alfa: 2 werkfoto's, bij afspraak '[HA] 9001 proefbezoek' 10:00-11:00", titels)
         self.assertIn("2026-10-29: geen werk: privé 12, met mensen 1, scherm of app 2, onbeslist 0 (alleen geteld, geen plaats)", titels)
+        self.assertEqual(ind["werf"][0]["bezoek"], {"pagina": "https://mijnagents.globaal.be/werfverslag/9001/2",
+                                                    "bezoekmap": "/Work All/01. H-A WORK/9001 Proef/20261029 bezoek 2"})
         nodig = [it for it in items if it["soort"] == "fotoindeling"][0]["inhoud"]["voorbeeld_nodig"]
         self.assertEqual(nodig, ["w1", "w2"])
         self.assertEqual(sum(it["inhoud"]["aantal"] for it in items if it["soort"] == "foto"), len(fotos))
@@ -237,10 +247,47 @@ class Ronde(unittest.TestCase):
         self.assertIn("1 kandidaat", FI.deel_in("2026-10-01", self.ag, [P1]))
 
     def test_onvolledige_metadata_wordt_niet_ingedeeld(self):
-        self.bak.append({"soort": "fotometadata", "uniek": "fotodag:2026-10-29:1", "voor": "fotoindeling",
-                         "inhoud": json.dumps({"datum": "2026-10-29", "aantal": 300, "deel": 1, "delen": 2, "fotos": []})})
+        self.zet("2026-10-29", [], aantal=300)
         self.assertIsNone(FI.deel_in("2026-10-29", self.ag, [P1]))
         self.assertEqual(self.gepost, [])
+        self.assertEqual(FI.te_doen(FI.date(2026, 11, 1)), ["2026-10-29"])
+
+    def test_context_zonder_verblijven_is_onbekend_niet_leeg(self):
+        # Codex 1: een antwoord zonder de lijst telde als "geen verblijven" en maakte werkfoto's privé.
+        self.context = {"dag": "2026-10-29", "bronbeleid": "1"}
+        self.zet("2026-10-29", dag_29()[0])
+        self.assertEqual(FI.deel_in("2026-10-29", self.ag, [P1]), "onbekend")
+        with patch.object(FI, "_haal_locatie", lambda pad: {"dekking": {}}):
+            with self.assertRaises(ValueError):
+                FI.plekken_locatie()
+
+    def test_teams_afspraak_maakt_geen_werfbezoek_via_de_projectplek(self):
+        # Codex 1: een online overleg met een projectnummer kreeg de projectplek en maakte foto's daar 'werf zeker'.
+        self.bak.append({"soort": "afspraak", "uniek": "agenda:x:9", "voor": "h-architects", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "start": "2026-10-29T18:00:00+01:00", "einde": "2026-10-29T19:00:00+01:00",
+             "titel": "[HA] 9001 online", "firma": "HARC", "nummer": "9001", "locatie": "Microsoft Teams Meeting", "buiten": False})})
+        self.zet("2026-10-29", [foto("x", "18:30", *bij((P1["lat"], P1["lon"])))])
+        FI.deel_in("2026-10-29", self.ag, [P1])
+        ind = FI.lees_indeling("2026-10-29")
+        self.assertEqual((ind["werf"], [g["soort"] for g in ind["kandidaat"]]), ([], ["kandidaat"]))
+
+    def test_voorvertoning_verdwijnt_als_photos_later_mensen_vindt(self):
+        # Codex 1: een eenmaal bewaarde voorvertoning bleef staan als Photos later een gezicht herkende.
+        self.bak.append({"soort": "afspraak", "uniek": "agenda:x:1", "voor": "h-architects", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "start": "2026-10-29T10:00:00+01:00", "einde": "2026-10-29T11:00:00+01:00",
+             "titel": "[HA] 9001 proefbezoek", "firma": "HARC", "nummer": "9001", "locatie": "Proefstraat 1, 9999 Proefdorp"})})
+        a = bij((P1["lat"], P1["lon"]))
+        self.zet("2026-10-29", [foto("w1", "10:15", *a), foto("w2", "10:20", *a)])
+        FI.deel_in("2026-10-29", self.ag, [P1])
+        Path(FI.VOORBEELD, "2026-10-29").mkdir(parents=True)
+        for fid in ("w1", "w2"):
+            Path(FI.VOORBEELD, "2026-10-29", f"{fid}.jpg").write_bytes(b"\xff\xd8 fictief")
+        self.zet("2026-10-29", [foto("w1", "10:15", *a), foto("w2", "10:20", *a, mensen=True)])
+        FI.deel_in("2026-10-29", self.ag, [P1])
+        self.assertEqual(sorted(os.listdir(Path(FI.VOORBEELD, "2026-10-29"))), ["w1.jpg"])
+        ind = FI.lees_indeling("2026-10-29")
+        self.assertEqual(([f["id"] for f in ind["werf"][0]["fotos"]], ind["werf"][0]["met_mensen"]), (["w1"], 1))
+        self.assertNotIn("w2", json.dumps(ind) + json.dumps(self.gepost[-1]))
 
     def test_main_zonder_projectplekken_is_een_melding(self):
         verstuurd = []

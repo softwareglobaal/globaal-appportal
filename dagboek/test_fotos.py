@@ -43,6 +43,7 @@ INDELING = {
     "werf": [{"sleutel": "afspraak:HARC:9001:10:00", "soort": "zeker", "firma": "HARC", "nummer": "9001", "naam": "Proefwoning Alfa",
               "anker": {"soort": "afspraak", "titel": "[HA] 9001 proefbezoek", "start": "10:00", "einde": "11:00"},
               "auto_min": 45, "link": "https://ha-projecten.globaal.be/project/9001", "van": "10:15", "tot": "10:25",
+              "bezoek": {"pagina": "https://mijnagents.globaal.be/werfverslag/9001/2", "bezoekmap": "/Work All/01. H-A WORK/9001 Proef/bezoek 2"},
               "aantal": 3, "met_mensen": 1, "zonder_plaats": 0, "video": 0,
               "fotos": [{"id": "werk-1", "tijd": "10:15", "voorbeeld": True}, {"id": "werk-mens", "tijd": "10:20", "voorbeeld": False},
                         {"id": "werk-2", "tijd": "10:25", "voorbeeld": True}]}],
@@ -68,6 +69,7 @@ html = r.get_data(as_text=True)
 check("F01 met groep 200", r.status_code == 200, r.status_code)
 check("F02 project en afspraak", "HARC 9001 Proefwoning Alfa" in html and "[HA] 9001 proefbezoek" in html and "45 min" in html, html[:400])
 check("F02 voorvertoning van de werkfoto", f"/fotos/{DAG}/voorbeeld/werk-1.jpg" in html)
+check("F02 link naar het werfbezoek en de bezoekmap", "/werfverslag/9001/2" in html and "bezoekmap: /Work All" in html)
 check("F02 werkfoto zonder aangekomen beeld", "nog geen voorvertoning" in html)
 r = C.get(f"/fotos/{DAG}/voorbeeld/werk-1.jpg", headers=MET)
 check("F02 beeld is een JPEG", r.status_code == 200 and r.mimetype == "image/jpeg" and r.data == JPEG, r.status_code)

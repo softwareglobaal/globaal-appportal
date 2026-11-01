@@ -4,9 +4,11 @@
 Mehdi, 01-11-2026: "voor de fotos zijn de projecten van de bedrijven belangrijk niet de fotos van de mensen" en "ik wil
 elke foto en elke file van wachter kunnen zien en begrijpen". Dit is de VM-helft van De Fotowacht (icloud-wacht).
 
-Bron: het item 'fotometadata' dat De Fotowacht op de Mac per dag klaarzet (mac/icloud_wacht.py, metadata_items): per foto
-tijd, GPS, soort en de vlaggen die Photos zelf zet (scherm, app, mensen). Nooit een beeld, nooit een bestandsnaam. De
-indeling gebeurt hier, waar de andere bronnen staan, zodat elke Claude haar kan nakijken en de Mac klein blijft:
+Bron: de foto-metadata die De Fotowacht op de Mac per dag naar het bord stuurt (mac/icloud_wacht.py, metadata_bericht;
+het bord bewaart ze als mijnagents-data/fotometadata/<dag>.json, 0600, niet in zijn databank: mijnagents/fotowacht.py):
+per foto tijd, GPS, soort en de vlaggen die Photos zelf zet (scherm, app, mensen). Nooit een beeld, nooit een
+bestandsnaam. De indeling gebeurt hier, waar de andere bronnen staan, zodat elke Claude haar kan nakijken en de Mac
+klein blijft:
   - de projectplekken van het Locatie-dashboard (/api/projectplekken), van elke firma die dat register kent. Nu zijn dat
     alleen H-A-projecten; welke firma's erbij komen is een keuze van Mehdi (LOC-3, VOL-8), niet van deze koppeling. Een
     plekbron erbij is één functie in PLEKBRONNEN;
@@ -20,7 +22,7 @@ Regels (meting 01-11-2026, deel 3), in deze volgorde, alleen op metadata:
      verblijf "auto bij project" (AUTO_SPELING_MIN speling): firma, nummer, project en de afspraak of het verblijf;
   3. werkkandidaat: binnen STRAAL_M van een projectplek, zonder afspraak en zonder auto: Mehdi zegt of het werk was;
   4. mensen (een groot gezicht of Photos' vlag): buiten werk "met mensen", alleen geteld; binnen werk geteld bij het
-     project, nooit als beeld getoond;
+     project, zonder id, tijd of beeld;
   5. al de rest: privé, alleen geteld (geen plaats, geen tijd per foto);
   6. geen GPS: bij een werfgroep als de tijd tussen twee werkfoto's van die groep valt, anders onbeslist.
 Een voorvertoning (FOTO-5) alleen voor een foto (geen video) die werf zeker is met GPS en waarvan Photos de gezichten
@@ -58,6 +60,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 DATA = os.path.expanduser(os.environ.get("MIJNAGENTS_DATA", "~/appportal/mijnagents-data"))
 UIT = os.path.join(DATA, "fotoindeling")                      # niet in Dropbox (planning/mac/data_uit_mehdi_sync.sh)
 VOORBEELD = os.path.join(DATA, "fotovoorbeeld")               # de voorvertoningen van de Mac, via /api/fotovoorbeeld
+METADATA = os.path.join(DATA, "fotometadata")                 # de metadata van de Mac, via /api/fotometadata (0600)
 AGENDA_ADRESSEN = os.path.join(DATA, "agenda-adressen.json")  # adrescache van De Agendawacht (agenda_wacht.ADRES_CACHE)
 STRAAL_M = 150
 VOOR_MIN, NA_MIN = 30, 90
@@ -65,7 +68,11 @@ AUTO_SPELING_MIN = 30
 INDEEL_DAGEN = 3            # zoveel laatste dagen worden elke ronde opnieuw ingedeeld (de context kan nog veranderen)
 TERUG_DAGEN = 35            # verder terug dan dit kijkt de gewone ronde niet (zoals de Mac, FOTO-2)
 VERSIE = 1
+BORD_PUBLIEK = "https://mijnagents.globaal.be"               # de werfverslagpagina's, achter Authentik
 BRUIKBAAR = ("adres", "override")
+# Een buitenafspraak (meting 01-11): een fysiek adres, geen online vergadering en geen reistijd (die staan niet in de bak).
+POSTCODE = re.compile(r"\b\d{4}\b")
+ONLINE = re.compile(r"(?i)https?://|\b(?:teams|zoom|google meet|meet\.google|webex|online)\b")
 # Een link alleen naar een pagina achter Authentik of naar Mehdi's eigen Dropbox-web, nooit een gedeelde Dropbox-link
 # (VOL-19: één route achter Authentik).
 VEILIGE_LINK = re.compile(r"^https://(?:[a-z0-9-]+\.)*globaal\.be/|^https://www\.dropbox\.com/home/")
@@ -80,8 +87,11 @@ def _haal_locatie(pad):
 
 def plekken_locatie():
     """De bruikbare projectplekken van het Locatie-dashboard, van elke firma die het kent (nu alleen H-A)."""
+    d = _haal_locatie("/api/projectplekken")
+    if not isinstance(d, dict) or not isinstance(d.get("projectplekken"), list):
+        raise ValueError("projectplekken ontbreken in het antwoord")      # onbekend, nooit "geen projecten"
     uit = []
-    for p in _haal_locatie("/api/projectplekken").get("projectplekken") or []:
+    for p in d["projectplekken"]:
         if not p.get("actief") or p.get("uitgesloten") or p.get("geocode_kwaliteit") not in BRUIKBAAR:
             continue
         if not isinstance(p.get("lat"), (int, float)) or not isinstance(p.get("lon"), (int, float)):
@@ -132,7 +142,7 @@ def afspraken_van(dag):
         firma = str(d.get("firma") or "").upper()
         adres = str(d.get("locatie") or "").strip()
         if (d.get("datum") != dag or not firma or firma == "PRIVE" or str(r["voor"]) == "prive"
-                or not adres or adres.lower().startswith("http")):
+                or not (d.get("buiten") or POSTCODE.search(adres)) or ONLINE.search(adres)):
             continue
         try:
             start, einde = _tijd(d.get("start")), _tijd(d.get("einde") or d.get("start"))
@@ -166,11 +176,11 @@ def verblijven_van(dag, plekken):
     if not LC.bronbeleid.dag_toegestaan(dag):
         return []
     ctx = LC.context(dag)
-    if ctx is None:
-        return None
+    if ctx is None or not isinstance(ctx.get("verblijven"), list):
+        return None                                                     # onbekend, nooit "geen verblijven"
     plaats = {(p["firma"], p["nummer"]): p for p in plekken}
     uit = []
-    for v in ctx.get("verblijven") or []:
+    for v in ctx["verblijven"]:
         pr = v.get("project") or {}
         p = plaats.get((str(pr.get("firma") or ""), str(pr.get("nummer") or "")))
         if not v.get("positief") or not p:
@@ -185,28 +195,33 @@ def verblijven_van(dag, plekken):
     return uit
 
 
-def metadata_van(dag):
-    """De foto's van een dag uit de items 'fotometadata' van de Mac (alle delen), of None als ze onvolledig zijn."""
-    rijen = bord.db_lees("SELECT uniek, inhoud FROM klaarzet WHERE soort = 'fotometadata' AND van = ? AND uniek LIKE ?",
-                         (NAAM, f"fotodag:{dag}:%"))
-    delen = {}
+def bezoeken_van(dag):
+    """De werfbezoeken van H-Architects op die dag (tabel werfbezoek van het bord): per dossier de pagina van het bezoek
+    achter Authentik en de bezoekmap (een pad in Dropbox, geen gedeelde link; VOL-19). Onleesbaar: leeg."""
+    try:
+        rijen = bord.db_lees("SELECT dossier, volgnr, bezoekmap FROM werfbezoek WHERE datum = ? ORDER BY volgnr", (dag,))
+    except bord.BordOnbekend:
+        return {}
+    uit = {}
     for r in rijen:
-        try:
-            d = json.loads(r["inhoud"] or "{}")
-        except ValueError:
-            continue
-        if isinstance(d, dict) and d.get("datum") == dag and isinstance(d.get("fotos"), list):
-            delen[int(d.get("deel") or 0)] = d
-    if not delen:
+        if re.fullmatch(r"\d{4}", str(r["dossier"] or "")) and str(r["dossier"]) not in uit:
+            uit[str(r["dossier"])] = {"pagina": f"{BORD_PUBLIEK}/werfverslag/{r['dossier']}/{int(r['volgnr'] or 0)}",
+                                      "bezoekmap": str(r["bezoekmap"] or "")}
+    return uit
+
+
+def metadata_van(dag):
+    """De foto's van een dag uit het bestand dat het bord van de Mac kreeg (mijnagents/fotowacht.py, /api/fotometadata),
+    of None (er is niets, of het is onleesbaar of onvolledig)."""
+    try:
+        with open(os.path.join(METADATA, f"{dag}.json"), encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
         return None
-    eerste = delen.get(1) or {}
-    n = int(eerste.get("delen") or 0)
-    if not n or any(i not in delen for i in range(1, n + 1)):
+    if not isinstance(d, dict) or d.get("datum") != dag or not isinstance(d.get("fotos"), list):
         return None
-    fotos = [f for i in range(1, n + 1) for f in delen[i]["fotos"] if isinstance(f, dict) and f.get("id")]
-    if len(fotos) != int(eerste.get("aantal") or 0):
-        return None
-    return fotos
+    fotos = [f for f in d["fotos"] if isinstance(f, dict) and f.get("id")]
+    return fotos if len(fotos) == int(d.get("aantal") or 0) else None
 
 
 # ------------------------------------------------------------------ de indeling (pure functie)
@@ -320,14 +335,16 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
                               for v in verblijven if (v["firma"], v["nummer"]) == (g["firma"], g["nummer"]))
                 g["auto_min"] = int(minuten) or None
     uit = []
-    for g in sorted(groepen.values(), key=lambda g: (g["soort"] != "zeker", min(x["t"] for x in g["fotos"]))):
-        tijden = [x["t"] for x in g["fotos"]]
-        g.update(van=_uur(min(tijden)), tot=_uur(max(tijden)), aantal=len(g["fotos"]),
+    for g in sorted(groepen.values(), key=lambda g: (g["soort"] != "zeker", g["sleutel"])):
+        # Een foto met mensen telt bij het project, maar zonder id, tijd of beeld (Codex 1); de tijden komen van de rest.
+        zonder_mensen = sorted((x for x in g["fotos"] if not x["mensen"]), key=lambda x: x["t"])
+        tijden = [x["t"] for x in zonder_mensen]
+        g.update(van=_uur(min(tijden)) if tijden else "", tot=_uur(max(tijden)) if tijden else "", aantal=len(g["fotos"]),
                  met_mensen=sum(1 for x in g["fotos"] if x["mensen"]), zonder_plaats=sum(1 for x in g["fotos"] if not x["gps"]),
                  video=sum(1 for x in g["fotos"] if x["video"]))
         g["fotos"] = [{"id": x["id"], "tijd": _uur(x["t"]),
                        "voorbeeld": g["soort"] == "zeker" and x["gps"] and not x["video"] and x["mensen"] is False}
-                      for x in sorted(g["fotos"], key=lambda x: x["t"])]
+                      for x in zonder_mensen]
         uit.append(g)
     return {"datum": dag, "versie": VERSIE, "werf": [g for g in uit if g["soort"] == "zeker"],
             "kandidaat": [g for g in uit if g["soort"] == "kandidaat"], "telling": telling, "totaal": len(fotos)}
@@ -364,7 +381,7 @@ def bord_items(ind, nodig, oude_sleutels=()):
                       "inhoud": {"datum": dag, "soort": g["soort"], "firma": g["firma"], "nummer": g["nummer"], "naam": g["naam"],
                                  "aantal": g["aantal"], "van": g["van"], "tot": g["tot"], "anker": g["anker"],
                                  "auto_min": g["auto_min"], "met_mensen": g["met_mensen"], "zonder_plaats": g["zonder_plaats"],
-                                 "link": g["link"], "pagina": f"/fotos/{dag}"}})
+                                 "link": g["link"], "bezoek": g.get("bezoek"), "pagina": f"/fotos/{dag}"}})
     for uniek in sorted(set(oude_sleutels) - set(sleutels)):
         items.append({"van": NAAM, "voor": "mehdi", "soort": "foto", "sleutel": dag, "uniek": uniek,
                       "titel": f"{dag}: werfgroep vervallen na een nieuwe indeling", "inhoud": {"datum": dag, "aantal": 0, "vervallen": True}})
@@ -393,6 +410,19 @@ def voorbeeld_nodig(ind):
     map_ = os.path.join(VOORBEELD, ind["datum"])
     return [f["id"] for g in ind["werf"] for f in g["fotos"]
             if f["voorbeeld"] and not os.path.isfile(os.path.join(map_, f"{f['id']}.jpg"))]
+
+
+def niet_meer_toegelaten(ind):
+    """Voorvertoningen op de VM van foto's die deze indeling niet (meer) als werkfoto zonder mensen aanwijst, bijvoorbeeld
+    omdat Photos later een gezicht vond (Codex 1). Het Dagboek toont ze al niet; deel_in haalt ze weg: het zijn afgeleide
+    beeldjes die de VM zelf maakte, geen bron, en een foto van mensen hoort er niet."""
+    map_ = os.path.join(VOORBEELD, ind["datum"])
+    mag = {f["id"] for g in ind["werf"] for f in g["fotos"] if f["voorbeeld"]}
+    try:
+        namen = os.listdir(map_)
+    except FileNotFoundError:
+        return []
+    return [os.path.join(map_, n) for n in sorted(namen) if n.endswith(".jpg") and n[:-4] not in mag]
 
 
 def _pad(dag):
@@ -453,6 +483,9 @@ def deel_in(dag, ag, plekken, droog=False, recent=True):
     if oud and oud.get("bron_hash") == bron:
         return _voorbeelden_bijwerken(dag, oud, droog)
     ind = indeel(dag, fotos, plekken, afspraken, verblijven)
+    bezoeken = bezoeken_van(dag)
+    for g in ind["werf"] + ind["kandidaat"]:
+        g["bezoek"] = bezoeken.get(g["nummer"]) if g["firma"] == "HARC" else None
     nodig = voorbeeld_nodig(ind)
     items, sleutels = bord_items(ind, nodig, (oud or {}).get("items") or ())
     ind.update(meta_hash=meta, bron_hash=bron, voorbeeld_nodig=nodig, items=sleutels,
@@ -469,22 +502,28 @@ def deel_in(dag, ag, plekken, droog=False, recent=True):
         print(dag, kort)
         return kort
     _bewaar(dag, ind)
+    weg = niet_meer_toegelaten(ind)
+    for pad in weg:
+        os.remove(pad)
     uit = bord.call("/api/klaarzet", {"items": items})
     ag.log(f"indeling {dag}", "schrijf", kort,
            f"{len(afspraken)} buitenafspraken met firmacode ({ind['bronnen']['afspraken_zonder_plaats']} zonder plaats), "
            f"{len(verblijven)} verblijven auto bij project, {len(plekken)} projectplekken; "
-           f"bord: {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt, {uit.get('bestaand', 0)} al bekend")
+           f"bord: {uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt, {uit.get('bestaand', 0)} al bekend"
+           + (f"; {len(weg)} voorvertoningen weggehaald (niet meer toegelaten)" if weg else ""))
     return kort
 
 
 def te_doen(vandaag, dag=None):
-    """De dagen voor deze ronde: met --dag die ene; anders de dagen met foto-metadata van de laatste TERUG_DAGEN."""
+    """De dagen voor deze ronde: met --dag die ene; anders de dagen met een metadatabestand van de laatste TERUG_DAGEN."""
     if dag:
         return [dag]
     eerste = (vandaag - timedelta(days=TERUG_DAGEN)).isoformat()
-    rijen = bord.db_lees("SELECT DISTINCT sleutel FROM klaarzet WHERE soort = 'fotometadata' AND van = ? AND sleutel >= ? "
-                         "ORDER BY sleutel", (NAAM, eerste))
-    return [r["sleutel"] for r in rijen if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(r["sleutel"] or ""))]
+    try:
+        namen = os.listdir(METADATA)
+    except FileNotFoundError:
+        return []
+    return sorted(n[:10] for n in namen if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.json", n) and n[:10] >= eerste)
 
 
 def main(argv=None):

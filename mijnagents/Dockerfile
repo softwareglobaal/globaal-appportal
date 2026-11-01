@@ -46,7 +46,8 @@ RUN python3 test_dagbundelaar_groep.py
 # Grendel op /api/wachten/dag: per wacht van de groep Dagbundelaar wat er op een dag binnenkwam, met de juiste kleur.
 # Zie test_wachten_dag.py.
 RUN python3 test_wachten_dag.py
-# T-0120 FOTO-5: alleen een kleine JPEG van een werkfoto uit de indeling komt op de VM (fotovoorbeeld.py).
-RUN python3 test_fotovoorbeeld.py
+# T-0120 FOTO-4 en FOTO-5: foto-metadata als bestand (niet in de databank) en alleen een kleine JPEG van een werkfoto
+# uit de indeling (fotowacht.py). Zie test_fotowacht.py.
+RUN python3 test_fotowacht.py
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-3022} --workers 2 --timeout 900 app:app"]
