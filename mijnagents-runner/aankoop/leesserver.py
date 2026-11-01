@@ -28,11 +28,13 @@ MAX_POGINGEN = 2 * MAX_LEZEN                     # geslaagd en mislukt samen: ge
 MAX_TEKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000")) * 4     # ongeveer vier tekens per token
 MAX_BYTES = 8_000_000
 MAX_FOTOS = 8
+MAX_DOCUMENTEN = 8               # PDF-links van de pagina, zoals een handleiding (overleg 33, A)
 WACHT = 25
 AGENT = "Mozilla/5.0 (compatible; Prijsonderzoeker/1.0; +https://globaal.be)"
 TOOL = {"name": "lees_pagina",
         "description": "Lees een openbare webpagina of PDF en krijg haar tekst (afgekapt op ongeveer "
-                       f"{MAX_TEKENS // 4} tokens), met bovenaan de productfoto's. Alleen deze tekst telt als gelezen; "
+                       f"{MAX_TEKENS // 4} tokens), met bovenaan de productfoto's en de PDF-documenten (handleiding, "
+                       "specificatieblad) die de pagina linkt. Alleen deze tekst telt als gelezen; "
                        "de URL bovenaan is de url van het aanbod (na een doorverwijzing de eindpagina).",
         "inputSchema": {"type": "object", "properties": {"url": {"type": "string", "description": "https-adres"}},
                         "required": ["url"]}}
@@ -130,6 +132,7 @@ class _Tekst(HTMLParser):
     def __init__(self, basis):
         super().__init__(convert_charrefs=True)
         self.basis, self.stukken, self.diep, self.fotos, self.meta, self.ld = basis, [], 0, [], [], None
+        self.documenten = []
 
     def _foto(self, src):
         src = urljoin(self.basis, (src or "").strip())
@@ -148,6 +151,12 @@ class _Tekst(HTMLParser):
             elif naam in self.META and a.get("content"):
                 self.meta.append(f"{naam}: {a['content']}")
             return
+        if tag == "a" and a.get("href"):
+            # Een handleiding of specificatieblad staat vaak alleen als PDF-link op de winkelpagina (overleg 33, M1).
+            href = urljoin(self.basis, a["href"].strip())
+            if (href.startswith(("https://", "http://")) and urlsplit(href).path.lower().endswith(".pdf")
+                    and href not in self.documenten and len(self.documenten) < MAX_DOCUMENTEN):
+                self.documenten.append(href)
         if tag in self.WEG:
             self.diep += 1
         elif tag == "img" and not self.diep:
@@ -179,7 +188,8 @@ def html_tekst(html, basis):
     p.close()
     regels = [re.sub(r"[ \t\xa0]+", " ", r).strip() for r in "".join(p.stukken).splitlines()]
     tekst = "\n".join(r for r in regels if r and r != "|")
-    kop = (["Productfoto's: " + " ".join(p.fotos)] if p.fotos else []) + p.meta
+    kop = ((["Productfoto's: " + " ".join(p.fotos)] if p.fotos else [])
+           + (["Documenten: " + " ".join(p.documenten)] if p.documenten else []) + p.meta)
     return "\n".join(kop + [tekst])
 
 

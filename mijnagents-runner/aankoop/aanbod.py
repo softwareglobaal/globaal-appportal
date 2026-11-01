@@ -52,6 +52,17 @@ VOOR_EIS = 250                 # zoveel tekens voor een citaat bij een eis worde
 GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:verzending|levering|shipping|delivery|versand|"
                                r"lieferung|livraison)|(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)"
                                r"\s*(?::|is|ist|est)?\s*(?:gratis|free|kostenlos|gratuite?)", re.I)
+# "Levering aan huis: vanaf di. 03 november Gratis": tekst tussen verzendwoord en gratis (overleg 33, M4).
+LEVERING_DAN_GRATIS = re.compile(r"(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)(.{0,50}?)"
+                                 r"(?:gratis|free|kostenlos|gratuite?)", re.I | re.S)
+BEDRAG_TUSSEN = re.compile(r"€|\beur(?:o|os)?\b|\d+[.,]\d{2}", re.I)
+ANDERE_LEVERWIJZE = re.compile(r"afhal|click|collect|pick.?up|abhol|retrait|retour|return|terug|rücksend|renvoi", re.I)
+RETOUR = re.compile(r"retour|return|terug|rücksend|renvoi", re.I)
+# Een winkel die zegt dat bedragen zonder btw zijn: dan erft de verzending de btw niet (overleg 33, X5).
+EXCL_BTW = re.compile(r"excl\w*\.?\s*(?:btw|vat|tva|mwst)|zzgl\.?\s*mwst|hors\s+tva|zonder\s+btw|ohne\s+mwst|"
+                      r"(?:btw|vat|tva)\s+excl", re.I)
+ONTKENNING = re.compile(r"\b(?:geen|niet|no|not|kein\w*|pas|sans|ohne)\b", re.I)
+VERZENDKOP = 150   # zoveel tekens voor een tarief op de verzendpagina mag het verzendwoord staan: de tabelkop (overleg 33, C)
 # Alleen een doorhaling of een zinseinde scheidt; "nu" niet, dat wiste een kostwoord ervoor (Codex X14, ronde 4).
 SCHEIDING = re.compile(r"~~|[.;|!?]\s")
 # Een vermelding tussen haakjes vlak na het bedrag, ook na een punt, hoort bij dat bedrag (Codex X1, ronde 5).
@@ -121,6 +132,21 @@ def citaat_op_pagina(citaat, tekst):
     return len(citaat) >= MIN_CITAAT and citaat in _schoon(tekst)
 
 
+def _ervoor(citaat, tekst, n):
+    """De n tekens voor de eerste plaats van het citaat in de tekst (spaties gelijkgemaakt), of ""."""
+    citaat, tekst = _schoon(citaat), _schoon(tekst)
+    i = tekst.find(citaat) if citaat else -1
+    return tekst[max(0, i - n):i] if i >= 0 else ""
+
+
+def _verzendkop(citaat, tekst):
+    """Staat er een verzendwoord in de VERZENDKOP tekens voor het citaat, zonder retourwoord tussen dat woord en het
+    citaat ("Verzendkosten: ... Retour naar België: 9,95 euro" telt niet, overleg 33, X3)?"""
+    ervoor = _ervoor(citaat, tekst, VERZENDKOP)
+    laatste = list(VERZENDWOORDEN.finditer(ervoor))
+    return bool(laatste) and not RETOUR.search(ervoor[laatste[-1].end():] + " " + _schoon(citaat))
+
+
 def voor_dit_product(citaat, aanbod):
     """Noemt een verzendtarief een model, dan moet elk genoemd model dit aanbod zijn (titel of modelcode): "P70
     gratis; V70 39,95 euro" bewijst niets voor de V70. Een tarief zonder modelnaam is algemeen (Codex-controle 30 en
@@ -136,8 +162,17 @@ def voor_belgie(citaat):
 
 
 def gratis_verzending(tekst):
-    """Zegt de tekst dat de verzending gratis is, zonder ontkenning ervoor ("geen gratis verzending", Codex X12, ronde 4)?"""
-    return any(not NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]) for m in GRATIS_VERZENDING.finditer(tekst or ""))
+    """Zegt de tekst dat de verzending gratis is, zonder ontkenning ervoor ("geen gratis verzending", Codex X12, ronde 4)?
+    Ook met tekst ertussen, zoals "Levering aan huis: vanaf di. 03 november Gratis" (overleg 33, M4): hoogstens 50
+    tekens, zonder bedrag en zonder een andere leverwijze (afhaling) ertussen."""
+    tekst = tekst or ""
+    if any(not NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]) for m in GRATIS_VERZENDING.finditer(tekst)):
+        return True
+    for m in LEVERING_DAN_GRATIS.finditer(tekst):
+        tussen = m.group(1)
+        if not (BEDRAG_TUSSEN.search(tussen) or ANDERE_LEVERWIJZE.search(tussen) or ONTKENNING.search(tussen)):
+            return True
+    return False
 
 
 def _zonder_gratis_verzending(tekst):
@@ -304,20 +339,23 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
             # De verzendpagina van dezelfde winkel telt voor Belgie of voor alle bestellingen (Codex X16; overleg 29,
             # X2, gemeten bij RoboCleaners); een tarief voor een ander land of een ander product niet (Codex X12).
             eigen = eigen_tekst if eigen_tekst is not None else alle_tekst
-            if not (citaat_op_pagina(citaat, eigen) or (verzendtekst and citaat_op_pagina(citaat, verzendtekst)
-                                                         and voor_belgie(citaat) and voor_dit_product(citaat, aanbod))):
+            op_eigen = citaat_op_pagina(citaat, eigen)
+            if not (op_eigen or (verzendtekst and citaat_op_pagina(citaat, verzendtekst)
+                                 and voor_belgie(citaat) and voor_dit_product(citaat, aanbod))):
                 return False
+            # In een tarieftabel staat het verzendwoord alleen in de kop: "Land | Verzendkost | België | 12,50 €"
+            # (overleg 33, M3). Dat mag dan in de VERZENDKOP tekens ervoor op de verzendpagina staan.
+            woord = bool(VERZENDWOORDEN.search(citaat)) or (not op_eigen and _verzendkop(citaat, verzendtekst))
         elif not citaat_op_pagina(citaat, alle_tekst):
             return veld == "veilingkosten" and not waarde      # geen vaste kosten kan je niet citeren
         if veld == "opgeld":
             return procent_op_pagina(waarde, citaat)
         if veld == "verzending":
             if waarde:
-                return bool(VERZENDWOORDEN.search(citaat)) and bedrag_op_pagina(waarde, citaat)
+                return woord and bedrag_op_pagina(waarde, citaat)
             # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3)
             return gratis_verzending(_schoon(citaat)) or bool(
-                VERZENDWOORDEN.search(citaat) and not NEGATIE.search(citaat)
-                and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
+                woord and not NEGATIE.search(citaat) and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
         return bedrag_op_pagina(waarde, citaat)
 
     def euro_veld(veld, waarde):
@@ -352,7 +390,12 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
         btw_in = aanbod.get("btw_inbegrepen")
         # Is de prijs met btw, dan is een consumentenverzending dat ook. Is de prijs zonder btw, dan moet de status van
         # de verzending apart gekend zijn; ze erft niet (Codex X9, ronde 3).
-        btw_verzending = aanbod.get("verzending_btw_inbegrepen")    # nooit geërfd (Codex X9, ronde 3 en 4)
+        btw_verzending = aanbod.get("verzending_btw_inbegrepen")
+        # Bij een consumentenprijs met btw in de EU is de vooraf gemelde verzendkost dat ook (richtlijn 2011/83/EU,
+        # art. 6.1 e: de totaalprijs met belastingen en vrachtkosten), tenzij de winkel zegt dat bedragen zonder btw
+        # zijn (overleg 33, X5; vroeger nooit geërfd, Codex X9 ronde 4).
+        if btw_verzending is None and btw_in is True and not EXCL_BTW.search(alle_tekst or ""):
+            btw_verzending = True
         if btw_in is None or (verzending and btw_verzending is None):
             ontbreekt.append("btw")
         if btw_in is False:
@@ -457,6 +500,19 @@ def _accessoire_ervoor(citaat, tekst):
     return i >= 0 and bool(ACCESSOIRE.search(tekst[max(0, i - VOOR_EIS):i + len(citaat)]))
 
 
+def gelinkt_document(bron_url, eigen_tekst, bron, aanbod):
+    """Linkt de aanbodpagina zelf dit document (de regel "Documenten:" van de leestool) en noemt het hetzelfde model
+    als het aanbod (V70 uit "MOVA V70 Ultra Complete")? Dan koppelt de winkel het aan dit product, ook zonder de
+    volledige modelcode erin: de handleiding van Vanden Borre noemt "MOVA V70 Ultra Complete" en het basisstation
+    RCVE0707, niet MOVA-RC-V70ULC-WHT (overleg 33, M2, X2)."""
+    from aankoop.onderzoek import schoon_url
+    regel = next((r for r in str(eigen_tekst or "").splitlines() if r.startswith("Documenten: ")), "")
+    if schoon_url(bron_url) not in {schoon_url(u) for u in regel[len("Documenten: "):].split()}:
+        return False
+    eigen = {n.lower() for n in MODELNAAM.findall(f"{aanbod.get('titel') or ''} {aanbod.get('modelcode') or ''}")}
+    return bool(eigen & {n.lower() for n in MODELNAAM.findall(str(bron or ""))})
+
+
 def bewijspagina(aanbod, o, paginas):
     """De url van een andere gelezen pagina die het model als bewijs voor een eis gaf, of None als het bewijs van de
     aanbodpagina zelf komt (overleg 9, X1)."""
@@ -496,7 +552,9 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
                 code = aanbod.get("modelcode")
                 # Ook de aanbodpagina mag de waarde niet tegenspreken: "basisstation 50 Hz" op de winkelpagina weegt
                 # zwaarder dan een handleiding die alleen de robot beschrijft (Codex controle 11).
-                bewezen = (modelcode_op(code, eigen_tekst or "") and modelcode_op(code, bron) and not _twee_regios(bron)
+                gekoppeld = ((modelcode_op(code, eigen_tekst or "") and modelcode_op(code, bron))
+                             or gelinkt_document(bron_url, eigen_tekst or "", bron, aanbod))
+                bewezen = (gekoppeld and not _twee_regios(bron)
                            and not tegenstrijdig(m.group(3).lower(), m.group(2), eigen_tekst or "")
                            and _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron))
             elif m:
