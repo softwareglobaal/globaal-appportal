@@ -282,16 +282,25 @@ def omgeving(token, werkmap, bron=None):
     return env
 
 
+ONBEKENDE_HERSTART = 5 * 3600     # zonder herstarttijd: vijf uur na de meting (het kortste venster)
+
+
 def te_vol(nu=None):
-    """Lag de laatst gemeten benutting van een venster boven de grens, en is dat venster nog niet herstart?"""
+    """Lag de laatst gemeten benutting van een venster boven de grens, en is dat venster nog niet herstart? Zonder
+    bekende herstarttijd geldt vijf uur na de meting (Codex controle 26, punt 1)."""
     nu = time.time() if nu is None else nu
     try:
         with open(LIMIET_BESTAND, encoding="utf-8") as f:
-            vensters = json.load(f).get("vensters") or {}
-    except (OSError, ValueError, AttributeError):
+            bewaard = json.load(f)
+        vensters, gemeten = bewaard.get("vensters") or {}, float(bewaard.get("gemeten_ts") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
-    return any(isinstance(v, dict) and (v.get("utilization") or 0) >= GRENS_GEBRUIK and (v.get("resetsAt") or 0) > nu
-               for v in vensters.values())
+    for v in vensters.values():
+        if isinstance(v, dict) and isinstance(v.get("utilization"), (int, float)) and v["utilization"] >= GRENS_GEBRUIK:
+            herstart = v.get("resetsAt") if isinstance(v.get("resetsAt"), (int, float)) else gemeten + ONBEKENDE_HERSTART
+            if herstart > nu:
+                return True
+    return False
 
 
 def bewaar_limiet(vensters):
@@ -301,7 +310,7 @@ def bewaar_limiet(vensters):
     os.makedirs(os.path.dirname(LIMIET_BESTAND), mode=0o700, exist_ok=True)
     nieuw = LIMIET_BESTAND + ".nieuw"
     with open(os.open(nieuw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
-        json.dump({"vensters": vensters, "gemeten": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
+        json.dump({"vensters": vensters, "gemeten": time.strftime("%Y-%m-%dT%H:%M:%S"), "gemeten_ts": time.time()}, f)
     os.replace(nieuw, LIMIET_BESTAND)
 
 
@@ -387,9 +396,12 @@ def verwerk_regel(st, d):
         info = d.get("rate_limit_info") or {}
         # overageStatus wordt alleen bewaard: de betekenis is niet gedocumenteerd en blokkeert dus niet (overleg 25, X1).
         st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
-        for naam, v in (info.get("unifiedWindows") or {}).items():
-            if isinstance(v, dict):
-                st.vensters[str(naam)] = {"utilization": v.get("utilization"), "resetsAt": v.get("resetsAt")}
+        # Ook de melding zelf is een venster (rateLimitType); een venster zonder eigen herstarttijd neemt die van de
+        # melding over (Codex controle 26, punt 1).
+        for naam, v in [(info.get("rateLimitType") or "melding", info)] + list((info.get("unifiedWindows") or {}).items()):
+            if isinstance(v, dict) and v.get("utilization") is not None:
+                st.vensters[str(naam)] = {"utilization": v.get("utilization"),
+                                          "resetsAt": v.get("resetsAt", info.get("resetsAt"))}
         if info.get("isUsingOverage"):
             return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
         st.limiet = st.limiet or info.get("status") == "rejected"
@@ -562,6 +574,8 @@ def proef_abonnement(token=None, wacht=120):
         token = token or lees_token()
     except GeenAbonnement as e:
         return False, str(e)
+    if te_vol():
+        return False, f"de vorige meting zat boven {GRENS_GEBRUIK:.0%} van een limiet; na de herstart opnieuw"
     with tempfile.TemporaryDirectory(prefix="abonnement-") as werkmap:
         try:
             soort = voor_de_start(token, werkmap)
@@ -574,25 +588,29 @@ def proef_abonnement(token=None, wacht=120):
                                timeout=wacht, cwd=werkmap, env=omgeving(token, werkmap))
         except (subprocess.TimeoutExpired, OSError) as e:
             return False, f"claude -p antwoordde niet ({type(e).__name__})"
-    st = _Stand()
+    st, reden = _Stand(), None
     for regel in r.stdout.splitlines():
         try:
             d = json.loads(regel)
         except ValueError:
             continue
         reden = verwerk_regel(st, d) if isinstance(d, dict) else None
-        if reden == "bron":
-            return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
-        if reden == "betaald":
-            return False, "Claude Code startte extra betaald verbruik"
-        if reden == "vol":
-            return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
+        if reden in ("bron", "betaald", "vol", "centraal"):
+            break
+    bewaar_limiet(st.vensters)            # ook als de proef stopt (Codex controle 26, punt 2)
+    if reden == "bron":
+        return False, f"Claude Code gebruikte {st.bron!r} in plaats van het abonnement"
+    if reden == "betaald":
+        return False, "Claude Code startte extra betaald verbruik"
+    if reden == "vol":
+        return False, f"het abonnement zit boven {GRENS_GEBRUIK:.0%} van een limiet; later opnieuw"
+    if reden == "centraal":
+        return False, "het account krijgt centrale instellingen van een organisatie"
     einde = st.einde or {}
     if st.bron != "none":
         return False, "geen startbericht van claude -p: de bron is niet bewezen"
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
-    bewaar_limiet(st.vensters)
     return True, f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
 

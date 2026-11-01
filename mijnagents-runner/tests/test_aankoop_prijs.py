@@ -575,6 +575,8 @@ uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, vol]))
 check("boven 90 procent van een limiet stopt de vraag, voor er betaald extra verbruik kan komen (Codex 15, punt 1)",
       isinstance(uit, dict) and uit["stop"] == "limiet" and uit["reden"] == "vol" and uit["extra_verbruik"] == "disabled"
       and time.monotonic() - begin < 10)
+check("die meting blokkeert de volgende vraag (zonder herstarttijd vijf uur)", O.te_vol())
+os.remove(O.LIMIET_BESTAND)
 aan = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "allowed",
        "unifiedWindows": {"five_hour": {"utilization": 0.2, "status": "allowed"}}}}
 uit, _, _, _, _ = nep_vraag(dict(GEWOON, regels=[INIT, aan] + GEWOON["regels"][2:]))
@@ -628,6 +630,30 @@ with open(O.LIMIET_BESTAND, "w") as f:
     json.dump({"vensters": {"five_hour": {"utilization": 0.95, "resetsAt": time.time() - 60}}}, f)
 uit, args, _, _, _ = nep_vraag(GEWOON)
 check("na de herstart van het venster mag het weer", isinstance(uit, dict) and uit["stop"] == "klaar" and args is not None)
+alleen_boven = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
+                "rateLimitType": "five_hour", "utilization": 0.93, "resetsAt": time.time() + 3600,
+                "unifiedWindows": {"five_hour": {"utilization": 0.93}}}}
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, alleen_boven]))
+uit, args, _, _, _ = nep_vraag(GEWOON)
+check("een herstarttijd die alleen bovenaan de melding staat, telt ook (Codex 26, punt 1)",
+      isinstance(uit, dict) and uit["reden"] == "vol_vooraf" and args is None, str(uit)[:200])
+with open(O.LIMIET_BESTAND, "w") as f:
+    json.dump({"vensters": {"x": {"utilization": 0.95}}, "gemeten_ts": time.time()}, f)
+check("zonder herstarttijd blokkeert een meting boven 90 procent vijf uur (Codex 26, punt 1)", O.te_vol())
+with open(O.LIMIET_BESTAND, "w") as f:
+    json.dump({"vensters": {"x": {"utilization": 0.95}}, "gemeten_ts": time.time() - 6 * 3600}, f)
+check("na die vijf uur niet meer", not O.te_vol())
+with open(O.LIMIET_BESTAND, "w") as f:
+    json.dump({"vensters": {"five_hour": {"utilization": 0.95, "resetsAt": time.time() + 3600}}}, f)
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("ook de abonnementsproef start niet na een meting boven 90 procent (Codex 26, punt 2)", not gelukt
+      and "vorige meting" in melding, melding)
+os.remove(O.LIMIET_BESTAND)
+json.dump({"regels": [INIT, alleen_boven, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("stopt de proef boven 90 procent, dan bewaart ze die meting voor de volgende vraag (Codex 26, punt 2)",
+      not gelukt and O.te_vol(), melding)
+os.remove(O.LIMIET_BESTAND)
 oud_bestand = O.TOKEN_BESTAND
 O.TOKEN_BESTAND = os.path.join(NEPMAP, "bestaat-niet")
 uit, args, _, _, _ = nep_vraag(GEWOON, token=None)

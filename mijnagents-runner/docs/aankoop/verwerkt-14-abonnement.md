@@ -166,3 +166,13 @@ extra zekerheid. Gebouwd:
 - nieuw: de gemeten vensters gaan naar `~/.config/prijsonderzoeker/limiet.json` (600); lag de vorige meting boven 90
   procent en is dat venster nog niet herstart, dan start een vraag niet.
 Lessen: `lessen-nieuwe-agent.md`. Werkwijze 1.3. Tests: 249 prijstests groen.
+
+## Verwerking Codex-controle 26 (niet klaar)
+
+1. **Herstarttijd uit de melding zelf.** De melding is nu zelf een venster (`rateLimitType`). Heeft een venster geen
+   eigen herstarttijd, dan neemt het die van de melding over. Is er geen herstarttijd bekend, dan blokkeert een meting
+   boven 90 procent vijf uur na het meten (`gemeten_ts`).
+2. **Voorafstop ook bij de abonnementsproef.** De proef start niet na een meting boven 90 procent. Ze bewaart haar
+   meting ook als ze stopt.
+
+Tests: 255 prijstests groen.
