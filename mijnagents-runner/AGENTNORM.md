@@ -137,7 +137,7 @@ Wat de ronde zelf doet:
 | is de werkwijze onbekend (bord onbereikbaar, geen toegang, niet op het bord, onleesbaar) of leeg, dan stopt de ronde voor het werk begint: een nood, hartslag "fout" en `RondeGestopt` | |
 | de gedeelde lessen lezen (`r.lessen`, N13) en de collega's van het bord (`r.collegas`, N14) | |
 | | het werkverslag versturen |
-| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11); noden die al open stonden blijven open. Dat geldt ook voor een stopsignaal (SIGTERM van een time-out, Ctrl-C), ook terwijl de ronde nog begint |
+| | breekt de ronde, dan hartslag "fout" met de foutmelding, nooit blijven hangen op "actief" (N11); noden die al open stonden blijven open. Dat geldt ook voor een stopsignaal (SIGTERM van een time-out, Ctrl-C), ook terwijl de ronde nog begint of al afsluit (Codex NA49, 01-11-2026); het signaal gaat daarna door |
 
 **Zonder regelboek geen ronde** (Codex NA09, 16-10-2026). Tot dan gaf een leesfout
 een lege werkwijze en werkte de agent gewoon door, zonder dat iemand het zag.
