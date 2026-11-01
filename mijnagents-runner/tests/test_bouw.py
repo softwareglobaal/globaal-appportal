@@ -150,6 +150,8 @@ check("Geopunt onbereikbaar: afstand onbekend, dus na te kijken", res2["na_te_ki
 sys_, gebr = Z.opdracht("werkwijze", "dakwerken", "3000 Leuven", 25, "onderaanneming", "2026-10-30", "40 m2")
 check("naar het model alleen werk, omvang, gemeente en straal", "Harmonie" not in gebr and "Architects" not in gebr
       and "40 m2" in gebr and "onderaanneming" in gebr)
+check("01-11-2026: het model weet dat de firma bewust weggelaten is en begint meteen, zonder een firma te noemen",
+      "bewust weggelaten" in sys_ and "nooit voor welke firma" in sys_ and not S.noemt_een_firma(sys_))
 
 print("\nEigen bronnen van die ene firma (X2)")
 def zoek_nep(q, pad):

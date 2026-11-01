@@ -83,7 +83,11 @@ def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", ke
            if soort == "uitvoering" else "een vakman of firma die dit werk in onderaanneming voor een aannemer uitvoert")
     delen = ["Je bent De Aannemerszoeker, een agent die firma's zoekt die een bouwwerk kunnen uitvoeren, en gegevens "
              "levert; de code achter je keurt elke firma. Nederlands, geen emoji. Beweer niets wat je niet op een gelezen "
-             "pagina zag.", "JOUW WERKWIJZE (ze geldt):\n" + modelwerkwijze(werkwijze)]
+             "pagina zag.", "JOUW WERKWIJZE (ze geldt):\n" + modelwerkwijze(werkwijze),
+             # Live gemeten 01-11-2026: zonder deze zin las het model "zonder firma begin ik niet" en zocht het niets
+             "VOOR DEZE VRAAG: de firma die zoekt is gekend en bewust weggelaten; de code houdt ze apart, doet haar eigen "
+             "mappen en boekhouding en schrijft de mails. Vraag dus nooit voor welke firma het is en begin meteen: jij "
+             "doet alleen het web en de KBO."]
     if kennis:
         delen.append(kennis)
     systeem = "\n\n".join(delen + [VORM])
