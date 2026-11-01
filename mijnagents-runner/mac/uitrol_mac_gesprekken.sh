@@ -1,7 +1,9 @@
 #!/bin/zsh
 # De WhatsApp-wacht, De Belwacht en (sinds 31-10-2026) De Sms-wacht op Mehdi's Mac (ontwerp dagvaststelling v2.0,
 # fase 2). De Sms-wacht heeft een eigen proefbewijs (PROEF_SMS): staat Messages nog niet klaar, dan blijven WhatsApp en
-# telefoon gewoon werken.
+# telefoon gewoon werken. Sinds 01-11-2026 (T-0120 VOL-11) ook De Websitewacht en De YouTube-wacht: ze lezen de set
+# browser van dezelfde helper, met een eigen proefbewijs (PROEF_BROWSER), en De Belwacht en De Sms-wacht krijgen de
+# namen uit het adresboek van Contacts (TEL-9). Een nieuwe helper, dus een keer Full Disk Access opnieuw (zie onder).
 #
 #   uitrol_mac_gesprekken.sh              eerst de wachten uit, dan de code naar origin/main in een eigen worktree,
 #                                         MacGesprekkenKopie bouwen als zijn bron veranderde, de LaunchAgents plaatsen
@@ -45,10 +47,14 @@ HELPER="$HMAP/MacGesprekkenKopie"
 VORIG="$HMAP/vorige"          # de vorige versie als geheel: COMMIT, de helper, BRON_SHA256 en de LaunchAgents
 PROEF="$HMAP/PROEF"
 PROEF_SMS="$HMAP/PROEF_SMS"
+PROEF_BROWSER="$HMAP/PROEF_BROWSER"
 uid=$(id -u)
-HELPERTAKEN=(be.globaal.mijnagents.kopie-whatsapp be.globaal.mijnagents.kopie-telefoon be.globaal.mijnagents.kopie-sms)
+HELPERTAKEN=(be.globaal.mijnagents.kopie-whatsapp be.globaal.mijnagents.kopie-telefoon be.globaal.mijnagents.kopie-sms
+             be.globaal.mijnagents.kopie-browser)
 WACHTEN=(be.globaal.mijnagents.whatsapp-wacht be.globaal.mijnagents.belwacht be.globaal.mijnagents.sms-wacht)
-ALLE=($HELPERTAKEN $WACHTEN)
+# De Websitewacht en De YouTube-wacht (WEB-1, YT-1): korte rondes zonder rondeslot, wel uit voor elke wissel
+LOSSE_WACHTEN=(be.globaal.mijnagents.browser be.globaal.mijnagents.youtube)
+ALLE=($HELPERTAKEN $WACHTEN $LOSSE_WACHTEN)
 
 laad() {
     # eerst uit, dan aan: zo geldt een gewijzigde plist
@@ -62,14 +68,14 @@ geladen() {
 
 wachten_uit() {
     # bootout stopt ook een ronde die nog loopt; de gedeelde ronde meldt dan fout (N11)
-    for l in $WACHTEN; do "$LAUNCHCTL" bootout "gui/$uid/$l" >/dev/null 2>&1 || true; done
-    rm -f "$PROEF" "$PROEF_SMS"
+    for l in $WACHTEN $LOSSE_WACHTEN; do "$LAUNCHCTL" bootout "gui/$uid/$l" >/dev/null 2>&1 || true; done
+    rm -f "$PROEF" "$PROEF_SMS" "$PROEF_BROWSER"
 }
 
 wachten_echt_uit() {
     # Codex S3: een bootout die faalt, mag niet stil voorbijgaan; staat een wacht nog in launchd, dan wisselt niets
     wachten_uit
-    for l in $WACHTEN; do
+    for l in $WACHTEN $LOSSE_WACHTEN; do
         if geladen $l; then print -u2 "$l staat nog in launchd; niets gewisseld"; exit 1; fi
     done
 }
@@ -131,7 +137,7 @@ case $modus in
         met_rondesloten __installeer ;;
     __installeer) ;;
     proef)
-        rm -f "$PROEF" "$PROEF_SMS"
+        rm -f "$PROEF" "$PROEF_SMS" "$PROEF_BROWSER"
         "$PY" -I -c "
 import sys
 sys.path.insert(0, sys.argv[1] + '/koppelingen')
@@ -142,6 +148,9 @@ try:
         pad, ts = M.kopie_vragen(kanaal)
         M.wis(pad)
         print(f'toegangsproef {kanaal}: ok onder launchd ({ts:%H:%M:%S} UTC)')
+    # TEL-9: het adresboek van Contacts is een extra bron; zonder blijven de namen van WhatsApp
+    import json
+    print('adresboek van Contacts:', json.loads((M.KOPIE / 'telefoon' / 'status.json').read_text()).get('extra'))
     for runner, naam in (('whatsapp_wacht.py', 'whatsapp-wacht'), ('belwacht.py', 'belwacht')):
         print(f'proefronde {naam}: ronde-id {M.proefronde(sys.argv[1] + \"/\" + runner, naam)} bevestigd')
 except M.MacFout as e:
@@ -166,6 +175,26 @@ except M.MacFout as e:
         else
             print -u2 "De Sms-wacht blijft uit; WhatsApp en telefoon kunnen wel aan."
         fi
+        # YT-1 en WEB-1: de set browser onder launchd, en beide wachten droog (niets naar het bord)
+        if "$PY" -I -c "
+import sys
+sys.path.insert(0, sys.argv[1] + '/koppelingen')
+import mac_gesprekken as M
+try:
+    bezoeken, gelezen, onleesbaar = M.browser_kopie(0)
+except M.MacFout as e:
+    sys.exit(f'proef browser mislukt: {e.nood}')
+print('toegangsproef browser: ok onder launchd; gelezen: ' + (', '.join(f'{b} ({n})' for b, n in gelezen.items()) or 'niets')
+      + (f'; onleesbaar: {onleesbaar}' if onleesbaar else '') + f'; {len(bezoeken)} bezoeken')
+if not gelezen:
+    sys.exit('proef browser mislukt: geen enkele browser gelezen')
+" "$WERK/mijnagents-runner" && "$PY" -I "$WERK/mijnagents-runner/mac/browser_wacht.py" --droog --dagen 2 >/dev/null &&
+            "$PY" -I "$WERK/mijnagents-runner/mac/youtube_wacht.py" --droog --dagen 2 >/dev/null; then
+            stempel > "$PROEF_BROWSER"
+            print "Proef browser geslaagd (De Websitewacht en De YouTube-wacht droog)."
+        else
+            print -u2 "De Websitewacht en De YouTube-wacht blijven uit; de andere wachten kunnen wel aan."
+        fi
         print "Lees het werkverslag op het bord na en zet de wachten dan aan met: $0 aan"
         exit 0 ;;
     aan)
@@ -179,10 +208,16 @@ except M.MacFout as e:
         else
             print "De Sms-wacht blijft uit: geen geslaagde sms-proef voor deze versie."
         fi
+        if [[ -f "$PROEF_BROWSER" && "$(cat "$PROEF_BROWSER")" == "$(stempel)" ]]; then
+            for l in $LOSSE_WACHTEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
+            print "De Websitewacht en De YouTube-wacht staan aan (elk uur)."
+        else
+            print "De Websitewacht en De YouTube-wacht blijven uit: geen geslaagde browserproef voor deze versie."
+        fi
         exit 0 ;;
     uit)
         wachten_uit
-        print "De WhatsApp-wacht, De Belwacht en De Sms-wacht staan uit."
+        print "De WhatsApp-wacht, De Belwacht, De Sms-wacht, De Websitewacht en De YouTube-wacht staan uit."
         exit 0 ;;
     terug)
         [[ -f "$VORIG/COMMIT" && -x "$VORIG/MacGesprekkenKopie" ]] || { print -u2 "Geen vorige versie bewaard"; exit 1; }
@@ -206,6 +241,9 @@ except M.MacFout as e:
         else print "proef: ontbreekt of hoort bij een andere versie"; fi
         if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" ]]; then print "proef sms: geslaagd voor deze versie"
         else print "proef sms: ontbreekt of hoort bij een andere versie"; fi
+        if [[ -f "$PROEF_BROWSER" && "$(cat "$PROEF_BROWSER")" == "$(stempel)" ]]; then
+            print "proef browser: geslaagd voor deze versie"
+        else print "proef browser: ontbreekt of hoort bij een andere versie"; fi
         for l in $ALLE; do
             if geladen $l; then print "$l: geladen"; else print "$l: niet geladen"; fi
         done
@@ -255,6 +293,11 @@ for l in $HELPERTAKEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
 print "Geïnstalleerd: $sha"
 "$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' || true
 if (( helper_nieuw )); then
-    print "NIEUWE HELPER: Mehdi geeft $HELPER Full Disk Access (System Settings > Privacy & Security > Full Disk Access)."
+    # De toestemming hangt aan de cdhash: uit en aan zetten werkt niet, alleen weghalen en opnieuw toevoegen
+    print "NIEUWE HELPER: Mehdi geeft $HELPER opnieuw Full Disk Access:"
+    print "  1. System Settings > Privacy & Security > Full Disk Access"
+    print "  2. MacGesprekkenKopie aanklikken en op - klikken (de oude weg)"
+    print "  3. Op + klikken, Cmd+Shift+G, dit pad plakken, Open: $HELPER"
+    print "  4. De schakelaar van MacGesprekkenKopie staat aan"
 fi
 print "De wachten staan uit. Daarna: $0 proef, nalezen, en $0 aan."

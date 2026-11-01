@@ -7,6 +7,14 @@
        MacGesprekkenKopie whatsapp    berichten, oproepen en de betrokken contacten van WhatsApp
        MacGesprekkenKopie telefoon    oproepen van de iPhone en de contacten bij die nummers
        MacGesprekkenKopie sms         sms en iMessages uit Messages: per bericht gesprek, tijd, richting en dienst
+       MacGesprekkenKopie browser     de geschiedenis van Chrome, Edge, Firefox en Safari: per bezoek de tijd en de
+                                      naam van de site; alleen bij een YouTube-video ook video-ID, titel en duur
+
+   Sinds 01-11-2026 (T-0120 VOL-11, een nieuwe helper en een moment voor Mehdi): bij telefoon en sms ook het adresboek
+   van Contacts (TEL-9: alleen naam en nummer, alleen bij een nummer van het venster) en de set browser (YT-1, WEB-1),
+   zodat geen Python Full Disk Access nodig heeft. Die extra bronnen lezen een voor een, na de vaste bronnen: een extra
+   bron die ontbreekt, geweigerd wordt of een ander schema heeft, laat de rest van de set werken; haar uitkomst staat in
+   status.json onder "extra", nooit onder "bronnen".
 
    Venster: de laatste VENSTER_DAGEN dagen (de runner leest er hoogstens zestig van). De vragen lopen in een
    leestransactie over de bron, dus met de WAL erbij (Codex P2). Het resultaat staat eerst in het geheugen en gaat
@@ -14,6 +22,7 @@
    elke aanvraag haar eigen uitvoer (Codex R2). Daarna
    status.json met het tijdstip, de aanvraag-ID van de runner (uit het bestand aanvraag, alleen 32 hextekens) en de
    uitkomst per bron: ok, geweigerd, ontbreekt, onverwacht (ander schema) of fout. Geen inhoud, geen paden. */
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -40,10 +49,22 @@ typedef struct {
 } Bron;
 
 typedef struct {
+    const char *naam;      /* in status.json en in de tabel BRON: adresboek, Chrome, Edge, Firefox, Safari */
+    const char *map;       /* onder de thuismap */
+    const char *bestand;   /* de databank in map, of met profielen in elke submap van map */
+    int profielen;         /* 1: een databank per submap (een profiel van de browser, een bron van het adresboek) */
+    int kopie;             /* 1: eerst een eigen kopie, want de browser houdt zijn geschiedenis open en vergrendeld */
+    const char *vraag;     /* een INSERT; :begin is het begin van het venster in Unix-seconden, :pk en :browser */
+} Extra;
+
+typedef struct {
     const char *naam;
     const Bron *bronnen;
     size_t aantal;
     const char *vragen;   /* %.0f is het begin van het venster in Core Data-seconden */
+    const Extra *extra;   /* een voor een na de vaste bronnen, elk met een eigen uitkomst */
+    size_t extra_aantal;
+    int meld;             /* 1: per extra databank een rij (naam, uitkomst) in de tabel BRON van de uitvoer */
 } Set;
 
 static const Bron WHATSAPP[] = {
@@ -125,10 +146,61 @@ static const char SMS_VRAGEN[] =
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(" SMS_TIJD ") FROM berichten.message m "
     "  WHERE COALESCE(m.item_type, 0) = 0) AS waarde;";
 
+/* TEL-9: het adresboek van Contacts op de Mac (dat van de iPhone, via iCloud): alleen naam en nummer, alleen bij een
+   nummer van het venster (temp.nummers) dat WhatsApp nog niet bij naam kent. Dezelfde tabel en kolommen als de
+   contacten van WhatsApp; Z_PK ligt boven die van WhatsApp (:pk), zodat mac_gesprekken.Adresboek eerst WhatsApp en dan
+   het oudste contact neemt. Een naam is voornaam en familienaam, anders de firma van de kaart. */
+#define CNORM(x) NORM("replace(replace(" x ", '/', ''), char(160), '')")
+static const char ADRESBOEK_VRAAG[] =
+    "INSERT INTO main.ZWAADDRESSBOOKCONTACT (Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER) "
+    "SELECT :pk + pk, naam, NULL, NULL, nummer FROM (SELECT r.Z_PK AS pk, p.ZFULLNUMBER AS nummer, "
+    "  COALESCE(NULLIF(trim(COALESCE(r.ZFIRSTNAME, '') || ' ' || COALESCE(r.ZLASTNAME, '')), ''), "
+    "  NULLIF(trim(r.ZORGANIZATION), '')) AS naam "
+    "  FROM extra.ZABCDPHONENUMBER p JOIN extra.ZABCDRECORD r ON r.Z_PK = p.ZOWNER) "
+    "WHERE naam IS NOT NULL AND " CNORM("nummer") " IN (SELECT n FROM temp.nummers) "
+    "  AND " CNORM("nummer") " NOT IN (SELECT " NORM("ZPHONENUMBER") " FROM main.ZWAADDRESSBOOKCONTACT "
+    "  WHERE ZPHONENUMBER IS NOT NULL) ORDER BY pk";
+
+/* YT-1 en WEB-1: de geschiedenis van de browsers. Van elk bezoek alleen het tijdstip (Unix-seconden) en de naam van de
+   site (site(), zoals browser_wacht.site: nooit het adres, het pad of een zoekopdracht); alleen bij een YouTube-video
+   (video(), zoals youtube_wacht.video) ook de video-ID, de titel en hoe lang het tabblad openstond (alleen Chrome en
+   Edge houden dat bij). Een andere titel verlaat de bron niet. */
+static const char BROWSER_VRAGEN[] =
+    "CREATE TABLE BEZOEK (browser TEXT, tijd REAL, site TEXT, video TEXT, titel TEXT, duur REAL);"
+    "CREATE TABLE BRON (browser TEXT, uitkomst TEXT);"
+    "CREATE TABLE META (sleutel TEXT, waarde);";
+#define BEZOEK_IN "INSERT INTO main.BEZOEK (browser, tijd, site, video, titel, duur) SELECT :browser, t, site(a), " \
+    "video(a), CASE WHEN video(a) IS NOT NULL THEN substr(k, 1, 200) END, CASE WHEN video(a) IS NOT NULL THEN d END FROM "
+static const char CHROMIUM_VRAAG[] = BEZOEK_IN
+    "(SELECT v.visit_time / 1000000.0 - 11644473600 AS t, u.url AS a, u.title AS k, v.visit_duration / 1000000.0 AS d "
+    "  FROM extra.visits v JOIN extra.urls u ON u.id = v.url WHERE v.visit_time >= (:begin + 11644473600) * 1000000.0) "
+    "WHERE site(a) IS NOT NULL";
+static const char FIREFOX_VRAAG[] = BEZOEK_IN
+    "(SELECT v.visit_date / 1000000.0 AS t, p.url AS a, p.title AS k, NULL AS d FROM extra.moz_historyvisits v "
+    "  JOIN extra.moz_places p ON p.id = v.place_id WHERE v.visit_date >= :begin * 1000000.0) "
+    "WHERE site(a) IS NOT NULL";
+static const char SAFARI_VRAAG[] = BEZOEK_IN
+    "(SELECT v.visit_time + 978307200 AS t, i.url AS a, v.title AS k, NULL AS d FROM extra.history_visits v "
+    "  JOIN extra.history_items i ON i.id = v.history_item WHERE v.visit_time >= :begin - 978307200) "
+    "WHERE site(a) IS NOT NULL";
+
+static const Extra ADRESBOEK[] = {
+    {"adresboek", "Library/Application Support/AddressBook", "AddressBook-v22.abcddb", 0, 0, ADRESBOEK_VRAAG},
+    {"adresboek", "Library/Application Support/AddressBook/Sources", "AddressBook-v22.abcddb", 1, 0, ADRESBOEK_VRAAG},
+};
+static const Extra BROWSERS[] = {
+    {"Chrome", "Library/Application Support/Google/Chrome", "History", 1, 1, CHROMIUM_VRAAG},
+    {"Edge", "Library/Application Support/Microsoft Edge", "History", 1, 1, CHROMIUM_VRAAG},
+    {"Firefox", "Library/Application Support/Firefox/Profiles", "places.sqlite", 1, 1, FIREFOX_VRAAG},
+    {"Safari", "Library/Safari", "History.db", 0, 1, SAFARI_VRAAG},
+};
+
 static const Set SETS[] = {
-    {"whatsapp", WHATSAPP, sizeof WHATSAPP / sizeof *WHATSAPP, WHATSAPP_VRAGEN},
-    {"telefoon", TELEFOON, sizeof TELEFOON / sizeof *TELEFOON, TELEFOON_VRAGEN},
-    {"sms", SMS, sizeof SMS / sizeof *SMS, SMS_VRAGEN},
+    {"whatsapp", WHATSAPP, sizeof WHATSAPP / sizeof *WHATSAPP, WHATSAPP_VRAGEN, NULL, 0, 0},
+    {"telefoon", TELEFOON, sizeof TELEFOON / sizeof *TELEFOON, TELEFOON_VRAGEN, ADRESBOEK,
+     sizeof ADRESBOEK / sizeof *ADRESBOEK, 0},
+    {"sms", SMS, sizeof SMS / sizeof *SMS, SMS_VRAGEN, ADRESBOEK, sizeof ADRESBOEK / sizeof *ADRESBOEK, 0},
+    {"browser", NULL, 0, BROWSER_VRAGEN, BROWSERS, sizeof BROWSERS / sizeof *BROWSERS, 1},
 };
 
 /* Een map onder dirfd openen zonder symlink te volgen; maak ze aan (0700) als dat mag. eigen: de map moet van
@@ -214,8 +286,12 @@ static const char *uit_errno(int e) {
 
 /* Een pad als URI (file:...?mode=ro): elk teken buiten [A-Za-z0-9/._~-] als %XX. Zonder -wal naast de databank
    (de app is gesloten en heeft alles teruggeschreven) staat alles in het bestand zelf; dan immutable, want alleen
-   lezend kan SQLite de -shm niet aanmaken. */
-static int als_uri(const char *pad, int zonder_wal, char *uit, size_t ruimte) {
+   lezend kan SQLite de -shm niet aanmaken. Een eigen kopie met -wal opent schrijvend (EIGEN_KOPIE): alleen zo kan
+   SQLite de WAL van de kopie inlezen. */
+#define LEZEN "?mode=ro"
+#define LEZEN_VAST "?mode=ro&immutable=1"
+#define EIGEN_KOPIE "?mode=rw"
+static int als_uri(const char *pad, const char *achter, char *uit, size_t ruimte) {
     static const char hex[] = "0123456789ABCDEF";
     size_t n = (size_t)snprintf(uit, ruimte, "file:");
     for (const unsigned char *p = (const unsigned char *)pad; *p; p++) {
@@ -230,7 +306,7 @@ static int als_uri(const char *pad, int zonder_wal, char *uit, size_t ruimte) {
             uit[n++] = hex[*p & 15];
         }
     }
-    return snprintf(uit + n, ruimte - n, zonder_wal ? "?mode=ro&immutable=1" : "?mode=ro") < (int)(ruimte - n);
+    return snprintf(uit + n, ruimte - n, "%s", achter) < (int)(ruimte - n);
 }
 
 /* Schrijf buf atomisch als naam in dirfd: eerst een nieuw tijdelijk bestand (O_EXCL, O_NOFOLLOW), dan rename. */
@@ -259,6 +335,9 @@ static int schrijf(int dirfd, const char *naam, const unsigned char *buf, size_t
 /* Codex S2: alleen de eigen uitvoernamen: gesprekken.sqlite, gesprekken-<aanvraag>.sqlite en .lezen-<aanvraag>.sqlite. */
 static int is_uitvoer(const char *naam) {
     if (strcmp(naam, "gesprekken.sqlite") == 0) return 1;
+    if (strncmp(naam, ".bron.sqlite", 12) == 0 && (naam[12] == 0 || strcmp(naam + 12, "-wal") == 0 ||
+                                                   strcmp(naam + 12, "-shm") == 0 || strcmp(naam + 12, "-journal") == 0))
+        return 1;   /* de eigen kopie van een browserdatabank (extra_een), als een ronde ze liet liggen */
     const char *rest = strncmp(naam, "gesprekken-", 11) == 0 ? naam + 11 : strncmp(naam, ".lezen-", 7) == 0 ? naam + 7 : NULL;
     if (rest == NULL || strlen(rest) != 32 + 7 || strcmp(rest + 32, ".sqlite") != 0) return 0;
     for (int i = 0; i < 32; i++)
@@ -299,12 +378,346 @@ static void lees_aanvraag(int dirfd, char aanvraag[33]) {
     aanvraag[32] = 0;
 }
 
+/* ------------------------------------------------------------------ extra bronnen (T-0120 VOL-11, 01-11-2026) --- */
+
+/* Een pad onder de thuismap openen, map per map zonder een symlink te volgen; het laatste deel als map (map != 0) of als
+   gewoon bestand (zonder te blijven hangen op iets anders). Geeft een open descriptor, of -1 met errno (een weigering
+   van macOS is EPERM, een symlink ELOOP). */
+static int open_onder(const char *home, const char *pad, int map) {
+    char deel[PATH_MAX];
+    if (snprintf(deel, sizeof deel, "%s", pad) >= (int)sizeof deel) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    int fd = open(home, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    char *rest = deel, *stuk;
+    while (fd >= 0 && (stuk = strsep(&rest, "/")) != NULL) {
+        if (!*stuk) continue;
+        int bestand = rest == NULL && !map;
+        int volgend = openat(fd, stuk, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | (bestand ? O_NONBLOCK : O_DIRECTORY));
+        int e = errno;
+        close(fd);
+        errno = e;
+        fd = volgend;
+    }
+    struct stat st;
+    if (fd >= 0 && (fstat(fd, &st) != 0 || (map ? !S_ISDIR(st.st_mode) : !S_ISREG(st.st_mode)))) {
+        close(fd);
+        errno = EINVAL;
+        return -1;
+    }
+    return fd;
+}
+
+/* site(adres) en video(adres), alleen voor de vragen van de set browser. host_van: de host van een http- of https-adres
+   in kleine letters, zonder gebruiker en poort, zoals urllib.parse.urlsplit(adres).hostname. Alleen letters, cijfers,
+   punt, streep en liggend streepje (bij een IPv6-adres ook de dubbelpunt), hoogstens 253 tekens: wat er anders uitziet,
+   verlaat de bron niet. */
+static int host_van(const char *adres, char *uit, size_t ruimte) {
+    const char *p = adres;
+    if (strncasecmp(p, "http://", 7) == 0) p += 7;
+    else if (strncasecmp(p, "https://", 8) == 0) p += 8;
+    else return 0;
+    size_t lang = strcspn(p, "/?#");
+    for (size_t i = lang; i > 0; i--)
+        if (p[i - 1] == '@') {
+            p += i;
+            lang -= i;
+            break;
+        }
+    int v6 = lang > 0 && p[0] == '[';
+    size_t n = 0;
+    if (v6) {
+        const char *eind = memchr(p, ']', lang);
+        if (eind == NULL) return 0;
+        p++;
+        n = (size_t)(eind - p);
+    } else {
+        while (n < lang && p[n] != ':') n++;
+    }
+    if (n == 0 || n > 253 || n >= ruimte) return 0;
+    for (size_t i = 0; i < n; i++) {
+        char c = (char)tolower((unsigned char)p[i]);
+        int goed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' ||
+                   (v6 && c == ':');
+        if (!goed) return 0;
+        uit[i] = c;
+    }
+    uit[n] = 0;
+    return 1;
+}
+
+/* De naam van de site: de host zonder www. (browser_wacht.site). */
+static void sql_site(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+    (void)argc;
+    const char *adres = (const char *)sqlite3_value_text(argv[0]);
+    char host[256];
+    if (adres == NULL || !host_van(adres, host, sizeof host)) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    const char *naam = strncmp(host, "www.", 4) == 0 ? host + 4 : host;
+    if (*naam) sqlite3_result_text(ctx, naam, -1, SQLITE_TRANSIENT);
+    else sqlite3_result_null(ctx);
+}
+
+static int is_video_id(const char *p, size_t n) {
+    if (n < 6 || n > 20) return 0;
+    for (size_t i = 0; i < n; i++)
+        if (!((p[i] >= 'A' && p[i] <= 'Z') || (p[i] >= 'a' && p[i] <= 'z') || (p[i] >= '0' && p[i] <= '9') ||
+              p[i] == '_' || p[i] == '-'))
+            return 0;
+    return 1;
+}
+
+/* De video-ID van een YouTube-adres (watch?v=, youtu.be/, shorts/, live/), anders NULL (youtube_wacht.video): zoeken,
+   kanalen, de startpagina en reacties tellen niet. */
+static void sql_video(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+    (void)argc;
+    const char *adres = (const char *)sqlite3_value_text(argv[0]);
+    char host[256];
+    if (adres == NULL || !host_van(adres, host, sizeof host)) {
+        sqlite3_result_null(ctx);
+        return;
+    }
+    const char *h = strncmp(host, "www.", 4) == 0 ? host + 4 : strncmp(host, "m.", 2) == 0 ? host + 2 : host;
+    const char *pad = adres + (strncasecmp(adres, "https://", 8) == 0 ? 8 : 7);
+    pad += strcspn(pad, "/?#");
+    size_t padlang = strcspn(pad, "?#");
+    const char *id = NULL;
+    size_t n = 0;
+    if (strcmp(h, "youtu.be") == 0) {
+        const char *q = pad;
+        while (q < pad + padlang && *q == '/') q++;
+        id = q;
+        while (id + n < pad + padlang && id[n] != '/') n++;
+    } else if (strcmp(h, "youtube.com") == 0 || strcmp(h, "music.youtube.com") == 0) {
+        if (padlang == 6 && strncmp(pad, "/watch", 6) == 0 && pad[6] == '?') {
+            const char *q = pad + 7, *eind = q + strcspn(q, "#");
+            while (q < eind && id == NULL) {
+                size_t stuk = strcspn(q, "&#");
+                if (stuk > 2 && strncmp(q, "v=", 2) == 0) {
+                    id = q + 2;
+                    n = stuk - 2;
+                }
+                q += stuk + (q[stuk] == '&');
+                if (stuk == 0 && *q != '&') break;
+            }
+        } else if (padlang > 8 && strncmp(pad, "/shorts/", 8) == 0) {
+            id = pad + 8;
+            n = strcspn(id, "/?#");
+        } else if (padlang > 6 && strncmp(pad, "/live/", 6) == 0) {
+            id = pad + 6;
+            n = strcspn(id, "/?#");
+        }
+    }
+    if (id != NULL && is_video_id(id, n)) sqlite3_result_text(ctx, id, (int)n, SQLITE_TRANSIENT);
+    else sqlite3_result_null(ctx);
+}
+
+/* Een submap met een gewone naam: een profiel van een browser of een bron van het adresboek (geen punt vooraan, geen
+   symlink, hoogstens 64 tekens uit letters, cijfers, spatie, punt, streep en liggend streepje). */
+static int gewone_naam(const char *naam) {
+    size_t n = strlen(naam);
+    if (n == 0 || n > 64 || naam[0] == '.') return 0;
+    for (size_t i = 0; i < n; i++)
+        if (!((naam[i] >= 'A' && naam[i] <= 'Z') || (naam[i] >= 'a' && naam[i] <= 'z') ||
+              (naam[i] >= '0' && naam[i] <= '9') || strchr(" ._-", naam[i]) != NULL))
+            return 0;
+    return 1;
+}
+
+static int pad_cmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+
+/* De databanken van een extra bron, als paden onder de thuismap, gesorteerd (een vaste volgorde, dus een vaste :pk).
+   Geeft hun aantal (hoogstens MAX_PROFIELEN); 0 als de map er niet is; -1 met errno als ze er wel is maar macOS haar
+   weigert. Of het bestand in een profiel echt bestaat, zegt pas extra_een. */
+#define MAX_PROFIELEN 24
+static int extra_paden(const char *home, const Extra *x, char paden[][PATH_MAX]) {
+    if (!x->profielen) {
+        if (snprintf(paden[0], PATH_MAX, "%s/%s", x->map, x->bestand) >= PATH_MAX) return 0;
+        return 1;
+    }
+    int fd = open_onder(home, x->map, 1);
+    if (fd < 0) return errno == ENOENT || errno == ENOTDIR ? 0 : -1;
+    DIR *d = fdopendir(fd);
+    if (d == NULL) {
+        close(fd);
+        return -1;
+    }
+    int n = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && n < MAX_PROFIELEN) {
+        struct stat st;
+        if (!gewone_naam(e->d_name) || fstatat(dirfd(d), e->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0 ||
+            !S_ISDIR(st.st_mode))
+            continue;
+        if (snprintf(paden[n], PATH_MAX, "%s/%s/%s", x->map, e->d_name, x->bestand) < PATH_MAX) n++;
+    }
+    closedir(d);
+    qsort(paden, (size_t)n, PATH_MAX, pad_cmp);
+    return n;
+}
+
+/* Kopieer het open bestand bron (gecontroleerd: geen symlink, gewoon bestand) als naam in dirfd: nieuw (O_EXCL,
+   O_NOFOLLOW, 0600). Geeft 1 als alles er staat. */
+static int kopieer(int bron, int dirfd, const char *naam) {
+    unlinkat(dirfd, naam, 0);
+    int fd = openat(dirfd, naam, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (fd < 0) return 0;
+    static unsigned char buf[1 << 20];
+    int goed = 1;
+    for (;;) {
+        ssize_t r = read(bron, buf, sizeof buf);
+        if (r < 0 && errno == EINTR) continue;
+        if (r < 0) goed = 0;
+        if (r <= 0) break;
+        for (ssize_t gedaan = 0; goed && gedaan < r;) {
+            ssize_t w = write(fd, buf + gedaan, (size_t)(r - gedaan));
+            if (w < 0 && errno == EINTR) continue;
+            if (w <= 0) goed = 0;
+            else gedaan += w;
+        }
+        if (!goed) break;
+    }
+    goed = close(fd) == 0 && goed;
+    if (!goed) unlinkat(dirfd, naam, 0);
+    return goed;
+}
+
+static void kopie_weg(int dirfd) {
+    const char *namen[] = {".bron.sqlite", ".bron.sqlite-wal", ".bron.sqlite-shm", ".bron.sqlite-journal"};
+    for (size_t i = 0; i < sizeof namen / sizeof *namen; i++) unlinkat(dirfd, namen[i], 0);
+}
+
+/* Een databank van een extra bron lezen: openen langs het pad zonder symlink, bij x->kopie eerst een eigen kopie (met
+   haar -wal) in de privemap van de set (privemap: het volle pad van dirfd), dan de vraag van de bron met :begin, :pk en
+   :browser. De kopie is weg voor de functie terugkeert. Geeft de uitkomst: ok, ontbreekt, geweigerd, onverwacht of fout. */
+static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const char *privemap, const Extra *x,
+                             const char *pad, double begin, sqlite3_int64 pk) {
+    char vol[PATH_MAX], wal[PATH_MAX + 8], uri[3 * PATH_MAX];
+    struct stat id, st;
+    int bron = open_onder(home, pad, 0);
+    if (bron < 0) return uit_errno(errno);
+    if (fstat(bron, &id) != 0) {
+        close(bron);
+        return "fout";
+    }
+    int met_wal = 0, goed = 1;
+    if (x->kopie) {
+        kopie_weg(dirfd);
+        goed = kopieer(bron, dirfd, ".bron.sqlite");
+        snprintf(wal, sizeof wal, "%s-wal", pad);
+        int w = goed ? open_onder(home, wal, 0) : -1;
+        if (w >= 0) {
+            met_wal = 1;
+            goed = kopieer(w, dirfd, ".bron.sqlite-wal");
+            close(w);
+        } else if (goed && errno != ENOENT) {
+            goed = 0;
+        }
+        goed = goed && snprintf(vol, sizeof vol, "%s/.bron.sqlite", privemap) < (int)sizeof vol &&
+               als_uri(vol, met_wal ? EIGEN_KOPIE : LEZEN_VAST, uri, sizeof uri);
+    } else {
+        goed = snprintf(vol, sizeof vol, "%s/%s", home, pad) < (int)sizeof vol &&
+               snprintf(wal, sizeof wal, "%s-wal", vol) < (int)sizeof wal &&
+               als_uri(vol, lstat(wal, &st) != 0 && errno == ENOENT ? LEZEN_VAST : LEZEN, uri, sizeof uri);
+    }
+    close(bron);
+    const char *uitkomst = goed ? "ok" : "fout";
+    sqlite3_stmt *stmt = NULL;
+    int rc = goed ? sqlite3_prepare_v2(db, "ATTACH ?1 AS extra", -1, &stmt, NULL) : SQLITE_ERROR;
+    if (goed) {
+        if (rc == SQLITE_OK) rc = sqlite3_bind_text(stmt, 1, uri, -1, SQLITE_TRANSIENT);
+        if (rc == SQLITE_OK) rc = sqlite3_step(stmt) == SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
+        sqlite3_finalize(stmt);
+        if (rc != SQLITE_OK) {
+            uitkomst = rc == SQLITE_AUTH || rc == SQLITE_PERM ? "geweigerd" : "fout";
+        } else {
+            if (!x->kopie && !zelfde_bestand(db, "extra", &id)) {
+                uitkomst = "onverwacht";   /* het pad wees intussen naar een ander bestand */
+            } else {
+                /* Een vraag die faalt, wijst op een ander schema: onverwacht, en van deze bron komt dan niets mee. */
+                stmt = NULL;
+                rc = sqlite3_prepare_v2(db, x->vraag, -1, &stmt, NULL);
+                if (rc == SQLITE_OK) {
+                    int i;
+                    if ((i = sqlite3_bind_parameter_index(stmt, ":begin")) > 0)
+                        sqlite3_bind_double(stmt, i, begin + APPLE_EPOCH);
+                    if ((i = sqlite3_bind_parameter_index(stmt, ":pk")) > 0) sqlite3_bind_int64(stmt, i, pk);
+                    if ((i = sqlite3_bind_parameter_index(stmt, ":browser")) > 0)
+                        sqlite3_bind_text(stmt, i, x->naam, -1, SQLITE_STATIC);
+                    sqlite3_exec(db, "SAVEPOINT extra", NULL, NULL, NULL);
+                    rc = sqlite3_step(stmt) == SQLITE_DONE ? SQLITE_OK : sqlite3_errcode(db);
+                    sqlite3_finalize(stmt);
+                    sqlite3_exec(db, rc == SQLITE_OK ? "RELEASE extra" : "ROLLBACK TO extra; RELEASE extra", NULL,
+                                 NULL, NULL);
+                } else {
+                    sqlite3_finalize(stmt);
+                }
+                if (rc != SQLITE_OK)
+                    uitkomst = rc == SQLITE_AUTH || rc == SQLITE_PERM ? "geweigerd" : rc == SQLITE_ERROR ? "onverwacht"
+                                                                                                        : "fout";
+            }
+            sqlite3_exec(db, "DETACH extra", NULL, NULL, NULL);
+        }
+    }
+    if (x->kopie) kopie_weg(dirfd);
+    return uitkomst;
+}
+
+/* Alle extra bronnen van een set; per naam de uitkomst (ok als elke databank ok was, anders de eerste andere;
+   ontbreekt als er geen databank was) in namen en uitkomsten, en bij set->meld een rij per databank in BRON. Geeft het
+   aantal namen; *ok het aantal databanken met uitkomst ok, *geweigerd dat met geweigerd. */
+#define MAX_EXTRA 8
+static void noteer(sqlite3 *db, const Set *set, const char *naam, const char *u, const char **uitkomst, int *ok,
+                   int *geweigerd) {
+    *ok += strcmp(u, "ok") == 0;
+    *geweigerd += strcmp(u, "geweigerd") == 0;
+    if (uitkomst != NULL && (strcmp(*uitkomst, "ontbreekt") == 0 || (strcmp(*uitkomst, "ok") == 0 && strcmp(u, "ok") != 0)))
+        *uitkomst = u;
+    if (!set->meld) return;
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db, "INSERT INTO main.BRON VALUES (?1, ?2)", -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, naam, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, u, -1, SQLITE_STATIC);
+        sqlite3_step(stmt);
+    }
+    sqlite3_finalize(stmt);
+}
+
+static size_t extra_lezen(sqlite3 *db, const char *home, int dirfd, const char *privemap, const Set *set, double begin,
+                          const char *namen[MAX_EXTRA], const char *uitkomsten[MAX_EXTRA], int *ok, int *geweigerd) {
+    static char paden[MAX_PROFIELEN][PATH_MAX];
+    size_t n = 0;
+    sqlite3_int64 k = 0;
+    *ok = *geweigerd = 0;
+    for (size_t i = 0; i < set->extra_aantal; i++) {
+        const Extra *x = &set->extra[i];
+        size_t j = 0;
+        while (j < n && strcmp(namen[j], x->naam) != 0) j++;
+        if (j == n && n < MAX_EXTRA) {
+            namen[n] = x->naam;
+            uitkomsten[n++] = "ontbreekt";
+        }
+        const char **uitkomst = j < n ? &uitkomsten[j] : NULL;
+        int aantal = extra_paden(home, x, paden);
+        if (aantal < 0) noteer(db, set, x->naam, uit_errno(errno), uitkomst, ok, geweigerd);
+        for (int p = 0; p < aantal; p++) {
+            const char *u = extra_een(db, home, dirfd, privemap, x, paden[p], begin, ++k * 1000000000LL);
+            if (strcmp(u, "ontbreekt") != 0)   /* een profiel zonder databank telt niet */
+                noteer(db, set, x->naam, u, uitkomst, ok, geweigerd);
+        }
+    }
+    return n;
+}
+
 int main(int argc, char *argv[]) {
     const Set *set = NULL;
     for (size_t i = 0; argc == 2 && i < sizeof SETS / sizeof *SETS; i++)
         if (strcmp(argv[1], SETS[i].naam) == 0) set = &SETS[i];
     if (set == NULL) {
-        fprintf(stderr, "Gebruik: MacGesprekkenKopie whatsapp|telefoon|sms\n");
+        fprintf(stderr, "Gebruik: MacGesprekkenKopie whatsapp|telefoon|sms|browser\n");
         return EX_USAGE;
     }
     umask(0077);
@@ -336,19 +749,25 @@ int main(int argc, char *argv[]) {
     ruim_op(fd);
     unlinkat(fd, uitnaam, 0);   /* een oude uitvoer met deze naam blijft nooit staan als de nieuwe niet lukt */
 
-    const char *uitkomst[8] = {0};
+    const char *uitkomst[8] = {0}, *extra_naam[MAX_EXTRA] = {0}, *extra_uitkomst[MAX_EXTRA] = {0};
+    size_t extra_n = 0;
     const char *geheel = "ok";
     sqlite3 *db = NULL;
     if (sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_URI |
                         SQLITE_OPEN_NOFOLLOW, NULL) != SQLITE_OK) geheel = "fout";
     if (db) sqlite3_busy_timeout(db, 15000);
+    if (db && (sqlite3_create_function_v2(db, "site", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, NULL, sql_site, NULL, NULL,
+                                          NULL) != SQLITE_OK ||
+               sqlite3_create_function_v2(db, "video", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, NULL, sql_video, NULL,
+                                          NULL, NULL) != SQLITE_OK))
+        geheel = "fout";
     for (size_t i = 0; i < set->aantal; i++) {
         char pad[PATH_MAX], wal[PATH_MAX + 8], uri[3 * PATH_MAX], sql[256];
         struct stat st, id;
         uitkomst[i] = "ok";
         if (snprintf(pad, sizeof pad, "%s/%s", home, set->bronnen[i].pad) >= (int)sizeof pad ||
             snprintf(wal, sizeof wal, "%s-wal", pad) >= (int)sizeof wal ||
-            !als_uri(pad, lstat(wal, &st) != 0 && errno == ENOENT, uri, sizeof uri)) {
+            !als_uri(pad, lstat(wal, &st) != 0 && errno == ENOENT ? LEZEN_VAST : LEZEN, uri, sizeof uri)) {
             uitkomst[i] = "fout";
         } else if ((errno = bron_identiteit(home, set->bronnen[i].pad, &id)) != 0) {
             uitkomst[i] = uit_errno(errno);
@@ -377,7 +796,7 @@ int main(int argc, char *argv[]) {
     unsigned char *buf = NULL;
     sqlite3_int64 n = 0;
     if (strcmp(geheel, "ok") == 0) {
-        char vragen[sizeof WHATSAPP_VRAGEN + sizeof TELEFOON_VRAGEN + sizeof SMS_VRAGEN + 64];
+        char vragen[sizeof WHATSAPP_VRAGEN + sizeof TELEFOON_VRAGEN + sizeof SMS_VRAGEN + sizeof BROWSER_VRAGEN + 64];
         double begin = (double)time(NULL) - APPLE_EPOCH - VENSTER_DAGEN * 86400.0;
         snprintf(vragen, sizeof vragen, set->vragen, begin, begin);
         /* Een leestransactie over alle bronnen: een samenhangend beeld, met de WAL erbij. Een vraag die faalt, wijst
@@ -398,10 +817,19 @@ int main(int argc, char *argv[]) {
                 snprintf(sql, sizeof sql, "DETACH %s", set->bronnen[i].schema);
                 sqlite3_exec(db, sql, NULL, NULL, NULL);
             }
+            /* VOL-11: de extra bronnen, een voor een (temp.nummers bestaat nog); geen enkele gelezen en wel een
+               weigering, bij een set zonder vaste bronnen: dan heeft de helper geen toegang */
+            char privemap[PATH_MAX];
+            int ok = 0, geweigerd = 0;
+            if (set->extra_aantal > 0 && snprintf(privemap, sizeof privemap, "%s/Library/Caches/mijnagents/mac-gesprekken/%s",
+                                                  home, set->naam) < (int)sizeof privemap)
+                extra_n = extra_lezen(db, home, fd, privemap, set, begin, extra_naam, extra_uitkomst, &ok, &geweigerd);
+            if (set->aantal == 0 && ok == 0 && geweigerd > 0) geheel = "geweigerd";
             sqlite3_exec(db, "DROP TABLE IF EXISTS temp.adressen; DROP TABLE IF EXISTS temp.nummers; "
                              "DROP TABLE IF EXISTS temp.toegelaten", NULL, NULL, NULL);
-            buf = sqlite3_serialize(db, "main", &n, 0);
-            if (buf == NULL || n < 100 || !schrijf(fd, uitnaam, buf, (size_t)n)) geheel = "fout";
+            buf = strcmp(geheel, "ok") == 0 ? sqlite3_serialize(db, "main", &n, 0) : NULL;
+            if (strcmp(geheel, "ok") == 0 && (buf == NULL || n < 100 || !schrijf(fd, uitnaam, buf, (size_t)n)))
+                geheel = "fout";
         }
     }
     sqlite3_free(buf);
@@ -414,6 +842,11 @@ int main(int argc, char *argv[]) {
     for (size_t i = 0; i < set->aantal && lengte < (int)sizeof status; i++)
         lengte += snprintf(status + lengte, sizeof status - (size_t)lengte, "%s\"%s\": \"%s\"", i ? ", " : "",
                            set->bronnen[i].schema, uitkomst[i]);
+    if (set->extra_aantal > 0 && lengte < (int)sizeof status)
+        lengte += snprintf(status + lengte, sizeof status - (size_t)lengte, "}, \"extra\": {");
+    for (size_t i = 0; i < extra_n && lengte < (int)sizeof status; i++)
+        lengte += snprintf(status + lengte, sizeof status - (size_t)lengte, "%s\"%s\": \"%s\"", i ? ", " : "",
+                           extra_naam[i], extra_uitkomst[i]);
     if (lengte < (int)sizeof status)
         lengte += snprintf(status + lengte, sizeof status - (size_t)lengte, "}}\n");
     int bewaard = lengte < (int)sizeof status && schrijf(fd, "status.json", (const unsigned char *)status, (size_t)lengte);

@@ -49,7 +49,7 @@ INHAAL = 60                                             # na een lange slaap lee
 KOPIE = Path.home() / "Library/Caches/mijnagents/mac-gesprekken"
 STAAT = Path.home() / "Library/Application Support/mijnagents"
 HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon",
-          "sms": "be.globaal.mijnagents.kopie-sms"}
+          "sms": "be.globaal.mijnagents.kopie-sms", "browser": "be.globaal.mijnagents.kopie-browser"}
 KOPIE_WACHT = 120
 TOKEN_PAD = Path.home() / ".config/mijnagents/token"
 VM = "globaal"
@@ -93,8 +93,12 @@ SQL_SMS_DEELNEMERS = "SELECT gesprek, adres FROM DEELNEMER ORDER BY gesprek, adr
 SQL_NIEUWSTE = "SELECT waarde FROM META WHERE sleutel = 'nieuwste'"
 SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
 SQL_ANDERE_APPS = "SELECT COUNT(*) FROM ANDERE_APPS WHERE ZDATE >= ? AND ZDATE < ?"
+# YT-1 en WEB-1: de set browser (tijd in Unix-seconden; video, titel en duur alleen bij een YouTube-video)
+SQL_BEZOEKEN = "SELECT browser, tijd, site, video, titel, duur FROM BEZOEK WHERE tijd >= ? ORDER BY tijd"
+SQL_BROWSERBRONNEN = "SELECT browser, uitkomst FROM BRON ORDER BY rowid"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
-       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS, SQL_SMS_BERICHTEN, SQL_SMS_GESPREKKEN, SQL_SMS_DEELNEMERS)
+       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS, SQL_SMS_BERICHTEN, SQL_SMS_GESPREKKEN, SQL_SMS_DEELNEMERS,
+       SQL_BEZOEKEN, SQL_BROWSERBRONNEN)
 MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
 NIET_BEVESTIGD = "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt"
 BEZET = 75                                              # exit van een wacht die niet liep omdat er al een ronde liep
@@ -671,6 +675,25 @@ def kopie_vragen(kanaal, wacht=KOPIE_WACHT, kopie=None, klok=time.time, slaap=ti
         # Codex Q4: de status hoort bij mijn vraag, maar de uitvoer niet (een andere start schreef ze)
         raise MacFout("uitvoer hoort niet bij de aanvraag", "MacGesprekkenKopie gaf geen verse kopie")
     return pad, datetime.fromtimestamp(int(status["ts"]), timezone.utc)
+
+
+def browser_kopie(sinds, vragen=None):
+    """YT-1 en WEB-1: de browsergeschiedenis sinds (Unix-seconden) uit een verse kopie van MacGesprekkenKopie (set
+    browser), zodat geen Python Full Disk Access nodig heeft (keuze VOL-11, weg a). Geeft (bezoeken, gelezen,
+    onleesbaar): bezoeken [(browser, tijd, site, video, titel, seconden)], gelezen {browser: aantal gelezen databanken},
+    onleesbaar {browser: uitkomst}. De kopie is weg voor de functie terugkeert."""
+    pad, _ = (vragen or kopie_vragen)("browser")
+    try:
+        bezoeken = [tuple(r) for r in lees(pad, SQL_BEZOEKEN, (float(sinds),))]
+        gelezen, onleesbaar = defaultdict(int), {}
+        for browser, uitkomst in lees(pad, SQL_BROWSERBRONNEN):
+            if uitkomst == "ok":
+                gelezen[browser] += 1
+            else:
+                onleesbaar.setdefault(browser, uitkomst)
+    finally:
+        wis(pad)
+    return bezoeken, dict(gelezen), onleesbaar
 
 
 def wis(pad):

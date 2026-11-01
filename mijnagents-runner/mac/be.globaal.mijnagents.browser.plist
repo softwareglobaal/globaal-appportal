@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
+<!-- De Websitewacht (browser_wacht.py, WEB-1): elk uur op minuut 40. Leest de kopie van MacGesprekkenKopie (set
+     browser), nooit de browserbestanden zelf. Code uit de eigen worktree op origin/main (mac/uitrol_mac_gesprekken.sh),
+     Python 3.14 van python.org, geisoleerd (-I), zonder Full Disk Access. Laden pas na een geslaagde proef:
+     mac/uitrol_mac_gesprekken.sh aan. -->
+<plist version="1.0"><dict>
   <key>Label</key><string>be.globaal.mijnagents.browser</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/mehdichegini/.claude/tools/mijnagents/browser_wacht.py</string>
+  <key>ProgramArguments</key><array>
+    <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/python3</string>
+    <string>-I</string>
+    <string>/Users/mehdichegini/Library/Application Support/mijnagents/repo/mijnagents-runner/mac/browser_wacht.py</string>
   </array>
-  <key>StartCalendarInterval</key>
-  <array>
-    <dict><key>Minute</key><integer>40</integer></dict>
-  </array>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>40</integer></dict>
+  <key>ProcessType</key><string>Background</string>
   <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
   <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
-</dict>
-</plist>
+</dict></plist>
