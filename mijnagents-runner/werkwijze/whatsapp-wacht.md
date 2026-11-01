@@ -1,6 +1,7 @@
 # Werkwijze van De WhatsApp-wacht (Privé · Communicatie)
 
-Versie 3.0 (26-10-2026). Vervangt versie 2.0 van 23-10-2026, waarin ik alleen
+Versie 3.1 (01-11-2026, T-0120 WA-1, WA-2 en WA-3: inhalen vanaf een dag, geen valse nul
+oproepen, gemist volgens WhatsApp). Versie 3.0 (26-10-2026) verving versie 2.0 van 23-10-2026, waarin ik alleen
 gekozen exports anoniem telde. Mehdi besliste op 26-10-2026: ik mag de
 WhatsApp-databank op zijn Mac automatisch lezen, met namen, maar alleen wie,
 wanneer, hoeveel en hoe lang. Nooit de tekst van een bericht. Wat ik lees, gaat
