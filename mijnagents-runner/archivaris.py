@@ -4,6 +4,10 @@ op inhoud, getoetst aan agenda en locatie, en bepaalt waar het hoort. Verplaatst
 (beslissing 3 en 4 van Mehdi zijn nog open). Werkwijze op het bord is de bron van de
 regels; de sectie "Correcties van Mehdi" daar gaat boven alles.
 
+Versie 3 (T-0120): aan het eind van de ronde De Gespreksanalist (gespreksanalist.py): per gesprek twee zinnen
+samenvatting en de actiepunten met een letterlijk citaat, alleen als gespreksanalist.ANALYSE_AAN; Plaud en Zoom-tekst
+via het model alleen als gespreksanalist.MODEL_AAN (beide staan uit).
+
 Gebruik: archivaris.py [--van JJJJ-MM-DD --tot JJJJ-MM-DD]   (standaard: de laatste drie dagen)
 """
 import glob
@@ -233,18 +237,26 @@ def geval_van(g, lijst, projecten):
             "ha_nummer": ha_projectnummer(a, g.get("project"), {("HARC", str(n)) for n in projecten})}
 
 
-def _analyse(gesprekken, lijst, projecten, van, tot):
-    """Versie 3, De Gespreksanalist (gespreksanalist.py): alleen als GA.ANALYSE_AAN. De uitvoer staat op de VM, buiten
-    gesprek.json; het werkverslag krijgt alleen aantallen, geen naam, onderwerp of citaat."""
+def _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag):
+    """Versie 3, De Gespreksanalist (gespreksanalist.py): alleen als GA.ANALYSE_AAN; Plaud en Zoom-tekst alleen met
+    GA.MODEL_AAN, op het abonnement en binnen GA.Budget. De uitvoer staat op de VM, buiten gesprek.json; het werkverslag
+    krijgt alleen aantallen, geen naam, onderwerp of citaat."""
     if not GA.ANALYSE_AAN:
         return
-    tel = Counter()
+    tel, budget = Counter(), GA.Budget(vandaag)
     for geval in [geval_van(g, lijst, projecten) for g in gesprekken] + GA.zoom_gevallen(van, tot):
-        rec, toestand = GA.stap(geval)
+        rec, toestand = GA.stap(geval, budget)
         if rec:
             GA.bewaar(rec)
         tel[toestand] += 1
     ag.log(f"{van} tot {tot}", "schrijf", "gespreksanalist (versie 3): " + (", ".join(f"{v} {k}" for k, v in tel.most_common()) or "geen gesprekken"))
+    e = budget.fout
+    if e is not None:                       # zoals De Offertevergelijker: de bestaande noden van het abonnement
+        if e.soort in ("aanmelden", "limiet"):
+            r.nood(GA.claude_abonnement.AANMELDEN_NOOD if e.aanmelden else GA.claude_abonnement.LIMIET_NOOD, wie="mehdi")
+        else:
+            r.nood(GA.claude_abonnement.BRON_NOOD if e.soort == "bron" else "De Gespreksanalist kreeg geen antwoord van "
+                   "Claude op het abonnement", wie="claude-code")
 
 
 def main():
@@ -325,7 +337,7 @@ def _ronde(r, van, tot, vandaag):
             if uit["zekerheid"] == "laag" or uit["label"] == "Onbekend":
                 twijfel.append(f"{g['datum']} {g['start']} {(g.get('personen') or '')[:35]} · voorstel {uit['label']} · {uit.get('vraag_aan_mehdi') or uit['reden'][:80]}")
         n_week = sum(weekoverzicht(w) for w in weken if w)
-        _analyse(gesprekken, lijst, projecten, van, tot)
+        _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag)
         if twijfel:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"Archivaris: {len(twijfel)} gesprek(ken) waar ik twijfel",
                           "uniek": f"archivaris-twijfel:{vandaag}:{len(twijfel)}",

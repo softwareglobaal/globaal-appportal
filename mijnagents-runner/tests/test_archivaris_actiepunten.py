@@ -299,6 +299,187 @@ def test_de_ronde_doet_niets_zolang_de_analyse_uit_staat_en_logt_daarna_alleen_a
     assert not any(w in str(ag.logboek) + str(ag.klaar) for w in ("Zeta", "Proefstraat", "offerte", "plan")), ag.logboek
 
 
+
+# ----------------------------------------------------------------------- Plaud en Zoom-tekst via het model ---
+import time  # noqa: E402
+
+import claude_abonnement as CA  # noqa: E402
+
+PLAUD_TRANSCRIPT = [
+    {"speaker": "Speaker 1", "content": "We hebben de stabiliteitsstudie voor de Proefstraat besproken.", "start_time": 1000},
+    {"speaker": "Speaker 2", "content": "Ik bel de ingenieur morgen terug over de balk boven de keuken.", "start_time": 65000},
+    {"speaker": "Speaker 1", "content": "Prima, dan plannen we het plaatsbezoek in de week van 9 november.", "start_time": 90000},
+]
+ANTWOORD = {"samenvatting": "Het gesprek ging over de stabiliteitsstudie. De ingenieur wordt teruggebeld. Een derde zin.",
+            "actiepunten": [
+                {"wat": "ingenieur terugbellen", "wie": "Speaker 2", "tegen_wanneer": "morgen", "voor_wie": "collega",
+                 "citaat": "Ik bel de ingenieur morgen terug over de balk"},
+                {"wat": "contract tekenen", "wie": "Speaker 1", "voor_wie": "mehdi", "citaat": "we tekenen het contract"},
+                {"wat": "plaatsbezoek plannen", "voor_wie": "mehdi", "citaat": "dan plannen we het bezoek in november"}]}
+LIMIET = os.path.join(THUIS, "limiet.json")
+
+
+def _plaud(naam="2026-10-09 1400 proef", n=1):
+    map_ = os.path.join(DATA, "plaud-invoer", naam)
+    _schrijf(os.path.join(map_, "transcript.json"), PLAUD_TRANSCRIPT)
+    return [{"uniek": f"plaud:p{i}", "bron": "plaud", "datum": "2026-10-09", "start": "14:00", "minuten": 18, "prive": 0,
+             "afdeling": "", "label": "TKN project", "ha_nummer": "", "titel": "", "map": map_} for i in range(n)]
+
+
+def _meet(benutting, gezien=None, herstart=None):
+    _schrijf(LIMIET, {"info": {"status": "allowed", "isUsingOverage": False, "unifiedWindows": {"seven_day": {
+        "utilization": benutting, "resetsAt": herstart or time.time() + 3 * 86400, "status": "allowed"}}},
+        "gezien": gezien or time.time()})
+
+
+class NepVraag:
+    """Een nepmodel: geeft ANTWOORD en meet daarna het weekvenster (zoals claude_abonnement.onthoud_limiet)."""
+
+    def __init__(self, antwoord=ANTWOORD, benutting=0.40, meet=True):
+        self.antwoord, self.benutting, self.meet, self.vragen = antwoord, benutting, meet, []
+
+    def __call__(self, systeem, gebruiker, **kw):
+        self.vragen.append((systeem, gebruiker, kw))
+        if self.meet:
+            _meet(self.benutting)
+        if isinstance(self.antwoord, Exception):
+            raise self.antwoord
+        return {"tekst": "```json\n" + json.dumps(self.antwoord, ensure_ascii=False) + "\n```", "tokens": 1234}
+
+
+def _budget(dag="2026-11-02", teller=None):
+    if os.path.exists(LIMIET):
+        os.remove(LIMIET)
+    return GA.Budget(dag, teller=teller, limiet=LIMIET)
+
+
+def test_plaud_en_zoom_tekst_gaan_niet_naar_het_model_zolang_de_vlag_uit_staat():
+    vraag = NepVraag()
+    assert GA.MODEL_AAN is False, "de vlag staat in de code uit tot het ja van Mehdi (T-0122 keuze 1)"
+    rec, toestand = GA.verwerk(_plaud()[0], _budget(), vraag)
+    assert rec is None and toestand == "model staat uit" and not vraag.vragen
+    zoom = {**_plaud()[0], "uniek": "zoom:meeting:w1", "bron": "zoom", "zoom_prive": False}
+    assert GA.verwerk(zoom, _budget(), vraag) == (None, "model staat uit") and not vraag.vragen
+
+
+def test_nepmodel_plaud_twee_zinnen_en_alleen_letterlijke_citaten():
+    vraag = NepVraag()
+    with vervangen((GA, "MODEL_AAN", True)):
+        rec, toestand = GA.verwerk(_plaud()[0], _budget(), vraag)
+    assert toestand == "model" and rec["samenvatting_van"] == "model" and rec["tokens"] == 1234, rec
+    assert rec["samenvatting"] == "Het gesprek ging over de stabiliteitsstudie. De ingenieur wordt teruggebeld."
+    assert [p["wat"] for p in rec["actiepunten"]] == ["ingenieur terugbellen"] and rec["weggegooid"] == 2, rec
+    assert (rec["firma"], rec["soort"]) == ("TKN", "project")
+    systeem, gebruiker, kw = vraag.vragen[0]
+    assert kw == {"tools": (), "max_beurten": 2, "timeout": 600}, kw
+    assert "Ik bel de ingenieur morgen terug" in json.loads(gebruiker)["transcript"]
+    with vervangen((GA, "MODEL_AAN", True)):
+        rec, toestand = GA.verwerk(_plaud()[0], _budget(), NepVraag({"samenvatting": "Kennismaking. Geen afspraken.",
+                                                                     "actiepunten": []}))
+    assert toestand == "model" and rec["actiepunten"] == [] and rec["weggegooid"] == 0, "een gesprek zonder actiepunt"
+    for slecht in ({"actiepunten": []}, {"samenvatting": "x.", "actiepunten": "geen lijst"}):
+        with vervangen((GA, "MODEL_AAN", True)):
+            assert GA.verwerk(_plaud()[0], _budget(), NepVraag(slecht))[0] is None
+
+
+def test_hoogstens_vijf_gesprekken_per_dag_hoe_vaak_de_ronde_ook_draait():
+    teller = os.path.join(THUIS, "teller-vijf", "teller.json")
+    vraag = NepVraag()
+    with vervangen((GA, "MODEL_AAN", True), (GA, "UITVOER", os.path.dirname(teller))):
+        budget = _budget(teller=teller)
+        uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=4)]
+        tweede = GA.Budget("2026-11-02", teller=teller, limiet=LIMIET)        # een tweede ronde dezelfde dag
+        uit += [GA.verwerk(g, tweede, vraag)[1] for g in _plaud(n=3)]
+        assert os.stat(teller).st_mode & 0o777 == 0o600 and json.load(open(teller))["vragen"] == 5
+        assert GA.Budget("2026-11-03", teller=teller, limiet=LIMIET).vandaag == 0, "een nieuwe dag begint bij nul"
+    assert len(vraag.vragen) == 5 and uit.count("model") == 5, uit
+    assert uit[-2:] == ["al 5 gesprekken naar het model vandaag"] * 2, uit
+
+
+def test_geen_vraag_vanaf_60_procent_van_het_weekvenster_en_niet_zonder_nieuwe_meting():
+    with vervangen((GA, "MODEL_AAN", True)):
+        for benutting, herstart, verwacht in ((0.60, None, 0), (0.59, None, 1), (0.95, time.time() - 60, 1)):
+            budget, vraag = _budget(), NepVraag(benutting=0.30)
+            _meet(benutting, herstart=herstart)
+            toestand = GA.verwerk(_plaud()[0], budget, vraag)[1]
+            assert len(vraag.vragen) == verwacht, (benutting, toestand)
+        assert toestand == "model", "een herstart venster is geen volle week meer"
+        budget, vraag = _budget(), NepVraag(benutting=0.61)
+        uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=3)]
+        assert len(vraag.vragen) == 1 and uit[1:] == ["weekvenster op 61 procent (grens 60)"] * 2, uit
+        budget, vraag = _budget(), NepVraag(meet=False)
+        uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=2)]
+        assert len(vraag.vragen) == 1 and uit[1] == "weekvenster na de vorige vraag niet gemeten", uit
+    assert GA.WEEKGRENS == 0.60 and GA.MAX_PER_DAG == 5
+
+
+def test_een_fout_van_het_abonnement_stopt_het_model_zonder_uitwijking_en_geeft_de_bestaande_nood():
+    vraag = NepVraag(CA.Fout("Claude via het abonnement: limiet", "limiet"))
+    with vervangen((GA, "MODEL_AAN", True)):
+        budget = _budget()
+        uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=3)]
+    assert len(vraag.vragen) == 1 and uit == ["abonnement: limiet"] * 3, uit
+    bron = open(os.path.join(HIER, "gespreksanalist.py"), encoding="utf-8").read()
+    for woord in ("import anthropic", "from anthropic", "Anthropic(", "messages.create", "sleutelbron", "ANTHROPIC_API_KEY"):
+        assert woord not in bron, f"De Gespreksanalist mag de API niet kennen: {woord}"
+    plaud = os.path.join(DATA, "plaud-invoer", "2026-10-21 0900 Proefpersoon Zeta")
+    _schrijf(os.path.join(plaud, "transcript.json"), PLAUD_TRANSCRIPT)
+    rij = {"bron": "plaud", "datum": "2026-10-21", "start": "09:00", "uniek": "plaud:ef56",
+           "archief": "Data uit Mehdi/Plaud/2026-10-21 0900 Proefpersoon Zeta/transcript.md"}
+    with vervangen((GA, "ANALYSE_AAN", True), (GA, "MODEL_AAN", True), (GA, "UITVOER", os.path.join(THUIS, "nood")),
+                   (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (CA, "vraag", vraag)):
+        ag, r = _labelronde([rij], _geen_model)
+    assert (CA.LIMIET_NOOD, "mehdi") in r.noden and len(vraag.vragen) == 2, (r.noden, vraag.vragen)
+    assert any("1 abonnement: limiet" in str(a) for a in ag.logboek), ag.logboek
+
+
+_NEP_CLAUDE = r"""import json, os, sys
+rec, uit = sys.argv[1], sys.argv[2]
+json.dump({"env": dict(os.environ), "invoer": sys.stdin.read()}, open(rec, "w"))
+for regel in open(uit):
+    print(regel.rstrip("\n"), flush=True)
+"""
+
+
+def test_nep_claude_code_krijgt_geen_api_sleutel_en_geen_gereedschap():
+    """De echte claude_abonnement.vraag met een nep-Claude Code die alleen zijn omgeving opschrijft: De Archivaris zet
+    de API-sleutel in zijn eigen omgeving (sleutelbron), het kindproces mag ze nooit zien."""
+    d = tempfile.mkdtemp(prefix="nep-claude-", dir=THUIS)
+    token, nep, rec, uitf = (os.path.join(d, n) for n in ("token", "nep.py", "rec.json", "uit.jsonl"))
+    _schrijf(token, "sk-ant-oat01-nep\n")
+    os.chmod(token, 0o600)
+    _schrijf(nep, _NEP_CLAUDE)
+    tekst = "```json\n" + json.dumps(ANTWOORD, ensure_ascii=False) + "\n```"
+    regels = [{"type": "system", "subtype": "init", "model": "claude-opus-nep", "apiKeySource": "none"},
+              {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
+                                                              "unifiedWindows": {"seven_day": {"utilization": 0.35,
+                                                                                               "resetsAt": time.time() + 86400}}}},
+              {"type": "result", "subtype": "success", "is_error": False, "result": tekst, "num_turns": 1,
+               "usage": {"input_tokens": 900, "output_tokens": 100}}]
+    _schrijf(uitf, "\n".join(json.dumps(r) for r in regels) + "\n")
+    opdrachten, echte_opdracht = [], CA.opdracht
+
+    def opdracht(*a, **k):
+        opdrachten.append(echte_opdracht(*a, **k))
+        return [sys.executable, nep, rec, uitf]
+
+    os.environ["ANTHROPIC_API_KEY"] = "sk-ant-api-nep"
+    try:
+        with vervangen((GA, "MODEL_AAN", True), (CA, "opdracht", opdracht), (CA, "controleer_bron", lambda env, cwd: None),
+                       (CA, "TOKEN_BESTAND", token), (CA, "LIMIET_BESTAND", LIMIET)):
+            budget = _budget()
+            uit = [GA.verwerk(g, budget)[1] for g in _plaud(n=2)]
+    finally:
+        del os.environ["ANTHROPIC_API_KEY"]
+    gezien = json.load(open(rec, encoding="utf-8"))
+    assert uit == ["model", "model"], uit
+    assert "ANTHROPIC_API_KEY" not in gezien["env"] and gezien["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-nep"
+    cmd = opdrachten[0]
+    assert cmd[cmd.index("--tools") + 1] == "" and "--allowedTools" not in cmd and "--safe-mode" in cmd, cmd
+    assert "Ik bel de ingenieur morgen terug" in gezien["invoer"]
+    assert GA.weekbenutting(LIMIET)[0] == 0.35, "de meting van het abonnement is wat het budget leest"
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in list(globals().items()):

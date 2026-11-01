@@ -12,7 +12,9 @@ Per bron (X9):
 - Fathom: de eigen samenvatting en actiepunten van Fathom (samenvatting.md en actiepunten.md van De Fathomwacht,
   FATHOM-1). Een gesprek met een samenvatting van Fathom gaat nooit naar het model; zonder samenvatting wacht het
   (Fathom heeft het model niet nodig, overleg T-0120 K3).
-- Plaud en Zoom-tekst: het model, zie modelvraag().
+- Plaud en Zoom-tekst: het model op het abonnement van Mehdi (koppelingen/claude_abonnement.vraag), nooit de API en
+  nooit een betaalde uitwijking (X3, keuze 1 van T-0122). Alleen als MODEL_AAN True is (uit tot het ja van Mehdi),
+  hoogstens MAX_PER_DAG gesprekken per dag en geen nieuwe vraag vanaf WEEKGRENS van het weekvenster (Budget).
 
 Een controle zonder model (citaat_in) gooit elk actiepunt weg waarvan het citaat niet letterlijk in het transcript
 staat. Ook een actiepunt van Fathom krijgt zo een citaat: de uiting op het tijdstip dat Fathom noemt.
@@ -28,19 +30,28 @@ import hashlib
 import json
 import os
 import re
-import tempfile
 import sys
+import tempfile
+import time
 import unicodedata
 from datetime import datetime
 
 HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
+import claude_abonnement  # noqa: E402  het abonnement van Mehdi; nooit de API
 import nummerlezer  # noqa: E402
 
 VERSIE = 3
 # De stap in de ronde van De Archivaris (Fathom zonder model en privé). Uit tot FATHOM-1 live is en De Fathomwacht
 # samenvatting.md en actiepunten.md echt schrijft; aanzetten is een commit, geen omgevingsvariabele (X6: per onderdeel).
 ANALYSE_AAN = False
+# Plaud en Zoom-tekst via het model. Uit tot Mehdi ja zegt (X3, keuze 1 van T-0122: hoogstens vijf per nacht, nadat
+# Extra usage in zijn Claude-account uit staat); ook aanzetten is een commit.
+MODEL_AAN = False
+MAX_PER_DAG = 5          # "hoogstens 5 per nacht": een teller per kalenderdag, hoe vaak de cron ook draait
+WEEKGRENS = 0.60         # geen nieuwe vraag als het weekvenster (seven_day) op 60 procent of hoger staat (X3, Codex)
+MAX_TRANSCRIPT = 200000  # tekens transcript naar het model
 MAX_CITAAT = 200
 MIN_CITAAT = 12          # tekens na normaal(), en minstens drie woorden: "ja" of "ok" staat in elk transcript
 VOOR_WIE = ("mehdi", "collega", "klant", "agent", "onbekend")
@@ -260,6 +271,115 @@ def fathom_eigen(map_, uit):
     return samenvatting, goed, weg + (1 if items is None else 0)
 
 
+# ------------------------------------------------------------------------------- het model (Plaud, Zoom) ---
+SYSTEEM = """Je bent De Gespreksanalist, een assistent van Mehdi. Je leest het transcript van een opgenomen werkgesprek
+en geeft alleen een JSON-object terug, tussen ```json en ```, in deze vorm:
+{"samenvatting": "...", "actiepunten": [{"wat": "...", "wie": "...", "tegen_wanneer": "...", "voor_wie": "...",
+"citaat": "..."}]}
+Regels:
+- samenvatting: precies twee zinnen in het Nederlands: waarover het gesprek ging en wat er besloten werd.
+- actiepunten: alleen wat in het gesprek echt afgesproken of toegezegd werd: iemand gaat iets doen. Geen raad, geen
+  wens, niets wat je zelf bedenkt. Is er geen actiepunt, geef dan een lege lijst.
+- wat: kort, met een werkwoord. wie: wie het doet, zoals in het gesprek; leeg als het niet gezegd werd.
+  tegen_wanneer: een datum (JJJJ-MM-DD) of de woorden uit het gesprek; leeg als niets gezegd werd.
+  voor_wie: voor wie de taak is: mehdi, collega, klant, agent of onbekend.
+- citaat: de letterlijke woorden uit het transcript waarop het actiepunt steunt, hoogstens 200 tekens, in een stuk,
+  zonder spreker en zonder weglating. Een actiepunt zonder letterlijk citaat wordt weggegooid.
+- Nooit iets versturen of voorstellen om iets te versturen. Geen emoji."""
+
+
+def json_uit(tekst):
+    from aankoop import onderzoek as O      # zoals bouw/offertes.py: het laatste ```json-blok, anders { ... }
+    return O.json_uit(tekst)
+
+
+def modelvraag(geval, uit, vraag):
+    """(samenvatting, actiepunten, weg, tokens) van het model op het abonnement, zonder gereedschap; een ValueError
+    zonder geldig antwoord. De samenvatting wordt twee zinnen, de actiepunten gaan door keur()."""
+    regels = "\n".join(f"{wie or 'spreker'}: {t}" for _, wie, t in uit)
+    gebruiker = json.dumps({"gesprek": {"bron": geval["bron"], "datum": geval.get("datum", ""),
+                                        "minuten": geval.get("minuten") or 0, "label": geval.get("label") or ""},
+                            "transcript_ingekort": len(regels) > MAX_TRANSCRIPT, "transcript": regels[:MAX_TRANSCRIPT]},
+                           ensure_ascii=False)
+    antwoord = vraag(SYSTEEM, gebruiker, tools=(), max_beurten=2, timeout=600)
+    d = json_uit((antwoord or {}).get("tekst"))
+    if not isinstance(d, dict) or not isinstance(d.get("actiepunten", []), list):
+        raise ValueError("geen geldig JSON-antwoord")
+    samenvatting = twee_zinnen(d.get("samenvatting"))
+    if not samenvatting:
+        raise ValueError("antwoord zonder samenvatting")
+    goed, weg = keur(d.get("actiepunten") or [], corpus(uit))
+    return samenvatting, goed, weg, int((antwoord or {}).get("tokens") or 0)
+
+
+def weekbenutting(bestand=None, nu=None):
+    """(benutting of None, gezien): de laatst gemeten benutting van het weekvenster (seven_day) uit het limietbestand
+    van claude_abonnement ({"info": rate_limit_info, "gezien": tijd}, onthoud_limiet; elke agent op het abonnement
+    schrijft het bij elke vraag met een limietmelding), en wanneer dat gemeten is. None zonder meting, of als het venster
+    sindsdien herstart is."""
+    try:
+        with open(bestand or claude_abonnement.LIMIET_BESTAND, encoding="utf-8") as f:
+            d = json.load(f) or {}
+        info, gezien = d.get("info") or {}, float(d.get("gezien") or 0)
+        vensters = dict(info.get("unifiedWindows") or {})
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None, 0.0
+    if info.get("rateLimitType") and info.get("utilization") is not None:
+        vensters.setdefault(str(info["rateLimitType"]), {"utilization": info["utilization"], "resetsAt": info.get("resetsAt")})
+    nu = time.time() if nu is None else nu
+    waarden = []
+    for naam, v in vensters.items():
+        if not (str(naam).startswith("seven_day") and isinstance(v, dict)):
+            continue
+        try:
+            benut, herstart = float(v.get("utilization")), float(v.get("resetsAt") or 0) or gezien + 7 * 86400
+        except (TypeError, ValueError):
+            continue
+        if herstart > nu:
+            waarden.append(benut)
+    return (max(waarden) if waarden else None), gezien
+
+
+class Budget:
+    """Mag er nog een gesprek naar het model? Hoogstens MAX_PER_DAG per dag (teller.json in UITVOER; een mislukte vraag
+    telt mee), en geen vraag als het weekvenster op WEEKGRENS of hoger staat. Na een vraag moet het venster opnieuw
+    gemeten zijn: zonder nieuwe meting stopt het model voor de rest van de ronde (onbekend is geen ruimte). Een fout van
+    het abonnement stopt het ook (stop, fout). teller=None: alleen in het geheugen (de proef), vanaf de stand in het
+    bestand."""
+
+    def __init__(self, dag, teller="", limiet=None, klok=time.time):
+        self.dag, self.limiet, self.klok = dag, limiet, klok
+        self.bestand = os.path.join(UITVOER, "teller.json")
+        self.teller = self.bestand if teller == "" else teller
+        self.vandaag, self.sinds, self.stop, self.fout = self._stand(), None, None, None
+
+    def _stand(self):
+        try:
+            with open(self.bestand, encoding="utf-8") as f:
+                d = json.load(f) or {}
+            return int(d.get("vragen") or 0) if d.get("dag") == self.dag else 0
+        except (OSError, ValueError, AttributeError, TypeError):
+            return 0
+
+    def reden(self):
+        """None als de volgende vraag mag, anders waarom niet."""
+        if self.stop:
+            return self.stop
+        if self.vandaag >= MAX_PER_DAG:
+            return f"al {MAX_PER_DAG} gesprekken naar het model vandaag"
+        benutting, gezien = weekbenutting(self.limiet, self.klok())
+        if self.sinds is not None and gezien < self.sinds:
+            self.stop = "weekvenster na de vorige vraag niet gemeten"
+        elif benutting is not None and benutting >= WEEKGRENS:
+            self.stop = f"weekvenster op {int(benutting * 100)} procent (grens {int(WEEKGRENS * 100)})"
+        return self.stop
+
+    def tel(self):
+        self.vandaag, self.sinds = self.vandaag + 1, self.klok()
+        if self.teller:
+            schrijf_600(self.teller, {"dag": self.dag, "vragen": self.vandaag})
+
+
 # ----------------------------------------------------------------------------------------------- uitvoer ---
 def pad_van(uniek, map_=None):
     """<UITVOER>/<bron>/<sleutel>.json voor gesprek_log.uniek ('fathom:123', 'plaud:ab12', 'zoom:meeting:<uuid>'). Een
@@ -331,7 +451,19 @@ def verwerk(geval, budget=None, vraag=None, nu=None):
         samenvatting, punten, weg = eigen
         return {**werk, "samenvatting": samenvatting, "samenvatting_van": "fathom", "actiepunten": punten,
                 "weggegooid": weg, "tokens": 0, "ts": stempel}, "fathom"
-    return None, "model staat uit"
+    reden = "model staat uit" if not MODEL_AAN else (budget.reden() if budget else "geen budget")
+    if reden:
+        return None, reden
+    budget.tel()
+    try:
+        samenvatting, punten, weg, tokens = modelvraag(geval, uit, vraag or claude_abonnement.vraag)
+    except claude_abonnement.Fout as e:     # aanmelden, limiet, bron of mislukt: nooit een uitwijking naar de API
+        budget.stop, budget.fout = f"abonnement: {e.soort or 'mislukt'}", e
+        return None, budget.stop
+    except ValueError as e:
+        return None, f"mislukt: {e}"
+    return {**werk, "samenvatting": samenvatting, "samenvatting_van": "model", "actiepunten": punten,
+            "weggegooid": weg, "tokens": tokens, "ts": stempel}, "model"
 
 
 def stap(geval, budget=None, vraag=None, map_=None, nu=None):
