@@ -17,7 +17,8 @@ Met de hand op de VM: ~/agents/.venv/bin/python prijsonderzoeker.py --vraag "...
 heeft pypdf voor handleidingen in PDF).
 
 Werkt met Mehdi's Claude-abonnement via claude -p, nooit met de API (overleg 14, 01-11-2026): geen API-kost. Het token
-staat in ~/.config/prijsonderzoeker/claude-token (rechten 600); zetten met scripts/claude-abonnement-naar-vm.sh.
+staat in ~/.config/prijsonderzoeker/claude-token (rechten 600), het bestand dat ook de bouwagents lezen; zetten met
+mijnagents-runner/mac/abonnement_aanmelden.command (dubbelklikken, aanmelden, niets plakken).
 """
 import argparse
 import hashlib
@@ -69,6 +70,11 @@ def open_vragen():
     return sorted(vragen, key=lambda it: it.get("id") or 0)
 
 
+class VraagBlijft(Exception):
+    """De vraag gaf geen verslag (fout, limiet of geen leesbaar antwoord): ze blijft klaarstaan, de nood is al gemeld
+    (Codex controle 22, punt 3)."""
+
+
 def vingerafdruk(vraag, vandaag):
     """Wat het logboek van een vraag bewaart: nooit de vraag zelf (Codex X3), alleen een vingerafdruk."""
     return hashlib.sha256(f"{vandaag}:{vraag}".encode()).hexdigest()[:12]
@@ -103,12 +109,13 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
         ag.log("prijsvraag", "fout", f"vraag {va}: claude -p eindigde met een fout", uit.get("fout"))
         r.nood("Prijsvraag: claude -p eindigde met een fout", wie="claude-code")
     g = uit["gegevens"]
+    if uit["stop"] != "klaar":
+        # Alleen een vraag die gewoon eindigde, bewees dat ze binnen het abonnement bleef (Codex controle 23).
+        raise VraagBlijft(uit["stop"])
     if g is None:
         ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
-        r.nood("Prijsvraag zonder leesbaar antwoord van het model", wie="claude-code")
-        zet_klaar(vraag, "Prijsvraag zonder antwoord", "**Geen antwoord:** het zoeken gaf geen bruikbare gegevens. "
-                  "Ik kocht, bood en contacteerde niets.", vandaag)
-        return 0
+        r.nood("Prijsvraag zonder leesbaar antwoord van het model; de vraag blijft klaarstaan", wie="claude-code")
+        raise VraagBlijft("geen antwoord")
     aanbiedingen = g.get("aanbiedingen") if isinstance(g.get("aanbiedingen"), list) else []
     for a in aanbiedingen:
         if isinstance(a, dict):
@@ -160,13 +167,18 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
         try:
             aanbod += een_vraag(r, tekst, koersdatum, koersen, vandaag, deadline)
         except O.GeenAbonnement as e:
-            # Nooit terug naar de API (overleg 14, K1): de vraag stopt en wacht op een werkend token.
+            # Nooit terug naar de API (overleg 14, K1). De vraag blijft klaarstaan tot het abonnement werkt, en de
+            # volgende vragen ook: niets wordt als opgepakt gemarkeerd zonder verslag (Codex controle 20, punt 3).
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: geen abonnement: {str(e)[:300]}")
             r.nood(f"Prijsvraag niet gedaan, niets via de API: het Claude-abonnement werkt niet op de VM ({str(e)[:160]})",
                    wie="claude-code")
-        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug
+            break
+        except VraagBlijft:
+            break                                   # de nood staat er al; de vraag blijft klaarstaan
+        except Exception as e:  # noqa: BLE001  de vraag blijft klaarstaan, met een nood (Codex controle 21, punt 3)
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
-            r.nood("Prijsvraag mislukt bij het zoeken", wie="claude-code")
+            r.nood("Prijsvraag mislukt bij het zoeken; de vraag blijft klaarstaan", wie="claude-code")
+            break
         gedaan += 1
         if v.get("id"):
             bord.opgepakt(v["id"], NAAM)

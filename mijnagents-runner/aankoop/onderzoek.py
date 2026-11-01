@@ -9,6 +9,7 @@ Een grendel die niet van het model afhangt: een aanbod telt alleen als het model
 de eigen leestool (aankoop/leesserver.py). Die geeft het model precies de tekst die ze ook in het leeslog zet, en dat
 leeslog is `gelezen` voor aanbod.py. Een link uit een zoekresultaat alleen gaat nooit in het verslag.
 """
+import hashlib
 import json
 import os
 import queue
@@ -27,6 +28,9 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 CLAUDE = os.path.expanduser(os.environ.get("PRIJS_CLAUDE", "~/.local/bin/claude"))
 MODEL = os.environ.get("PRIJS_MODEL", "opus")      # een alias, geen modelcode die kan verdwijnen (overleg 14, X1)
 TOKEN_BESTAND = os.path.expanduser(os.environ.get("PRIJS_TOKEN_BESTAND", "~/.config/prijsonderzoeker/claude-token"))
+# Het merkteken van een geslaagde abonnementsproef, met de vingerafdruk van het token (overleg 19): een prijsvraag start
+# alleen als de proef met dit token abonnementsvensters zag. Een setup-token toont zonder modelvraag geen abonnementstype.
+MERK_BESTAND = os.path.expanduser(os.environ.get("PRIJS_MERK_BESTAND", "~/.config/prijsonderzoeker/abonnement-bewezen.json"))
 MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
@@ -279,6 +283,20 @@ def omgeving(token, werkmap, bron=None):
     return env
 
 
+def vingerafdruk_token(token):
+    return hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def bewezen(token):
+    """Zag een abonnementsproef met precies dit token abonnementsvensters (overleg 19)?"""
+    try:
+        with open(MERK_BESTAND, encoding="utf-8") as f:
+            merk = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(merk, dict) and merk.get("token") == vingerafdruk_token(token) and bool(merk.get("vensters"))
+
+
 def voor_de_start(token, werkmap):
     """Voor er een aanvraag naar het model gaat: geen beheerde instellingen op deze machine (Codex controle 15), en
     `claude auth status` (geen modelaanvraag) toont een persoonlijk abonnement zonder centrale instellingen (Codex
@@ -293,18 +311,27 @@ def voor_de_start(token, werkmap):
     except (subprocess.TimeoutExpired, OSError, ValueError) as e:
         raise GeenAbonnement(f"claude auth status niet leesbaar ({type(e).__name__})") from e
     soort = str(status.get("subscriptionType") or "").lower()
-    if not status.get("loggedIn") or status.get("apiProvider") != "firstParty":
-        raise GeenAbonnement("het abonnementstoken wordt niet aanvaard (claude auth status)")
-    if soort not in PERSOONLIJK:
-        raise GeenAbonnement(f"geen persoonlijk abonnement (soort {soort or 'onbekend'}); niet gestart")
-    try:
-        with open(os.path.join(werkmap, "claude-config", "remote-settings.json"), encoding="utf-8") as f:
-            centraal = json.load(f)
-    except (OSError, ValueError):
-        centraal = {}
-    if centraal:
+    if (not status.get("loggedIn") or status.get("apiProvider") != "firstParty" or status.get("apiKeySource")
+            or status.get("authMethod") != "oauth_token"):
+        raise GeenAbonnement(f"het abonnementstoken wordt niet aanvaard (claude auth status: {status.get('authMethod')})")
+    # Met een token uit setup-token toont auth status geen abonnementstype (gemeten 01-11-2026 door de bouwsessie,
+    # Claude Code 2.1.302: alleen loggedIn, authMethod oauth_token, apiProvider). Staat het type er wel, dan moet het
+    # persoonlijk zijn; een Team- of Enterprise-account herkennen we anders aan centrale instellingen, hier en bij de
+    # start van claude -p (verwerk_regel, init).
+    if soort and soort not in PERSOONLIJK:
+        raise GeenAbonnement(f"geen persoonlijk abonnement (soort {soort}); niet gestart")
+    if centraal_ingesteld(os.path.join(werkmap, "claude-config")):
         raise GeenAbonnement("het account krijgt centrale instellingen; niet gestart")
-    return soort
+    return soort or "oauth_token"
+
+
+def centraal_ingesteld(config):
+    """Heeft Claude Code centrale instellingen van een organisatie opgehaald in deze configuratiemap?"""
+    try:
+        with open(os.path.join(config, "remote-settings.json"), encoding="utf-8") as f:
+            return bool(json.load(f))
+    except (OSError, ValueError):
+        return False
 
 
 def opdrachtregel(werkmap, systeem, model=None):
@@ -335,6 +362,8 @@ class _Stand:
         self.limiet = False
         self.extra_verbruik = None          # overageStatus uit de stream, voor het werkverslag
         self.soort = None                   # het abonnement volgens claude auth status
+        self.config = None                  # de eigen configuratiemap van claude -p
+        self.vensters = set()               # de limietvensters van het abonnement (five_hour, seven_day)
 
 
 def verwerk_regel(st, d):
@@ -344,9 +373,13 @@ def verwerk_regel(st, d):
         st.bron, st.model = d.get("apiKeySource"), d.get("model")
         if st.bron != "none":
             return "bron"                 # een API-sleutel of iets anders dan het abonnement (K1)
+        if st.config and centraal_ingesteld(st.config):
+            return "centraal"             # centrale instellingen van een organisatie: stoppen voor de eerste aanvraag
     elif soort == "rate_limit_event":
         info = d.get("rate_limit_info") or {}
         st.extra_verbruik = info.get("overageStatus", st.extra_verbruik)
+        st.vensters |= {str(k) for k in (info.get("unifiedWindows") or {})} | ({str(info["rateLimitType"])}
+                                                                               if info.get("rateLimitType") else set())
         if info.get("isUsingOverage"):
             return "betaald"              # extra verbruik bovenop het abonnement kost geld: meteen stoppen
         if st.extra_verbruik == "allowed":
@@ -459,12 +492,15 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     deadline: time.monotonic() waarop de vraag klaar moet zijn (de deadline van de ronde, Codex X6 en overleg 14, X4)."""
     deadline = deadline or time.monotonic() + 420
     token = token or lees_token()
+    if not bewezen(token):
+        raise GeenAbonnement("nog geen geslaagde abonnementsproef voor dit token (prijsonderzoeker.py --proef-abonnement)")
     systeem, gebruiker = opdracht(werkwijze, vraag, vandaag, vaste_eisen)
     eigen_map = werkmap is None
     werkmap = werkmap or tempfile.mkdtemp(prefix="prijsvraag-")
     st = _Stand()
     try:
         st.soort = voor_de_start(token, werkmap)
+        st.config = os.path.join(werkmap, "claude-config")
         reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token, werkmap), werkmap, gebruiker, deadline, st)
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)
@@ -477,6 +513,11 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         raise GeenAbonnement("Claude Code startte extra betaald verbruik bovenop het abonnement; meteen gestopt")
     if reden == "extra_aan":
         raise GeenAbonnement("Usage credits staan aan op het account (claude.ai, Settings > Usage); meteen gestopt")
+    if reden == "centraal":
+        raise GeenAbonnement("het account krijgt centrale instellingen van een organisatie; meteen gestopt")
+    if st.bron != "none":
+        # Bij elk einde, ook na de deadline (Codex controle 21, punt 1).
+        raise GeenAbonnement("geen startbericht van claude -p: de bron is niet bewezen (Codex controle 20)")
     einde = st.einde or {}
     if einde.get("is_error") and re.search(r"not logged in|/login|oauth|invalid api key|authenticat", fout, re.I):
         raise GeenAbonnement(f"het abonnementstoken werkt niet: {fout[:200]}")
@@ -490,6 +531,10 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
         stop = "fout"
     else:
         stop = "klaar"
+    if stop == "klaar" and (not st.vensters & {"five_hour", "seven_day"} or st.extra_verbruik is None):
+        # Elke vraag moet zelf tonen dat ze binnen het abonnement bleef (overleg 19, K2; Codex controle 20).
+        raise GeenAbonnement("geen limietmelding van het abonnement in deze vraag: niet na te gaan of ze binnen het "
+                             "abonnement bleef")
     tekst = str(einde.get("result") or "".join(st.teksten[-1:])).strip()
     gebruik = einde.get("usage") or {}
     tellers = {"input": gebruik.get("input_tokens", 0) or 0, "output": gebruik.get("output_tokens", 0) or 0,
@@ -505,8 +550,8 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
 
 
 def proef_abonnement(token=None, wacht=120):
-    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Voor scripts/claude-abonnement-naar-vm.sh
-    en na een uitrol (overleg 14, X7): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
+    """Een korte vraag via het abonnement, zonder tools: (gelukt, melding). Pas te draaien als Mehdi bevestigde dat
+    Usage credits uitstaan, na het aanmelden en na een uitrol (overleg 14, X7; Codex controle 17): bewijst dat het token werkt en dat Claude Code geen API-sleutel gebruikt."""
     try:
         token = token or lees_token()
     except GeenAbonnement as e:
@@ -539,11 +584,21 @@ def proef_abonnement(token=None, wacht=120):
         if reden == "extra_aan":
             return False, "Usage credits staan aan op dit account: zet ze uit in claude.ai, Settings > Usage"
     einde = st.einde or {}
+    if st.bron != "none":
+        return False, "geen startbericht van claude -p: de bron is niet bewezen"
     if not einde or einde.get("is_error"):
         tekst = str(einde.get("result") or r.stderr[-300:] or "geen eindregel")
         return False, re.sub(r"sk-ant-\w+-[\w-]+", "sk-ant-…", tekst)[:300]
     if st.extra_verbruik is None:
         # Zonder limietmelding is niet na te gaan of Usage credits uitstaan: dan nooit "werkt" (Codex controle 17, 3).
         return False, "geen limietmelding van het abonnement: niet na te gaan of Usage credits uitstaan"
+    if not st.vensters & {"five_hour", "seven_day"}:
+        return False, "geen limietvensters van een abonnement in de stream: dit lijkt geen persoonlijk abonnement"
+    os.makedirs(os.path.dirname(MERK_BESTAND), mode=0o700, exist_ok=True)
+    nieuw = MERK_BESTAND + ".nieuw"
+    with open(os.open(nieuw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+        json.dump({"token": vingerafdruk_token(token), "vensters": sorted(st.vensters), "extra_verbruik": st.extra_verbruik,
+                   "datum": time.strftime("%Y-%m-%dT%H:%M:%S")}, f)
+    os.replace(nieuw, MERK_BESTAND)
     return True, f"werkt via het abonnement {soort} (model {st.model}, bron {st.bron}, extra verbruik: {st.extra_verbruik})"
 

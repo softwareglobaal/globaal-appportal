@@ -72,3 +72,84 @@ Tests: 233 prijstests groen.
   abonnementsproef en de MOVA-vraag pas als Mehdi bevestigt dat Usage credits uitstaan (claude.ai, Settings > Usage).
 - Punt 3: de abonnementsproef zegt alleen nog "werkt" als ze een limietmelding zag met `overageStatus` anders dan
   `allowed`; zonder melding faalt ze met uitleg.
+
+## Na de uitrol: meting van de bouwsessie (01-11-2026)
+
+- **Gemeten door de bouwsessie** (Claude Code 2.1.302, alleen `CLAUDE_CODE_OAUTH_TOKEN`, lege configuratiemap):
+  `claude auth status --json` toont met een token uit setup-token geen `subscriptionType`, alleen `loggedIn`,
+  `authMethod: "oauth_token"` en `apiProvider`. `voor_de_start()` zou dus altijd weigeren.
+- **Aanpassing in `voor_de_start()`:**
+  - de controle eist nu `authMethod == "oauth_token"`, aanbieder `firstParty` en geen `apiKeySource`;
+  - een getoond abonnementstype moet persoonlijk zijn;
+  - zonder type geldt een Team- of Enterprise-account als gevonden zodra er centrale instellingen zijn.
+- **Controle op centrale instellingen:** die gebeurt na `auth status` en opnieuw bij het init-bericht van `claude -p`,
+  voor de eerste aanvraag (`centraal_ingesteld`).
+- **Eén aanmeldscript:** het eigen script `scripts/claude-abonnement-naar-vm.sh` is weg. De bouwsessie bouwde
+  `mijnagents-runner/mac/abonnement_aanmelden.command`:
+  - het schrijft hetzelfde tokenbestand, zonder plakken;
+  - het toetst zonder modelaanvraag;
+  - het geldt voor alle agents op het abonnement.
+- **Afwijking van X5:** dat script neemt `setup-token` kort op in een tijdelijk bestand (0600, daarna overschreven en
+  gewist) om plakken te vermijden. Mehdi wil niets plakken. Het nakijken van dat script hoort bij de bouwsessie.
+
+## Verwerking Codex-controle 18 en overleg 19 (bewijs van een persoonlijk abonnement)
+
+- Codex 18, punt 2 (De Offertevergelijker): die fout kwam van main (#153) en is daar al hersteld (#155). Deze tak
+  raakt dat bestand niet.
+- Codex 18, punt 1: met een setup-token is er geen bewijs van het abonnementstype zonder modelvraag. Overleg 19:
+  - X1 (2-1): de vensters in de stream onderscheiden persoonlijk en Enterprise niet zeker; Mehdi's bevestiging dat hij
+    met zijn persoonlijke account aanmeldt sluit dat;
+  - X2 (3-0): een merkteken bewijst alleen de toestand tijdens de proef;
+  - G2, K3 (3-0): geen nieuwe grens voor Mehdi; X3 (0-3) verworpen;
+  - K2 (3-0): de grendels werken ook tijdens elke vraag (stop bij `overageStatus: "allowed"`, `isUsingOverage`, 90 procent).
+- Gebouwd (A als poort, met B):
+  - `proef_abonnement` slaagt alleen met de vensters `five_hour` of `seven_day`, `overageStatus` niet `allowed` en bron `none`;
+  - dan schrijft de proef `~/.config/prijsonderzoeker/abonnement-bewezen.json` (600) met de vingerafdruk van het token;
+  - `onderzoek()` start alleen als dat merkteken bij het huidige token hoort; een nieuw token vraagt een nieuwe proef.
+- De proef draait pas nadat Mehdi in de chat bevestigt:
+  - hij meldt aan met zijn persoonlijke account;
+  - Usage credits staan uit.
+  Die bevestiging komt in de werkstand (T-0037).
+
+Tests: 242 prijstests groen.
+
+## Verwerking Codex-controle 20 (niet klaar)
+
+1. Een proef zonder startbericht (`init`) slaagt niet meer en schrijft geen merkteken; een vraag zonder startbericht
+   geeft `GeenAbonnement`.
+2. Een vraag is alleen `klaar` als ze zelf een limietmelding van het abonnement toonde (`five_hour` of `seven_day`, en
+   `overageStatus`); anders `GeenAbonnement` en geen verslag.
+3. Werkt het abonnement niet, dan breekt de runner af: de bordvraag en de volgende blijven klaarstaan, niets wordt als
+   opgepakt gemarkeerd.
+
+Tests: 246 prijstests groen.
+
+## Verwerking Codex-controle 21 (niet klaar)
+
+1. De broncontrole geldt nu bij elk einde, ook na de deadline: zonder startbericht altijd `GeenAbonnement`.
+2. Punt 2 was opgelost.
+3. Ook bij een andere fout breekt de runner af: de bordvraag blijft klaarstaan, met een nood (werkwijze aangepast).
+- "Live: nee" omdat een vraag met persoonsgegevens zonder token een verslag krijgt: dat is bedoeld. Die vraag gaat nooit
+  naar het model (privacygrendel van overleg X4/K6) en kost niets; mijn voorwaarde "doet niets" was te ruim geformuleerd.
+  Juist is: zonder token en merkteken gaat er geen enkele vraag naar het model.
+
+Tests: 248 prijstests groen.
+
+## Verwerking Codex-controle 22 (niet klaar)
+
+1. Punt 1 van controle 21 was opgelost.
+2. Zonder token gaat geen vraag naar het model. Met een token en zonder merkteken doet alleen `--proef-abonnement` een
+   korte modelvraag. Dat is bewust: het is de poort uit overleg 19, en ze draait pas na Mehdi's bevestiging.
+3. Hoog, hersteld. Eindigt het zoeken met `fout` of `limiet`, of zonder leesbaar antwoord, dan gooit `een_vraag`
+   `VraagBlijft`:
+   - er komt geen leeg verslag;
+   - de bordvraag en de volgende vragen blijven klaarstaan;
+   - de nood staat al op het bord.
+
+Tests: 250 prijstests groen.
+
+## Verwerking Codex-controle 23 (niet klaar)
+
+Punt 3 van controle 22 was opgelost. Nieuw en hersteld: ook bij `plafond` (tijd, beurten, zoekgrens) komt er geen verslag,
+ook niet met leesbare JSON; alleen een vraag met stop `klaar` (die bron en limietmelding bewees) geeft een verslag. Elke
+andere stop laat de bordvraag staan. Tests: 251 prijstests groen.
