@@ -2,33 +2,36 @@
 """De Browserwacht (Privé, alleen voor Mehdi) - draait op de Mac, niet op de VM: alleen daar staat de geschiedenis van
 de browsers. Mehdi, 31-10-2026: "alle websites dat ik bekeken heb" in het Dagboek.
 
-Leest per dag (Brusselse tijd) uit een kopie van de geschiedenis van Chrome (alle profielen), Firefox (alle profielen)
-en Safari: het aantal bezoeken, het aantal verschillende sites en de sites met de meeste bezoeken. Alleen de naam van
-de site (bijvoorbeeld monday.com), nooit het volledige adres, nooit een zoekopdracht, nooit de paginatitel. Een privaat
+Leest per dag (Brusselse tijd) de geschiedenis van Chrome en Edge (alle profielen), Firefox (alle profielen) en
+Safari: het aantal bezoeken, het aantal verschillende sites en de sites met de meeste bezoeken. Alleen de naam van de
+site (bijvoorbeeld monday.com), nooit het volledige adres, nooit een zoekopdracht, nooit de paginatitel. Een privaat
 venster laat geen geschiedenis na en telt dus nooit mee.
 
+Sinds 01-11-2026 (WEB-1, T-0120 VOL-11): onder launchd mag Python de browsers niet lezen. De geschiedenis zelf leest
+alleen MacGesprekkenKopie (set browser, Full Disk Access); hij geeft alleen tijd en sitenaam door (site() hieronder is
+dezelfde regel), en deze wacht leest zijn kopie (koppelingen/mac_gesprekken.browser_kopie). Nooit Full Disk Access voor
+Python zelf: dat gaf elk python-script volledige toegang.
+
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
-op in het dagbestand. Safari telt alleen wat op deze Mac bekeken werd, niet wat iCloud van de gsm meebrengt (WEB-3,
-01-11-2026). Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
+op in het dagbestand. Een browser die niet te lezen is, staat bij 'onleesbaar'.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
-import glob
 import json
 import os
-import shutil
-import sqlite3
 import sys
-import tempfile
 import urllib.parse
 import urllib.request
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+HIER = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HIER), "koppelingen"))
+import mac_gesprekken as M  # noqa: E402
 
 NAAM = "browser-wacht"
 BORD = os.environ.get("MIJNAGENTS_URL", "https://mijnagents.globaal.be")
 BRUSSEL = ZoneInfo("Europe/Brussels")
-THUIS = os.path.expanduser(os.environ.get("BROWSER_THUIS", "~"))
 TOP = 10
 DAGEN = 14
 DAG = None
@@ -39,24 +42,6 @@ for i, a in enumerate(sys.argv):
     if a == "--dagen" and i + 1 < len(sys.argv):
         DAGEN = int(sys.argv[i + 1])
 DAG = DAG or datetime.now(BRUSSEL).date().isoformat()
-
-# (browser, glob van de databank, query die (epoch-seconden, adres) geeft)
-CHROME_EPOCH = 11644473600      # Chrome: microseconden sinds 1601-01-01
-SAFARI_EPOCH = 978307200        # Safari: seconden sinds 2001-01-01
-# WEB-3: alleen de bezoeken van deze Mac; history_visits.origin 1 komt via iCloud van een ander toestel. Een oudere
-# Safari zonder die kolom kent geen oorsprong: dan telt alles (zonder_oorsprong), nooit "onleesbaar".
-DEZE_MAC = "v.origin = 0"
-BRONNEN = (
-    ("Chrome", "Library/Application Support/Google/Chrome/*/History",
-     f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
-    ("Edge", "Library/Application Support/Microsoft Edge/*/History",
-     f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
-    ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
-     "SELECT v.visit_date / 1000000.0, p.url FROM moz_historyvisits v JOIN moz_places p ON p.id = v.place_id"),
-    ("Safari", "Library/Safari/History.db",
-     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item "
-     f"WHERE {DEZE_MAC}"),
-)
 
 
 def token():
@@ -107,7 +92,8 @@ def fout_in_werkverslag(tekst):
 
 
 def site(adres):
-    """'https://www.monday.com/boards/1?x=2' -> 'monday.com'; geen web-adres (file:, chrome:, about:) -> None."""
+    """'https://www.monday.com/boards/1?x=2' -> 'monday.com'; geen web-adres (file:, chrome:, about:) -> None. De helper
+    rekent precies zo (site() in mac/kopie/macgesprekken_kopie.c; test_vol11_site_en_video_zoals_de_wachten)."""
     try:
         u = urllib.parse.urlsplit(adres or "")
     except ValueError:
@@ -116,31 +102,6 @@ def site(adres):
         return None
     h = u.hostname.lower()
     return h[4:] if h.startswith("www.") else h
-
-
-def zonder_oorsprong(c, query):
-    """De vraag zonder de voorwaarde DEZE_MAC als de databank geen kolom history_visits.origin heeft."""
-    if DEZE_MAC in query and "origin" not in {r[1] for r in c.execute("PRAGMA table_info(history_visits)")}:
-        return query.replace(DEZE_MAC, "1")
-    return query
-
-
-def lees_bestand(pad, query, sinds):
-    """(epoch, site) uit een kopie van de databank (de browser houdt hem open en vergrendeld)."""
-    tmp = tempfile.mkdtemp(prefix="browser-")
-    try:
-        doel = os.path.join(tmp, "h.sqlite")
-        shutil.copy2(pad, doel)
-        for ext in ("-wal", "-shm"):
-            if os.path.exists(pad + ext):
-                shutil.copy2(pad + ext, doel + ext)
-        c = sqlite3.connect(f"file:{doel}?mode=ro", uri=True)
-        try:
-            return [(t, site(a)) for t, a in c.execute(zonder_oorsprong(c, query)) if t and t >= sinds]
-        finally:
-            c.close()
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def tel(bezoeken, dagen):
@@ -158,35 +119,32 @@ def tel(bezoeken, dagen):
                 "top": [[s, n] for s, n in x["sites"].most_common(TOP)]} for d, x in per.items()}
 
 
-def main():
+def main(vragen=None):
     eind = datetime.fromisoformat(DAG).date()
     dagen = [(eind - timedelta(days=i)).isoformat() for i in range(DAGEN)]
     sinds = datetime.combine(eind - timedelta(days=DAGEN), datetime.min.time(), BRUSSEL).timestamp()
     hartslag("actief", taak=f"geschiedenis van {DAGEN} dagen lezen")
-    bezoeken, gelezen, onleesbaar = [], defaultdict(int), {}
-    for browser, patroon, query in BRONNEN:
-        for pad in glob.glob(os.path.join(THUIS, patroon)):
-            try:
-                rijen = lees_bestand(pad, query, sinds)
-            except (OSError, sqlite3.Error) as e:
-                onleesbaar[browser] = type(e).__name__
-                continue
-            gelezen[browser] += 1
-            bezoeken += [(browser, t, s) for t, s in rijen]
-    nood = []
-    if "Safari" in onleesbaar:
-        nood.append({"tekst": "Safari is niet te lezen: geef Python Full Disk Access (System Settings, Privacy & Security)",
-                     "wie": "mehdi"})
-    if not gelezen:
-        # WEB-2 (01-11-2026): niets gelezen is onbekend, nooit 0 bezoeken. Geen item klaarzetten: De Dagbundelaar zou de
-        # nullen overnemen (dagbundelaar.py, per_dag_uit) en het Dagboek "0 bezoeken" tonen.
-        tekst = niet_gelezen(onleesbaar)
+    try:
+        rijen, gelezen, onleesbaar = M.browser_kopie(sinds, vragen)
+    except M.MacFout as e:
+        fout_in_werkverslag(f"geen kopie van de browsergeschiedenis: {e.nood}")
+        hartslag("fout", taak="geen kopie van de browsergeschiedenis", nood=[{"tekst": e.nood, "wie": e.wie}])
+        print(f"ronde mislukt: {e}", file=sys.stderr)
+        return 1
+    bezoeken = [(browser, t, s) for browser, t, s, *_ in rijen]
+    per_dag = tel(bezoeken, dagen)
+    nood = M.browser_nood(onleesbaar)
+    if not gelezen or onleesbaar:
+        # Codex 01-11 (onbekend is nooit 0) en WEB-2: zonder alle browsers geen telling klaarzetten; de vorige blijft
+        # staan. YT-2: de reden noemt geweigerd of onleesbaar, en de mislukte ronde staat in het werkverslag.
+        tekst = niet_gelezen(onleesbaar) if not gelezen else (
+            "browsergeschiedenis niet volledig gelezen: " + ", ".join(f"{b} ({u})" for b, u in onleesbaar.items()))
+        if not gelezen:
+            nood.append({"tekst": tekst, "wie": "claude-code"})
         fout_in_werkverslag(tekst)
-        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
-                 nood=nood + [{"tekst": tekst, "wie": "claude-code"}])
+        hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", detail=tekst, nood=nood)
         print(tekst, file=sys.stderr)
         return 1
-    per_dag = tel(bezoeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]
@@ -203,7 +161,7 @@ def main():
         {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf",
          "tekst": f"{titel}; {DAGEN} dagen klaargezet ({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)"}]})
     hartslag("klaar", taak=f"websites {DAG} klaargezet",
-             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen)}", nood=nood)
+             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen)}")
     print(titel)
     return 0
 

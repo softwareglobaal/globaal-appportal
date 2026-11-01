@@ -50,7 +50,7 @@ KOPIE_DAGEN = 62                                        # het venster van de hel
 KOPIE = Path.home() / "Library/Caches/mijnagents/mac-gesprekken"
 STAAT = Path.home() / "Library/Application Support/mijnagents"
 HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon",
-          "sms": "be.globaal.mijnagents.kopie-sms"}
+          "sms": "be.globaal.mijnagents.kopie-sms", "browser": "be.globaal.mijnagents.kopie-browser"}
 KOPIE_WACHT = 120
 TOKEN_PAD = Path.home() / ".config/mijnagents/token"
 VM = "globaal"
@@ -94,8 +94,12 @@ SQL_SMS_DEELNEMERS = "SELECT gesprek, adres FROM DEELNEMER ORDER BY gesprek, adr
 SQL_NIEUWSTE = "SELECT waarde FROM META WHERE sleutel = 'nieuwste'"
 SQL_AANVRAAG = "SELECT waarde FROM META WHERE sleutel = 'aanvraag'"
 SQL_ANDERE_APPS = "SELECT COUNT(*) FROM ANDERE_APPS WHERE ZDATE >= ? AND ZDATE < ?"
+# YT-1 en WEB-1: de set browser (tijd in Unix-seconden; video, titel en duur alleen bij een YouTube-video)
+SQL_BEZOEKEN = "SELECT browser, tijd, site, video, titel, duur FROM BEZOEK WHERE tijd >= ? ORDER BY tijd"
+SQL_BROWSERBRONNEN = "SELECT browser, uitkomst FROM BRON ORDER BY rowid"
 SQL = (SQL_GESPREKKEN, SQL_BERICHTEN, SQL_OPROEPMELDINGEN, SQL_WA_OPROEPEN, SQL_WA_DEELNEMERS, SQL_CONTACTEN,
-       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS, SQL_SMS_BERICHTEN, SQL_SMS_GESPREKKEN, SQL_SMS_DEELNEMERS)
+       SQL_TELEFOON, SQL_NIEUWSTE, SQL_AANVRAAG, SQL_ANDERE_APPS, SQL_SMS_BERICHTEN, SQL_SMS_GESPREKKEN, SQL_SMS_DEELNEMERS,
+       SQL_BEZOEKEN, SQL_BROWSERBRONNEN)
 MIN_VERVALLEN = 5                                       # zoveel verdwenen rijen tegelijk is verdacht (Codex Q2)
 NIET_BEVESTIGD = "Bord heeft de ronde niet bevestigd: hartslag of kennis ontbreekt"
 BEZET = 75                                              # exit van een wacht die niet liep omdat er al een ronde liep
@@ -201,8 +205,8 @@ def schoon(naam):
 
 
 def nummer_sleutel(nummer):
-    """Een telefoonnummer als sleutel: de laatste negen cijfers van het internationale nummer (+32 475 ..., 0475 ...
-    en 475 ... zijn hetzelfde nummer). Zo kiest ook de helper de contacten (NORM in macgesprekken_kopie.c)."""
+    """Een telefoonnummer als korte sleutel: de laatste negen cijfers van het internationale nummer (+32 475 ...,
+    0475 ... en 475 ... zijn hetzelfde nummer). Voor namen telt het volle nummer (nummer_vol)."""
     tekst = str(nummer or "").strip()
     cijfers = re.sub(r"\D", "", tekst)
     if cijfers.startswith("00"):
@@ -212,6 +216,20 @@ def nummer_sleutel(nummer):
     return cijfers[-9:] if len(cijfers) >= 9 else cijfers
 
 
+def nummer_vol(nummer):
+    """Het volle internationale nummer als sleutel (Codex 01-11): +31 470 ... en +32 470 ... met dezelfde laatste negen
+    cijfers zijn twee nummers. Zoals INTL in macgesprekken_kopie.c, waarmee de helper de contacten kiest: (0) weg, 00
+    vooraan weg, een 0 vooraan wordt 32, zonder landnummer (hoogstens negen cijfers) ook 32. Leeg onder zes cijfers."""
+    cijfers = re.sub(r"\D", "", str(nummer or "").replace("(0)", ""))
+    if len(cijfers) < 6:
+        return ""
+    if cijfers.startswith("00"):
+        return cijfers[2:]
+    if cijfers.startswith("0"):
+        return "32" + cijfers[1:]
+    return "32" + cijfers if len(cijfers) <= 9 else cijfers
+
+
 def nummer_van_jid(jid):
     """Het nummer in een klassiek WhatsApp-adres (32475...@s.whatsapp.net); een LID-adres draagt geen nummer."""
     m = re.fullmatch(r"(\d{6,15})@s\.whatsapp\.net", str(jid or ""))
@@ -219,8 +237,9 @@ def nummer_van_jid(jid):
 
 
 class Adresboek:
-    """Het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2): naam per WhatsApp-adres, LID en nummer. Bij
-    twee contacten met hetzelfde adres wint het oudste (Z_PK), zodat een naam niet van ronde tot ronde wisselt."""
+    """Het adresboek dat WhatsApp van de iPhone overneemt (ContactsV2) en, sinds 01-11-2026, voor de nummers die WhatsApp
+    niet kent het adresboek van Contacts (TEL-9): naam per WhatsApp-adres, LID en vol nummer (nummer_vol). Bij twee
+    contacten met hetzelfde adres wint het oudste (Z_PK), zodat een naam niet van ronde tot ronde wisselt."""
 
     def __init__(self, rijen=()):
         self.jid, self.nummer = {}, {}
@@ -231,16 +250,16 @@ class Adresboek:
             for j in (wa, lid):
                 if j:
                     self.jid.setdefault(str(j), naam)
-            sleutel = nummer_sleutel(nummer)
-            if len(sleutel) >= 6:
+            sleutel = nummer_vol(nummer)
+            if sleutel:
                 self.nummer.setdefault(sleutel, naam)
 
     def bij_jid(self, jid):
         return self.jid.get(str(jid or ""), "")
 
     def bij_nummer(self, nummer):
-        sleutel = nummer_sleutel(nummer)
-        return self.nummer.get(sleutel, "") if len(sleutel) >= 6 else ""
+        sleutel = nummer_vol(nummer)
+        return self.nummer.get(sleutel, "") if sleutel else ""
 
 
 def maskerwoorden(rijen):
@@ -393,7 +412,8 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
             overgeslagen += 1
             continue
         nummer = re.sub(r"[^\d+*#]", "", str(adres or ""))
-        persoon = (boek.bij_nummer(nummer) or (nummer if onbekend_als_nummer else "onbekend nummer")) if nummer \
+        # Codex 01-11 (toets 3): de naam op het nummer zoals het binnenkwam, want nummer_vol haalt ook (0) weg
+        persoon = (boek.bij_nummer(adres) or (nummer if onbekend_als_nummer else "onbekend nummer")) if nummer \
             else "nummer verborgen"
         thema = f"{soort}, {'uitgaand' if uitgaand else 'inkomend'}"
         if duur <= 0:
@@ -429,7 +449,9 @@ def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
             return naam
         if not onbekend_als_nummer:
             return "onbekend"
-        return schoon(re.sub(r"[^\d+*#]", "", adres) if "@" not in adres else adres) or "onbekend"
+        # TEL-3: een afzender in letters (een firmanaam) blijft als tekst; van een nummer alleen de cijfers
+        tekst = "@" in adres or any(c.isalpha() for c in adres)
+        return schoon(adres if tekst else re.sub(r"[^\d+*#]", "", adres)) or "onbekend"
 
     def gespreksnaam(pk):
         ident, soort, naam = gesprekken.get(pk, ("", None, ""))
@@ -689,6 +711,40 @@ def kopie_vragen(kanaal, wacht=KOPIE_WACHT, kopie=None, klok=time.time, slaap=ti
         # Codex Q4: de status hoort bij mijn vraag, maar de uitvoer niet (een andere start schreef ze)
         raise MacFout("uitvoer hoort niet bij de aanvraag", "MacGesprekkenKopie gaf geen verse kopie")
     return pad, datetime.fromtimestamp(int(status["ts"]), timezone.utc)
+
+
+def browser_kopie(sinds, vragen=None):
+    """YT-1 en WEB-1: de browsergeschiedenis sinds (Unix-seconden) uit een verse kopie van MacGesprekkenKopie (set
+    browser), zodat geen Python Full Disk Access nodig heeft (keuze VOL-11, weg a). Geeft (bezoeken, gelezen,
+    onleesbaar): bezoeken [(browser, tijd, site, video, titel, seconden)], gelezen {browser: aantal gelezen databanken},
+    onleesbaar {browser: uitkomst}. De kopie is weg voor de functie terugkeert."""
+    pad, _ = (vragen or kopie_vragen)("browser")
+    try:
+        bezoeken = [tuple(r) for r in lees(pad, SQL_BEZOEKEN, (float(sinds),))]
+        gelezen, onleesbaar = defaultdict(int), {}
+        for browser, uitkomst in lees(pad, SQL_BROWSERBRONNEN):
+            if uitkomst == "ok":
+                gelezen[browser] += 1
+            else:
+                onleesbaar.setdefault(browser, uitkomst)
+    finally:
+        wis(pad)
+    return bezoeken, dict(gelezen), onleesbaar
+
+
+def browser_nood(onleesbaar):
+    """Codex 01-11 (toets 3, onbekend is nooit 0): een browser die niet te lezen was, maakt de telling onvolledig. De
+    wachten zetten dan niets klaar en melden dit: een weigering is voor Mehdi (Full Disk Access voor de helper, nooit
+    voor Python), een andere fout voor Claude."""
+    nood = []
+    if "geweigerd" in onleesbaar.values():
+        nood.append({"tekst": "MacGesprekkenKopie mag een browser niet lezen: Full Disk Access (System Settings > "
+                              "Privacy & Security > Full Disk Access)", "wie": "mehdi"})
+    anders = sorted(b for b, u in onleesbaar.items() if u != "geweigerd")
+    if anders:
+        nood.append({"tekst": f"Browsergeschiedenis niet volledig gelezen ({', '.join(anders)}): niets klaargezet",
+                     "wie": "claude-code"})
+    return nood
 
 
 def wis(pad):

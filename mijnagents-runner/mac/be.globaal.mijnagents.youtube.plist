@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
+<!-- De YouTube-wacht (youtube_wacht.py, YT-1): elk uur op minuut 45. Leest de kopie van MacGesprekkenKopie (set
+     browser), nooit de browserbestanden zelf; zo kan launchd hem draaien zonder Full Disk Access voor Python. Code uit de
+     eigen worktree op origin/main (mac/uitrol_mac_gesprekken.sh), Python 3.14 van python.org, geisoleerd (-I). Laden
+     pas na een geslaagde proef: mac/uitrol_mac_gesprekken.sh aan. -->
+<plist version="1.0"><dict>
   <key>Label</key><string>be.globaal.mijnagents.youtube</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/mehdichegini/.claude/tools/mijnagents/youtube_wacht.py</string>
+  <key>ProgramArguments</key><array>
+    <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/python3</string>
+    <string>-I</string>
+    <string>@THUIS@/Library/Application Support/mijnagents/repo/mijnagents-runner/mac/youtube_wacht.py</string>
   </array>
-  <key>StartCalendarInterval</key>
-  <array>
-    <dict><key>Minute</key><integer>45</integer></dict>
-  </array>
-  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/youtube_wacht.log</string>
-  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/youtube_wacht.log</string>
-</dict>
-</plist>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>45</integer></dict>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>@THUIS@/Library/Logs/mijnagents/youtube_wacht.log</string>
+  <key>StandardErrorPath</key><string>@THUIS@/Library/Logs/mijnagents/youtube_wacht.log</string>
+</dict></plist>

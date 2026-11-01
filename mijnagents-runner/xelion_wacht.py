@@ -10,23 +10,30 @@ de gsm-lijn van Mehdi. Zo komt er geen tweede login bij Xelion (die telt mislukt
 
 Rijen: xelion:<oid> (bron xelion, privé), een oproep zonder gesprek met dubbel_van buiten:gemist, en dekking:xelion:<dag>
 voor elke voorbije dag waarna de spiegel nog foutloos liep: zo is een dag zonder oproep een echte 0, en een dag die de
-spiegel niet zag onbekend.
+spiegel niet zag onbekend. Een Xelion-oproep die ook als iPhone-oproep op het bord staat (doorgeschakeld naar de gsm),
+krijgt dubbel_van telefoon:<uniek>: de iPhone-rij telt, de Xelion-rij niet (TEL-6, T-0084).
 
     xelion_wacht.py           een ronde (cron op de VM, elk uur)
     xelion_wacht.py --droog   per dag de aantallen tonen; niets naar het bord
+    xelion_wacht.py --inhaal-vanaf 2026-10-01
+                              eenmalig vanaf die dag lezen (TEL-2, hoogstens 60 dagen terug; de spiegel houdt er 12
+                              maanden); ook --van
 """
 import argparse
 import json
 import os
+import re
 import secrets
+import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import bordstand  # noqa: E402
+import dagvaststelling as V  # noqa: E402
 import mac_gesprekken as M  # noqa: E402
 
 NAAM = "xelion-wacht"
@@ -35,6 +42,8 @@ TAAK = "Xelion-oproepen uit de databank lezen"   # met 'databank': zo ziet De Da
 CONTAINER = os.environ.get("XELION_CONTAINER", "appportal-app-communicatie-1")
 GEBRUIKER = os.environ.get("XELION_GEBRUIKER", "Mehdi")             # xelion_gebruiker.gebruikersnaam
 LIJN = os.environ.get("XELION_LIJN", "Mehdi Chegini gsm")           # xelion_lijn.naam
+SAMEN = timedelta(minutes=2)    # TEL-6: zo dicht bij elkaar begint dezelfde oproep in Xelion en op de iPhone
+NUMMER = r"[+\d*#\s().-]+"         # wie als nummer, niet als naam
 ag = bord.Agent(NAAM)
 
 # De vraag loopt in de container van de communicatie-app (node en pg staan daar al). Alleen SELECT, met parameters.
@@ -127,14 +136,93 @@ def terug_lokaal(kanaal, van, tot):
     return bordstand.gesprekken(kanaal, van, tot)
 
 
-def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None):
+def telefoon_lokaal(van, tot, db=None):
+    """De iPhone-oproepen van De Belwacht op het bord (datum van tot en met tot): uniek, datum, start, minuten,
+    dubbel_van en wie (naam of nummer, alleen om een paar te herkennen; het verlaat deze ronde nooit). Alleen lezen."""
+    con = sqlite3.connect(f"file:{db or bordstand.DB}?mode=ro", uri=True)
+    try:
+        rijen = con.execute("SELECT uniek, datum, start, minuten, COALESCE(dubbel_van, ''), COALESCE(personen, '') "
+                            "FROM gesprek_log WHERE datum BETWEEN ? AND ? AND substr(uniek, 1, 9) = 'telefoon:'",
+                            (van, tot)).fetchall()
+    finally:
+        con.close()
+    return [dict(zip(("uniek", "datum", "start", "minuten", "dubbel_van", "personen"), r)) for r in rijen]
+
+
+def nummers_van(spiegel):
+    """{xelion:<oid>: het volle externe nummer (nummer_vol)}: om een paar met de iPhone te herkennen, ook als Xelion
+    een naam kent."""
+    uit = {}
+    for x in spiegel.get("rijen") or []:
+        oid = "".join(c for c in str(x.get("oid") or "") if c.isalnum())
+        if oid:
+            uit[f"xelion:{oid}"] = M.nummer_vol(x.get("extern_nummer") or "")
+    return uit
+
+
+def zelfde_wie(x, t, nummers=None):
+    """Codex 01-11: twee gelijktijdige oproepen van verschillende mensen zijn geen paar. Hetzelfde nummer, of (als de
+    iPhone een naam toont) dezelfde naam; een verborgen of onbekend nummer is nooit zeker, dus geen paar."""
+    tp, xp = M.schoon(t.get("personen") or ""), M.schoon(x.get("personen") or "")
+    if not tp or tp in ("nummer verborgen", "onbekend nummer") or xp in ("nummer verborgen", "onbekend nummer"):
+        return False
+    if re.fullmatch(NUMMER, tp):
+        sleutel = M.nummer_vol(tp)                    # Codex 01-11: het volle nummer, niet de laatste negen cijfers
+        xs = (nummers or {}).get(x["uniek"]) or (M.nummer_vol(xp) if re.fullmatch(NUMMER, xp) else "")
+        return bool(sleutel) and sleutel == xs
+    return tp.casefold() == xp.casefold()
+
+
+def ontdubbel(rijen, telefoon, nummers=None):
+    """TEL-6 (T-0084): een Xelion-oproep die ook als iPhone-oproep binnenkwam, telt een keer; de iPhone-rij leidt. Een
+    paar is: dezelfde persoon (zelfde_wie), beide een gesprek of beide zonder gesprek, het begin hoogstens SAMEN uit
+    elkaar en ongeveer even lang (hoogstens een minuut of een vijfde verschil). Elke iPhone-rij hoort bij hoogstens een
+    Xelion-rij: zoveel mogelijk paren, elk eerst met de dichtste. Zonder paar verandert niets. Geeft het aantal
+    Xelion-rijen dat dubbel werd."""
+    vrij = [t for t in telefoon if t.get("dubbel_van") in ("", M.GEMIST)]
+    xel = sorted((x for x in rijen if x["bron"] == KANAAL and x["dubbel_van"] in ("", M.GEMIST)),
+                 key=lambda x: V.gesprek_venster(x)[0])
+    kandidaten = []
+    for x in xel:
+        begin, m = V.gesprek_venster(x)[0], int(x["minuten"] or 0)
+        bij = []
+        for i, t in enumerate(vrij):
+            tm = int(t.get("minuten") or 0)
+            afstand = abs(V.gesprek_venster(t)[0] - begin)
+            if (t["dubbel_van"] == "") == (x["dubbel_van"] == "") and afstand <= SAMEN \
+                    and abs(tm - m) <= max(1, max(tm, m) / 5) and zelfde_wie(x, t, nummers):
+                bij.append((afstand, t["uniek"], i))
+        kandidaten.append([i for _, _, i in sorted(bij)])
+    # Codex 01-11 (toets 3): zoveel mogelijk paren (Kuhn: een nieuwe Xelion-rij mag een eerdere naar een andere
+    # iPhone-rij laten schuiven), elk eerst met de dichtste
+    paar = {}
+
+    def zoek(xi, gezien):
+        for i in kandidaten[xi]:
+            if i in gezien:
+                continue
+            gezien.add(i)
+            if i not in paar or zoek(paar[i], gezien):
+                paar[i] = xi
+                return True
+        return False
+    for xi in range(len(xel)):
+        zoek(xi, set())
+    for i, xi in paar.items():
+        xel[xi]["dubbel_van"] = vrij[i]["uniek"]
+    return len(paar)
+
+
+def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None, vanaf=None, telefoon=telefoon_lokaal):
+    """Een ronde: de laatste 14 dagen, of met vanaf (TEL-2) eenmalig vanaf die dag."""
     M.grenzen_of_stop(r.werkwijze, bord.grenzen)
     r.bron(f"ronde-id-{ronde_id}", "")
     nu = nu or datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
     try:
         spiegel = lezer(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1])))
         rijen, info = rijen_van(spiegel, dagen)
+        dubbel = ontdubbel(rijen, telefoon(dagen[0], dagen[-1]), nummers_van(spiegel))
         ag.prive(M.maskerwoorden(rijen))
         vervallen = M.schrijf_en_lees_terug(KANAAL, rijen, dagen[0], dagen[-1], bord.call, terug)
     except M.MacFout as e:
@@ -143,40 +231,48 @@ def werk(r, ronde_id, lezer=spiegel_lezen, terug=terug_lokaal, nu=None):
     gisteren = dagen[-2]
     oproepen = [x for x in rijen if x["datum"] == gisteren and x["bron"] == KANAAL]
     gesprek = [x for x in oproepen if not x["dubbel_van"]]
+    gemist = [x for x in oproepen if x["dubbel_van"] == M.GEMIST]
     r.detail = (f"privé; {len(dagen)} dagen gelezen ({dagen[0]} tot {dagen[-1]}); gisteren {len(gesprek)} oproepen, "
-                f"{sum(x['minuten'] for x in gesprek)} min, {len(oproepen) - len(gesprek)} gemist; dekking tot "
-                f"{max(info['gedekt']) if info['gedekt'] else 'geen'}; {len(rijen)} rijen, {vervallen} vervallen; "
-                f"ronde-id:{ronde_id}")
+                f"{sum(x['minuten'] for x in gesprek)} min, {len(gemist)} gemist; {dubbel} ook als iPhone-oproep; "
+                f"dekking tot {max(info['gedekt']) if info['gedekt'] else 'geen'}; {len(rijen)} rijen, "
+                f"{vervallen} vervallen; ronde-id:{ronde_id}")
     for dag in dagen[-2:]:
         n = [x for x in rijen if x["datum"] == dag and x["bron"] == KANAAL]
         ag.log(f"dag {dag}", "gelezen", f"{len([x for x in n if not x['dubbel_van']])} oproepen, "
-               f"{len([x for x in n if x['dubbel_van']])} gemist")
+               f"{len([x for x in n if x['dubbel_van'] == M.GEMIST])} gemist, "
+               f"{len([x for x in n if x['dubbel_van'].startswith('telefoon:')])} ook op de iPhone")
     if not info["gedekt"]:
         r.nood("De Xelion-spiegel in de communicatie-app liep niet foutloos: staat XELION_ENABLED aan?", wie="claude-code")
     return info
 
 
-def droog():
+def droog(vanaf=None):
     nu = datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
-    rijen, info = rijen_van(spiegel_lezen(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1]))), dagen)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
+    spiegel = spiegel_lezen(M.daggrens(dagen[0]), M.daggrens(M.volgende(dagen[-1])))
+    rijen, info = rijen_van(spiegel, dagen)
+    ontdubbel(rijen, telefoon_lokaal(dagen[0], dagen[-1]), nummers_van(spiegel))
     for dag in dagen:
         n = [x for x in rijen if x["datum"] == dag and x["bron"] == KANAAL]
-        print(f"{dag}: {len([x for x in n if not x['dubbel_van']])} oproepen, {len([x for x in n if x['dubbel_van']])} "
-              f"gemist{'' if dag in info['gedekt'] else ', niet gedekt'}")
+        print(f"{dag}: {len([x for x in n if not x['dubbel_van']])} oproepen, "
+              f"{len([x for x in n if x['dubbel_van'] == M.GEMIST])} gemist, "
+              f"{len([x for x in n if x['dubbel_van'].startswith('telefoon:')])} ook op de iPhone"
+              f"{'' if dag in info['gedekt'] else ', niet gedekt'}")
     return 0
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="De Belwacht Xelion: de Xelion-oproepen van Mehdi lezen.")
     p.add_argument("--droog", action="store_true", help="per dag de aantallen tonen, niets naar het bord")
+    p.add_argument("--inhaal-vanaf", "--van", type=M.inhaal_vanaf, metavar="JJJJ-MM-DD",
+                   help="eenmalig vanaf die dag lezen (hoogstens 60 dagen terug)")
     a = p.parse_args(argv)
     if a.droog:
-        return droog()
+        return droog(a.inhaal_vanaf)
     ronde_id = secrets.token_hex(16)
     try:
         with ag.ronde(TAAK) as r:
-            werk(r, ronde_id)
+            werk(r, ronde_id, vanaf=a.inhaal_vanaf)
     except (M.MacFout, bord.RondeGestopt) as e:
         print(f"ronde mislukt: {e}", file=sys.stderr)
         return 1

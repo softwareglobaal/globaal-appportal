@@ -11,6 +11,8 @@ de gedeelde ronde (N4, N10 tot N14). Daarna leest hij de rijen, de hartslag en d
 
     belwacht.py           een ronde
     belwacht.py --droog   de bestaande kopie lezen en per dag de aantallen tonen; niets naar het bord
+    belwacht.py --inhaal-vanaf 2026-10-01
+                                      eenmalig vanaf die dag lezen (TEL-1, hoogstens 60 dagen terug)
 """
 import argparse
 import os
@@ -89,6 +91,8 @@ def droog():
 def main(argv=None):
     p = argparse.ArgumentParser(description="De Belwacht: de iPhone-oproepen op de Mac lezen.")
     p.add_argument("--droog", action="store_true", help="de bestaande kopie lezen, niets naar het bord")
+    p.add_argument("--inhaal-vanaf", type=M.inhaal_vanaf, metavar="JJJJ-MM-DD",
+                   help="eenmalig vanaf die dag lezen (hoogstens 60 dagen terug); de stand op de Mac zakt niet")
     a = p.parse_args(argv)
     if a.droog:
         return droog()
@@ -101,7 +105,7 @@ def main(argv=None):
                 with M.tunnel() as url:
                     bord.PLATFORM, bord.TOKEN = url, token
                     with ag.ronde(TAAK) as r:
-                        gedekt = werk(r, ronde_id, stand.get("gedekt_tot"))
+                        gedekt = werk(r, ronde_id, M.inhaal_grens(stand.get("gedekt_tot"), a.inhaal_vanaf))
                     if not M.eindcontrole(ag, NAAM, TAAK, ronde_id):
                         # P8 en Q6: het slot houdt een tweede ronde van mij op deze Mac tegen, dus de status op het bord
                         # is van mij; zonder bevestiging staat ze op fout met een nood, nooit op een oude klaar.

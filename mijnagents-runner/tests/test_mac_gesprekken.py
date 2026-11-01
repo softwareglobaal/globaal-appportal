@@ -19,6 +19,10 @@ Legt vast, zonder netwerk, zonder bord en zonder de echte databanken (alles in e
   hartslag, N4 vergelijkt die ID bij elke cadans (P8);
 - de helper zelf (alleen op een Mac met cc): leest de WAL mee (P2), schrijft geen tekstkolom, weigert een symlink en
   meldt een ander schema als onverwacht.
+- T-0120 (01-11-2026): een sms-afzender in letters (TEL-3), --inhaal-vanaf (TEL-1, TEL-1b), de cdhash in het
+  proefbewijs (TEL-7), en VOL-11: het adresboek van Contacts bij telefoon en sms (TEL-9, alleen naam en nummer) en de
+  set browser (YT-1, WEB-1: alleen tijd en sitenaam, bij YouTube ook video-ID, titel en duur), gelezen door De
+  Websitewacht en De YouTube-wacht.
 Draaien: python3 mijnagents-runner/tests/test_mac_gesprekken.py
 """
 import hashlib
@@ -154,6 +158,22 @@ def test_sms_per_gesprek_per_dag_zonder_tekst():
     s = M.samenvatting(rijen, DAG)
     assert s["berichten"] == 5 and s["gesprekken"] == 3 and s["oproepen"] == 0, s
     assert V.soort({"uniek": jan["uniek"], "bron": "sms"}) == "chat" and V.is_prive({"bron": "sms"})
+
+
+def test_tel3_afzender_in_letters_blijft_zijn_naam():
+    """TEL-3: een afzender zonder cijfers (een firmanaam als afzender van een sms) bleef 'onbekend', want van het adres
+    bleven alleen de cijfers over. Een adres met letters en zonder @ blijft nu als tekst; een kort nummer blijft een
+    nummer, een mailadres een mailadres."""
+    gesprekken = [(1, "ProefBank", 45, ""), (2, "8850", 45, ""), (3, "Pakje-Proef", 45, "")]
+    deelnemers = [(1, "ProefBank"), (2, "8850"), (3, "Pakje-Proef")]
+    berichten = [(pk, a(bxl(2026, 10, 22, 9 + pk, 0)), 0, "SMS") for pk in (1, 2, 3)]
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_sms(os.path.join(map_, "sms.sqlite"), berichten, gesprekken, deelnemers, (),
+                       nieuwste=a(bxl(2026, 10, 23, 8, 0)))
+        rijen, _ = M.sms_rijen(pad, DAGEN)
+        zonder, _ = M.sms_rijen(pad, DAGEN, onbekend_als_nummer=False)
+    assert sorted(r["personen"] for r in rijen) == ["8850", "Pakje-Proef", "ProefBank"], [r["personen"] for r in rijen]
+    assert {r["personen"] for r in zonder} == {"onbekend"}
 
 
 def whatsapp_wereld(map_):
@@ -334,6 +354,25 @@ def test_nummer_sleutel():
         assert M.nummer_sleutel(vorm) == "470000001", vorm
 
 
+def test_nummer_vol_kent_het_land():
+    """Codex 01-11: een naam hoort bij het volle nummer; +31 en +32 met dezelfde laatste negen cijfers zijn twee
+    nummers. Elke Belgische vorm geeft hetzelfde volle nummer, ook met (0) of een spatie die geen spatie is."""
+    for vorm in ("+32 470 00 00 01", "0470000001", "470000001", "0032470000001", "+32-470-00.00.01",
+                 "+32 (0)470 00 00 01", "0470/00.00.01", "0470\u00a000\u00a000\u00a001"):
+        assert M.nummer_vol(vorm) == "32470000001", vorm
+    assert M.nummer_vol("+31 470 00 00 01") == "31470000001" and M.nummer_vol("8850") == ""
+    boek = M.Adresboek([("Jan Proef", "", "", "+32470000001")])
+    assert boek.bij_nummer("0470 00 00 01") == "Jan Proef" and boek.bij_nummer("+31470000001") == ""
+    # Codex 01-11 (toets 3): de hele weg van een oproep met (0) naar de naam
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
+            ("H1", a(bxl(2026, 10, 22, 8, 0)), 60.0, 0, 1, "+32 (0)470 00 00 01", "com.apple.Telephony"),
+            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony")],
+            [(1, "Jan Proef", "", "", "+32470000001")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+        rijen, _ = M.telefoon_rijen(pad, DAGEN)
+    assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001"], rijen
+
+
 # --------------------------------------------------------------------------------------------- dekking ---
 def test_dekking_alleen_met_gegevens_tijdens_de_dag():
     gekopieerd = bxl(2026, 10, 24, 9, 0)
@@ -408,6 +447,48 @@ def test_dagen_en_inhalen_na_lange_slaap():
     assert M.dagen(nu, "onzin")[0] == "2026-10-13"
 
 
+def test_tel1_inhaal_vanaf_een_dag():
+    """TEL-1 en TEL-1b: --inhaal-vanaf 2026-10-01 laat De Belwacht en De Sms-wacht eenmalig vanaf 01-10 lezen (op 01-11
+    zijn dat 32 dagen), zonder de stand op de Mac te laten zakken; zonder optie blijft alles zoals het was."""
+    nu = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+    dagen = M.dagen(nu, M.inhaal_grens("2026-10-31", "2026-10-01"))
+    assert dagen[0] == "2026-10-01" and dagen[-1] == "2026-11-01" and len(dagen) == 32, dagen
+    assert M.inhaal_grens("2026-10-31", None) == "2026-10-31" and M.inhaal_grens(None, "2026-10-01") == "2026-09-30"
+    assert M.inhaal_grens("2026-09-15", "2026-10-01") == "2026-09-15"     # nooit minder dan de stand al las
+    assert M.inhaal_vanaf("2026-10-01", nu) == "2026-10-01"
+    # Codex 01-11: precies de oudste toegestane dag (zestig dagen met vandaag erbij) mag, een dag eerder niet
+    assert M.inhaal_vanaf("2026-09-03", nu) == "2026-09-03" and len(M.dagen(nu, M.inhaal_grens(None, "2026-09-03"))) == 60
+    for slecht in ("2026-13-01", "gisteren", "2026-09-02", "2026-11-02"):
+        try:
+            M.inhaal_vanaf(slecht, nu)
+            raise AssertionError(slecht)
+        except M.argparse.ArgumentTypeError:
+            pass
+    import contextlib
+    for module in (BEL, SMS):
+        gezien, geschreven = [], []
+        oud = (M.slot, M.lees_token, M.stand_lezen, M.tunnel, module.ag.ronde, module.werk, M.eindcontrole,
+               M.stand_schrijven, M.inhaal_vanaf, bord.PLATFORM, bord.TOKEN)
+        M.slot = lambda naam: contextlib.nullcontext()
+        M.lees_token = lambda: "proef"
+        M.stand_lezen = lambda naam: {"gedekt_tot": "2026-10-31"}
+        M.tunnel = lambda: contextlib.nullcontext("http://127.0.0.1:1")
+        module.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde(""))
+        module.werk = lambda r, ronde_id, gedekt_tot=None: (gezien.append(gedekt_tot), "2026-10-31")[1]
+        M.eindcontrole = lambda *x, **k: True
+        M.stand_schrijven = lambda naam, stand: geschreven.append(stand)
+        M.inhaal_vanaf = lambda tekst, _echt=oud[8]: _echt(tekst, nu)
+        try:
+            with redirect_stdout(io.StringIO()):
+                assert module.main(["--inhaal-vanaf", "2026-10-01"]) == 0
+                assert module.main([]) == 0
+        finally:
+            (M.slot, M.lees_token, M.stand_lezen, M.tunnel, module.ag.ronde, module.werk, M.eindcontrole,
+             M.stand_schrijven, M.inhaal_vanaf, bord.PLATFORM, bord.TOKEN) = oud
+        assert gezien == ["2026-09-30", "2026-10-31"], (module.NAAM, gezien)
+        assert geschreven == [], geschreven                             # de stand zakt niet en blijft 31-10
+
+
 def test_dagbundelaar_haalt_dagen_in():
     with tempfile.TemporaryDirectory() as map_:
         oud_staat, oud_inhaal, oud_lees = D.STAAT, D.INHAALSTAAT, bord.db_lees
@@ -454,7 +535,7 @@ def test_dagoverzicht_toont_gezien_zonder_namen():
     tekst = V.tekst(v)
     # Jan Proef 3, de groep 1, het LID-gesprek 1 (00:01 Brussel); de oproepen met duur: 5, 2 en 10 min
     assert "- WhatsApp: 5 berichten in 3 gesprekken, 3 oproepen, 17 min gezien" in tekst, tekst
-    assert "- telefoon: 3 oproepen, 4 min gezien" in tekst, tekst
+    assert "- telefoon: 3 oproepen, 4 min, 2 gemist gezien" in tekst, tekst     # TEL-5: U2 gemist, U6 niet beantwoord
     for naam in (JAN, PIET, GROEP, "Kees Proef", "+32470000099"):
         assert naam not in tekst, naam
     # niet gepland: een WhatsApp- of telefoonoproep van minstens twee minuten, als privé
@@ -855,12 +936,12 @@ def test_werkwijzen_hebben_grenzen():
 
 
 # ----------------------------------------------------------------------------------- de helper zelf ---
-def _bouw_helper(map_):
+def _bouw_helper(map_, *extra):
     """De testbouw leest onder map_/thuis. map_ zonder symlink (op macOS is /var een symlink): de helper weigert er een."""
     if sys.platform != "darwin" or not shutil.which("cc"):
         return None
     uit = os.path.join(map_, "kopie")
-    r = subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", f'-DBASIS_TEST="{map_}/thuis"', "-o", uit,
+    r = subprocess.run(["cc", "-O2", "-Wall", "-Wextra", "-Werror", f'-DBASIS_TEST="{map_}/thuis"', *extra, "-o", uit,
                         str(HELPER_C), "-lsqlite3"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     return uit
@@ -1339,6 +1420,479 @@ def test_r5_proefronde_eist_een_eigen_bevestigde_ronde():
         assert "return M.BEZET" in bron and "ronde gelukt, ronde-id:{ronde_id}" in bron
 
 
+# ------------------------------------------------------------------ VOL-11: adresboek en browser (01-11) ---
+def _vraag(helper, thuis, naam, aanvraag="c" * 32):
+    """Een aanvraag aan de testbouw van de helper voor een set: (status, pad van de uitvoer, privemap)."""
+    doel = Path(thuis, "Library/Caches/mijnagents/mac-gesprekken", naam)
+    doel.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(doel.parent, 0o700)
+    (doel / "aanvraag").write_text(aanvraag)
+    r = subprocess.run([helper, naam], capture_output=True, text=True, timeout=120)
+    return json.loads(r.stdout), doel / f"gesprekken-{aanvraag}.sqlite", doel
+
+
+def _adresboek(pad, kaarten, schema_fout=False):
+    """Een adresboek zoals Contacts het bewaart: kaarten (pk, voornaam, familienaam, firma, notitie, nummers)."""
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(pad)
+    con.executescript(f"""
+        CREATE TABLE ZABCDRECORD(Z_PK INTEGER PRIMARY KEY, ZFIRSTNAME, ZLASTNAME, {'ZBEDRIJF' if schema_fout else
+                                 'ZORGANIZATION'}, ZNOTE, ZNICKNAME);
+        CREATE TABLE ZABCDPHONENUMBER(Z_PK INTEGER PRIMARY KEY, ZOWNER, ZFULLNUMBER, ZLABEL);""")
+    for pk, voor, achter, firma, notitie, nummers in kaarten:
+        con.execute("INSERT INTO ZABCDRECORD VALUES(?,?,?,?,?,'Bijnaam Proef')", (pk, voor, achter, firma, notitie))
+        for nummer in nummers:
+            con.execute("INSERT INTO ZABCDPHONENUMBER(ZOWNER, ZFULLNUMBER, ZLABEL) VALUES(?,?,'_$!<Mobile>!$_')",
+                        (pk, nummer))
+    con.commit()
+    con.close()
+
+
+def _oproepen(thuis, nummers):
+    geschiedenis = Path(thuis, "Library/Application Support/CallHistoryDB")
+    geschiedenis.mkdir(parents=True)
+    con = sqlite3.connect(geschiedenis / "CallHistory.storedata")
+    con.execute("CREATE TABLE ZCALLRECORD(ZUNIQUE_ID, ZDATE, ZDURATION, ZORIGINATED, ZANSWERED, ZADDRESS, "
+                "ZSERVICE_PROVIDER, ZNAME)")
+    nu = M.apple(datetime.now(timezone.utc))
+    con.executemany("INSERT INTO ZCALLRECORD VALUES(?,?,60.0,0,1,?,'com.apple.Telephony',NULL)",
+                    [(f"T{i}", nu - 600 + i, n) for i, n in enumerate(nummers)])
+    con.commit()
+    con.close()
+
+
+def test_vol11_tel9_helper_leest_het_adresboek_van_contacts():
+    """TEL-9 (helperdeel): 57% van de oproepen stond alleen als nummer, want de naam kwam alleen uit het adresboek van
+    WhatsApp. De helper leest nu ook het adresboek van Contacts (de hoofddatabank en elke bron onder Sources): alleen
+    naam en nummer, alleen bij een nummer van het venster dat WhatsApp niet al kent. Geen notitie, bijnaam, label of
+    ander contact verlaat de bron; de uitvoer houdt dezelfde tabellen en kolommen."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        _bron_wa(thuis, met_wal=False).close()
+        _oproepen(thuis, ["0470000001", "+32 470 00 00 05", "+32470000006", "+32470000007", "+32470000008",
+                          "+31470000009", "+31470000011", "+32470000012"])
+        # Codex 01-11 (toets 2): ook een WhatsApp-contact met dezelfde laatste negen cijfers in een ander land blijft weg
+        wa = sqlite3.connect(Path(thuis, "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ContactsV2.sqlite"))
+        wa.execute("INSERT INTO ZWAADDRESSBOOKCONTACT VALUES(6, 'Wa Ander Land Proef', NULL, NULL, '+32 470 00 00 11', 'S')")
+        wa.commit()
+        wa.close()
+        boek = Path(thuis, "Library/Application Support/AddressBook")
+        _adresboek(boek / "AddressBook-v22.abcddb", [
+            (1, "Lies", "Proef", None, "GEHEIME NOTITIE", ["0470/00.00.05"]),
+            (2, "Ver", "Weg Proef", None, None, ["+32470000099"]),
+            (3, "Andere Naam", "Proef", None, None, ["+32 470 00 00 01"]),
+            # Codex 01-11: dezelfde laatste negen cijfers in een ander land is een ander nummer
+            (4, "Verkeerd Land", "Proef", None, None, ["+32 470 00 00 09"]),
+            (5, "Haakjes", "Proef", None, None, ["+32 (0)470 00 00 12"])])
+        _adresboek(boek / "Sources" / "0A1B2C3D-0000-4000-8000-00000000AAAA" / "AddressBook-v22.abcddb", [
+            (1, None, None, "Proef Firma BV", None, ["0032 470 00 00 06"]),
+            (2, "Nbsp", "Proef", None, None, ["0470\u00a000\u00a000\u00a008"])])
+        (boek / "Sources" / ".verborgen").mkdir()
+        os.symlink(boek / "Sources" / "0A1B2C3D-0000-4000-8000-00000000AAAA", boek / "Sources" / "link")
+        status, uit, doel = _vraag(helper, thuis, "telefoon")
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "ok"}, status
+        assert set(status["bronnen"].values()) == {"ok"}, status
+        ruw = uit.read_bytes()
+        for geheim in (b"GEHEIME NOTITIE", b"Weg Proef", b"Andere Naam", b"Bijnaam", b"Mobile", b"470000099",
+                       b"Verkeerd Land", b"32 470 00 00 09", b"Wa Ander Land", b"32 470 00 00 11"):
+            assert geheim not in ruw, geheim
+        rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        namen = [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])]
+        assert namen == ["Kees Proef", "Lies Proef", "Proef Firma BV", "+32470000007", "Nbsp Proef", "+31470000009",
+                         "+31470000011", "Haakjes Proef"], namen
+        con = sqlite3.connect(uit)
+        tabellen = {r[0]: [k[1] for k in con.execute(f"PRAGMA table_info({r[0]})")]
+                    for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        con.close()
+        assert tabellen["ZWAADDRESSBOOKCONTACT"] == ["Z_PK", "ZFULLNAME", "ZWHATSAPPID", "ZLID", "ZPHONENUMBER"], tabellen
+        assert set(tabellen) == {"ZCALLRECORD", "ZWAADDRESSBOOKCONTACT", "ANDERE_APPS", "META"}, tabellen
+        assert not [n for n in os.listdir(doel) if n.startswith(".bron")], os.listdir(doel)
+        # ook de sms kent nu de namen van Contacts
+        Path(thuis, "Library/Messages").mkdir(parents=True)
+        db = sqlite3.connect(Path(thuis, "Library/Messages/chat.db"))
+        db.executescript("""
+            CREATE TABLE message(ROWID INTEGER PRIMARY KEY, text, attributedBody, handle_id, service, date, is_from_me,
+                                 item_type, associated_message_type);
+            CREATE TABLE chat(ROWID INTEGER PRIMARY KEY, style, chat_identifier, display_name);
+            CREATE TABLE handle(ROWID INTEGER PRIMARY KEY, id);
+            CREATE TABLE chat_message_join(chat_id, message_id);
+            CREATE TABLE chat_handle_join(chat_id, handle_id);
+            INSERT INTO handle VALUES(1, '+32470000005');
+            INSERT INTO chat VALUES(1, 45, '+32470000005', '');
+            INSERT INTO chat_handle_join VALUES(1, 1);
+            INSERT INTO chat_message_join VALUES(1, 1);""")
+        db.execute("INSERT INTO message VALUES(1, 'GEHEIME TEKST', NULL, 1, 'SMS', ?, 0, 0, 0)",
+                   (int((M.apple(datetime.now(timezone.utc)) - 600) * 1e9),))
+        db.commit()
+        db.close()
+        status, uit, _ = _vraag(helper, thuis, "sms")
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "ok"}, status
+        rijen, _ = M.sms_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert [r["personen"] for r in rijen] == ["Lies Proef"] and b"GEHEIME" not in uit.read_bytes(), rijen
+
+
+def test_vol11_tel9_adresboek_ontbreekt_of_ander_schema():
+    """Een adresboek dat ontbreekt of een ander schema heeft, laat De Belwacht werken: de namen komen dan alleen uit
+    WhatsApp, en de uitkomst staat onder extra (de runner kijkt alleen naar bronnen)."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = os.path.join(map_, "thuis")
+        _bron_wa(thuis, met_wal=False).close()
+        _oproepen(thuis, ["0470000001", "+32470000005"])
+        status, uit, _ = _vraag(helper, thuis, "telefoon")
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "ontbreekt"}, status
+        boek = Path(thuis, "Library/Application Support/AddressBook")
+        _adresboek(boek / "AddressBook-v22.abcddb", [(1, "Lies", "Proef", None, None, ["+32470000005"])],
+                   schema_fout=True)
+        status, uit, _ = _vraag(helper, thuis, "telefoon", "d" * 32)
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "onverwacht"}, status
+        rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert sorted(r["personen"] for r in rijen) == ["+32470000005", "Kees Proef"], rijen
+        # zoals De Belwacht de status leest: geen weigering, geen fout
+        bronnen = status["bronnen"]
+        assert status["uitkomst"] == "ok" and "geweigerd" not in bronnen.values()
+        # Codex 01-11: drie vergrendelde bronnen houden de set niet op (hoogstens 2 s per databank, ver onder de 120 s
+        # van de runner); de namen komen dan uit WhatsApp
+        os.unlink(boek / "AddressBook-v22.abcddb")
+        sloten = []
+        for i in range(3):
+            pad = boek / "Sources" / f"0A1B2C3D-0000-4000-8000-00000000000{i}" / "AddressBook-v22.abcddb"
+            _adresboek(pad, [(1, "Lies", "Proef", None, None, ["+32470000005"])])
+            con = sqlite3.connect(pad, timeout=0)
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA locking_mode=EXCLUSIVE")
+            con.execute("UPDATE ZABCDRECORD SET ZNOTE = 'x'")
+            con.commit()
+            sloten.append(con)
+        try:
+            t0 = time.time()
+            status, uit, _ = _vraag(helper, thuis, "telefoon", "e" * 32)
+            duur = time.time() - t0
+        finally:
+            for con in sloten:
+                con.close()
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "fout"}, status
+        assert duur < 20, duur
+        rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert sorted(r["personen"] for r in rijen) == ["+32470000005", "Kees Proef"], rijen
+
+
+def _chrome(pad, bezoeken, wal=False, slot=False):
+    """Een geschiedenis zoals Chrome ze bewaart; bezoeken: (Unix-tijd, adres, titel, seconden). slot: een andere
+    verbinding houdt de databank exclusief vast, zoals Chrome terwijl hij draait. Geeft die verbinding terug."""
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(pad)
+    if wal:
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA wal_autocheckpoint=0")
+    con.executescript("CREATE TABLE urls(id INTEGER PRIMARY KEY, url, title, visit_count);"
+                      "CREATE TABLE visits(id INTEGER PRIMARY KEY, url, visit_time, visit_duration, from_visit);")
+    con.commit()
+    if slot:
+        con.execute("PRAGMA locking_mode=EXCLUSIVE")
+    for i, (t, adres, titel, sec) in enumerate(bezoeken, 1):
+        con.execute("INSERT INTO urls VALUES(?,?,?,1)", (i, adres, titel))
+        con.execute("INSERT INTO visits VALUES(?,?,?,?,0)", (i, i, int((t + 11644473600) * 1e6), int(sec * 1e6)))
+    con.commit()
+    return con
+
+
+def test_vol11_yt1_web1_helper_set_browser():
+    """YT-1 en WEB-1: onder launchd mocht Python de browsergeschiedenis niet lezen. De helper heeft een set browser:
+    per bezoek de tijd en de naam van de site, alleen bij een YouTube-video ook video-ID, titel en duur. Hij leest elk
+    Chrome-profiel (ook terwijl Chrome de databank vergrendeld houdt, en met de WAL), Firefox en Safari; een kapot
+    profiel of een geweigerde browser staat bij die browser en laat de rest werken. Nooit een adres, pad, zoekopdracht of
+    andere titel in de uitvoer, en zijn eigen kopie is weg na de ronde."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        nu = time.time()
+        chrome = thuis / "Library/Application Support/Google/Chrome"
+        open_a = _chrome(chrome / "Default" / "History", [
+            (nu - 3000, "https://www.monday.com/boards/1?q=geheim", "Geheim bord", 5),
+            (nu - 2900, "https://www.youtube.com/watch?v=abcdefgh123&t=5", "(2) Proef Video - YouTube", 120),
+            (nu - 2800, "https://www.google.com/search?q=geheime+zoekterm", "geheime zoekterm - Google", 3),
+            (nu - 100 * 86400, "https://oud.example.org/", "Oud", 1),
+            (nu - 2700, "chrome://settings", "Instellingen", 1)], wal=True, slot=True)
+        open_b = _chrome(chrome / "Profile 1" / "History", [
+            (nu - 2600, "https://claude.ai/chat/geheim-id", "Geheim gesprek", 9)], slot=True)
+        (chrome / "Kapot").mkdir()
+        (chrome / "Kapot" / "History").write_bytes(b"geen databank " * 100)
+        (chrome / ".verborgen").mkdir()
+        _chrome(chrome / ".verborgen" / "History", [(nu - 10, "https://verborgen.example.org/", "x", 1)]).close()
+        os.symlink(chrome / "Profile 1", chrome / "Link")
+        ff = thuis / "Library/Application Support/Firefox/Profiles/abcd1234.default-release"
+        ff.mkdir(parents=True)
+        con = sqlite3.connect(ff / "places.sqlite")
+        con.executescript("CREATE TABLE moz_places(id INTEGER PRIMARY KEY, url, title);"
+                          "CREATE TABLE moz_historyvisits(id INTEGER PRIMARY KEY, place_id, visit_date);")
+        con.execute("INSERT INTO moz_places VALUES(1, 'https://youtu.be/zyxwvu987?t=3', 'Andere Video')")
+        con.execute("INSERT INTO moz_places VALUES(2, 'https://www.example.org/pad?x=1', 'Geheime pagina')")
+        con.executemany("INSERT INTO moz_historyvisits VALUES(?,?,?)", [(1, 1, int((nu - 2500) * 1e6)),
+                                                                        (2, 2, int((nu - 2400) * 1e6))])
+        con.commit()
+        con.close()
+        safari = thuis / "Library/Safari"
+        safari.mkdir(parents=True)
+        con = sqlite3.connect(safari / "History.db")
+        con.executescript("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url);"
+                          "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item, visit_time, title);")
+        con.execute("INSERT INTO history_items VALUES(1, 'https://m.youtube.com/shorts/short12345')")
+        con.execute("INSERT INTO history_visits VALUES(1, 1, ?, 'Kort Filmpje')", (nu - 2300 - 978307200,))
+        con.commit()
+        con.close()
+        try:
+            status, uit, doel = _vraag(helper, str(thuis), "browser")
+        finally:
+            open_a.close()
+            open_b.close()
+        assert status["uitkomst"] == "ok", status
+        assert status["extra"] == {"Chrome": "fout", "Edge": "ontbreekt", "Firefox": "ok", "Safari": "ok"}, status
+        ruw = uit.read_bytes()
+        for geheim in (b"Geheim", b"geheim", b"zoekterm", b"boards", b"pad?x", b"oud.example", b"verborgen", b"https:",
+                       b"Instellingen", b"settings"):
+            assert geheim not in ruw, geheim
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT browser, site, video, titel, duur FROM BEZOEK ORDER BY tijd").fetchall()
+        bronnen = sorted(con.execute("SELECT browser, uitkomst FROM BRON").fetchall())
+        con.close()
+        assert rijen == [("Chrome", "monday.com", None, None, None),
+                         ("Chrome", "youtube.com", "abcdefgh123", "(2) Proef Video - YouTube", 120.0),
+                         ("Chrome", "google.com", None, None, None), ("Chrome", "claude.ai", None, None, None),
+                         ("Firefox", "youtu.be", "zyxwvu987", "Andere Video", None),
+                         ("Firefox", "example.org", None, None, None),
+                         ("Safari", "m.youtube.com", "short12345", "Kort Filmpje", None)], rijen
+        assert bronnen == [("Chrome", "fout"), ("Chrome", "ok"), ("Chrome", "ok"), ("Firefox", "ok"), ("Safari", "ok")]
+        assert not [n for n in os.listdir(doel) if n.startswith(".bron")], os.listdir(doel)
+        # de browser die macOS weigert, staat bij die browser; weigert hij alles, dan is de uitkomst geweigerd
+        os.chmod(safari, 0)
+        try:
+            status, _, _ = _vraag(helper, str(thuis), "browser", "d" * 32)
+            assert status["uitkomst"] == "ok" and status["extra"]["Safari"] == "geweigerd", status
+            shutil.rmtree(thuis / "Library/Application Support")
+            r = subprocess.run([helper, "browser"], capture_output=True, text=True, timeout=60)
+            assert r.returncode == 2 and json.loads(r.stdout)["uitkomst"] == "geweigerd", r.stdout
+        finally:
+            os.chmod(safari, 0o700)
+
+
+def test_vol11_tijdgrens_ook_tijdens_het_kopieren():
+    """Codex 01-11 (toets 2): de tijdgrens van de extra bronnen geldt ook midden in het kopieren (en in een vraag),
+    niet alleen voor een nieuwe databank. Een trage schijf (testbouw: <bron>.traag, een seconde per megabyte) met een
+    grens van een seconde: de set stopt na enkele seconden met fout, en een vroegere grens zou pas na vijf seconden
+    ingrijpen."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_, "-DEXTRA_BUDGET=1")
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        chrome = thuis / "Library/Application Support/Google/Chrome"
+        for profiel in ("A", "B"):
+            con = _chrome(chrome / profiel / "History", [(time.time() - 60, "https://monday.com/", "x", 1)])
+            con.execute("CREATE TABLE vulsel(x)")
+            con.execute("INSERT INTO vulsel VALUES(?)", (b"0" * (5 << 20),))
+            con.commit()
+            con.close()
+        (chrome / "A" / "History.traag").write_text("")
+        t0 = time.time()
+        status, _, doel = _vraag(helper, str(thuis), "browser")
+        duur = time.time() - t0
+        rest = [n for n in os.listdir(doel) if n.startswith(".bron")]
+    assert status["uitkomst"] == "ok" and status["extra"]["Chrome"] == "fout", status
+    assert duur < 4.5 and not rest, (duur, rest)
+
+
+def test_vol11_site_en_video_zoals_de_wachten():
+    """De helper rekent site() en video() zoals browser_wacht.site en youtube_wacht.video: dezelfde uitkomst op een
+    rij adressen (een adres zonder site komt niet in de uitvoer)."""
+    import importlib.util
+
+    def laad(naam):
+        spec = importlib.util.spec_from_file_location(naam, RUNNER / "mac" / f"{naam}.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    B, Y = laad("browser_wacht"), laad("youtube_wacht")
+    adressen = ["https://www.monday.com/boards/1?q=geheim", "http://Example.ORG:8080/x", "https://user:pw@sub.example.com/",
+                "https://[2001:db8::1]:443/p", "chrome://settings", "file:///Users/x", "about:blank",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=5", "https://youtu.be/dQw4w9WgXcQ",
+                "https://www.youtube.com/shorts/abcdef12", "https://m.youtube.com/watch?feature=x&v=abcdefgh9",
+                "https://music.youtube.com/watch?v=abcdefgh8", "https://www.youtube.com/live/abcdefgh7?si=1",
+                "https://www.youtube.com/results?search_query=geheim", "https://www.youtube.com/",
+                "https://monday.com/watch?v=abcdefgh", "https://www.youtube.com/watch?v=kort",
+                "HTTPS://WWW.YOUTUBE.COM/watch?v=AbCdEfGh12", "https://youtu.be//dQw4w9WgXcQ/", "https://www.youtube.com/watch",
+                # Codex 01-11: een gecodeerde letter, een gecodeerde sleutel, een lege v eerst, een ongeldige %
+                "https://www.youtube.com/watch?v=%61bcdef123", "https://www.youtube.com/watch?%76=abcdefgh5",
+                "https://www.youtube.com/watch?v=&v=abcdefgh4", "https://www.youtube.com/watch?v=abc%zzdefgh",
+                "https://www.youtube.com/watch?v=" + "a" * 40]
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        nu = time.time()
+        _chrome(thuis / "Library/Application Support/Google/Chrome/Default/History",
+                [(nu - 1000 + i, a, "titel", 1) for i, a in enumerate(adressen)]).close()
+        status, uit, _ = _vraag(helper, str(thuis), "browser")
+        assert status["uitkomst"] == "ok", status
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT site, video FROM BEZOEK ORDER BY tijd").fetchall()
+        con.close()
+    verwacht = [(B.site(a), Y.video(a)) for a in adressen if B.site(a)]
+    assert rijen == verwacht, list(zip(rijen, verwacht))
+
+
+def test_vol11_yt1_web1_wachten_lezen_de_kopie():
+    """YT-1 en WEB-1: De Websitewacht en De YouTube-wacht lezen de kopie van de helper (set browser) in plaats van de
+    browserbestanden zelf: dezelfde tellingen, 'gelezen: Chrome (2), Firefox (1)' in het logboek, een geweigerde browser
+    bij onleesbaar met een nood voor Mehdi over Full Disk Access voor de helper (nooit voor Python), en zonder kopie een
+    hartslag fout met de nood van de helper. De kopie is weg na het lezen."""
+    import importlib.util
+
+    def laad(naam):
+        spec = importlib.util.spec_from_file_location(naam, RUNNER / "mac" / f"{naam}.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    dag = "2026-10-30"
+    t = bxl(2026, 10, 30, 10, 0).timestamp()
+    with tempfile.TemporaryDirectory() as map_:
+        def kopie(_kanaal, bronnen=(("Chrome", "ok"), ("Chrome", "ok"), ("Firefox", "ok")), leeg=False):
+            pad = Path(map_, "kopie.sqlite")
+            con = sqlite3.connect(pad)
+            con.executescript("CREATE TABLE BEZOEK (browser, tijd, site, video, titel, duur); CREATE TABLE BRON (browser, uitkomst);"
+                              "CREATE TABLE META (sleutel, waarde);")
+            con.executemany("INSERT INTO BEZOEK VALUES(?,?,?,?,?,?)", [] if leeg else [
+                ("Chrome", t, "monday.com", None, None, None), ("Chrome", t + 60, "monday.com", None, None, None),
+                ("Chrome", t + 120, "youtube.com", "abcdefgh123", "(2) Proef Video - YouTube", 600.0),
+                ("Firefox", t + 180, "youtu.be", "zyxwvu987", "Andere Video", None),
+                ("Chrome", t - 40 * 86400, "oud.example.org", None, None, None)])
+            con.executemany("INSERT INTO BRON VALUES(?,?)", bronnen)
+            con.commit()
+            con.close()
+            return pad, datetime.now(timezone.utc)
+        for naam in ("browser_wacht", "youtube_wacht"):
+            mod = laad(naam)
+            mod.DAG, mod.DAGEN, mod.DROOG = dag, 2, False
+            post, hart = [], []
+            mod.bord = lambda pad, payload, _p=post: (_p.append((pad, payload)), {"nieuw": 2})[1]
+            mod.hartslag = lambda status, taak="", detail="", nood=None, _h=hart: _h.append((status, nood or []))
+            with redirect_stdout(io.StringIO()):
+                assert mod.main(kopie) == 0
+            assert not Path(map_, "kopie.sqlite").exists()
+            item = post[0][1]["items"][0]
+            regels = " ".join(r["tekst"] for r in post[1][1]["regels"])
+            assert "gelezen: Chrome (2), Firefox (1)" in regels and "onleesbaar" not in regels, regels
+            assert hart[-1][0] == "klaar", hart[-1]
+            if naam == "browser_wacht":
+                v = item["inhoud"]["per_dag"][dag]
+                assert item["uniek"] == f"websites:{dag}" and v["bezoeken"] == 4 and v["sites"] == 3, v
+                assert v["top"][0] == ["monday.com", 2] and v["per_browser"] == {"Chrome": 3, "Firefox": 1}, v
+            else:
+                v = item["inhoud"]["per_dag"][dag]
+                assert v["videos"] == 2 and v["keer"] == 2 and v["minuten"] == 10, v
+                assert v["top"] == [["Proef Video", 1], ["Andere Video", 1]], v
+            # Codex 01-11 (toets 3): een gelezen browser zonder bezoeken en een geweigerde met bezoeken is onbekend, nooit
+            # 0: niets klaargezet, een fout met een nood voor Mehdi (Full Disk Access voor de helper, nooit voor Python)
+            post.clear()
+            for kop in (lambda k: kopie(k, (("Chrome", "ok"), ("Safari", "geweigerd")), leeg=True),
+                        lambda k: kopie(k, (("Chrome", "ok"), ("Chrome", "fout")))):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    assert mod.main(kop) == 1
+                assert not post and hart[-1][0] == "fout" and hart[-1][1], hart[-1]
+            assert any(n["wie"] == "mehdi" and "Full Disk Access" in n["tekst"] and "Python" not in n["tekst"]
+                       for n in M.browser_nood({"Safari": "geweigerd"}))
+            assert [n["wie"] for n in M.browser_nood({"Chrome": "fout"})] == ["claude-code"]
+            # zonder kopie: een hartslag fout met de nood van de helper, en niets klaargezet
+
+            def geen(_kanaal):
+                raise M.MacFout("macOS weigert de databank", "MacGesprekkenKopie heeft geen volledige schijftoegang",
+                                wie="mehdi")
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                assert mod.main(geen) == 1
+            assert not post and hart[-1] == ("fout", [{"tekst": "MacGesprekkenKopie heeft geen volledige schijftoegang",
+                                                      "wie": "mehdi"}]), hart[-1]
+            # Codex 01-11: geen enkele browser gelezen is onbekend, nooit 0: geen telling klaargezet, wel een fout
+            def leeg(_kanaal):
+                pad = Path(map_, "kopie.sqlite")
+                con = sqlite3.connect(pad)
+                con.executescript("CREATE TABLE BEZOEK (browser, tijd, site, video, titel, duur);"
+                                  "CREATE TABLE BRON (browser, uitkomst); INSERT INTO BRON VALUES('Chrome', 'fout');")
+                con.close()
+                return pad, datetime.now(timezone.utc)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                assert mod.main(leeg) == 1
+            assert not post and hart[-1][0] == "fout" and any("Geen browsergeschiedenis" in n["tekst"]
+                                                             for n in hart[-1][1]), hart[-1]
+    assert M.HELPER["browser"] == "be.globaal.mijnagents.kopie-browser"
+
+
+def test_uitrol_echte_plists_zonder_vaste_thuismap():
+    """Codex 01-11 (toets 2): elke plist die de uitrol plaatst (ALLE in uitrol_mac_gesprekken.sh), zonder vaste
+    gebruikersmap: na de vervanging van @THUIS@ door een andere thuismap (zoals de uitrol doet) een geldige plist waarvan
+    elk pad onder die thuismap of onder /Library ligt."""
+    import plistlib
+    script = (RUNNER / "mac" / "uitrol_mac_gesprekken.sh").read_text(encoding="utf-8")
+    labels = []
+    for naam in ("HELPERTAKEN", "WACHTEN", "LOSSE_WACHTEN"):
+        labels += re.findall(r"be\.globaal\.mijnagents\.[a-z-]+", re.search(rf"^{naam}=\(([^)]*)\)", script, re.M).group(1))
+    assert len(labels) == 9 and "be.globaal.mijnagents.kopie-browser" in labels, labels
+    for label in labels:
+        tekst = (RUNNER / "mac" / f"{label}.plist").read_text(encoding="utf-8")
+        assert "/Users/" not in tekst and "@THUIS@" in tekst, label
+        r = subprocess.run(["zsh", "-c", 'inhoud=$(<"$1"); print -r -- "${inhoud//@THUIS@/$HOME}"', "_",
+                            str(RUNNER / "mac" / f"{label}.plist")], capture_output=True, text=True,
+                           env={**os.environ, "HOME": "/Users/ander proef"}, check=True)
+        p = plistlib.loads(r.stdout.encode())
+        assert p["Label"] == label, label
+        paden = p["ProgramArguments"] + [p.get("StandardOutPath", ""), p.get("StandardErrorPath", "")]
+        assert all(x.startswith(("/Users/ander proef/", "/Library/")) for x in paden if x.startswith("/")), paden
+
+
+def test_tel7_echte_codesign_geeft_de_cdhash():
+    """TEL-7 (T-0067, WA-9): codesign -dv toont geen CDHash, dus het proefbewijs hing aan geen enkele helper. Met de
+    echte codesign van deze Mac (alleen als die er is): stempel() geeft de cdhash van een ad hoc getekend programma."""
+    if not (shutil.which("cc") and os.path.exists("/usr/bin/codesign") and shutil.which("zsh")):
+        print("   (overgeslagen: geen cc of codesign)")
+        return
+    script = RUNNER / "mac" / "uitrol_mac_gesprekken.sh"
+    with tempfile.TemporaryDirectory() as map_:
+        m = Path(map_)
+        (m / "a.c").write_text("int main(void) { return 0; }\n")
+        subprocess.run(["cc", "-o", str(m / "a"), str(m / "a.c")], check=True, capture_output=True)
+        subprocess.run(["/usr/bin/codesign", "-s", "-", "-o", "runtime", "-i", "proef.a", "-f", str(m / "a")], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "init", "-q", str(m / "w")], check=True)
+        subprocess.run(["git", "-C", str(m / "w"), "-c", "user.email=p@p", "-c", "user.name=p", "commit", "-q",
+                        "--allow-empty", "-m", "p"], check=True)
+        echt = subprocess.run(["/usr/bin/codesign", "-dvvv", str(m / "a")], capture_output=True, text=True).stderr
+        stempel = subprocess.run(["zsh", "-c", f"source <(sed -n '/^stempel()/,/^}}/p' '{script}'); "
+                                  f"HELPER='{m / 'a'}' WERK='{m / 'w'}' CODESIGN=/usr/bin/codesign stempel"],
+                                 capture_output=True, text=True, check=True).stdout
+    cdhash = re.search(r"^CDHash=([0-9a-f]{40})$", echt, re.M).group(1)
+    assert stempel.split()[0] == cdhash, (stempel, cdhash)
+
+
 def test_r6_drie_uitrollen_en_terug():
     """De uitrol met nagebootste launchctl, codesign en cc: drie versies na elkaar, dan terug naar de vorige als
     geheel (code, helper, LaunchAgents); de wachten gaan uit voor elke wissel en aan alleen met een proefbewijs."""
@@ -1353,7 +1907,9 @@ def test_r6_drie_uitrollen_en_terug():
         geladen = m / "geladen"
         (stub / "launchctl").write_text(f"#!/bin/sh\necho \"$*\" >> '{log}'\nif [ \"$1\" = print ]; then\n"
                                         f"  case \"$2\" in *wacht) [ -f '{geladen}' ] && exit 0;; esac\n  exit 1\nfi\nexit 0\n")
-        (stub / "codesign").write_text("#!/bin/sh\n[ \"$1\" = -dv ] && echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2\nexit 0\n")
+        # zoals de echte codesign: -dv toont geen CDHash, pas -dvvv (TEL-7); de Candidate-regels lijken erop
+        (stub / "codesign").write_text("#!/bin/sh\nif [ \"$1\" = -dvvv ]; then echo \"CandidateCDHash sha256=ff\" >&2; "
+                                       "echo \"CDHash=$(shasum \"$2\" | cut -c1-8)\" >&2; fi\nexit 0\n")
         (stub / "cc").write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in -o) uit=$2; shift;; *.c) bron=$1;; esac; shift; done\n"
                                  "cp \"$bron\" \"$uit\"; chmod +x \"$uit\"\n")
         for s in stub.iterdir():
@@ -1370,8 +1926,10 @@ def test_r6_drie_uitrollen_en_terug():
         shas = []
         for versie, helper in (("1", "a"), ("2", "b"), ("3", "b")):
             (mac / "kopie" / "macgesprekken_kopie.c").write_text(f"helper {helper}\n")
-            for l in ("kopie-whatsapp", "kopie-telefoon", "whatsapp-wacht", "belwacht"):
+            for l in ("kopie-whatsapp", "kopie-telefoon", "whatsapp-wacht", "belwacht", "kopie-browser", "browser"):
                 (mac / f"be.globaal.mijnagents.{l}.plist").write_text(f"{l} versie {versie}\n")
+            # Codex 01-11: een plist zonder vaste gebruikersmap; de uitrol zet de thuismap van deze Mac in de plaats
+            (mac / "be.globaal.mijnagents.youtube.plist").write_text(f"youtube versie {versie} @THUIS@/Library/x\n")
             git("add", "-A")
             git("commit", "-q", "-m", f"v{versie}")
             shas.append(git("rev-parse", "HEAD"))
@@ -1379,7 +1937,8 @@ def test_r6_drie_uitrollen_en_terug():
         script = RUNNER / "mac" / "uitrol_mac_gesprekken.sh"
         basis, agents = m / "basis", m / "agents"
         omgeving = {**os.environ, "REPO": str(repo), "BASIS": str(basis), "AGENTS": str(agents), "LOGS": str(m / "logs"),
-                    "LAUNCHCTL": str(stub / "launchctl"), "CODESIGN": str(stub / "codesign"), "CC": str(stub / "cc")}
+                    "LAUNCHCTL": str(stub / "launchctl"), "CODESIGN": str(stub / "codesign"), "CC": str(stub / "cc"),
+                    "HOME": str(m / "ander thuis")}
 
         def uitrol(*args, ref=None, ok=True):
             r = subprocess.run(["zsh", str(script), *args], env={**omgeving, **({"REF": ref} if ref else {})},
@@ -1397,6 +1956,12 @@ def test_r6_drie_uitrollen_en_terug():
             regels = log.read_text().splitlines()
             assert regels[0].startswith("bootout") and "whatsapp-wacht" in regels[0], regels
             assert not any(r.startswith("bootstrap") and "wacht.plist" in r and "kopie" not in r for r in regels)
+            # VOL-11: de helpertaak browser laadt (op vraag), De Websitewacht zelf pas na een browserproef
+            assert any(r.startswith("bootstrap") and "kopie-browser.plist" in r for r in regels), regels
+            assert not any(r.startswith("bootstrap") and "mijnagents.browser.plist" in r for r in regels), regels
+            assert any(r.startswith("bootout") and r.endswith("be.globaal.mijnagents.youtube") for r in regels), regels
+            assert (agents / "be.globaal.mijnagents.youtube.plist").read_text() == \
+                f"youtube versie {i + 1} {m / 'ander thuis'}/Library/x\n"
             assert ("NIEUWE HELPER" in uit) == (i < 2), uit
         vorige = basis / "mac-gesprekken" / "vorige"
         assert (vorige / "COMMIT").read_text().strip() == shas[1]
@@ -1452,9 +2017,34 @@ def test_r6_drie_uitrollen_en_terug():
         stempel = subprocess.run(["zsh", "-c", f"source <(sed -n '/^stempel()/,/^}}/p' '{script}'); "
                                   f"HELPER='{helper}' WERK='{werk}' CODESIGN='{stub / 'codesign'}' stempel"],
                                  capture_output=True, text=True, check=True).stdout
+        # TEL-7 (T-0067): het proefbewijs begint met de cdhash van precies deze helper, nooit leeg
+        assert re.fullmatch(r"[0-9a-f]{8} [0-9a-f]{40}\n", stempel), stempel
+        # Codex 01-11: zonder cdhash geen proefbewijs, en een leeg bewijs is nooit geldig
+        (stub / "geen-codesign").write_text("#!/bin/sh\nexit 0\n")
+        (stub / "geen-codesign").chmod(0o755)
+        functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_schrijf()/,/^}}/p;/^proef_geldig()/,/^}}/p' "
+                    f"'{script}'); HELPER='{helper}' WERK='{werk}' CODESIGN='{stub / 'geen-codesign'}'; ")
+        leeg_bewijs = m / "PROEF_LEEG"
+        r = subprocess.run(["zsh", "-c", functies + f"proef_schrijf '{leeg_bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0 and not leeg_bewijs.exists() and "Geen CDHash" in r.stderr, (r.returncode, r.stderr)
+        leeg_bewijs.write_text("")
+        r = subprocess.run(["zsh", "-c", functies + f"proef_geldig '{leeg_bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0, r.stderr
+        assert re.search(r"helper: CDHash=[0-9a-f]{8}\n", uitrol("controleer")), uitrol("controleer")
         (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
+        # Codex 01-11 (toets 3): code die na de proef in de worktree verandert, maakt het bewijs ongeldig
+        bron_c = werk / "mijnagents-runner" / "mac" / "kopie" / "macgesprekken_kopie.c"
+        bron_c.write_text("ander\n")
+        assert "eerst" in uitrol("aan", ok=False)
+        git("checkout", "-q", "--", ".", cwd=werk)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
+        assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
+        (basis / "mac-gesprekken" / "PROEF_BROWSER").write_text(stempel)
+        assert "Websitewacht en De YouTube-wacht staan aan" in uitrol("aan")
+        laatste = [r for r in log.read_text().splitlines() if r.startswith("bootstrap")][-2:]
+        assert laatste[0].endswith("be.globaal.mijnagents.browser.plist") and \
+            laatste[1].endswith("be.globaal.mijnagents.youtube.plist"), laatste
 
 
 if __name__ == "__main__":

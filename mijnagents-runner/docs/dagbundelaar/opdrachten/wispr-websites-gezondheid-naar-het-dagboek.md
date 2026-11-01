@@ -14,6 +14,11 @@ Mehdi's toestellen staan in het Engels: de menunamen hieronder staan zoals op he
 
 ## Voor Claude 1 op de laptop
 
+> Vervangen voor de Websitewacht (01-11-2026, T-0120 WEB-1 en YT-1): browser_wacht.py en youtube_wacht.py lezen nu de
+> kopie van MacGesprekkenKopie (set browser) en draaien uit de eigen worktree. Stap 2 tot 5 voor de Websitewacht gaan
+> via `mac/uitrol_mac_gesprekken.sh` (installeer, proef, aan), nooit meer met de hand naar `~/.claude/tools`. Nooit
+> Full Disk Access voor Python. Stap 6 en 7 (Wispr, gezondheid) blijven zoals hieronder.
+
 1. `git -C ~/dev/globaal-appportal pull --rebase origin main`
 2. Kopieer de twee wachten naar de vaste plek:
    `cp ~/dev/globaal-appportal/mijnagents-runner/mac/browser_wacht.py ~/dev/globaal-appportal/mijnagents-runner/mac/wispr_wacht.py ~/.claude/tools/mijnagents/`

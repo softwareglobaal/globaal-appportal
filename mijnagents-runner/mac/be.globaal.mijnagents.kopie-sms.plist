@@ -6,10 +6,10 @@
 <plist version="1.0"><dict>
   <key>Label</key><string>be.globaal.mijnagents.kopie-sms</string>
   <key>ProgramArguments</key><array>
-    <string>/Users/mehdichegini/Library/Application Support/mijnagents/mac-gesprekken/MacGesprekkenKopie</string>
+    <string>@THUIS@/Library/Application Support/mijnagents/mac-gesprekken/MacGesprekkenKopie</string>
     <string>sms</string>
   </array>
   <key>ProcessType</key><string>Background</string>
-  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/kopie-sms.log</string>
-  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/kopie-sms.log</string>
+  <key>StandardOutPath</key><string>@THUIS@/Library/Logs/mijnagents/kopie-sms.log</string>
+  <key>StandardErrorPath</key><string>@THUIS@/Library/Logs/mijnagents/kopie-sms.log</string>
 </dict></plist>

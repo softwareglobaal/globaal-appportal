@@ -263,6 +263,33 @@ def test_f5_dekking_per_dag():
         assert "WhatsApp: 0 berichten in 0 gesprekken" in t and "dekking" not in t.split("## Over")[0], t
 
 
+def test_tel5_gemiste_iphone_oproepen_in_het_dagbestand():
+    """TEL-5: het dagbestand toonde voor de iPhone alleen de oproepen met gesprek; de gemiste en niet beantwoorde
+    stonden alleen op de wachtenpagina. Nu, zoals bij Xelion: '- telefoon: N oproepen, M min, K gemist gezien'."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        w.status["belwacht"] = dict(w.status["belwacht"], status="klaar", taak="iPhone-oproepen uit de databank lezen",
+                                    ts=NU.isoformat())
+
+        def oproep(uniek, start, minuten, gemist):
+            return {"uniek": uniek, "datum": DAG, "start": start, "minuten": minuten, "personen": "Proef Beller",
+                    "afdeling": "", "thema": "telefoon, inkomend" + (", gemist" if gemist else ""), "prive": 1,
+                    "bron": "telefoon", "dubbel_van": "buiten:gemist" if gemist else ""}
+        w.rijen += [oproep("telefoon:A-1", "09:00", 4, False), oproep("telefoon:B-2", "09:30", 0, True),
+                    oproep("telefoon:C-3", "11:00", 0, True),
+                    {"uniek": f"dekking:telefoon:{DAG}", "datum": DAG, "start": "", "minuten": 0, "personen": "",
+                     "afdeling": "", "thema": "gelezen", "prive": 1, "bron": "dekking", "dubbel_van": "buiten:dekking"}]
+        ronde(w)
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert "- telefoon: 1 oproepen, 4 min, 2 gemist gezien" in t, t
+        assert "Proef Beller" not in t, t
+        # zonder dekking en zonder gesprek, maar met een gemiste oproep: gezien, met de stand erbij (zoals Xelion)
+        w.rijen = [x for x in w.rijen if x["uniek"] not in (f"dekking:telefoon:{DAG}", "telefoon:A-1")]
+        ronde(w)
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert "- telefoon: 0 oproepen, 0 min, 2 gemist gezien (onbekend voor deze dag)" in t, t
+
+
 class Module:
     def __init__(self, **k):
         self.__dict__.update(k)

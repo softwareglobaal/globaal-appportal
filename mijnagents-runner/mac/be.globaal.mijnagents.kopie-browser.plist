@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MacGesprekkenKopie, set browser (YT-1 en WEB-1, T-0120 VOL-11): de geschiedenis van Chrome, Edge, Firefox en
+     Safari; alleen tijd en sitenaam, bij een YouTube-video ook video-ID, titel en duur. Geen schema: De Websitewacht en
+     De YouTube-wacht starten deze taak met launchctl kickstart, zodat de helper zelf het verantwoordelijke proces is.
+     Plaatsen en laden: mac/uitrol_mac_gesprekken.sh. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>be.globaal.mijnagents.kopie-browser</string>
+  <key>ProgramArguments</key><array>
+    <string>@THUIS@/Library/Application Support/mijnagents/mac-gesprekken/MacGesprekkenKopie</string>
+    <string>browser</string>
+  </array>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>@THUIS@/Library/Logs/mijnagents/kopie-browser.log</string>
+  <key>StandardErrorPath</key><string>@THUIS@/Library/Logs/mijnagents/kopie-browser.log</string>
+</dict></plist>

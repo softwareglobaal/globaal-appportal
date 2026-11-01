@@ -14,6 +14,10 @@
   alleen 'privégesprek, N min'. Tot 01-11-2026 toonde de pagina daar naam en onderwerp;
 - W12 (T-0120 WACHT-2): De Zoomwacht is helemaal gelezen als haar dagregel volledig, definitief en met elke bron ok is;
   vandaag toont niets;
+- W12 (TEL-4, WA-7): een gemiste oproep (buiten:gemist) heet 'telt niet als gesprek', nooit 'dubbel'; een vervallen
+  rij 'niet meer in de bron'; alleen een echte dubbel blijft 'dubbel, telt niet';
+- W13 (TEL-8): een gesprekswacht met een dekkingsrij voor die dag en geen enkel item is groen 'gelezen, niets gebeurd',
+  niet grijs of oranje: de dag is gelezen en er was niets;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd;
 - W20 (WISPR-3): een fout-hartslag van gisteren maakt vandaag niet rood (de stand van nu blijft zichtbaar); een
   fout-hartslag van vandaag wel.
@@ -246,6 +250,51 @@ for wacht in ("fathom-wacht", "plaud-wacht", "zoom-wacht"):
     it = w22[wacht]["items"]
     check(f"W14 {wacht}: prive=1 met afdeling regie is een privégesprek", len(it) == 1 and it[0]["wie"] == "privégesprek"
           and it[0]["wat"] == "12 min" and "Verborgen" not in str(it), it)
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, start, thema, dubbel, afdeling in (
+        ("telefoon:A-1", "08:00", "telefoon, inkomend, gemist", "buiten:gemist", ""),
+        ("telefoon:B-2", "08:30", "telefoon, uitgaand, niet beantwoord", "buiten:gemist", ""),
+        ("telefoon:C-3", "09:00", "telefoon, inkomend", "buiten:vervallen", ""),
+        ("telefoon:D-4", "09:30", "telefoon, inkomend", "telefoon:A-1", ""),
+        ("telefoon:E-5", "10:00", "telefoon, inkomend, gemist", "buiten:gemist", "prive")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,dubbel_van,ts) "
+                "VALUES(?,'2026-10-29',?,0,'Proef Beller',?,?,1,'telefoon',?,'x')", (uniek, start, thema, afdeling, dubbel))
+con.commit()
+con.close()
+d29 = C.get("/api/wachten/dag?dag=2026-10-29", headers=K).get_json()
+bel = {x["naam"]: x for v in d29["vakken"] for x in v["wachten"]}["belwacht"]
+wat = [i["wat"] for i in bel["items"]]
+check("W12 gemist is geen dubbel", wat[0] == "telefoon, inkomend, gemist, telt niet als gesprek"
+      and wat[1] == "telefoon, uitgaand, niet beantwoord, telt niet als gesprek", wat)
+check("W12 vervallen en echte dubbel", wat[2] == "telefoon, inkomend, niet meer in de bron"
+      and wat[3] == "telefoon, inkomend, dubbel, telt niet", wat)
+check("W12 privé gemist zonder naam", bel["items"][4]["wie"] == "privégesprek"
+      and wat[4] == "gemist, telt niet als gesprek", bel["items"][4])
+
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:xelion:2026-10-30','2026-10-30','',0,'',1,'dekking','buiten:dekking','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:sms:2026-10-30','2026-10-30','',0,'',1,'dekking','buiten:dekking','x')")
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('sms-wacht','','gelezen','0 berichten',"
+            "'2026-10-30T10:00:00+00:00')")
+con.commit()
+con.close()
+d30 = C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()
+w30 = {x["naam"]: x for v in d30["vakken"] for x in v["wachten"]}
+check("W13 gelezen zonder ronde: niets gebeurd", w30["xelion-wacht"]["oordeel"] == "gelezen, niets gebeurd"
+      and w30["xelion-wacht"]["kleur"] == "groen" and w30["xelion-wacht"]["aantal"] == 0, w30["xelion-wacht"]["oordeel"])
+check("W13 gelezen met ronde: niets gebeurd", w30["sms-wacht"]["oordeel"] == "gelezen, niets gebeurd"
+      and w30["sms-wacht"]["kleur"] == "groen", w30["sms-wacht"]["oordeel"])
+check("W13 niet gelezen blijft grijs", w30["belwacht"]["kleur"] == "grijs", w30["belwacht"]["oordeel"])
+# Codex 01-11: een vervallen dekkingsrij (de bron toont de dag niet meer) is geen bewijs dat de dag gelezen is
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("UPDATE gesprek_log SET dubbel_van='buiten:vervallen' WHERE uniek='dekking:xelion:2026-10-30'")
+con.commit()
+con.close()
+w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
+check("W13 vervallen dekking is niet gelezen", w30["xelion-wacht"]["kleur"] == "grijs"
+      and w30["xelion-wacht"]["gedekt"] is False, (w30["xelion-wacht"]["oordeel"], w30["xelion-wacht"]["gedekt"]))
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
