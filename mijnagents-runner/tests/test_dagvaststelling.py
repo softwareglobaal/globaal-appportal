@@ -226,6 +226,27 @@ def test_mail():
     eis("klant4@x.be en 3 meer" in t and "klant5@x.be" not in t, f"hoogstens vijf ontvangers bij naam\n{t}")
 
 
+def test_mail3_alleen_verzonden_gelezen():
+    """MAIL-3 (T-0120): een postvak dat alleen voor verzonden gelezen wordt (een adres waaruit een wacht antwoordt), toont
+    'binnen: niet gelezen', nooit '0 binnen'; het is daarom niet onvolledig en geeft geen nood. Tot 01-11-2026 stonden er
+    zo 60 valse nullen in 20 dagbestanden."""
+    k = {"datum": f"{DAG}T10:00:00+02:00", "message_id": "<u1@x>", "aan": ["klant <k@proef.test>"], "onderwerp": "x"}
+    i = {"datum": f"{DAG}T09:00:00+02:00", "message_id": "<b1@x>"}
+    m = V.mail_telling(DAG, {"wacht@proef.test": {"berichten": [i]}},
+                       {"wacht@proef.test": {"berichten": []}, "uit@proef.test": {"berichten": [k]}})
+    pv = m["postvakken"]
+    eis(pv["uit@proef.test"]["binnen"] is None and pv["uit@proef.test"]["verzonden"] == 1, f"per richting ({pv})")
+    eis(pv["wacht@proef.test"]["binnen"] == 1 and pv["wacht@proef.test"]["verzonden"] == 0, f"gelezen postvak ({pv})")
+    eis(not m["onvolledig"] and m["binnen"] == 1, f"niet gelezen is geen onvolledig ({m})")
+    t = V.tekst(vast(mail=m))
+    eis("  - uit@proef.test: binnen: niet gelezen, 1 verzonden; naar klant\n" in t, f"exact 'binnen: niet gelezen'\n{t}")
+    eis("  - wacht@proef.test: 1 binnen, 0 verzonden\n" in t, f"een gelezen postvak houdt zijn aantal\n{t}")
+    eis("0 binnen" not in t and "onvolledig" not in t, f"geen valse nul\n{t}")
+    # omgekeerd: een postvak dat alleen voor binnen in de lezing zit, zegt 'verzonden: niet gelezen'
+    t = V.tekst(vast(mail=V.mail_telling(DAG, {"wacht@proef.test": {"berichten": [i]}}, {})))
+    eis("  - wacht@proef.test: 1 binnen, verzonden: niet gelezen\n" in t, f"per richting\n{t}")
+
+
 def test_privacy():
     afs = [afspraak("p", "17:45", "18:30", "!! Mehdi: [PR] Proefafspraak Zeta")]
     rijen = [rij("zoom:meeting:p", "17:06", 18, "Mehdi, Tante Mie", prive=1),

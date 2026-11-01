@@ -352,13 +352,16 @@ def mail_telling(dag, ontvangen, verzonden, soorten=None):
     een mail aan twee adressen van Mehdi telt in elk postvak, maar een keer in het totaal. Een postvak met een reden is
     onvolledig, en dan ook het totaal. 'dekking' {'vanaf', 'gemaakt'} (een kopie in een bestand) toetst deze dag: begint
     de kopie na de dag ervoor (de kopie zoekt op UTC-datum, de dag is Brussels), of werd ze gemaakt voor het einde van de
-    dag, dan is het postvak voor deze dag onvolledig (overleg 26-10-2026, X2, lenzen 5 en 9)."""
+    dag, dan is het postvak voor deze dag onvolledig (overleg 26-10-2026, X2, lenzen 5 en 9). MAIL-3 (T-0120): een richting
+    die voor een postvak niet gelezen werd (een adres waaruit een wacht alleen antwoordt), is None, nooit 0."""
     per, totaal = {}, {"in": set(), "uit": set()}
     soorten = soorten or {}
     einde = datetime.combine(datetime.fromisoformat(dag).date() + timedelta(days=1), datetime.min.time(), BRUSSEL)
     for richting, bron in (("in", ontvangen), ("uit", verzonden)):
         for postvak, v in sorted((bron or {}).items()):
-            p = per.setdefault(postvak, {"binnen": 0, "soorten": {}, "verzonden": 0, "naar": [], "onvolledig": []})
+            p = per.setdefault(postvak, {"binnen": None, "soorten": {}, "verzonden": None, "naar": [], "onvolledig": []})
+            sleutel = "binnen" if richting == "in" else "verzonden"
+            p[sleutel] = p[sleutel] or 0                       # MAIL-3: deze richting is gelezen
             redenen = list(v.get("onvolledig") or [])
             dek = v.get("dekking") or {}
             if dek.get("vanaf") and dek["vanaf"] > (einde.date() - timedelta(days=2)).isoformat():
@@ -495,7 +498,10 @@ def tekst(v, prive_postvakken=(), over=None):
                  + ("; onvolledig)" if m["onvolledig"] else ")"))
         for postvak, p in sorted(m["postvakken"].items()):
             soorten = ", ".join(f"{n} {s}" for s, n in sorted(p["soorten"].items()))
-            regel = f"  - {postvak}: {p['binnen']} binnen" + (f" ({soorten})" if soorten else "") + f", {p['verzonden']} verzonden"
+            # MAIL-3: een richting die niet gelezen werd, is geen nul
+            regel = (f"  - {postvak}: " + ("binnen: niet gelezen" if p["binnen"] is None else f"{p['binnen']} binnen"
+                                            + (f" ({soorten})" if soorten else "")) + ", "
+                     + ("verzonden: niet gelezen" if p["verzonden"] is None else f"{p['verzonden']} verzonden"))
             if p["onvolledig"]:
                 regel += " (onvolledig: " + "; ".join(p["onvolledig"]) + ")"
             if p["naar"] and postvak not in prive_postvakken:

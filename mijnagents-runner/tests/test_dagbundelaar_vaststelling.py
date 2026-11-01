@@ -536,7 +536,8 @@ def test_h1_antwoordadressen_van_een_privewacht():
     u = {"light@x.be": {"berichten": [{"datum": f"{DAG}T10:00:00+02:00", "message_id": "<a@x>", "aan": ["Tante Mie <t@x.be>"]}]}}
     t = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", V.mail_telling(DAG, {}, u), None, lambda a: False),
                 prive_postvakken=prive)
-    assert "Tante Mie" not in t and "light@x.be: 0 binnen, 1 verzonden" in t, t
+    # MAIL-3 (T-0120): light@ wordt alleen voor verzonden gelezen; binnen is niet gelezen, geen nul
+    assert "Tante Mie" not in t and "light@x.be: binnen: niet gelezen, 1 verzonden" in t, t
 
 
 def test_g4_ontbrekend_postvak():
