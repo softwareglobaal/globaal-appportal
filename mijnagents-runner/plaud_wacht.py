@@ -53,6 +53,8 @@ DATA = os.path.expanduser(os.environ.get("MIJNAGENTS_DATA", "~/appportal/mijnage
 INVOER = os.environ.get("PLAUD_INVOER", os.path.join(DATA, "plaud-invoer"))
 STAAT = os.environ.get("PLAUD_STAAT", os.path.join(DATA, "plaud-staat"))
 INBOX = os.environ.get("PLAUD_INBOX", "/Work All/000 AI Opzet/Mehdi Agents/Plaud inbox")
+# PLAUD-8: de laatst gemelde bevinding per open zoektaak; niet in STAAT, want daar is elk .json-bestand een opname
+GEMELD = os.environ.get("PLAUD_GEMELD", os.path.join(DATA, "plaud-zoektaken-gemeld.json"))
 # Opnames van vóór deze dag worden niet opnieuw herkend en gepubliceerd (geen volledige herverwerking);
 # voor zoektaken blijven ze vindbaar.
 SINDS = os.environ.get("PLAUD_WACHT_SINDS", "2026-10-01")
@@ -218,8 +220,12 @@ def eigen_bewijs(o, uitingen, tekst, items):
 
 
 def zoektaken_beoordelen(taken, opnames, st_obj, items):
-    """(per plaud_id: [taak], uitkomsten). opnames: [(contract, romp)]. Een ongeldige taak levert niets op."""
+    """(per plaud_id: [taak], uitkomsten). opnames: [(contract, romp)]. Een ongeldige taak levert niets op.
+
+    PLAUD-8 (T-0120): een bevinding komt alleen in het werkverslag als ze anders is dan de vorige keer (GEMELD). Op 29-10
+    waren 384 van de 408 regels elk uur dezelfde 16 zoektaakbevindingen. De uitkomsten zelf veranderen niet."""
     per_id, uitkomsten = {}, []
+    gemeld, nu_gemeld = archief.lees_json(GEMELD) or {}, {}
     contracten = [o for o, _ in opnames]
     beslissingen = {o["plaud_id"]: (st_obj.lees(o["plaud_id"]).get("beslissing") or {}) for o in contracten}
     dagen = {zoektaak.inhoud_van(t).get("datum") for t in taken}
@@ -237,9 +243,17 @@ def zoektaken_beoordelen(taken, opnames, st_obj, items):
         r = zoektaak.beoordeel(t, contracten, beslissingen, bewijs)
         r["taak"] = t.get("id")
         uitkomsten.append(r)
-        ag.log(f"taak {t.get('id')}", "bevinding", f"{r['uitkomst']}: {r['reden']}" + (f" ({', '.join(r['kandidaten'])})" if r.get("kandidaten") else ""))
+        bevinding = f"{r['uitkomst']}: {r['reden']}" + (f" ({', '.join(r['kandidaten'])})" if r.get("kandidaten") else "")
+        nu_gemeld[str(t.get("id"))] = bevinding
+        if gemeld.get(str(t.get("id"))) != bevinding:
+            ag.log(f"taak {t.get('id')}", "bevinding", bevinding)
         if r["uitkomst"] in ("gevonden", "wacht_op_transcript"):
             per_id.setdefault(r["plaud_id"], []).append(t)
+    if nu_gemeld != gemeld:
+        try:
+            archief.schrijf_json(GEMELD, nu_gemeld)
+        except OSError as e:          # dan meld ik de volgende ronde opnieuw; de beoordeling zelf hangt er niet van af
+            ag.log("Plaud", "fout", f"gemelde zoektaken niet bewaard: {type(e).__name__}")
     return per_id, uitkomsten
 
 

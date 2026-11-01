@@ -204,6 +204,13 @@ check("D14 werkverslag niet gelezen: items blijven, werkverslag onbekend", "Sara
 html = C.get("/wachten?dag=2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 tegel bij werkverslagfout toont de fout, niet het item", "kon niet lezen: werkverslag niet gelezen (OperationalError)" in html
       and "09:15 Sara Proef 3 berichten" not in html, html[-3000:])
+# PLAUD-8 (T-0120): het bord geeft 'regels' (het aantal regels in het werkverslag) apart van 'rondes' (de slotregels)
+REG = json.loads(json.dumps(WACHTEN))
+REG["vakken"][0]["wachten"][0].update(regels=9, rondes=3)
+A.haal_wachten = lambda dag: json.loads(json.dumps(REG))
+html = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 werkverslag: het aantal regels uit 'regels', niet uit 'rondes'", "9</span> regels in het werkverslag" in html
+      and "Werkverslag van deze dag (9)" in html, html[-3500:])
 check("D14 dag buiten de vier dagen is 404", C.get("/wachten?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten/whatsapp-wacht?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten?dag=" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)

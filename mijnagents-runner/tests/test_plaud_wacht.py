@@ -78,6 +78,7 @@ class Wereld:
         self.herkend = []              # (plaud_id, context, lengte transcript)
         self.deals = []
         P.INVOER, P.STAAT, P.INBOX = str(self.invoer), str(self.staat), "/inbox"
+        P.GEMELD = str(self.staat) + "-gemeld.json"   # PLAUD-8: per Wereld een eigen geheugen van gemelde zoektaken
         P.bord.call = self.call
         P.bord.klaargezet_voor = lambda voor, n=100, **k: list(self.taken)
         P.bord.opgepakt = self.pak
@@ -826,6 +827,51 @@ def test_plaud5_status_ok_zonder_onvolledige_mappen_geeft_geen_nood():
     code, tel, r = ronde_met_detail(w)
     assert code == P.OK and not r.noden and tel["onvolledig_archief"] == 0, (code, r.noden)
     assert "onvolledig" not in r.detail, r.detail
+
+
+def test_plaud8_zelfde_zoektaakuitkomst_staat_een_keer_in_het_werkverslag():
+    """PLAUD-8 (T-0120): op 29-10 stonden 384 van de 408 regels in het werkverslag van De Plaudwacht er omdat elke ronde
+    dezelfde 16 zoektaakbevindingen opnieuw schreef. Een bevinding komt er nu alleen bij een andere uitkomst."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(601, datum="2026-10-09", bezoekmap=f"{HA}/2531 Fictiva/_00. Communication/2026-10-09 bezoek klant - werfbezoek")]
+    for _ in range(3):
+        w.ronde()
+    regels = [t for s, t in w.logs if s == "bevinding" and t.startswith("niet_gevonden")]
+    assert len(regels) == 1, regels
+    # een andere uitkomst (de opname van die dag komt binnen) staat er wel bij, en wordt geleverd zoals voordien
+    w.opname(ID2, "10-09 Werfbezoek 2531 Fictiva", "2026-10-09T09:05:00")
+    w.push()
+    w.ronde()
+    assert len([t for s, t in w.logs if s == "bevinding" and t.startswith("gevonden")]) == 1, w.logs
+    assert w.opgepakt == [601], w.opgepakt
+
+
+def test_plaud8_barsten_en_scheuren_zoektaak_geeft_dezelfde_uitkomst():
+    """VOL-18: alleen het werkverslag verandert. Een zoektaak van de keten barsten en scheuren (TKN, eigen doelmap) geeft
+    bij elke beoordeling dezelfde uitkomst en wordt geleverd zoals in test_tkn_plaudwordt_uit_zoektaak_in_submap_geleverd."""
+    w = Wereld()
+    w.opname(ID1, "Opname barsten en scheuren", "2026-10-08T07:10:00", uitingen=ZONDER_NUMMER)
+    w.push()
+    w.taken = [tkn_taak()]
+    w.agenda = [{"soort": "afspraak", "titel": "barstenbezoek", "inhoud": json.dumps({
+        "titel": "[UNAB-KB] BS 3999 Proeflaan 23", "start": "2026-10-08T09:00:00+02:00",
+        "einde": "2026-10-08T10:00:00+02:00", "firma": "UNAB", "nummer": "3999"})}]
+    w.herkenning[ID1] = {"personen": ["bouwheer"], "hoofdpersoon": "bouwheer", "bedrijf": "UNABO",
+                        "afdeling": "unabo", "thema": "barsten en scheuren", "project": "", "prive": False,
+                        "zekerheid": "middel", "waarom": "bezoekopdracht"}
+    m = P.manifest.lees(P.INVOER)
+    opnames = [(o, None) for o in m["opnames"]]
+    st_obj = P.staat.Staat(P.STAAT)
+    items = P.klaarzet_items()
+    eerste = P.zoektaken_beoordelen(w.taken, opnames, st_obj, items)
+    tweede = P.zoektaken_beoordelen(w.taken, opnames, st_obj, items)
+    assert eerste == tweede and eerste[1][0]["uitkomst"] == "gevonden", (eerste, tweede)
+    assert len([t for s, t in w.logs if s == "bevinding" and t.startswith("gevonden")]) == 1, w.logs
+    code, _, _ = w.ronde()
+    doel = f"{TKN_PLAUD}/{TKN_NAAM}"
+    assert code == P.OK and w.uploads == [doel] and w.opgepakt == [701], (code, w.uploads, w.opgepakt)
 
 
 def test_planning_heeft_slot_en_tijdslimiet_en_vervangt_alleen_de_oude_regel():

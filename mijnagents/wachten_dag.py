@@ -21,6 +21,8 @@ KORT = 160
 GESPREK_BRON = {"whatsapp-wacht": "whatsapp", "belwacht": "telefoon", "sms-wacht": "sms", "xelion-wacht": "xelion",
                 "fathom-wacht": "fathom", "plaud-wacht": "plaud", "zoom-wacht": "zoom"}
 MAIL_WACHTEN = ("mail-prive", "mail-mch", "mail-info-harc", "mail-hinv", "mail-melo")
+# De slotregel van een ronde in het werkverslag (De Plaudwacht: ag.log("Plaud", "bron", "ronde: ...")).
+RONDE_REGEL = "ronde:"
 
 
 def grenzen(dag):
@@ -145,7 +147,7 @@ def lees_log(conn, wacht, van, tot):
                          (wacht, van, tot)).fetchall()
     return [{"tijd": uur(r["ts"]), "stap": r["stap"], "tekst": kort(f"{r['onderwerp']}: {r['tekst']}" if r["onderwerp"]
                                                                        else r["tekst"], 220),
-             "fout": r["stap"] == "fout"} for r in rijen]
+             "fout": r["stap"] == "fout", "ronde": str(r["tekst"] or "").startswith(RONDE_REGEL)} for r in rijen]
 
 
 def per_wacht(conn, wacht, label, dag, status=None, noden=()):
@@ -166,6 +168,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         log, logfout = [], f"werkverslag niet gelezen ({type(e).__name__})"
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
+    # PLAUD-8 (T-0120): 'rondes' was het aantal regels (29-10 bij De Plaudwacht 408 tegen 24 rondes). Nu telt het de
+    # slotregels 'ronde:'; een wacht die er geen schrijft, heeft geen meetbare rondes: None, nooit 0. 'regels' blijft.
+    rondes = sum(1 for x in log if x["ronde"]) or None
     st = dict(status) if status else None
     # De hartslag is alleen de stand van nu: hij telt alleen mee voor vandaag.
     status_fout = bool(st and dag == datetime.now(BRUSSEL).date().isoformat()
@@ -179,7 +184,7 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
-            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten, "log": log[-MAX_LOG:],
+            "items": items[:MAX_ITEMS], "regels": len(log), "rondes": rondes, "fouten": fouten, "log": log[-MAX_LOG:],
             "gedekt": gedekt, "leesfout": leesfout, "logfout": logfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
