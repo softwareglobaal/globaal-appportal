@@ -122,11 +122,12 @@ def citaat_op_pagina(citaat, tekst):
 
 
 def voor_dit_product(citaat, aanbod):
-    """Noemt een verzendtarief een model, dan moet het dit aanbod zijn (titel of modelcode); een tarief zonder
-    modelnaam is algemeen (Codex-controle 30, X2)."""
+    """Noemt een verzendtarief een model, dan moet elk genoemd model dit aanbod zijn (titel of modelcode): "P70
+    gratis; V70 39,95 euro" bewijst niets voor de V70. Een tarief zonder modelnaam is algemeen (Codex-controle 30 en
+    31, X2)."""
     namen = MODELNAAM.findall(str(citaat or ""))
     eigen = f"{aanbod.get('titel') or ''} {aanbod.get('modelcode') or ''}".lower()
-    return not namen or any(n.lower() in eigen for n in namen)
+    return all(n.lower() in eigen for n in namen)
 
 
 def voor_belgie(citaat):
