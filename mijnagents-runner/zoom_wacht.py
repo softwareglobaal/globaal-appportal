@@ -43,7 +43,8 @@ voor Mehdi en een hartslag die zegt dat er niets geschreven is (RZ4-02).
 
     zoom_wacht.py                              een ronde
     zoom_wacht.py --droog                      alleen lezen; een rapport per dag zonder namen of onderwerpen
-    zoom_wacht.py --inhaal 14                  het venster op 14 dagen in plaats van 7
+    zoom_wacht.py --inhaal 14                  het venster op 14 dagen in plaats van 7 (hoogstens 35)
+    zoom_wacht.py --inhaal 35 --oud-herzien    eenmalig: ook een opgepakte dagregel ouder dan zes dagen herzien
     zoom_wacht.py --koppel-sinds 2026-09-07    oude zoom:meeting-rijen koppelen en daarna hun joinlink leegmaken, en de
                                                andere ruimtes voor het venster opnieuw beoordelen met het rapport
 Staat: mijnagents-data/zoom-wacht.json (laatste ronde en een cache van afgeronde sessies).
@@ -78,6 +79,8 @@ STAAT = os.path.join(DATA, "zoom-wacht.json")
 ZOOM_DATA = os.path.join(DATA, "zoom-data")
 FATHOM_DATA = fw.ARCHIEF
 VENSTER_DAGEN = 7
+INHAAL_MAX = 35      # WACHT-1 (meting 01-11-2026): 01-10 tot 15-10 opnieuw tellen; de grens schuift elke dag een dag op
+STUK_DAGEN = 28      # Zoom geeft het rapport, de opnames en de chat voor hoogstens een maand per vraag
 WACHT_NA_EINDE = timedelta(minutes=30)
 TEKST_WACHT = timedelta(hours=24)
 TERUGBLIK = 6
@@ -146,6 +149,18 @@ def dag_grenzen(dag):
     begin = datetime.combine(d, time(0), tzinfo=BE)
     einde = datetime.combine(d + timedelta(days=1), time(0), tzinfo=BE)
     return begin.astimezone(timezone.utc), einde.astimezone(timezone.utc)
+
+
+def stukken(van_dag, tot_dag, dagen=STUK_DAGEN):
+    """[van_dag, tot_dag] (JJJJ-MM-DD, beide inbegrepen) als aansluitende stukken (van, tot) van hoogstens DAGEN dagen,
+    zonder overlap: Zoom geeft het rapport, de opnames en de chat voor hoogstens een maand per vraag (WACHT-1). Een
+    gewoon venster is een stuk."""
+    d, einde, uit = date.fromisoformat(van_dag), date.fromisoformat(tot_dag), []
+    while d <= einde:
+        tot = min(d + timedelta(days=dagen - 1), einde)
+        uit.append((d.isoformat(), tot.isoformat()))
+        d = tot + timedelta(days=1)
+    return uit
 
 
 def utc_tijden(dag, uur):
@@ -358,8 +373,9 @@ def zoom_lezen(van, tot, staat, klok):
     fout = None
     for soort in RAPPORT_SOORTEN:
         try:
-            for m in _lijst(f"/report/users/{ik['id']}/meetings", {"type": soort, "from": d0, "to": d1, "page_size": 300}, "meetings"):
-                voeg(m, "rapport", deelname=soort == "pastJoined")
+            for a, b in stukken(d0, d1):
+                for m in _lijst(f"/report/users/{ik['id']}/meetings", {"type": soort, "from": a, "to": b, "page_size": 300}, "meetings"):
+                    voeg(m, "rapport", deelname=soort == "pastJoined")
         except Exception as e:  # noqa: BLE001
             fout = fout or e
     bronnen["rapport"] = toestand_van(fout) if fout else "ok"
@@ -379,7 +395,8 @@ def zoom_lezen(van, tot, staat, klok):
 
     cache = staat.setdefault("cache", {})
     try:
-        for m in _lijst(f"/users/{ik['id']}/meetings", {"type": "previous_meetings", "from": d0, "to": d1, "page_size": 50}, "meetings"):
+        for m in (m for a, b in stukken(d0, d1) for m in
+                  _lijst(f"/users/{ik['id']}/meetings", {"type": "previous_meetings", "from": a, "to": b, "page_size": 50}, "meetings")):
             Z.nummer_erbij(m.get("id"))
             uuid = m.get("uuid") or ""
             if uuid in sessies or uuid in cache:
@@ -402,7 +419,7 @@ def zoom_lezen(van, tot, staat, klok):
         bronnen["gepland"] = toestand_van(e)
 
     try:
-        for m in Z.opnames(d0, d1):
+        for m in (m for a, b in stukken(d0, d1) for m in Z.opnames(a, b)):
             st = tijd(m["start"])
             if m["uuid"] and st and van <= st < tot:
                 opnamen[m["uuid"]] = m
@@ -520,12 +537,25 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
     leesbaar' is een 404 op de berichten: een verlaten kanaal, een contact dat weg is, of iets anders, dat zegt Zoom niet
     (live 22-10-2026 maakte zo een enkel oud gesprek de hele chat onbekend). 'N chatgesprek(ken) zonder bestemming' is
     een sessie zonder adres of kanaal (RZ10-01: die werd stil overgeslagen). Een fout van de sessielijst, of een andere
-    fout dan 404, gaat door: dan las deze ronde de chat niet."""
-    # Zoom leest from en to van de chat alleen als datum met tijd in UTC: met alleen een datum negeert hij ze en geeft
-    # /messages enkel de laatste dag terug (gemeten 22-10-2026: voor 20-10 36 berichten met tijd, 0 zonder).
-    venster = {"from": zoom_tijd(dag_grenzen(van_dag)[0]), "to": zoom_tijd(dag_grenzen(tot_dag)[0] - timedelta(seconds=1))}
+    fout dan 404, gaat door: dan las deze ronde de chat niet.
+    Het venster gaat in stukken van hoogstens STUK_DAGEN dagen, die op een Brusselse dag aansluiten (WACHT-1): zo komt
+    elke dag uit een stuk, en telt een gesprek dat in twee stukken staat een keer als niet leesbaar of zonder bestemming."""
+    rijen, weg, zonder = [], set(), Counter()
+    laatste = (date.fromisoformat(tot_dag) - timedelta(days=1)).isoformat()
+    for a, b in stukken(van_dag, laatste):
+        # Zoom leest from en to van de chat alleen als datum met tijd in UTC: met alleen een datum negeert hij ze en geeft
+        # /messages enkel de laatste dag terug (gemeten 22-10-2026: voor 20-10 36 berichten met tijd, 0 zonder).
+        tot = (date.fromisoformat(b) + timedelta(days=1)).isoformat()
+        venster = {"from": zoom_tijd(dag_grenzen(a)[0]), "to": zoom_tijd(dag_grenzen(tot)[0] - timedelta(seconds=1))}
+        rijen += _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder)
+    return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((len(weg), "niet leesbaar"), (sum(zonder.values()), "zonder bestemming")) if n]
+
+
+def _chat_stuk(ik, venster, personen, domeinen, ouderdom, weg, zonder):
+    """De chatrijen van een stuk van het venster (chat_rijen). weg: de sleutels van de gesprekken met een 404, over de
+    stukken heen; zonder: per sleutel het hoogste aantal gesprekken zonder bestemming in een stuk."""
     sessies = _lijst(f"/chat/users/{ik['id']}/sessions", dict(venster, page_size=50), "sessions", "stack")
-    rijen, weg, zonder = [], 0, 0
+    rijen, zonder_hier = [], Counter()
     for s in sessies:
         p = dict(venster, page_size=50)
         een_op_een = s.get("type") == "1:1"
@@ -534,13 +564,14 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
         else:
             p["to_channel"] = s.get("channel_id", "")
         if not (p.get("to_contact") or p.get("to_channel")):
-            zonder += 1
+            zonder_hier[chat_sleutel(s)] += 1
             continue
         berichten = Z.lees_alles(f"/chat/users/{ik['id']}/messages", p, "messages", "stack")
         if berichten is None:
-            weg += 1
-            if ouderdom is not None:
-                ouderdom.append(s.get("last_message_sent_time"))
+            if chat_sleutel(s) not in weg:
+                weg.add(chat_sleutel(s))
+                if ouderdom is not None:
+                    ouderdom.append(s.get("last_message_sent_time"))
             continue
         if not berichten:
             continue
@@ -583,7 +614,9 @@ def chat_rijen(ik, van_dag, tot_dag, personen, domeinen, ouderdom=None):
                           "thema": f"Zoom-chat: {len(lijst)} bericht(en), {van_mehdi} van Mehdi, {tijden[0] if tijden else ''} tot {tijden[-1] if tijden else ''}",
                           "project": "", "prive": prive, "zekerheid": zeker, "waarom": waarom, "archief": "", "link": "",
                           "opgenomen_door": "Zoom-chat", "bron": "zoom"})
-    return rijen, [f"{n} chatgesprek(ken) {wat}" for n, wat in ((weg, "niet leesbaar"), (zonder, "zonder bestemming")) if n]
+    for k, n in zonder_hier.items():
+        zonder[k] = max(zonder[k], n)
+    return rijen
 
 
 def chat_tellen(w):
@@ -1470,7 +1503,7 @@ def chat_laatst_gezien(chat, redenen):
     return oud
 
 
-def dagregels(w, info, klok, tel, redenen):
+def dagregels(w, info, klok, tel, redenen, oud_herzien=False):
     """Z8: een dagregel per afgelopen Brusselse dag in het venster, uniek zoom:dag:<dag>, sleutel leeg. Staat ze al op
     opgepakt en verandert de kern, dan met revisie; ouder dan TERUGBLIK nooit, dan alleen een regel in het werkverslag.
     Twee grendels, elk met een regel in het werkverslag:
@@ -1484,7 +1517,10 @@ def dagregels(w, info, klok, tel, redenen):
     eenmalig herzien zodra de gesprekkentabel weer leesbaar is (RZ13 X3, RZ15).
     De overgang van een opgepakte regel in de oude vorm naar de nieuwe gaat bewust met herziening, een keer: de oude
     getallen telden alleen geplande meetings (1 tegen 16 op 20-10), en met de oude vorm op het bord zegt De Regisseur
-    'onbekend' voor die dag (ZOO-05). Geeft (items, regels voor het werkverslag)."""
+    'onbekend' voor die dag (ZOO-05).
+    oud_herzien (WACHT-1, eenmalig met --inhaal): de grens TERUGBLIK geldt niet; een oude opgepakte regel waarvan de kern
+    veranderde, gaat dan ook met herziening naar het bord, met een regel in het werkverslag. De andere grendels blijven.
+    Geeft (items, regels voor het werkverslag)."""
     items, notities = [], []
     vandaag = date.fromisoformat(w["vandaag"])
     dag = date.fromisoformat(w["eerste"])
@@ -1511,8 +1547,10 @@ def dagregels(w, info, klok, tel, redenen):
                           and oude_chatvorm(oud.get("titel"), oud_inhoud))
         if opgepakt and (kern_anders(oud_inhoud, inhoud) or formaat_oud):
             if (vandaag - date.fromisoformat(d)).days > TERUGBLIK:
-                notities.append((d, "dagregel niet herzien: ouder dan zes dagen"))
-                continue
+                if not oud_herzien:
+                    notities.append((d, "dagregel niet herzien: ouder dan zes dagen"))
+                    continue
+                notities.append((d, "dagregel ouder dan zes dagen eenmalig herzien (--oud-herzien)"))
             it["revisie"] = True
             if oud_tel == "oude vorm":
                 notities.append((d, "dagregel van de oude vorm naar de nieuwe telling, eenmalig met herziening"))
@@ -1679,7 +1717,7 @@ def werk(r, a, klok):
             r.nood("Markering alleen Mehdi niet bevestigd", "claude-code")
         items = tekst_items(info, w["ik"])
         uit_items = ag.klaarzet(items) if items else {}
-        dag_items, notities = dagregels(w, info, klok, tel, redenen)
+        dag_items, notities = dagregels(w, info, klok, tel, redenen, oud_herzien=getattr(a, "oud_herzien", False))
         uit_dag = ag.klaarzet(dag_items) if dag_items else {}
         for d, tekst in notities:
             ag.log(f"dag {d}", "besluit", tekst)
@@ -1894,15 +1932,13 @@ def rapport_nummers(ik, van_dag, tot_dag):
     """De meetingnummers uit het rapport (past, pastOne en pastJoined) van de vaste gebruiker tussen twee datums, in
     stukken van hoogstens 28 dagen: Zoom geeft het rapport voor hoogstens een maand per vraag. Faalt een stuk, dan gaat
     de fout door: het geheel is dan onbekend, nooit een kortere lijst."""
-    nummers, d, einde = set(), date.fromisoformat(van_dag), date.fromisoformat(tot_dag)
-    while d <= einde:
-        tot = min(d + timedelta(days=27), einde)
+    nummers = set()
+    for d, tot in stukken(van_dag, tot_dag):
         for soort in RAPPORT_SOORTEN:
-            for m in _lijst(f"/report/users/{ik['id']}/meetings", {"type": soort, "from": d.isoformat(), "to": tot.isoformat(), "page_size": 300},
+            for m in _lijst(f"/report/users/{ik['id']}/meetings", {"type": soort, "from": d, "to": tot, "page_size": 300},
                             "meetings"):
                 if m.get("id"):
                     nummers.add(str(m["id"]))
-        d = tot + timedelta(days=1)
     return nummers
 
 
@@ -2009,13 +2045,15 @@ def argumenten(argv):
     p = argparse.ArgumentParser(description="De Zoomwacht: telt elk Zoom-gesprek en koppelt het aan Fathom.")
     p.add_argument("--droog", action="store_true", help="alleen lezen; een rapport per dag zonder namen of onderwerpen")
     p.add_argument("--account", action="store_true", help="de accountscan in deze ronde volledig proberen")
-    p.add_argument("--inhaal", type=int, default=VENSTER_DAGEN, help="het venster in dagen (standaard 7)")
+    p.add_argument("--inhaal", type=int, default=VENSTER_DAGEN, help=f"het venster in dagen (standaard 7, hoogstens {INHAAL_MAX})")
+    p.add_argument("--oud-herzien", dest="oud_herzien", action="store_true",
+                   help="eenmalig, bij een inhaal: ook een opgepakte dagregel ouder dan zes dagen herzien")
     p.add_argument("--koppel-sinds", dest="koppel_sinds",
                    help="oude zoom:meeting-rijen sinds JJJJ-MM-DD koppelen en hun link leegmaken, en andere ruimtes opnieuw beoordelen")
     a = p.parse_args(argv)
-    if a.inhaal < 1 or a.inhaal > 28:
-        # Zoom geeft het rapport en de opnames voor hoogstens een maand per vraag, en het venster krijgt een dag marge
-        p.error("--inhaal tussen 1 en 28 dagen")
+    if a.inhaal < 1 or a.inhaal > INHAAL_MAX:
+        # WACHT-1: de vragen aan Zoom gaan in stukken van een maand (stukken), dus het venster mag langer dan een maand
+        p.error(f"--inhaal tussen 1 en {INHAAL_MAX} dagen")
     if a.koppel_sinds:
         try:
             date.fromisoformat(a.koppel_sinds)
