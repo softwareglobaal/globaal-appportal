@@ -41,7 +41,8 @@ RUN python3 test_felix.py
 # Grendel op het blok Laatst klaargezet op de pagina van een agent (De Mehdi-agent): alleen beheer, de nieuwste
 # takenlijst en het nieuwste verslag, ruwe HTML en markdown-links uit een bron worden tekst. Zie test_klaargezet_pagina.py.
 RUN python3 test_klaargezet_pagina.py
-# De Plaudwacht op /api/wachten/dag (T-0120): de rondes, de opnames uit het manifest. Zie test_wachten_dag_plaud.py.
+# De Plaudwacht op /api/wachten/dag (T-0120): de rondes, de opnames uit het manifest, privé en geen dubbel. Faalt zonder
+# FATHOM-3 (t0120-fathom): deze tak gaat alleen samen daarmee live. Zie test_wachten_dag_plaud.py.
 RUN python3 test_wachten_dag_plaud.py
 # Grendel op de groep Dagbundelaar: elke agent van het dagboek op één plek, niets dubbel. Zie test_dagbundelaar_groep.py.
 RUN python3 test_dagbundelaar_groep.py

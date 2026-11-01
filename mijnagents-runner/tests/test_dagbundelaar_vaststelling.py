@@ -1044,7 +1044,9 @@ def test_plaud10_gewijzigde_plaud_of_fathom_rij_laat_een_oude_dag_inhalen_op_inh
     - vlag uit (standaard, overleg X7): alleen de dekkingsrij, zoals voordien;
     - vlag aan, eerste nacht: een dag met een Plaud- of Fathom-rij die nieuwer is dan zijn vaststelling;
     - tweede nacht: een herschrijving zonder verschil (De Fathomwacht schrijft elke ronde haar venster) haalt niet opnieuw
-      in, een gewijzigde rij wel (Codex-toets 1)."""
+      in, een gewijzigde rij wel (Codex-toets 1);
+    - derde nacht: een rij die van dag verandert, laat beide dagen inhalen; de lege dag bewaart GEEN_RIJEN (Codex-toets 2);
+    - vierde nacht: niets veranderd, niets in te halen."""
     import sqlite3
     nu = datetime(2026, 10, 28, 23, 30, tzinfo=timezone.utc)
     venster = D.V.venster(nu, D.NACHTVENSTER)
@@ -1089,6 +1091,24 @@ def test_plaud10_gewijzigde_plaud_of_fathom_rij_laat_een_oude_dag_inhalen_op_inh
             con.execute(rij, ("plaud:of_" + "1" * 32, "2026-10-13", "werf en dak", "plaud", later))   # andere inhoud
             tweede = D.inhaaldagen(nacht2, D.V.venster(nacht2, D.NACHTVENSTER))
             assert tweede == ["2026-10-13"], tweede
+            with open(D.INHAALVINGERS) as f:
+                assert "2026-10-10" in json.load(f), "een al vastgestelde dag krijgt zijn vingerafdruk als vertrekpunt"
+            D.vingers_bewaren(tweede, D.gespreksvingers(min(tweede), max(tweede)))
+            # Codex-toets 2: een rij die van dag verandert, laat beide dagen inhalen, ook de dag die nu leeg is
+            nacht3 = nacht2 + timedelta(days=1)
+            later = (nacht3 - timedelta(hours=2)).isoformat()
+            con.execute("UPDATE gesprek_log SET datum='2026-10-11', ts=? WHERE uniek=?", (later, "plaud:of_" + "1" * 32))
+            con.execute("UPDATE gesprek_log SET datum='2026-10-08', ts=? WHERE uniek=?", (later, "plaud:of_" + "2" * 32))
+            derde = D.inhaaldagen(nacht3, D.V.venster(nacht3, D.NACHTVENSTER))
+            assert derde == ["2026-10-08", "2026-10-10", "2026-10-11", "2026-10-13"], derde
+            with open(D.INHAALSTAAT, "w") as f:
+                json.dump({d: nacht3.isoformat() for d in eerste + derde}, f)
+            D.vingers_bewaren(derde, D.gespreksvingers(min(derde), max(derde)))
+            with open(D.INHAALVINGERS) as f:
+                bewaard = json.load(f)
+            assert bewaard["2026-10-13"] == bewaard["2026-10-10"] == D.GEEN_RIJEN, bewaard
+            nacht4 = nacht3 + timedelta(days=1)
+            assert D.inhaaldagen(nacht4, D.V.venster(nacht4, D.NACHTVENSTER)) == [], "niets veranderd: niets in te halen"
         finally:
             D.STAAT, D.INHAALSTAAT, D.INHAALVINGERS, D.INHAAL_GESPREKKEN, bord.db_lees = oud
     assert D.INHAAL_GESPREKKEN is False, "standaard uit tot Mehdi's ja op X7"

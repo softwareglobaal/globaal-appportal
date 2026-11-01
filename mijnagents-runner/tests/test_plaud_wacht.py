@@ -957,6 +957,49 @@ def test_plaud12_pipedrive_niet_gelezen_en_geen_projectnummer_in_een_echte_ronde
     assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")], w3.logs
 
 
+def test_plaud12_een_al_verwerkte_opname_krijgt_de_reden_een_keer_zonder_modelvraag():
+    """Codex-toets 2: de 7 HARC-opnames van oktober waren al verwerkt; na de uitrol stopte verwerk ze als 'ongewijzigd'
+    vóór de reden. Nu krijgt zo'n opname de reden één keer, uit haar staat, zonder nieuwe modelvraag."""
+    w = Wereld()
+    w.deals = [{"id": 778, "titel": "2532 Andere", "nummer": "2532"}]
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.taken = [werftaak(101)]
+    w.ronde()
+    w.ronde()                                   # de geleverde taak valt weg: de laatste beoordeling
+    # zoals een staat van voor PLAUD-12: geen bewaarde reden
+    pad = w.staat / f"{ID1}.json"
+    st = json.loads(pad.read_text())
+    st.pop("zonder_kopie", None)
+    pad.write_text(json.dumps(st))
+    w.logs.clear()
+    herkend = len(w.herkend)
+    code, tel, _ = w.ronde()
+    assert tel["ongewijzigd"] == 1 and len(w.herkend) == herkend, (tel, w.herkend)
+    assert [t for s, t in w.logs if t.startswith("geen dossierkopie")] == \
+        ["geen dossierkopie: geen open Pipedrive-deal met nummer 2531"], w.logs
+    w.ronde()
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == 1, "één keer, niet elke ronde"
+
+
+def test_plaud12_een_mislukte_dossierkopie_krijgt_haar_fout_als_reden_een_keer():
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    P.bronnen.zoek_salesmap = lambda naam="", nummer="": None            # geen salesmap: de kopie faalt
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.ronde()
+    w.ronde()
+    reden = [t for s, t in w.logs if t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: de kopie mislukte (RuntimeError: geen salesmap voor dit dossier)"], w.logs
+    # de salesmap komt er: de kopie lukt en de reden valt weg, zonder nieuwe regel
+    P.bronnen.zoek_salesmap = lambda naam="", nummer="": f"/Sales/{nummer} klant" if nummer else None
+    w.ronde()
+    assert any(p.startswith("/Sales/") for p in w.uploads), w.uploads
+    assert json.loads((w.staat / f"{ID1}.json").read_text()).get("zonder_kopie") is None
+    assert len([t for s, t in w.logs if t.startswith("geen dossierkopie")]) == 1
+
+
 def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
     """VOL-18: een opname van de keten barsten en scheuren (UNAB) krijgt geen reden erbij en wordt geleverd als voordien."""
     w = Wereld()
@@ -1030,6 +1073,12 @@ def test_plaud13_launchd_alleen_uit_een_checkout_op_main_en_zonder_paden_van_een
     nep.mkdir()
     for naam in ("plaud_launchd_zetten.sh", "be.globaal.plaud.ophalen.plist"):
         shutil.copy2(bron / naam, repo / "mijnagents-runner" / "planning" / "mac" / naam)
+    # de uurtaak zelf, met nagebootste ophaler en manifest: nooit de echte Plaud-API of de VM
+    (repo / "mijnagents-runner" / "plaud").mkdir()
+    shutil.copy2(Path(HIER) / "plaud" / "plaud_invoer_push.sh", repo / "mijnagents-runner" / "plaud" / "plaud_invoer_push.sh")
+    (repo / "mijnagents-runner" / "plaud" / "plaud_haal_alles.py").write_text(
+        "import os, pathlib\npathlib.Path(os.environ['PROEF_MERK']).write_text('gedraaid')\n")
+    (repo / "mijnagents-runner" / "plaud" / "manifest.py").write_text("")
     oproepen = tmp / "oproepen.txt"
     for naam in ("launchctl", "plutil"):
         (nep / naam).write_text(f"#!/bin/sh\necho {naam} \"$@\" >> '{oproepen}'\n")
@@ -1052,6 +1101,21 @@ def test_plaud13_launchd_alleen_uit_een_checkout_op_main_en_zonder_paden_van_een
     assert gezet["ProgramArguments"][1] == f"{echte_repo}/mijnagents-runner/plaud/plaud_invoer_push.sh", gezet
     assert gezet["StandardOutPath"] == f"{thuis}/Library/Logs/plaud-ophalen.out", gezet
     assert "launchctl bootstrap" in oproepen.read_text(), oproepen.read_text()
+    # Codex-toets 2: daarna van tak wisselen en de geïnstalleerde uurtaak starten: ze weigert, zonder op te halen
+    archief_map, vm_map, merk = tmp / "archief", tmp / "vm", tmp / "gedraaid"
+    archief_map.mkdir()
+    vm_map.mkdir()
+    (thuis / "Library" / "Logs").mkdir(parents=True)
+    uur = dict(omgeving, PLAUD_DOEL=str(archief_map), PLAUD_VM=str(vm_map), PROEF_MERK=str(merk))
+    subprocess.run(git + ["checkout", "-q", "-b", "andere-tak"], check=True)
+    r = subprocess.run([zsh, gezet["ProgramArguments"][1]], env=uur, capture_output=True, text=True)
+    log = (thuis / "Library" / "Logs" / "plaud-ophalen.log").read_text()
+    assert r.returncode == 8 and "niet op main" in log and not merk.exists(), (r.returncode, log)
+    if shutil.which("rsync"):
+        subprocess.run(git + ["checkout", "-q", "main"], check=True)
+        r = subprocess.run([zsh, gezet["ProgramArguments"][1]], env=uur, capture_output=True, text=True)
+        assert r.returncode == 0 and merk.exists(), (r.returncode, r.stderr,
+                                                     (thuis / "Library" / "Logs" / "plaud-ophalen.log").read_text())
     shutil.rmtree(tmp)
 
 

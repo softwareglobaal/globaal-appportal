@@ -9,8 +9,9 @@ elkaar daar niet in de weg zitten; het draait in dezelfde Docker-build.
   'plaud' telt per dag de opnames, ook die zonder audio. Nooit een naam uit Plaud, nooit een pad of link.
 - P03 (PLAUD-7): zonder leesbaar manifest, of met een manifest van voor die dag, blijven de items uit de tabel en is de
   stand onbekend, nooit 0; een manifest van tijdens de dag zegt dat de telling nog niet af is (na_de_dag).
-- P04, P05 (Codex-toets 1): privémaskering en geen dubbele klaarzet-regel bij De Plaudwacht; actief na het samenvoegen
-  met FATHOM-3 (t0120-fathom) en DB-8 (t0120-prive), die dat bouwen.
+- P04, P05, P06 (Codex-toets 1 en 2): privémaskering en geen dubbele klaarzet-regel bij De Plaudwacht, ook voor een
+  privégesprek met zijn klaarzet-item. FATHOM-3 (t0120-fathom) bouwt dat; zonder die tak faalt dit bestand, ook in de
+  Docker-build, zodat deze tak niet alleen live kan. Los toetsen: WACHTEN_PLAUD_LOS=1.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -146,17 +147,33 @@ for letter, start in (("f", "09:00"), ("g", "14:00")):
                 "?,'{}',?,'2026-10-24T15:00:00+00:00')", (f"2026-10-24 {start} Plaud: Proef Klant · Proefthema", uniek))
 con.commit()
 con.close()
-if PRIVE:
+# P06 (Codex-toets 2): een privégesprek van Plaud met zijn klaarzet-item (zelfde uniek, titel zoals plaud_wacht.py die
+# voor privé maakt): precies één item, gemaskeerd
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+uniek = "plaud:of_" + "q" * 32
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+            "VALUES(?,'2026-10-23','10:00',15,'Verborgen Persoon','Verborgen onderwerp','prive',1,'plaud','x')", (uniek,))
+con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('plaud-wacht','mehdi','transcript',"
+            "'2026-10-23 10:00 Plaud: privégesprek, 15 min · PRIVÉ','{}',?,'2026-10-23T12:00:00+00:00')", (uniek,))
+con.commit()
+con.close()
+# Zonder FATHOM-3 mag deze tak niet live: dan faalt deze toets, ook in de Docker-build (Codex-toets 2). Alleen om deze
+# tak los te toetsen: WACHTEN_PLAUD_LOS=1.
+LOS = os.environ.get("WACHTEN_PLAUD_LOS") == "1"
+if PRIVE and DEDUP:
     it = wachten("2026-10-25")["plaud-wacht"]["items"]
     check("P04 prive=1 bij Plaud met afdeling regie: alleen 'privégesprek, N min'", len(it) == 1
           and it[0]["wie"] == "privégesprek" and "Verborgen" not in str(it), it)
-else:
-    print("WACHT P04: actief na het samenvoegen van FATHOM-3 (t0120-fathom) of DB-8 (t0120-prive)")
-if DEDUP:
     pl = wachten("2026-10-24")["plaud-wacht"]
     check("P05 een dag met 2 opnames: 2 items, niet 4 (klaarzet met dezelfde uniek valt weg)", pl["aantal"] == 2, pl["items"])
+    it = wachten("2026-10-23")["plaud-wacht"]["items"]
+    check("P06 privégesprek met zijn klaarzet-item: precies één item, gemaskeerd", len(it) == 1
+          and it[0]["wie"] == "privégesprek" and it[0]["wat"] == "15 min" and "Verborgen" not in str(it), it)
+elif LOS:
+    print("WACHT P04, P05, P06: actief na het samenvoegen met FATHOM-3 (t0120-fathom); deze tak alleen mag niet live")
 else:
-    print("WACHT P05: actief na het samenvoegen van FATHOM-3 (t0120-fathom)")
+    check("P04, P05, P06 vragen FATHOM-3 (t0120-fathom): zonder die tak mag deze tak niet live", False,
+          f"ontdubbeling {DEDUP}, privévlag {PRIVE}; los toetsen met WACHTEN_PLAUD_LOS=1")
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

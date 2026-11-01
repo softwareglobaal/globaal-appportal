@@ -413,6 +413,9 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
                              "bekend": [k for k in relevant if bekend and k in bekend],
                              "deals": sorted(str(d.get("id")) for d in (deals or []) if ("HARC", str(d.get("nummer"))) in relevant)})
     if st.get("vingerafdruk") == vinger and not staat.open_opdrachten(st):
+        # PLAUD-12, Codex-toets 2: ook een opname die al verwerkt was, krijgt één keer de reden, zonder modelvraag
+        if not is_prive(st.get("herkenning"), st.get("beslissing")):
+            meld_zonder_kopie(o, st, st_obj, reden_uit_staat(st, st.get("herkenning"), st.get("beslissing") or {}, deals, tekst))
         return {"uitkomst": "ongewijzigd", "fouten": 0}
     herk = st.get("herkenning") or {}
     if herk.get("model_vinger") != model_vinger:
@@ -430,7 +433,6 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
     if b["firma"] == "HARC" and b["projectnummer"] and deals:
         passend = [d for d in deals if str(d.get("nummer")) == b["projectnummer"]]
         deal = passend[0] if len(passend) == 1 else None
-    zonder_kopie = reden_zonder_dossierkopie(b, herk, deals, passend, deal, tekst)
     st["beslissing"] = b
     st["vingerafdruk"] = vinger
     staat.plan(st, opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort_van(tekst, o.get("naam_in_plaud") or "")))
@@ -450,9 +452,30 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
            f"{herk.get('hoofdpersoon') or o.get('naam_in_plaud')} · dossier {b['dossier'] or 'geen'} ({b['zekerheid']})"
            + (" · conflict" if b["conflict"] else "") + f" · voor {b['voor']}"
            + f" · {gedaan} publicatie(s), {fouten} fout", "; ".join(b["redenen"]))
-    if zonder_kopie:
-        ag.log(f"opname {o['start_brussel'][:16]}", "bevinding", f"geen dossierkopie: {zonder_kopie}")
+    meld_zonder_kopie(o, st, st_obj, reden_uit_staat(st, herk, b, deals, tekst))
     return {"uitkomst": "gedaan", "fouten": fouten}
+
+
+def reden_uit_staat(st, herk, b, deals, tekst):
+    """PLAUD-12: de reden zonder dossierkopie voor één opname, uit haar staat: een geplande kopie die mislukte (met de
+    fout), anders reden_zonder_dossierkopie. Dezelfde keuze van de deal als in verwerk."""
+    mislukt = [x for x in st.get("opdrachten", []) if x.get("soort") == "dossierkopie" and not x.get("gedaan") and x.get("fout")]
+    if mislukt:
+        return f"de kopie mislukte ({mislukt[0]['fout'][:120]})"
+    passend = ([d for d in deals if str(d.get("nummer")) == b.get("projectnummer")]
+               if b.get("firma") == "HARC" and b.get("projectnummer") and deals else [])
+    return reden_zonder_dossierkopie(b, herk, deals, passend, passend[0] if len(passend) == 1 else None, tekst)
+
+
+def meld_zonder_kopie(o, st, st_obj, reden):
+    """Eén bevinding per nieuwe reden (in de staat als zonder_kopie), dus niet elke ronde; een opname die alsnog haar
+    kopie krijgt, verliest haar reden zonder regel."""
+    if st.get("zonder_kopie") == reden:
+        return
+    if reden:
+        ag.log(f"opname {o['start_brussel'][:16]}", "bevinding", f"geen dossierkopie: {reden}")
+    st["zonder_kopie"] = reden
+    st_obj.bewaar(o["plaud_id"], st)
 
 
 def reden_zonder_dossierkopie(b, herk, deals, passend, deal, tekst):

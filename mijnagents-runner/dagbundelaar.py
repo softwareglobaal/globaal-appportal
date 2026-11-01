@@ -455,18 +455,25 @@ def inhaaldagen(nu, venster):
         if nieuw is not None and (not vorige or nieuw > max(vorige)):
             uit.append(x["datum"])
     if INHAAL_GESPREKKEN:
-        # PLAUD-10: een dag met een vingerafdruk van zijn laatste inhaal, alleen als die anders is; een dag zonder, als
-        # een rij nieuwer is dan zijn laatste vaststelling of inhaal (daarna heeft hij er een)
-        bekend = lees_json(INHAALVINGERS)
-        for d, (vinger, laatst) in gespreksvingers(vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()).items():
+        # PLAUD-10: een dag met een bewaarde vingerafdruk alleen als die anders is, ook als er geen rij meer is (een rij
+        # die van dag veranderde, Codex-toets 2); een dag zonder, als een rij nieuwer is dan zijn laatste vaststelling of
+        # inhaal. Is ze dat niet, dan zag die vaststelling deze rijen: hun vingerafdruk wordt het vertrekpunt.
+        van, tot = vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()
+        bekend, vingers, vertrek = lees_json(INHAALVINGERS), gespreksvingers(van, tot), {}
+        for d in sorted(set(vingers) | {d for d in bekend if van <= d <= tot}):
+            vinger, laatst = vingers.get(d, (GEEN_RIJEN, ""))
             if d in bekend:
                 anders = bekend[d] != vinger
             else:
                 vorige = [v for v in (tijd((staat.get(d) or {}).get("ts")), tijd(gedaan.get(d))) if v]
                 nieuw = tijd(laatst)
                 anders = nieuw is not None and (not vorige or nieuw > max(vorige))
+                if not anders and vorige:
+                    vertrek[d] = vinger
             if anders:
                 uit.append(d)
+        if vertrek:
+            _schrijf(INHAALVINGERS, json.dumps({**bekend, **vertrek}, indent=1, sort_keys=True))
     return sorted(sorted(set(uit), reverse=True)[:INHAAL_PER_NACHT])
 
 
@@ -476,7 +483,8 @@ def inhaaldagen(nu, venster):
 # verschil (De Fathomwacht schrijft elke ronde haar venster opnieuw). Standaard uit (overleg X7): aan zet ze de inhaal van
 # oude dagen in gang, met nieuwe dagbestanden die naar Dropbox gaan. Aanzetten met een eigen commit na Mehdi's ja op X7.
 INHAAL_GESPREKKEN = False
-INHAALVINGERS = os.path.join(DATA, "dagvaststelling-inhaal-gesprekken.json")   # per ingehaalde dag de vingerafdruk
+INHAALVINGERS = os.path.join(DATA, "dagvaststelling-inhaal-gesprekken.json")   # per dag de vingerafdruk
+GEEN_RIJEN = "geen"                                                            # de vingerafdruk van een dag zonder rij
 
 
 def gespreksvingers(van, tot):
@@ -493,9 +501,10 @@ def gespreksvingers(van, tot):
 
 
 def vingers_bewaren(dagen, vooraf):
-    """Na een geslaagde inhaal: de vingerafdruk van elke ingehaalde dag, van voor het vastleggen (vooraf)."""
+    """Na een geslaagde inhaal: de vingerafdruk van elke ingehaalde dag, van voor het vastleggen (vooraf); een dag zonder
+    Plaud- of Fathom-rij krijgt GEEN_RIJEN, zodat een rij die er later bijkomt of wegging, opvalt."""
     bekend = lees_json(INHAALVINGERS)
-    bekend.update({d: vooraf[d][0] for d in dagen if d in vooraf})
+    bekend.update({d: vooraf[d][0] if d in vooraf else GEEN_RIJEN for d in dagen})
     _schrijf(INHAALVINGERS, json.dumps(bekend, indent=1, sort_keys=True))
 
 
