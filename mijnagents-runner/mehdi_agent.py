@@ -596,6 +596,7 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
     m = kies_moment or moment(nu, staat)
     vinger = vingerafdruk(bundels, gezegd_lijst)
     if m == "tussendoor" and vinger == staat.get("vingerafdruk"):
+        ag.log("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")   # anders alleen een hartslag (ANGEL-10)
         r.detail = werkverslag(m, bundels, Counter(), staat, {}, overgeslagen=True)
         return staat
     inhoud = invoer(nu, m, bundels, staat, gezegd_lijst, kern_lijst)

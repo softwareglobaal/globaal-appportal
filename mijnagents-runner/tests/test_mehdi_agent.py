@@ -298,6 +298,22 @@ def test_tussendoor_zonder_nieuws_roept_claude_niet_aan():
         o.weg()
 
 
+def test_overgeslagen_ronde_laat_een_logregel():
+    """ANGEL-10 (T-0120): een overgeslagen ronde liet op 01-11 geen spoor in het werkverslag, alleen een hartslag."""
+    o = Omgeving()
+    try:
+        o.ronde(uit=antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega")]))
+        o.bord.clear()
+        M.ag._log.clear()
+        o.ronde(nu=MIDDAG_UTC)
+        assert len(o.claude_oproepen) == 1 and o.bord == {}
+        assert [(x["onderwerp"], x["stap"], x["tekst"]) for x in M.ag._log] == [
+            ("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")], M.ag._log
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
 def test_ochtend_en_avond_een_keer_per_dag_op_de_brusselse_klok():
     vandaag = "2026-10-31"
     assert M.moment(OCHTEND_UTC, {}) == "ochtend"
