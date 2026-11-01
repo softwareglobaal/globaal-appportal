@@ -341,6 +341,46 @@ def test_dagen_en_inhalen_na_lange_slaap():
     assert M.dagen(nu, "onzin")[0] == "2026-10-13"
 
 
+def test_tel1_inhaal_vanaf_een_dag():
+    """TEL-1 en TEL-1b: --inhaal-vanaf 2026-10-01 laat De Belwacht en De Sms-wacht eenmalig vanaf 01-10 lezen (op 01-11
+    zijn dat 32 dagen), zonder de stand op de Mac te laten zakken; zonder optie blijft alles zoals het was."""
+    nu = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+    dagen = M.dagen(nu, M.inhaal_grens("2026-10-31", "2026-10-01"))
+    assert dagen[0] == "2026-10-01" and dagen[-1] == "2026-11-01" and len(dagen) == 32, dagen
+    assert M.inhaal_grens("2026-10-31", None) == "2026-10-31" and M.inhaal_grens(None, "2026-10-01") == "2026-09-30"
+    assert M.inhaal_grens("2026-09-15", "2026-10-01") == "2026-09-15"     # nooit minder dan de stand al las
+    assert M.inhaal_vanaf("2026-10-01", nu) == "2026-10-01"
+    for slecht in ("2026-13-01", "gisteren", "2026-09-02", "2026-11-02"):
+        try:
+            M.inhaal_vanaf(slecht, nu)
+            raise AssertionError(slecht)
+        except M.argparse.ArgumentTypeError:
+            pass
+    import contextlib
+    for module in (BEL, SMS):
+        gezien, geschreven = [], []
+        oud = (M.slot, M.lees_token, M.stand_lezen, M.tunnel, module.ag.ronde, module.werk, M.eindcontrole,
+               M.stand_schrijven, M.inhaal_vanaf, bord.PLATFORM, bord.TOKEN)
+        M.slot = lambda naam: contextlib.nullcontext()
+        M.lees_token = lambda: "proef"
+        M.stand_lezen = lambda naam: {"gedekt_tot": "2026-10-31"}
+        M.tunnel = lambda: contextlib.nullcontext("http://127.0.0.1:1")
+        module.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde(""))
+        module.werk = lambda r, ronde_id, gedekt_tot=None: (gezien.append(gedekt_tot), "2026-10-31")[1]
+        M.eindcontrole = lambda *x, **k: True
+        M.stand_schrijven = lambda naam, stand: geschreven.append(stand)
+        M.inhaal_vanaf = lambda tekst, _echt=oud[8]: _echt(tekst, nu)
+        try:
+            with redirect_stdout(io.StringIO()):
+                assert module.main(["--inhaal-vanaf", "2026-10-01"]) == 0
+                assert module.main([]) == 0
+        finally:
+            (M.slot, M.lees_token, M.stand_lezen, M.tunnel, module.ag.ronde, module.werk, M.eindcontrole,
+             M.stand_schrijven, M.inhaal_vanaf, bord.PLATFORM, bord.TOKEN) = oud
+        assert gezien == ["2026-09-30", "2026-10-31"], (module.NAAM, gezien)
+        assert geschreven == [], geschreven                             # de stand zakt niet en blijft 31-10
+
+
 def test_dagbundelaar_haalt_dagen_in():
     with tempfile.TemporaryDirectory() as map_:
         oud_staat, oud_inhaal, oud_lees = D.STAAT, D.INHAALSTAAT, bord.db_lees

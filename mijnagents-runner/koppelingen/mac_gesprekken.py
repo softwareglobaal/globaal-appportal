@@ -17,6 +17,7 @@ Het contract met De Dagbundelaar (dagbundelaar.kanaal_van_dag, dagvaststelling.s
 gesprek per dag, whatsapp-oproep:<oproep-ID>, telefoon:<ZUNIQUE_ID>, en dekking:<kanaal>:<dag> met bron dekking. Alles
 privé. Een oproep zonder duur staat er met dubbel_van buiten:gemist en telt dus niet als gesprek (Z10).
 """
+import argparse
 import contextlib
 import fcntl
 import hashlib
@@ -160,6 +161,29 @@ def dagen(nu, gedekt_tot=None, n=VENSTER):
         except ValueError:
             pass
     return [(eerste + timedelta(days=i)).isoformat() for i in range((vandaag - eerste).days + 1)]
+
+
+def inhaal_vanaf(tekst, nu=None):
+    """TEL-1: het argparse-type van --inhaal-vanaf JJJJ-MM-DD: een dag van vandaag tot hoogstens INHAAL dagen terug (zo
+    ver leest een ronde, en de helper kopieert er 62)."""
+    try:
+        dag = date.fromisoformat(str(tekst))
+    except ValueError:
+        raise argparse.ArgumentTypeError("een dag als JJJJ-MM-DD") from None
+    vandaag = (nu or datetime.now(timezone.utc)).astimezone(BRUSSEL).date()
+    if not vandaag - timedelta(days=INHAAL - 1) <= dag <= vandaag:
+        raise argparse.ArgumentTypeError(f"hoogstens {INHAAL} dagen terug en niet na vandaag")
+    return dag.isoformat()
+
+
+def inhaal_grens(gedekt_tot, vanaf=None):
+    """TEL-1: een eenmalige inhaalronde vanaf een dag. De dag ervoor geldt dan als laatste gedekte dag, zodat dagen() vanaf
+    daar leest, zoals na een lange slaap (P7). Nooit later dan de stand: een inhaalronde leest altijd minstens zoveel. De
+    stand op de Mac zakt er niet door, want de wacht schrijft alleen een latere gedekte dag weg."""
+    if not vanaf:
+        return gedekt_tot
+    grens = (date.fromisoformat(vanaf) - timedelta(days=1)).isoformat()
+    return min(grens, str(gedekt_tot)) if gedekt_tot else grens
 
 
 def minuten(seconden):
