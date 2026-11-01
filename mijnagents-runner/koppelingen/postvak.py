@@ -146,6 +146,15 @@ def mappen_van(adres):
         return ["INBOX"]
 
 
+def alleen_lezen_van(adres):
+    """De mappen van dit postvak die de wacht alleen leest (mailwachten.json, 'alleen_lezen'): nooit uitschrijven,
+    opruimen of sorteren daaruit (VOL-3). Opruimen, sorteren en rommel naar Opgeruimd werken toch alleen op de INBOX."""
+    try:
+        return list(wachten().get("alleen_lezen", {}).get((adres or "").lower()) or [])
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
 def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000, fouten=None):
     """Koppen uit meerdere mappen; een map die niet bestaat of niet leesbaar is, wordt overgeslagen en gelogd. Wat niet
     volledig gelezen werd (onleesbaar, of het plafond bereikt), komt in `fouten`."""

@@ -39,6 +39,13 @@
    "INBOX.Accounts en abonnementen"
   ]
  },
+ "alleen_lezen": {
+  "_uitleg": "VOL-3 (T-0120, overleg 01-11-2026: MAIL-2 pas na VOL-3): mappen die de wacht leest voor de opvolging en de cijfers, maar waaruit hij nooit uitschrijft, opruimt of sorteert. Bij info@h-invest.be zet een filter van one.com de Zoom- en bpost-meldingen meteen in INBOX.Zoom en INBOX.Bpost (62 procent van de post in oktober 2026); zonder deze lijst werden ze kandidaat voor een automatische uitschrijving (een POST naar de afzender). Het opruimen, het sorteren en rommel naar Opgeruimd werken alleen op de INBOX; het uitschrijven slaat deze mappen over (uitschrijven.mappen_voor en kandidaten).",
+  "info@h-invest.be": [
+   "INBOX.Zoom",
+   "INBOX.Bpost"
+  ]
+ },
  "sorteerregels": {
   "_uitleg": "Welk regelbestand (mijnagents-runner/mailregels/) de wacht elke ronde op de INBOX toepast: de nieuwe mail van drie dagen, en wat ouder is dan een jaar naar het jaararchief. Alleen UID MOVE, alleen met 'schrijven' in de postbus. Dezelfde bestanden gebruikt sorteren.py op de Mac (via een snelkoppeling in ~/.claude/tools/mailopruiming). regels_info.txt en regels_mch.txt worden gemaakt met maak_regels.py uit regels_hinvest.txt en toevoegingen_<alias>.txt.",
   "info@h-invest.be": "regels_hinvest.txt",

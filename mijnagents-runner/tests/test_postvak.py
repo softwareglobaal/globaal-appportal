@@ -621,6 +621,37 @@ def test_uitschrijven_ronde_logboek_plafond_en_grendels():
     assert U.mappen_voor("melodiebvba@gmail.com", {"imap_host": "imap.gmail.com"}, cfg_echt)[-2:] == ["Opgeruimd", "Nieuwsbrieven"]
 
 
+def test_alleen_lezen_mappen_blijven_buiten_het_uitschrijven():
+    """VOL-3, voor MAIL-2 (overleg 01-11-2026, X9): zodra de wacht van info@h-invest.be INBOX.Zoom en INBOX.Bpost leest,
+    werden die meldingen kandidaat voor een automatische uitschrijving (een POST naar de afzender). Die mappen staan op een
+    lijst 'alleen lezen' (mailwachten.json): het uitschrijven leest ze niet, en wat er toch uit komt, valt af."""
+    import uitschrijven as U
+    assert set(postvak.alleen_lezen_van("info@h-invest.be")) == {"INBOX.Zoom", "INBOX.Bpost"}
+    assert postvak.alleen_lezen_van("mch@h-architects.be") == []
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    brieven = []
+    for i, m in enumerate(("INBOX.Zoom", "INBOX.Bpost", "INBOX.Opgeruimd")):
+        brieven += [_nieuwsbrief(van=f"news{i}@brand.be", map=m, message_id=f"<n{i}@brand.be>"),
+                    _nieuwsbrief(van=f"news{i}@brand.be", map=m, message_id=f"<o{i}@brand.be>",
+                                 datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    oud_pv, oud_mv = postvak.postvak, postvak.mappen_van
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    postvak.mappen_van = lambda a: ["INBOX", "INBOX.Zoom", "INBOX.Bpost"]   # zoals na MAIL-2
+    gelezen = []
+    try:
+        mb = postvak.postvak("info@h-invest.be")
+        assert U.mappen_voor("info@h-invest.be", mb, inst) == ["INBOX", "INBOX.Opgeruimd"]
+        cfg = postvak.wachten()["mail-hinv"]
+        for lezen in (lambda mb, mappen, sinds: gelezen.append(list(mappen)) or [b for b in brieven if b["map"] in mappen],
+                      lambda mb, mappen, sinds: brieven):   # ook als een lezer toch alles teruggeeft
+            uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]), lezen=lezen, inst=inst)
+            assert {b["map"] for b, _url, _pv in uit.values()} == {"INBOX.Opgeruimd"}, (uit, redenen)
+        assert gelezen == [["INBOX", "INBOX.Opgeruimd"]], gelezen
+    finally:
+        postvak.postvak, postvak.mappen_van = oud_pv, oud_mv
+
+
 def test_rommel_naar_opgeruimd_alleen_met_exacte_domeinen():
     """19-10-2026: alleen rommel, met een exacte domeinvergelijking; 'ing.be' zat ooit in valoprojectontwikkeling.be."""
     def r(van, mid, soort="rommel", **k):
