@@ -51,14 +51,14 @@ def _getal(x):
 
 
 def _kanaal(x, sleutels):
-    """WA-6 (T-0120): een kanaal van de Mac dat die dag niet aangesloten was en geen enkele rij had, is onbekend: de
-    getallen zijn None, nooit 0, zoals in de dagtekst ('onbekend (stil sinds ...)'). Wat wel gezien is, blijft staan als
-    ondergrens; een aangesloten dag zonder rij is een echte nul."""
+    """WA-6 (T-0120): op een dag dat een kanaal van de Mac niet aangesloten was, is een nul onbekend (None), nooit 0:
+    'niets gezien' bewijst daar niets (Codex-toets 1: ook 0 oproepen naast gezien berichten). Wat wel gezien is, blijft
+    staan als ondergrens; op een aangesloten dag is een nul een echte nul."""
     x = x if isinstance(x, dict) else {}
     stand = x.get("stand") or "niet aangesloten"
     getallen = {k: _getal(x.get(k)) for k in sleutels}
-    if stand != "aangesloten" and not any(getallen.values()):
-        getallen = dict.fromkeys(sleutels)
+    if stand != "aangesloten":
+        getallen = {k: v or None for k, v in getallen.items()}
     return {"stand": stand, **getallen}
 
 
