@@ -144,14 +144,23 @@ def onthoud_limiet(info, bestand=None):
 
 
 def limiet_schrijfbaar(bestand=None):
-    """Kan de code een limiet onthouden? Zonder dat start geen vraag (Codex, controle 19): anders zou een volgende vraag
-    na extra verbruik toch starten."""
-    map_ = os.path.dirname(bestand or LIMIET_BESTAND)
+    """Kan de code een limiet onthouden? Zonder dat start geen vraag (Codex, controle 19 en 20): anders zou een volgende
+    vraag na extra verbruik toch starten. Een echte schrijfproef: het bestand zelf moet open kunnen om te schrijven, en
+    een proefbestand ernaast moet echt op schijf komen (een volle schijf of quotum valt zo op)."""
+    bestand = bestand or LIMIET_BESTAND
+    proef = bestand + ".proef"
     try:
-        os.makedirs(map_, exist_ok=True)
+        os.makedirs(os.path.dirname(bestand), exist_ok=True)
+        with open(bestand, "a", encoding="utf-8"):
+            pass
+        with open(proef, "w", encoding="utf-8") as f:
+            f.write("x" * 4096)
+            f.flush()
+            os.fsync(f.fileno())
+        os.remove(proef)
+        return True
     except OSError:
         return False
-    return os.access(map_, os.W_OK)
 
 
 def bekende_limiet(bestand=None, nu=None):

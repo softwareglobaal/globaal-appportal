@@ -844,6 +844,13 @@ with tempfile.TemporaryDirectory() as _d:
                                                                       "resetsAt": time.time() + 3600}}, "SLAAP", KLAAR])
     e = fout_van()
     check("controle 18: een waarschuwing van het abonnement stopt ook", e is not None and e.limiet)
+    _echt_onthoud = CA.onthoud_limiet
+    os.remove(CA.LIMIET_BESTAND)
+    CA.onthoud_limiet = lambda info, bestand=None: False
+    e = fout_van()
+    CA.onthoud_limiet = _echt_onthoud
+    check("controle 20: mislukt het bewaren van een limiet na de vraag, dan is het een limietfout", e is not None
+          and e.limiet and "niet te onthouden" in str(e))
     json.dump({"info": {"status": "allowed_warning", "resetsAt": time.time() - 10}}, open(CA.LIMIET_BESTAND, "w"))
     check("een voorbij venster houdt niets meer tegen", CA.bekende_limiet() is None)
     check("controle 18: boven 90 procent van een venster start geen nieuwe vraag", CA.limiet_reden(
@@ -921,6 +928,14 @@ try:
 except CA.Fout as e:
     check("controle 19: kan de code een limiet niet onthouden, dan start er geen vraag", e.soort == "bron"
           and "niet te onthouden" in str(e) and not _gestart)
+with tempfile.TemporaryDirectory() as _d2:
+    _ro = os.path.join(_d2, "limiet.json")
+    open(_ro, "w").write("{}")
+    os.chmod(_ro, 0o444)
+    check("controle 20: een limietbestand dat niet te schrijven is, telt als niet schrijfbaar",
+          CA.limiet_schrijfbaar(_ro) is False and CA.limiet_schrijfbaar(_d2) is False
+          and CA.limiet_schrijfbaar(os.path.join(_d2, "goed", "limiet.json")) is True)
+    os.chmod(_ro, 0o644)
 os.remove(_tf.name)
 CA.LIMIET_BESTAND, CA.draai = _oud_lb, _oud_draai
 _t0 = time.monotonic()

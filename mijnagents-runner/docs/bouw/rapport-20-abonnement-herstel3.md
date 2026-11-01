@@ -1,0 +1,8 @@
+Niet akkoord: tijdgrenzen zijn opgelost, maar de kostengrens is nog niet volledig hard.
+
+1. Hoog: onbekende status stopt correct en opslagfouten worden gemeld ([claude_abonnement.py:120](mijnagents-runner/koppelingen/claude_abonnement.py:120), [:275](mijnagents-runner/koppelingen/claude_abonnement.py:275), [:296](mijnagents-runner/koppelingen/claude_abonnement.py:296)). Maar `os.access` controleert alleen de map. Bij een onschrijfbaar bestand, volle schijf of quotum start een volgende vraag opnieuw ([claude_abonnement.py:146](mijnagents-runner/koppelingen/claude_abonnement.py:146)). Dit randgeval heb ik bevestigd. Alleen extra verbruik uitschakelen maakt dit financieel aanvaardbaar.
+2. Opgelost: DNS en het volledige verzoek delen een harde eindtijd, zonder minimumtijd ([webpagina.py:27](mijnagents-runner/bouw/webpagina.py:27), [:114](mijnagents-runner/bouw/webpagina.py:114), [:148](mijnagents-runner/bouw/webpagina.py:148)).
+5. Opgelost: elk Dropbox-verzoek valt binnen de resterende deadline en levert anders een onvolledige lijst op ([eigen.py:73](mijnagents-runner/bouw/eigen.py:73)).
+6. De nieuwe tijdtests en CI-paden kloppen ([test_bouw.py:1017](mijnagents-runner/tests/test_bouw.py:1017), [bouw-grendels.yml:7](.github/workflows/bouw-grendels.yml:7)). Een test voor mislukte opslag ná de vraag ontbreekt. Gerichte controles waren goed; de volledige 347 konden hier niet draaien doordat tijdelijke bestanden verboden zijn.
+
+NIET AKKOORD
