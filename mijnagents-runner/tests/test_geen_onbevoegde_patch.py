@@ -507,6 +507,7 @@ begin = next(i for i, n in enumerate(ronde.body) if isinstance(n, ast.Assign)
 staart = ast.fix_missing_locations(ast.Module(body=ronde.body[begin:], type_ignores=[]))
 volgorde = []
 hartslagen = []
+bord_open = set()        # de open noden van agenda-wacht op een nagebootst bord (zoals mijnagents/app.py, O27)
 
 
 class Rondeverslag:
@@ -522,6 +523,12 @@ class Rondeverslag:
     def hartslag(self, status, *args, **kwargs):
         volgorde.append(("hartslag", status))
         hartslagen.append(dict(kwargs, status=status))
+        if kwargs.get("nood") is not None:
+            # het bord sluit wat niet in de lijst staat, tenzij nood_sluiten false (sluiten=False); nieuw komt erbij
+            teksten = {n["tekst"] for n in kwargs["nood"]}
+            if kwargs.get("sluiten", True):
+                bord_open.intersection_update(teksten)
+            bord_open.update(teksten)
 
     def werkwijze(self, taak="", noden=()):
         return "# Proef\n\nRegel."
@@ -583,18 +590,22 @@ check("foutpad verstuurt de foutlog", isinstance(resultaat, RuntimeError)
       and [x[0] for x in volgorde][-3:] == ["log", "verstuur", "hartslag"] and volgorde[-1] == ("hartslag", "fout"),
       f"{resultaat} {volgorde}")
 
-# F8 op de echte staart (Codex NA52, ronde 12): een dagronde stuurt haar noden zonder te sluiten (sluiten=False, op het
-# bord nood_sluiten false), een volledige ronde stuurt de gezaghebbende lijst; een nood die al open stond, gaat gewoon mee.
-_open = {"tekst": "Buitenafspraken zonder reistijd, reden: rit zonder afspraak", "wie": "mehdi"}
-for _dag, _sluiten in ((None, True), ("2026-10-27", False)):
+# F8 op de echte staart (Codex NA52 en NA54, ronde 12 en 13): op het bord staat al een nood open die deze ronde niet
+# ziet. Een dagronde stuurt haar nieuwe nood zonder te sluiten (sluiten=False, op het bord nood_sluiten false): de oude
+# blijft open. Een volledige ronde stuurt de gezaghebbende lijst: de oude sluit, de nieuwe staat open.
+_oud = "Buitenafspraken zonder reistijd, reden: rit zonder afspraak"
+_nieuw = {"tekst": "TE KRAP: kies welke afspraak schuift", "wie": "mehdi"}
+for _dag, _sluiten, _verwacht in ((None, True, {_nieuw["tekst"]}), ("2026-10-27", False, {_oud, _nieuw["tekst"]})):
     volgorde.clear()
     hartslagen.clear()
-    dummy.update({"DAG_ARG": _dag, "noden": [dict(_open)]})
+    bord_open.clear()
+    bord_open.add(_oud)
+    dummy.update({"DAG_ARG": _dag, "noden": [dict(_nieuw)]})
     resultaat = veilig(lambda: in_de_ronde(staart))
     _h = hartslagen[-1] if hartslagen else {}
-    check(f"F8: {'een dagronde sluit niets' if _dag else 'de volledige ronde stuurt haar eigen lijst'} (echte staart)",
-          resultaat is None and _h.get("status") == "waakt" and _h.get("sluiten") is _sluiten and _h.get("nood") == [_open],
-          f"{resultaat} {_h}")
+    check(f"F8: {'een dagronde sluit de open nood niet' if _dag else 'de volledige ronde sluit wat ze niet meer ziet'} "
+          f"(echte staart)", resultaat is None and _h.get("status") == "waakt" and _h.get("sluiten") is _sluiten
+          and bord_open == _verwacht, f"{resultaat} {_h} {bord_open}")
 dummy.update({"DAG_ARG": None, "noden": []})
 
 print(f"H1-1: {ok} goed, {fout} fout")
