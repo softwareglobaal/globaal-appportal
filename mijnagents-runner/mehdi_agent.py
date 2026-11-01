@@ -417,26 +417,47 @@ def bron_in(bron, corpus):
     return bool(stukken) and all(s in corpus for s in stukken)
 
 
-def bron_prive(bron, bundels):
-    """Komt de bron uit een regel van de dagbundel die privé zegt, of uit een blok dat privé is (een kop met privé, of
-    Eigen werk en gezondheid)? Dan is de taak privé, ook als het woord niet in de taak zelf staat (Codex, toets 1 van
-    T-0120). Elk stuk van de bron moet in die ene regel of dat ene blok staan: een projectnaam die ook in een privéblok
-    voorkomt, maakt een gewone taak niet privé (toets 2). Op elke dag van de bundel: een verkeerde dag van het model
-    mag een privébron niet verbergen; wat zo te veel privé wordt, blijft alleen bij Mehdi."""
-    stukken = _stukken(bron)
-    for b in bundels if stukken else []:
-        kop, blok = "", []
-        for regel in b["dagbestand"].splitlines() + ["## einde"]:
+def _openbare_stukken(dagbestand):
+    """De openbare tekst van een dagbestand, als losse stukken: een reeks opeenvolgende regels zonder privé binnen een
+    blok, genormaliseerd. Privé is een regel met privé, of een blok met privé in de kop of Eigen werk en gezondheid."""
+    uit, kop_prive, reeks = [], False, []
+    for regel in dagbestand.splitlines() + ["## einde"]:
+        prive = kop_prive or bool(PRIVE.search(regel))
+        if regel.startswith("## ") or prive:
+            if reeks:
+                uit.append(normaal(" ".join(reeks)))
+            reeks = []
             if regel.startswith("## "):
-                tekst = normaal(" ".join(blok))
-                if (PRIVE.search(kop) or kop.startswith(PRIVE_KOPPEN)) and all(s in tekst for s in stukken):
-                    return True
-                kop, blok = normaal(regel[3:]), []
-                continue
-            blok.append(regel)
-            if PRIVE.search(regel) and all(s in normaal(regel) for s in stukken):
-                return True
-    return False
+                kop = normaal(regel[3:])
+                kop_prive = bool(PRIVE.search(kop)) or kop.startswith(PRIVE_KOPPEN)
+                if not kop_prive:
+                    uit.append(kop)
+            continue
+        reeks.append(regel)
+    return uit
+
+
+def herkomst(bron, bundels, gezegd=()):
+    """Per stuk van de bron waar het vandaan komt (Codex, toetsen 1 tot 3 van T-0120): "publiek" als het in een openbaar
+    stuk van de dagbundel staat (ook als het daarnaast in een privéblok staat: dan is die tekst al openbaar), "prive" als
+    het verder alleen in het dagbestand staat (in een privéregel of -blok, of over een privéregel of een kop heen),
+    "mehdi" als het uit Mehdi's woorden komt, "publiek" ook voor de telling, en "" als het nergens staat."""
+    openbaar = [s for b in bundels for s in _openbare_stukken(b["dagbestand"])]
+    heel = [normaal(b["dagbestand"]) for b in bundels]
+    telling = [normaal(json.dumps(b["telling"], ensure_ascii=False)) for b in bundels]
+    woorden = [normaal(g.get("tekst")) for g in gezegd or []]
+    uit = []
+    for s in _stukken(bron):
+        uit.append("publiek" if any(s in x for x in openbaar) else "prive" if any(s in x for x in heel)
+                   else "mehdi" if any(s in x for x in woorden) else "publiek" if any(s in x for x in telling) else "")
+    return uit
+
+
+def bron_prive(bron, bundels):
+    """Is een stuk van de bron privé (herkomst)? Dan is de taak privé, ook als het woord niet in de taak zelf staat. Op
+    elke dag van de bundel: een verkeerde dag van het model mag een privébron niet verbergen; wat zo te veel privé wordt,
+    blijft alleen bij Mehdi in zijn eigen lijst."""
+    return "prive" in herkomst(bron, bundels)
 
 
 def zoek_collega(wie, kern):
@@ -684,23 +705,23 @@ def klaarzet_items(antwoord):
 def doorgeef_besluiten(staat, agents, bundels, gezegd=(), ontvangers=None, aan=None):
     """Per open taak voor een agent die nog niet weg is, wat De Doorgever ermee doet: [{id, naar, besluit}]. naar is de
     agent als de taak deze ronde weggaat (met de vlag uit: zou weggaan), anders leeg. Elke bewaarde taak gaat opnieuw
-    langs de bundel van nu, ook een oude die Claude deze ronde wegliet: is de bron privé of niet meer na te gaan, dan
-    blijft ze bij Mehdi (Codex, toets 2). Zet niets (droog en test)."""
+    langs de bundel van nu, ook een oude die Claude deze ronde wegliet: is een stuk van de bron privé of niet meer na te
+    gaan (herkomst), dan blijft ze bij Mehdi (Codex, toetsen 2 en 3). Zet niets (droog en test)."""
     ontvangers = ONTVANGERS if ontvangers is None else ontvangers
     aan = DOORGEVEN if aan is None else aan
-    corpus = corpus_van(bundels, gezegd)
     uit, n = [], 0
     for t in open_taken(staat):
         if t.get("voor") != "agent" or t.get("doorgegeven"):
             continue
         naam = agent_naam(t.get("wie"), agents)
+        h = herkomst(t.get("bron"), bundels, gezegd)
         if t.get("prive") or PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))) \
-                or bron_prive(t.get("bron"), bundels):
+                or "prive" in h:
             reden = "privé"                              # privé gaat nooit naar een ander
         elif t.get("teruggekomen"):
             reden = "ging al eens terug"                 # een agent liet ze liggen: nu is ze van Mehdi
-        elif not bron_in(t.get("bron"), corpus):
-            reden = "bron niet meer na te gaan in de dagbundel"
+        elif not h or "" in h:
+            reden = "bron niet meer na te gaan in de dagbundel"   # elk stuk moet openbaar of van Mehdi zijn
         elif not naam:
             reden = "de agent staat niet op het bord"
         elif naam not in ontvangers:

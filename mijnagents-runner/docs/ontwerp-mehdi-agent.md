@@ -77,9 +77,11 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
   kiest Mehdi per soort taak (werkwijze, Wat Mehdi beslist). Een ontvanger komt er pas op als zijn eigen code een taak
   van `mehdi-agent` aanneemt; De Agendawacht neemt nu alleen taken van De Werfverslag voorbereider aan
   (`agenda_wacht.py`, `terugkijktaken`), en daar verandert dit niets aan.
-- Nooit iets privé: ook niet als alleen de bron privé is (elk stuk van de bron in een regel met privé, of in een blok als
-  Eigen werk en gezondheid; `bron_prive`), en zo'n taak blijft voortaan privé. Elke bewaarde taak gaat voor ze weggaat
-  opnieuw langs de bundel van nu: staat haar bron er niet meer letterlijk in, dan blijft ze bij Mehdi. Hoogstens vijf
+- Nooit iets privé: ook niet als alleen de bron privé is, en zo'n taak blijft voortaan privé. De herkomst telt per stuk
+  van de bron (`herkomst`): openbaar als het in een openbaar stuk van de bundel staat, privé als het alleen in een regel
+  met privé, in een blok als Eigen werk en gezondheid, of over zo'n regel of een kop heen staat. Elke bewaarde taak gaat
+  voor ze weggaat opnieuw langs de bundel van nu: elk stuk moet openbaar zijn of uit Mehdi's woorden komen, anders blijft
+  ze bij Mehdi. Hoogstens vijf
   per ronde. Een taak die al eens terugkwam, gaat niet opnieuw weg.
 - Elke ronde met Claude, met de vlag aan, leest hij de status van wat weg is terug. Alleen opgepakt door de ontvanger
   zelf (zijn naam als `opgepakt_door`) is beweging. Ligt een item na drie dagen nog klaar, of staat het niet meer klaar, dan neemt hij het terug (opgepakt door

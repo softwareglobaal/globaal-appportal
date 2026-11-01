@@ -901,6 +901,35 @@ def test_een_gedeelde_projectnaam_maakt_een_gewone_taak_niet_prive():
     assert t["voor"] == "collega" and t["wie"] == "Proefpersoon Zeta" and not t.get("prive")
 
 
+def test_een_gemengde_bron_met_een_privestuk_gaat_nooit_weg():
+    """Codex toets 3: een openbaar stuk, een weglating en een stuk dat alleen in een privéblok staat. De herkomst telt per
+    stuk: een stuk dat alleen privé voorkomt, maakt de bron privé; een stuk dat ook openbaar staat, niet."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n- slaap 5 uur, rustpols hoog\n\n## Over deze vaststelling")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    gemengd = "16:10 telefoon met Klant Omega ... slaap 5 uur, rustpols hoog"
+    assert M.bron_in(gemengd, M.corpus_van(bundels, [])) and M.bron_prive(gemengd, bundels)
+    assert M.herkomst("16:10 telefoon met Klant Omega ... slaap 5 uur", bundels) == ["publiek", "prive"]
+    assert M.herkomst("Zeta tekent het plan ... tekening Proefplan", bundels) == ["publiek", "prive"]
+    assert M.herkomst("rustpols hoog\n\n## Over deze vaststelling", bundels) == ["prive"]   # over een kop heen: privé
+    assert M.herkomst("Bel Proefpersoon Eta morgen", bundels, [{"tekst": "Bel Proefpersoon Eta morgen"}]) == ["mehdi"]
+    assert M.herkomst("verzonnen bron die nergens staat", bundels) == [""]
+    assert M.herkomst("op de computer - slaap 5 uur", bundels) == ["prive"]               # twee regels van een privéblok
+    assert M.herkomst("(auto ter plaatse) - 14:00", bundels) == ["prive"]                  # over een privéregel heen
+    o = Omgeving()
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1", bron=gemengd)}, "afgerond": []}
+        besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, bundels, zet=o.zet, lees=o.lees, pak=None,
+                                         ontvangers={"zoom-wacht": "zoekt"}, aan=True)
+        assert [b["besluit"] for b in besluiten] == ["blijft bij Mehdi: privé"] and o.bord == {} and not telling
+        staat, _, _ = M.verwerk(antwoord([taak("Zoek het op", gemengd, voor="agent", wie="De Zoomwacht")]),
+                                M.laad_staat("/nergens/staat.json"), bundels, [], KERN, AGENTS, OCHTEND_UTC)
+        (t,) = staat["taken"].values()
+        assert t["voor"] == "mehdi" and t["prive"] is True
+    finally:
+        o.weg()
+
+
 def test_doorgever_alleen_de_ontvanger_zelf_is_beweging():
     """Codex toets 2, bezwaar 3: opgepakt door Mehdi, een andere agent of zonder naam is geen beweging van de ontvanger."""
     weg = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-31T06:20:00+00:00"}
