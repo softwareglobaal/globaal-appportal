@@ -16,6 +16,7 @@ Draaien: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -92,10 +93,10 @@ class Wereld:
         return {"items": [it] if it else []}
 
 
-def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_noden=(), **k):
+def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_noden=(), doe=None, **k):
     """Een ronde van vastleggen; gisteren ligt vast (standaard ruim na DAG, zodat Zoom niet meer voorlopig is). mail: een
     eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt; open_noden: wat het bord als open noden geeft
-    (None: onbekend)."""
+    (None: onbekend); doe: in plaats van vastleggen, in dezelfde wereld (bv. main())."""
     oud = (D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren)
     D.V.gisteren = lambda nu: gisteren
     D.DAGBOEK = os.path.join(w.map, "dagboek")
@@ -113,7 +114,7 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_
     r = NepRonde()
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            detail = D.vastleggen(r, list(dagen), **k)
+            detail = doe() if doe else D.vastleggen(r, list(dagen), **k)
         return r, detail
     finally:
         D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren = oud
@@ -1210,6 +1211,81 @@ def test_mail4_reservesleutel_voor_rijen_zonder_message_id():
     assert S(pv, {"message_id": "<a1@x>", "uid": 5}) == "<a1@x>" == S(pv, {"uniek": f"{pv}:<a1@x>", "message_id": ""})
     assert S(pv, {"uid": 12}) == S(pv, {"uniek": f"{pv}:12"}) == f"{pv}:12"
     assert S(pv, {"uid": 12}) != S("ander@proef.test", {"uid": 12}), "een uid is alleen uniek binnen een postvak"
+
+
+class HartRonde:
+    """ag.ronde zonder bord: de taak, de noden en het detail na de ronde."""
+
+    def __init__(self, taak):
+        self.taak, self.noden, self.detail, self.noden_onbekend = taak, [], "", False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *fout):
+        return False
+
+    def nood(self, tekst, wie="mehdi"):
+        self.noden.append(tekst)
+
+    def bron(self, naam, inhoud):
+        pass
+
+
+def _hand(w, argv, **k):
+    """main() met de opties van argv (zoals de VM ze zou krijgen), in de wereld w; geeft de ronde of de fout van de
+    opties. bundelen() en de lezing van de nachtketen mogen niet lopen."""
+    rondes, geroepen = [], []
+    namen = ("DAG", "DAG_GEGEVEN", "VENSTER", "WEEK", "NACHT", "ALLEEN_VASTSTELLEN", "HANDMATIG", "bundelen", "lees_nacht")
+    oud = {n: getattr(D, n) for n in namen}
+    D.DAG, D.DAG_GEGEVEN, D.VENSTER, D.WEEK, D.NACHT, D.ALLEEN_VASTSTELLEN, D.HANDMATIG = D.opties(argv, nu=NU)
+    D.bundelen = lambda: geroepen.append("bundelen") or {"detail": "", "nood": [], "bronnen": 0}
+    D.lees_nacht = lambda: geroepen.append("nacht.json") or {}
+    D.ag.ronde = lambda taak, **kw: rondes.append(HartRonde(taak)) or rondes[-1]
+    try:
+        ronde(w, doe=D.main, **k)
+    finally:
+        for n, v in oud.items():
+            setattr(D, n, v)
+        D.ag.__dict__.pop("ronde", None)
+    return rondes[-1], geroepen
+
+
+def test_vol1_alleen_vaststellen_is_de_inhaalweg():
+    """VOL-1 (T-0120, overleg X7 en X9): de inhaalweg van de dagbundel. --alleen-vaststellen stelt vast zonder bundelen() en
+    zonder de controle van de nachtketen, dus zonder nood 'buiten de nachtketen'; het is een ronde met de hand, die geen
+    noden sluit en het ochtendbericht niet vrijgeeft. --dag samen met --venster weigert de runner: tot 01-11-2026 won
+    --dag dan stil (WISPR-2), en --venster zonder --nacht bundelde ook gisteren (DB-4, AG-1). Bouwen mag, draaien niet."""
+    import ochtend
+    for fout in (["--dag", "2026-10-05", "--venster", "32"], ["--nacht", "--alleen-vaststellen"],
+                 ["--alleen-vaststellen", "--dag", "2026-10-05", "--venster", "32"]):
+        try:
+            D.opties(fout, nu=NU)
+            raise AssertionError(f"{fout} moet geweigerd worden")
+        except ValueError as e:
+            assert "samen" in str(e), e
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        jaar = os.path.join(m, "dagboek", "2026")
+        os.makedirs(jaar)
+        with open(os.path.join(jaar, "2026-10-20.md"), "w", encoding="utf-8") as f:
+            f.write("# Dag 2026-10-20 vastgesteld\n\noude versie\n")
+        r, geroepen = _hand(w, ["--alleen-vaststellen", "--venster", "32"], dagen=())
+        assert not geroepen, f"geen bundelen() en geen nachtketen: {geroepen}"
+        assert r.taak == f"{ochtend.NACHTTAAK} met de hand", r.taak
+        assert not [n for n in r.noden if "nachtketen" in n], r.noden
+        tellingen = sorted(f for f in os.listdir(jaar) if f.endswith(".json"))
+        assert len(tellingen) == 32 and tellingen[-1] == "2026-11-10.json" and tellingen[0] == "2026-10-10.json", tellingen
+        assert os.path.exists(os.path.join(jaar, "versies", "2026-10-20 v1.md")), "de vorige versie blijft bewaard"
+        assert "32 dag(en) vastgesteld" in r.detail, r.detail
+        # --alleen-vaststellen --dag: precies die dag
+        r, geroepen = _hand(w, ["--alleen-vaststellen", "--dag", "2026-09-30"], dagen=())
+        assert not geroepen and os.path.exists(os.path.join(m, "dagboek", "2026", "2026-09-30.json")), geroepen
+    # de runner zelf weigert de verkeerde combinatie voor hij iets leest of schrijft
+    p = subprocess.run([sys.executable, os.path.join(RUNNER, "dagbundelaar.py"), "--dag", "2026-10-05", "--venster", "32"],
+                       capture_output=True, text=True, timeout=60,
+                       env=dict(os.environ, HOME=tempfile.gettempdir(), MIJNAGENTS_URL="http://127.0.0.1:9"))
+    assert p.returncode == 2 and "samen" in p.stderr, (p.returncode, p.stderr[-300:])
 
 
 def test_vol4_eigen_werk_en_gezondheid_standaard_uit():

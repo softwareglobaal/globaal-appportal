@@ -18,6 +18,8 @@ handmatige ronde van een gesprekkenwacht kon me zo vóór de keten laten lopen, 
      wat ontbreekt (afspraak zonder opname, opname zonder dossier);
   3. de bundels klaarzetten voor de afdeling (h-architects) en het dagverslag voor Mehdi;
   4. wat om een keuze vraagt (bij welk dossier hoort dit?) gaat als vraag naar het bord.
+Inhalen met de hand (VOL-1, T-0120): --alleen-vaststellen met --venster N of --dag JJJJ-MM-DD stelt alleen vast, zonder
+bundels en zonder de controle van de nachtketen; --dag en --venster samen weigert de runner (opties()).
 Leest het bord; schrijft alleen op het bord. Verplaatst niets vóór Mehdi's ja.
 
 De Zoom-dagregel en het lek naar de afdeling (ontwerp regie-zoom v1.2, Z14 en J14):
@@ -56,23 +58,43 @@ import weekoverzicht as WO  # noqa: E402  de week in cijfers, pure functies (dri
 
 NAAM = "dagbundelaar"
 ag = bord.Agent(NAAM)
-DAG = None
-VENSTER = None
-WEEK = None
-NACHT = "--nacht" in sys.argv          # alleen de dagvaststelling, geen bundels (keten.py --nacht, planning/gesprekken.cron)
-for i, a in enumerate(sys.argv):
-    if a == "--dag" and i + 1 < len(sys.argv):
-        DAG = sys.argv[i + 1]
-    if a == "--venster" and i + 1 < len(sys.argv):
-        VENSTER = int(sys.argv[i + 1])
-    if a == "--week" and i + 1 < len(sys.argv):
-        WEEK = sys.argv[i + 1]          # alleen het weekoverzicht van die week, met de hand (JJJJ-Www)
-DAG_GEGEVEN = DAG is not None
-# Een ronde met de hand (--dag, --venster of --week), niet uit de keten: ze kijkt niet alles na, sluit dus geen noden en
-# geeft het ochtendbericht niet vrij (Codex-controle mailnood 5)
-HANDMATIG = DAG_GEGEVEN or VENSTER is not None or WEEK is not None
-# Gisteren is de Brusselse dag: de VM loopt in UTC, en om 23:30 UTC is het in Brussel al de volgende dag.
-DAG = DAG or V.gisteren(datetime.now(timezone.utc))
+
+
+def opties(argv, nu=None):
+    """De opties van een ronde: (DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG). Een combinatie
+    die iets anders doet dan ze zegt, is een ValueError (VOL-1, T-0120): met --dag en --venster samen won --dag stil en
+    werd een dag vastgesteld in plaats van het venster (WISPR-2), en --alleen-vaststellen met --nacht zou de controle van
+    de nachtketen doen."""
+    dag = venster = week = None
+    nacht = "--nacht" in argv          # alleen de dagvaststelling, geen bundels (keten.py --nacht, planning/gesprekken.cron)
+    # VOL-1 (T-0120, overleg X7): de inhaalweg. Alleen de dagvaststelling, met de hand: geen bundelen() (dat zet items van
+    # andere agents op opgepakt) en geen controle van de nachtketen (geen nood 'buiten de nachtketen').
+    alleen = "--alleen-vaststellen" in argv
+    for i, a in enumerate(argv):
+        if a == "--dag" and i + 1 < len(argv):
+            dag = argv[i + 1]
+        if a == "--venster" and i + 1 < len(argv):
+            venster = int(argv[i + 1])
+        if a == "--week" and i + 1 < len(argv):
+            week = argv[i + 1]          # alleen het weekoverzicht van die week, met de hand (JJJJ-Www)
+    if dag is not None and venster is not None:
+        raise ValueError("--dag en --venster samen: kies een dag of een venster")
+    if alleen and nacht:
+        raise ValueError("--alleen-vaststellen en --nacht samen: de inhaalweg is een ronde met de hand, geen nachtronde")
+    # Een ronde met de hand (--dag, --venster, --week of --alleen-vaststellen), niet uit de keten: ze kijkt niet alles na,
+    # sluit dus geen noden en geeft het ochtendbericht niet vrij (Codex-controle mailnood 5)
+    handmatig = dag is not None or venster is not None or week is not None or alleen
+    # Gisteren is de Brusselse dag: de VM loopt in UTC, en om 23:30 UTC is het in Brussel al de volgende dag.
+    return (dag or V.gisteren(nu or datetime.now(timezone.utc)), dag is not None, venster, week, nacht, alleen, handmatig)
+
+
+try:
+    DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG = opties(sys.argv)
+    OPTIEFOUT = ""
+except ValueError as _e:
+    # de runner stopt in __main__, voor hij iets leest of schrijft; bij een import (tests) gelden de standaardopties
+    OPTIEFOUT = str(_e)
+    DAG, DAG_GEGEVEN, VENSTER, WEEK, NACHT, ALLEEN_VASTSTELLEN, HANDMATIG = opties([])
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.path.join(DATA, "dagboek")                       # gaat naar Dropbox: Data uit Mehdi/Dagboek
 STAAT = os.path.join(DATA, "dagvaststelling-staat.json")      # per dag versie en hash; niet in de map dagboek
@@ -256,10 +278,14 @@ def main():
                 r.detail = f"weekoverzicht {WEEK} mislukt"
             behoud(r, lambda t: True)
             return
-        nacht = lees_nacht()
+        nacht = {} if ALLEEN_VASTSTELLEN else lees_nacht()
         # G3: of De Zoomwacht in deze keten slaagde (True), faalde (False) of niet in deze keten liep (None)
         zoom_gelezen = None
-        if NACHT:
+        if ALLEEN_VASTSTELLEN:
+            # VOL-1: de inhaalweg met de hand, alleen de vaststelling; nacht.json en keten.json gaan over de keten, niet over
+            # deze ronde, en bundelen() blijft voor de ochtendronde
+            pass
+        elif NACHT:
             # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Zoomwacht
             begin = ochtend.tijdstip(nacht.get("start"))
             zoom = (nacht.get("stappen") or {}).get("zoom-wacht") or {}
@@ -1163,4 +1189,7 @@ if __name__ == "__main__":
         _schrijf(sys.argv[i + 2], json.dumps({"ontvangen": o, "verzonden": u, "prive": sorted(pr)}, ensure_ascii=False,
                                              default=str))
         sys.exit(0)
+    if OPTIEFOUT:
+        print(f"dagbundelaar: {OPTIEFOUT}", file=sys.stderr)
+        sys.exit(2)
     main()
