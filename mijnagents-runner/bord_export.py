@@ -13,7 +13,8 @@ De Mac-synctaak kopieert export/ naar Data uit Mehdi. Cron: elk half uur.
 Geen gespreksinhoud buiten de VM (H1, ontwerp regie-zoom v1.2): van een gesprek met een agent gaan alleen id, aan,
 status, tijd en lengtes mee, nooit de vraag of het antwoord; in het werkverslag van De Bode en De Regisseur staat bij
 een bericht alleen hoe lang vraag en antwoord waren.
-Van een privé-item in klaargezet/ alleen tijd, soort, voor wie en status, nooit titel, verwijzing of inhoud; in een
+Van een privé-item in klaargezet/ alleen tijd, soort, voor wie en status, nooit titel, verwijzing of inhoud; van een
+privé-agent (agent.prive = 1, zoals Ai Angel) alleen tijd, soort, voor wie, status en titel (T-0120 ANGEL-11). In een
 Dagverslag, in de inhoud van elk ander klaarzet-item en in het werkverslag wordt een regel met PRIVÉ, of een bevinding van
 De Plaudwacht in de oude vorm met ' · privé', "(privé)" (RZ2-01, voor wat van voor 22-10-2026 nog in het venster staat).
 Privé is ook een item met afdeling prive in de inhoud, en een regel met de titel of de verwijzing van zo'n item (RZ3-01).
@@ -206,7 +207,8 @@ def main():
     c.row_factory = sqlite3.Row
     sinds = (datetime.now(BE) - timedelta(days=DAGEN)).isoformat()
     kenmerken = prive_kenmerken(c)     # RZ3-01: titels en verwijzingen van privé-items, voor oude bundels en werkverslagregels
-    agents = {r["naam"]: dict(r) for r in c.execute("select naam, label, type, rol, cadans, werkwijze, actief from agent")}
+    # select *: ook prive (ANGEL-11), dat init_db pas later als kolom toevoegde
+    agents = {r["naam"]: dict(r) for r in c.execute("select * from agent")}
     geschreven = 0
     # werkwijzen: per agent en verzameld
     for naam, a in agents.items():
@@ -248,6 +250,7 @@ def main():
             kz[r["van"]][d.strftime("%Y-%m-%d")].append(dict(r))
     for naam, dagen in kz.items():
         m = MAP.get(naam) or veilig(re.sub(r"^De ", "", (agents.get(naam) or {}).get("label") or naam))
+        prive_agent = bool((agents.get(naam) or {}).get("prive"))
         for dag, items in dagen.items():
             uit = [f"# Klaargezet door {m} op {dag}", "", f"{len(items)} items.", ""]
             for it in items:
@@ -268,6 +271,11 @@ def main():
                     continue
                 if is_prive(it["titel"], it["inhoud"]):
                     uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): (privé)", ""]
+                    continue
+                if prive_agent:
+                    # ANGEL-11 (T-0120): van een privé-agent geen verwijzing en geen inhoud, zoals bij een privé-item. Tot
+                    # 01-11-2026 ging de volledige takenlijst van Ai Angel, met werknamen en concepten, naar Data uit Mehdi.
+                    uit += [f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}", ""]
                     continue
                 uit.append(f"## {be(it['ts']).strftime('%H:%M')} {it['soort']} voor {it['voor']} ({it['status']}): {it['titel']}")
                 if it.get("verwijzing"):
