@@ -31,6 +31,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_dagbundelaar_vaststelling.py",
     "mijnagents-runner/tests/test_dagvaststelling.py",
     "mijnagents-runner/tests/test_eigen_werk_gezondheid.py",
+    "mijnagents-runner/tests/test_fathom_wacht.py",
     "mijnagents-runner/tests/test_geen_echte_namen.py",
     "mijnagents-runner/tests/test_hotmail_server.py",
     "mijnagents-runner/tests/test_keten.py",

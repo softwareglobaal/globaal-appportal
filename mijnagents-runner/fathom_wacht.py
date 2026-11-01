@@ -49,6 +49,8 @@ AFDELINGEN = ("h-architects", "unabo", "harmoniebouw", "contrax", "tkn", "elevai
 # dezelfde lijst als De Zoomwacht en De Regisseur (EIGEN-3, tegenproef 22-10-2026). Tot dan zocht ik op deelstukken
 # ('h-architects', 'mch@'), en dan dempte een opname van een collega de nood hieronder.
 SLEUTEL_NOOD = "Mehdi's eigen Fathom-sleutel ontbreekt op de VM (FATHOM_API_KEYS is nu van Shaniel); ik zie zijn gesprekken niet"
+# FATHOM-7: een archiefmap zonder herkenning (null) telt als privé, zoals een gesprek waarop het model niet antwoordde.
+ONBEKENDE_HERKENNING = {"prive": True, "zekerheid": "laag", "waarom": "geen herkenning in het archief"}
 
 
 def laad_env(pad):
@@ -407,7 +409,9 @@ def _ronde(r):
             # herkenning alleen voor wat nog niet in het archief zit (kosten)
             al = bestaande_map(g)
             if al:
-                herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
+                # FATHOM-7: fathom_haal_alles.py schreef "herkenning": null (1960 mappen tot 17-09-2026); .get(.., {}) gaf
+                # dan None en de ronde brak af (01-10-2026). Geen herkenning is privé, de veilige kant, zonder naam.
+                herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning") or dict(ONBEKENDE_HERKENNING)
                 map_, nieuw = al, False
             else:
                 herk = herken(g, tekst, personen, deal, hoe)
