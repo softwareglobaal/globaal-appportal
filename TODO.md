@@ -1318,3 +1318,9 @@ subdiscipline-statistieken.
 - [x] VM live 01-11-2026 08:07: pull, apps herbouwd, drie wachten op het bord, cron xelion_wacht.py elk uur
 - [ ] Laptop: mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
 - [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling
+
+Overdracht 01-11-2026 (Mehdi neemt over via Claude 1 op de laptop):
+- Claude 1 (laptop): de opdracht hierboven, stap 0 tot 8. Meldt per stap gelukt of niet aan Mehdi.
+- Mehdi: Full Disk Access voor MacGesprekkenKopie (en zo nodig iCloudWacht en /usr/bin/python3), op de iPhone Messages in iCloud en Text Message Forwarding.
+- Claude 2 (server): niets open op de VM; alles staat op main. Na de laptopstappen: op het bord nakijken of Fotowacht, Sms-wacht en YouTube-wacht groen staan.
+- Nog niet gebouwd: een werkwijze voor youtube-wacht op het bord (draait zonder ronde, dus niet blokkerend).
