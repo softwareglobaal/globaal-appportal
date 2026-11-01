@@ -286,6 +286,25 @@ def test_wa3_niet_gemist_zonder_duur_telt_als_oproep():
     assert v["whatsapp"]["oproepen"] == 1, v["whatsapp"]
 
 
+def test_wa3_plaatsbezoek_barsten_en_scheuren_zelfde_uitkomst():
+    """WA-3 en B&S: een plaatsbezoek voor barsten en scheuren dat de auto ter plaatse bevestigt, houdt bij De
+    Dagbundelaar zijn uitkomst als er op dat uur alleen een gemiste oproep van de klant is (ZMISSED 1) of een niet
+    gemiste oproep zonder duur van iemand anders. De B&S-keten zelf leest de WhatsApp-rijen niet."""
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0), (2, "32470000003@s.whatsapp.net", PIET, 0)]
+    oproepen = [(11, "OPROEPA", a(bxl(2026, 10, 22, 10, 30)), 0.0, 21, "32470000001@s.whatsapp.net", None),
+                (12, "OPROEPB", a(bxl(2026, 10, 22, 10, 45)), 0.0, 22, "32470000003@s.whatsapp.net", None)]
+    aggregaten = [(21, 1, 1, 0), (22, 1, 0, 0)]
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, _ = M.whatsapp_rijen(maak_whatsapp(os.path.join(map_, "wa.sqlite"), (), sessies, oproepen, aggregaten,
+                                                  nieuwste=a(bxl(2026, 10, 23, 20, 0))), DAGEN)
+    afspraak = {"id": "bs1", "start": f"{DAG}T10:00:00+02:00", "einde": f"{DAG}T12:00:00+02:00",
+                "titel": f"[XX-BS] plaatsbezoek barsten en scheuren {JAN}", "deelnemers": []}
+    locatie = {"uitkomst": "doorgegaan", "tekst": "auto ter plaatse 10:05-11:50"}
+    zonder = V.bewijs(afspraak, V.gesprekken_van_dag(DAG, []), locatie)
+    met = V.bewijs(afspraak, V.gesprekken_van_dag(DAG, rijen), locatie)
+    assert zonder["uitkomst"] == met["uitkomst"] == "aanwijzing" and met["grond"] == zonder["grond"], (zonder, met)
+
+
 # ------------------------------------------------------------------------------------------- telefoon ---
 def test_telefoon_namen_nummers_en_diensten():
     with tempfile.TemporaryDirectory() as map_:
