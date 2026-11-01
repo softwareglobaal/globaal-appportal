@@ -45,6 +45,7 @@ METADATA_VERSIE = 2  # T-0120 FOTO-8: vanaf versie 2 staan plaats en tijd alleen
 # mensen"; ZIMPORTEDBY 3 en 8 zijn foto's die uit een app bewaard werden (vooral WhatsApp).
 MENSEN_GEZICHT = 0.10
 APP_IMPORT = (3, 8)
+AFSPRAAK_PAGINAS = 40
 ONLINE = re.compile(r"(?i)https?://|\b(?:teams|zoom|google meet|meet\.google|webex|online)\b")
 ADRESSEN = os.path.expanduser("~/.config/mijnagents/adressen.json")
 STRAAL_M = int(os.environ.get("FOTO_STRAAL_M", "300"))
@@ -276,13 +277,29 @@ def werkafspraken(dag):
     """Afspraken van die dag met een fysiek adres en een firmacode, uit de bak van De Agendawacht (alleen lezen). T-0120
     FOTO-3: alleen afspraken gevraagd; zonder filter vielen ze tussen de 500 nieuwste items van de hele bak weg (31-10).
     Nooit een privéafspraak of een online vergadering (Codex 1: anders ging een foto bij een privéafspraak als werk naar
-    Dropbox). None als de bak niet antwoordde: onbekend, nooit 'geen afspraken'."""
-    req = urllib.request.Request(f"{BORD}/api/klaarzet?status=alle&soort=afspraak&n=500", headers={"X-Agents-Token": TOKEN})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            items = json.loads(r.read().decode() or "{}").get("items", [])
-    except Exception as e:  # noqa: BLE001
-        print("afspraken niet gelezen:", type(e).__name__, file=sys.stderr)
+    Dropbox). None als de bak niet antwoordde of geen lijst gaf: onbekend, nooit 'geen afspraken'. De bak geeft hoogstens
+    500 items per vraag: er wordt teruggebladerd met tot_id (Codex 2), hoogstens AFSPRAAK_PAGINAS keer."""
+    items, tot_id = [], None
+    for _ in range(AFSPRAAK_PAGINAS):
+        q = {"status": "alle", "soort": "afspraak", "n": 500}
+        if tot_id:
+            q["tot_id"] = tot_id
+        req = urllib.request.Request(f"{BORD}/api/klaarzet?" + urllib.parse.urlencode(q), headers={"X-Agents-Token": TOKEN})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                pagina = json.loads(r.read().decode() or "{}").get("items")
+        except Exception as e:  # noqa: BLE001
+            print("afspraken niet gelezen:", type(e).__name__, file=sys.stderr)
+            return None
+        if not isinstance(pagina, list):
+            return None
+        items += pagina
+        ids = [it.get("id") for it in pagina if type(it.get("id")) is int]
+        if len(pagina) < 500 or not ids:
+            break
+        tot_id = min(ids)
+    else:
+        print("afspraken niet volledig gelezen: meer dan", AFSPRAAK_PAGINAS * 500, file=sys.stderr)
         return None
     uit = []
     for it in items:
@@ -357,8 +374,9 @@ def koppel_werk(fotos, afspraken):
     n = 0
     for f in fotos:
         f["werk"] = ""
-        # T-0120 (Codex 1): een foto met mensen gaat nooit als werkfoto naar Dropbox; ze blijft in Photos en telt mee.
-        if f["lat"] is None or f.get("mensen"):
+        # T-0120 (Codex 1 en 2): alleen een foto waarvan Photos zeker zegt dat er geen mensen op staan en die geen
+        # schermafbeelding of app-foto is, gaat als werkfoto naar Dropbox; onbekend is nooit 'nee'. De rest telt mee.
+        if f["lat"] is None or f.get("mensen") is not False or f.get("scherm") is not False or f.get("app") is not False:
             continue
         for a in afspraken:
             if not a.get("coord") or not a["start"]:
@@ -380,17 +398,26 @@ def veilige_naam(s):
 
 def groepeer(fotos):
     """Groepen: opeenvolgende foto's binnen ~300 m en 45 minuten van elkaar. T-0120 FOTO-7: opeenvolgende foto's zonder
-    GPS binnen 45 minuten vormen ook één groep (31-10: 17 foto's zonder plaats werden 17 losse items)."""
+    GPS binnen 45 minuten vormen ook één groep (31-10: 17 foto's zonder plaats werden 17 losse items).
+    De afstand in tijd komt uit de opnametijd in UTC: met de klok werden bij de wintertijd twee foto's 90 minuten uiteen één
+    groep (Codex 2); zonder UTC-tijd geldt de klok."""
     groepen = []
     for f in fotos:
         g = groepen[-1] if groepen else None
         if g and (f["lat"] is None) == (g["lat"] is None):
-            dt = (datetime.strptime(f["tijd"], "%H:%M") - datetime.strptime(g["tot"], "%H:%M")).total_seconds() / 60
+            dt = (_moment(f) - _moment(g["fotos"][-1])).total_seconds() / 60
             dicht = f["lat"] is None or (abs(f["lat"] - g["lat"]) < 0.003 and abs(f["lon"] - g["lon"]) < 0.004)
             if dicht and 0 <= dt <= 45:
                 g["fotos"].append(f); g["tot"] = f["tijd"]; continue
         groepen.append({"van": f["tijd"], "tot": f["tijd"], "lat": f["lat"], "lon": f["lon"], "fotos": [f]})
     return groepen
+
+
+def _moment(f):
+    try:
+        return datetime.fromisoformat(str(f["vastgelegd_utc"]).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except (KeyError, TypeError, ValueError):
+        return datetime.strptime(f["tijd"], "%H:%M").replace(tzinfo=timezone.utc)
 
 
 DROPBOX_LOKAAL = os.path.expanduser(os.environ.get("DROPBOX_LOKAAL", "~/TKN-buro Dropbox"))
@@ -1020,7 +1047,8 @@ def lees_dag(dag, volledig):
     elif volledig:
         n_werk = koppel_werk(fotos, afspraken)
         gek, via, nog = exporteer(fotos, dag, groepen) if fotos else (0, 0, 0)
-        export = "gedaan"
+        # Codex 2: originelen die nog in iCloud zitten, zijn niet geleverd; de dag komt dan later opnieuw volledig.
+        export = "mislukt" if nog else "gedaan"
         regels.append({"naam": NAAM, "onderwerp": f"dag {dag}", "stap": "schrijf", "tekst": f"{len(afspraken)} werkafspraken met adres; {n_werk} foto's horen erbij (binnen {STRAAL_M} m en venster) en zijn geexporteerd naar {os.path.join(EXPORT, dag)}: {gek} lokaal, {via} via Photos, {nog} nog niet; {len(fotos) - n_werk} foto's blijven in Photos (metadata alleen)",
                        "detail": "\n".join(f"{a['start']}-{a['einde']} {a['titel'][:50]} @ {a['adres'][:40]} -> {'coord' if a.get('coord') else 'adres niet gevonden'}" for a in afspraken)})
     else:
@@ -1089,7 +1117,8 @@ def voorvertoningen():
             if uit["verstuurd"] + len(uit["fouten"]) >= VOORBEELD_PER_RONDE:
                 return uit
             f = hier.get(fid)
-            if not f or f.get("mensen") is not False or f.get("video") or f.get("scherm") or f.get("app"):
+            if (not f or f.get("mensen") is not False or f.get("video") or f.get("scherm") is not False
+                    or f.get("app") is not False):
                 uit["niet_toegelaten"] += 1
                 continue
             bron = beeld_lokaal(f)

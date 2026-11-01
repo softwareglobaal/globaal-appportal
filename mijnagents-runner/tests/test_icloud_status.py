@@ -312,7 +312,9 @@ class ICloudStatus(unittest.TestCase):
             url = req.full_url
             vragen.append(url)
             q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
-            lijst = [it for it in reversed(items) if not q.get("soort") or it["soort"] == q["soort"]]
+            lijst = [dict(it, id=i) for i, it in enumerate(items, 1)][::-1]
+            lijst = [it for it in lijst if (not q.get("soort") or it["soort"] == q["soort"])
+                     and (not q.get("tot_id") or it["id"] < int(q["tot_id"]))]
             return Antwoord(json.dumps({"items": lijst[:min(int(q.get("n", 100)), 500)]}).encode())
         return vragen, urlopen
 
@@ -328,6 +330,24 @@ class ICloudStatus(unittest.TestCase):
             gevonden = self.module.werkafspraken("2026-10-31")
         self.assertEqual([a["adres"] for a in gevonden], ["Proefstraat 1, 9999 Proefdorp"])
         self.assertIn("soort=afspraak", vragen[0])
+        # Codex 2: ook achter 1200 nieuwere afspraken, door terug te bladeren
+        andere = [{"soort": "afspraak", "titel": f"ander {i}", "inhoud": json.dumps({"datum": "2026-10-30"})} for i in range(1200)]
+        vragen, urlopen = self.nep_bak([afspraak] + andere)
+        with patch.object(self.module.urllib.request, "urlopen", urlopen):
+            self.assertEqual(len(self.module.werkafspraken("2026-10-31")), 1)
+        self.assertEqual((len(vragen), "tot_id" in vragen[-1]), (3, True))
+        # een antwoord zonder lijst is onbekend, geen nul
+        class Leeg:
+            def __enter__(s):
+                return s
+
+            def __exit__(s, *a):
+                return False
+
+            def read(s):
+                return b'{"fout": "fictief"}'
+        with patch.object(self.module.urllib.request, "urlopen", lambda *a, **k: Leeg()):
+            self.assertIsNone(self.module.werkafspraken("2026-10-31"))
 
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])
@@ -353,6 +373,10 @@ class ICloudStatus(unittest.TestCase):
         later = zonder + [{"tijd": "11:00", "lat": None, "lon": None}, {"tijd": "11:01", "lat": 50.0, "lon": 4.0},
                           {"tijd": "11:02", "lat": None, "lon": None}]
         self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(later)], [5, 1, 1, 1])
+        # Codex 2: in de nacht van de wintertijd lijken 02:10 (zomertijd) en 02:40 (wintertijd) 30 minuten uiteen; het is 90.
+        nacht = [{"tijd": "02:10", "vastgelegd_utc": "2026-10-25T00:10:00+00:00", "lat": None, "lon": None},
+                 {"tijd": "02:40", "vastgelegd_utc": "2026-10-25T01:40:00+00:00", "lat": None, "lon": None}]
+        self.assertEqual([len(g["fotos"]) for g in self.module.groepeer(nacht)], [1, 1])
 
     def test_dubbel_lokaal_uur_bij_wintertijd_wordt_op_utc_gescheiden(self):
         m = self.module
@@ -425,8 +449,10 @@ class ICloudStatus(unittest.TestCase):
         m = self.module
         m.coord = lambda adres: (50.0, 4.0)
         afspraak = {"titel": "Plaatsbezoek 9999", "start": "10:00", "einde": "11:00", "adres": "Proefstraat 1, 9999 Proefdorp"}
-        fotos = [dict(self.foto("mens", lat=50.0, lon=4.0), tijd="10:10", mensen=True),
-                 dict(self.foto("werf", lat=50.0, lon=4.0), tijd="10:15", mensen=False)]
+        zeker = {"mensen": False, "scherm": False, "app": False}
+        fotos = [dict(self.foto(uid, lat=50.0, lon=4.0), tijd="10:15", **dict(zeker, **vlag)) for uid, vlag in (
+            ("mens", {"mensen": True}), ("onbekend", {"mensen": None}), ("scherm", {"scherm": True}), ("app", {"app": True}),
+            ("scherm-onbekend", {"scherm": None}), ("werf", {}))]
         self.assertEqual(m.koppel_werk(fotos, [afspraak]), 1)
         self.assertEqual([f["uuid"] for f in fotos if f["werk"]], ["werf"])
         inhoud = lambda **k: json.dumps(dict({"datum": "2026-10-31", "start": "2026-10-31T10:00:00+01:00",
@@ -505,7 +531,7 @@ class ICloudStatus(unittest.TestCase):
                                "scherm": (True, False, False), "app": (False, True, False), "nieuw": (False, False, None),
                                "verborgen": (False, False, False)})
 
-    def nep_avond(self, vandaag, fotos_per_dag, gelezen=(), afspraken=lambda dag: []):
+    def nep_avond(self, vandaag, fotos_per_dag, gelezen=(), afspraken=lambda dag: [], nog=0):
         """Een avondronde tegen een nep-bord: klaarzet op uniek zoals mijnagents/app.py, /api/fotometadata per dag."""
         m = self.module
         m.DAG, m.DAG_GEGEVEN = vandaag, False
@@ -538,7 +564,7 @@ class ICloudStatus(unittest.TestCase):
         m.bord, m.bord_lees = bord, bord_lees
         m.fotos_van = lambda dag: [dict(f) for f in fotos_per_dag.get(dag, [])]
         m.werkafspraken = afspraken
-        m.exporteer = lambda fotos, dag, groepen: self.uitvoer.append(dag) or (0, 0, 0)
+        m.exporteer = lambda fotos, dag, groepen: self.uitvoer.append(dag) or (0, 0, nog)
         with patch.object(m.os.path, "exists", return_value=True):
             return m.main()
 
@@ -587,6 +613,16 @@ class ICloudStatus(unittest.TestCase):
         self.nep_avond("2026-10-05", bib)
         self.assertNotIn("2026-10-02", self.uitvoer)
 
+    def test_foto2_originelen_nog_in_icloud_is_geen_volledige_export(self):
+        # Codex 2: een export met originelen die nog in iCloud zitten, telde als gedaan.
+        m = self.module
+        m.INHAAL_VANAF = "2026-10-01"
+        bib = {"2026-10-02": [self.proeffoto("b1")]}
+        self.nep_avond("2026-10-02", bib, nog=1)
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "mislukt")
+        self.nep_avond("2026-10-04", bib)
+        self.assertEqual(self.bak["fotodag:2026-10-02"]["inhoud"]["export"], "gedaan")
+
     def test_foto2_onleesbaar_werkverslag_slaat_alleen_het_inhalen_over(self):
         m = self.module
         m.INHAAL_VANAF = "2026-10-01"
@@ -604,7 +640,7 @@ class ICloudStatus(unittest.TestCase):
         uid = lambda n: f"aaaaaaa{n}-0000-4000-8000-000000000000"
         rij = lambda n, **k: dict({"uuid": uid(n), "bestand": f"{uid(n)}.HEIC", "video": False, "scherm": False, "app": False,
                                    "mensen": False}, **k)
-        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6)]
+        fotos = [rij(1), rij(2, mensen=True), rij(3, mensen=None), rij(4, video=True), rij(5), rij(6), rij(8, scherm=None)]
         afgeleid = bib / "resources/derivatives/a" / f"{uid(1)}_1_105_c.jpeg"
         afgeleid.parent.mkdir(parents=True)
         afgeleid.write_bytes(b"fictieve afgeleide")
@@ -614,7 +650,7 @@ class ICloudStatus(unittest.TestCase):
             origineel.write_bytes(b"fictief origineel")
         m.fotos_van = lambda dag: [dict(f) for f in fotos]
         m.bord_lees = lambda pad: {"items": [{"van": "icloud-wacht", "soort": "fotoindeling", "inhoud": json.dumps(
-            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 8)]})}]}
+            {"datum": "2026-10-29", "voorbeeld_nodig": [uid(n) for n in range(1, 9)]})}]}
         geopend, gepost = [], []
 
         def sips(cmd, **kw):
@@ -624,7 +660,7 @@ class ICloudStatus(unittest.TestCase):
         m.bord = lambda pad, data: gepost.append((pad, data)) or {"ok": True}
         with patch.object(m.subprocess, "run", sips):
             uit = m.voorvertoningen()
-        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 4, "fouten": []})
+        self.assertEqual(uit, {"verstuurd": 2, "zonder_beeld": 1, "niet_toegelaten": 5, "fouten": []})
         self.assertEqual(geopend, [afgeleid.name, f"{uid(6)}.HEIC"])
         self.assertEqual([(p, d["id"]) for p, d in gepost], [("/api/fotovoorbeeld", uid(1)), ("/api/fotovoorbeeld", uid(6))])
         self.assertTrue(base64.b64decode(gepost[0][1]["jpeg"]).startswith(b"\xff\xd8\xff"))

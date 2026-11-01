@@ -25,8 +25,8 @@ Regels (meting 01-11-2026, deel 3), in deze volgorde, alleen op metadata:
      project, zonder id, tijd of beeld;
   5. al de rest: privé, alleen geteld (geen plaats, geen tijd per foto);
   6. geen GPS: bij een werfgroep als de tijd tussen twee werkfoto's van die groep valt, anders onbeslist.
-Een voorvertoning (FOTO-5) alleen voor een foto (geen video) die werf zeker is met GPS en waarvan Photos de gezichten
-analyseerde zonder mensen te vinden (mensen is False, niet onbekend).
+Een voorvertoning (FOTO-5) alleen voor een foto (geen video) die werf zeker is met GPS en waarvan Photos zeker zegt dat
+er geen mensen op staan en dat het geen schermafbeelding of app-foto is (False, niet onbekend).
 
 Uitvoer, nooit in Dropbox:
   - ~/appportal/mijnagents-data/fotoindeling/<jaar>/<dag>.json (het Dagboek toont het op /fotos/<dag>);
@@ -37,6 +37,7 @@ Onbekend is nooit nul: is het Locatie-dashboard niet bereikbaar, dan wordt die d
 
 Gebruik (op de VM; planning/foto.cron):
     python3 fotoindeling.py                     de laatste INDEEL_DAGEN dagen, en oudere dagen zonder of met gewijzigde indeling
+    python3 fotoindeling.py --alles             elke dag van de laatste TERUG_DAGEN opnieuw met de context (één keer per nacht)
     python3 fotoindeling.py --dag JJJJ-MM-DD    één dag
     python3 fotoindeling.py --droog             niets schrijven, alleen tonen
 """
@@ -267,7 +268,10 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
         return groepen[sleutel]
 
     def zet(g, f, t):
-        g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")), "mensen": f.get("mensen")})
+        # Een voorvertoning alleen als Photos zeker is: geen mensen, geen schermafbeelding, geen app-foto (Codex 2).
+        zeker = f.get("mensen") is False and f.get("scherm") is False and f.get("app") is False
+        g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")), "mensen": f.get("mensen"),
+                           "zeker": zeker})
 
     for f in fotos:
         try:
@@ -343,7 +347,7 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
                  met_mensen=sum(1 for x in g["fotos"] if x["mensen"]), zonder_plaats=sum(1 for x in g["fotos"] if not x["gps"]),
                  video=sum(1 for x in g["fotos"] if x["video"]))
         g["fotos"] = [{"id": x["id"], "tijd": _uur(x["t"]),
-                       "voorbeeld": g["soort"] == "zeker" and x["gps"] and not x["video"] and x["mensen"] is False}
+                       "voorbeeld": g["soort"] == "zeker" and x["gps"] and not x["video"] and x["zeker"]}
                       for x in zonder_mensen]
         uit.append(g)
     return {"datum": dag, "versie": VERSIE, "werf": [g for g in uit if g["soort"] == "zeker"],
@@ -501,11 +505,13 @@ def deel_in(dag, ag, plekken, droog=False, recent=True):
     if droog:
         print(dag, kort)
         return kort
-    _bewaar(dag, ind)
+    # Eerst weghalen wat niet meer mag (privacy gaat voor), dan het bord, en pas daarna de indeling met haar hash bewaren:
+    # mislukt het bord, dan probeert de volgende ronde het opnieuw (Codex 2).
     weg = niet_meer_toegelaten(ind)
     for pad in weg:
         os.remove(pad)
     uit = bord.call("/api/klaarzet", {"items": items})
+    _bewaar(dag, ind)
     ag.log(f"indeling {dag}", "schrijf", kort,
            f"{len(afspraken)} buitenafspraken met firmacode ({ind['bronnen']['afspraken_zonder_plaats']} zonder plaats), "
            f"{len(verblijven)} verblijven auto bij project, {len(plekken)} projectplekken; "
@@ -532,6 +538,7 @@ def main(argv=None):
     if dag:
         date.fromisoformat(dag)
     droog = "--droog" in argv
+    alles = "--alles" in argv          # Codex 2: ook een oudere dag volgt een rechtgezette afspraak of plek
     ag = bord.Agent(NAAM)
     vandaag = datetime.now(BRUSSEL).date()
     try:
@@ -543,7 +550,7 @@ def main(argv=None):
         return 0
     fout = 0
     for d in te_doen(vandaag, dag):
-        recent = bool(dag) or d >= (vandaag - timedelta(days=INDEEL_DAGEN - 1)).isoformat()
+        recent = bool(dag) or alles or d >= (vandaag - timedelta(days=INDEEL_DAGEN - 1)).isoformat()
         try:
             deel_in(d, ag, plekken, droog=droog, recent=recent)
         except bord.BordOnbekend as e:

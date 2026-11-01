@@ -39,12 +39,14 @@ def _dag(p):
 
 
 def _schrijf(data, pad, inhoud):
-    """Atomair, 0600, met de eigenaar van de datamap (de mappen ertussen ook)."""
-    os.makedirs(os.path.dirname(pad), exist_ok=True)
+    """Atomair, met de eigenaar van de datamap (de mappen ertussen ook). Het bestand bestaat van bij het aanmaken alleen
+    met 0600 (Codex 2: eerst schrijven en dan chmod liet het even 0644 staan); een nieuwe map krijgt 0700."""
+    os.makedirs(os.path.dirname(pad), mode=0o700, exist_ok=True)
     tijdelijk = f"{pad}.{os.getpid()}.tmp"
-    with open(tijdelijk, "wb") as f:
+    fd = os.open(tijdelijk, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
         f.write(inhoud)
-    os.chmod(tijdelijk, 0o600)
+    os.chmod(tijdelijk, 0o600)      # de umask kan alleen strenger maken; dit maakt het zeker
     st = os.stat(data)
     try:
         map_ = os.path.dirname(pad)

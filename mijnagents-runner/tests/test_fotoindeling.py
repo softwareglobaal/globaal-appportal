@@ -105,6 +105,14 @@ class Regels(unittest.TestCase):
         self.assertNotIn("mens", [f["id"] for f in g["fotos"]])
         self.assertNotIn("10:50", json.dumps(ind))
 
+    def test_onbekende_vlag_geeft_nooit_een_voorvertoning(self):
+        # Codex 2: een onbekende scherm- of appvlag telde als 'nee'.
+        a = bij((P1["lat"], P1["lon"]))
+        fotos = [foto("zeker", "10:10", *a), foto("scherm-onbekend", "10:15", *a, scherm=None), foto("app-onbekend", "10:20", *a, app=None)]
+        ind = FI.indeel("2026-10-29", fotos, [P1], [afspraak("HARC", "9001", "2026-10-29", "10:00", "11:00", (P1["lat"], P1["lon"]))], [])
+        self.assertEqual([(f["id"], f["voorbeeld"]) for f in ind["werf"][0]["fotos"]],
+                         [("zeker", True), ("scherm-onbekend", False), ("app-onbekend", False)])
+
     def test_scherm_bij_een_project_is_geen_werk(self):
         a = bij((P1["lat"], P1["lon"]))
         ind = FI.indeel("2026-10-29", [foto("s", "10:15", *a, scherm=True)], [P1],
@@ -270,6 +278,42 @@ class Ronde(unittest.TestCase):
         FI.deel_in("2026-10-29", self.ag, [P1])
         ind = FI.lees_indeling("2026-10-29")
         self.assertEqual((ind["werf"], [g["soort"] for g in ind["kandidaat"]]), ([], ["kandidaat"]))
+
+    def test_rechtgezette_afspraak_van_een_oudere_dag_komt_door_met_alles(self):
+        # Codex 2: een oudere dag werd alleen opnieuw ingedeeld bij nieuwe metadata; een rechtgezette afspraak niet.
+        afspraak = {"soort": "afspraak", "uniek": "agenda:x:1", "voor": "h-architects", "inhoud": json.dumps(
+            {"datum": "2026-10-29", "start": "2026-10-29T10:00:00+01:00", "einde": "2026-10-29T11:00:00+01:00",
+             "titel": "[HA] 9001 proefbezoek", "firma": "HARC", "nummer": "9001", "locatie": "Proefstraat 1, 9999 Proefdorp"})}
+        self.bak.append(afspraak)
+        a = bij((P1["lat"], P1["lon"]))
+        self.zet("2026-10-29", [foto("w1", "10:15", *a)])
+        FI.deel_in("2026-10-29", self.ag, [P1])
+        Path(FI.VOORBEELD, "2026-10-29").mkdir(parents=True)
+        Path(FI.VOORBEELD, "2026-10-29", "w1.jpg").write_bytes(b"\xff\xd8 fictief")
+        self.bak.remove(afspraak)                     # de afspraak bleek privé of verplaatst: niet meer in de bak
+        FI.deel_in("2026-10-29", self.ag, [P1], recent=False)     # een gewone ronde kijkt de context van oude dagen niet na
+        self.assertEqual(len(FI.lees_indeling("2026-10-29")["werf"]), 1)
+        FI.deel_in("2026-10-29", self.ag, [P1], recent=True)      # de nachtronde met --alles
+        ind = FI.lees_indeling("2026-10-29")
+        self.assertEqual((ind["werf"], [g["soort"] for g in ind["kandidaat"]]), ([], ["kandidaat"]))
+        self.assertEqual(os.listdir(Path(FI.VOORBEELD, "2026-10-29")), [])
+        with patch.object(FI, "deel_in", lambda d, ag, pl, droog=False, recent=True: self.gepost.append(("recent", recent))), \
+                patch.object(FI, "projectplekken", lambda: [P1]), patch.object(FI.bord, "Agent", lambda naam: self.ag), \
+                patch.object(FI, "datetime", type("Klok", (FI.datetime,), {"now": classmethod(lambda c, tz=None: FI.datetime(2026, 11, 20, tzinfo=tz))})):
+            self.ag.log_verstuur = lambda: None
+            FI.main(["--alles"])
+            FI.main([])
+        self.assertEqual([x for x in self.gepost if isinstance(x, tuple)], [("recent", True), ("recent", False)])
+
+    def test_mislukte_bordpost_bewaart_de_nieuwe_indeling_niet(self):
+        # Codex 2: de hash werd bewaard voor het bord antwoordde; dan kwamen de items er nooit.
+        self.zet("2026-10-29", [foto("v", "10:00", *bij((P1["lat"], P1["lon"])))])
+        with patch.object(FI.bord, "call", lambda *a, **k: (_ for _ in ()).throw(OSError("fictief"))):
+            with self.assertRaises(OSError):
+                FI.deel_in("2026-10-29", self.ag, [P1])
+        self.assertIsNone(FI.lees_indeling("2026-10-29"))
+        self.assertIn("1 kandidaat", FI.deel_in("2026-10-29", self.ag, [P1]))
+        self.assertIsNotNone(FI.lees_indeling("2026-10-29"))
 
     def test_voorvertoning_verdwijnt_als_photos_later_mensen_vindt(self):
         # Codex 1: een eenmaal bewaarde voorvertoning bleef staan als Photos later een gezicht herkende.

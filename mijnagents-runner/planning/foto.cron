@@ -6,4 +6,6 @@
 # De indeling is idempotent: een ronde zonder verandering schrijft niets op het bord.
 # Op de VM zetten: mijnagents-runner/planning/foto_cron_zetten.py (vervangt alleen het blok tussen de merktekens).
 40 19,20,21,22 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/koppelingen/fotoindeling.py >> /home/ubuntu/agents/fotoindeling.log 2>&1
-40 5,6 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/koppelingen/fotoindeling.py >> /home/ubuntu/agents/fotoindeling.log 2>&1
+# 's Nachts (05:40 en 06:40 UTC) elke dag van de laatste 35 opnieuw met de context: een rechtgezette afspraak of plek van
+# een oudere dag komt zo de volgende ochtend door (Codex 2).
+40 5,6 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/koppelingen/fotoindeling.py --alles >> /home/ubuntu/agents/fotoindeling.log 2>&1

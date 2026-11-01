@@ -71,7 +71,16 @@ check("V05 routes aan het bord", {"/api/fotovoorbeeld", "/api/fotometadata"} <= 
 fotos = [{"id": "f-1", "utc": "2026-10-29T09:15:00+00:00", "lat": 50.12345, "lon": 4.12345, "video": False, "scherm": False,
           "app": False, "mensen": False, "bestand": "IMG_0001.HEIC"},
          {"id": "f-2", "utc": "2026-10-29T09:20:00+00:00", "lat": None, "lon": None, "video": True, "scherm": 1, "app": None, "mensen": None}]
-r = C.post("/api/fotometadata", headers=K, json={"dag": DAG, "aantal": 2, "fotos": fotos})
+geopend = []
+_open = os.open
+os.open = lambda pad, vlaggen, modus=0o777, *a, **k: geopend.append((pad, vlaggen, modus)) or _open(pad, vlaggen, modus, *a, **k)
+oude_umask = os.umask(0)
+try:
+    r = C.post("/api/fotometadata", headers=K, json={"dag": DAG, "aantal": 2, "fotos": fotos})
+finally:
+    os.open, _ = _open, os.umask(oude_umask)
+check("V06 het bestand ontstaat meteen met 0600, ook zonder umask",
+      [m for p, v, m in geopend if p.endswith(".tmp")] == [0o600] and all(v & os.O_EXCL for p, v, m in geopend if p.endswith(".tmp")))
 pad = os.path.join(MAP, "fotometadata", f"{DAG}.json")
 check("V06 metadata aanvaard", r.status_code == 200 and r.get_json()["aantal"] == 2, r.status_code)
 d = json.load(open(pad, encoding="utf-8"))
