@@ -26,7 +26,19 @@ DATA = os.path.join(THUIS, "appportal", "mijnagents-data")
 
 class NepAgent:
     def __init__(self):
-        self.logboek, self.klaar = [], []
+        self.logboek, self.klaar, self.rondes = [], [], []
+
+    def ronde(self, naam):
+        agent = self
+
+        class Ronde:
+            def __enter__(self):
+                agent.rondes.append(naam)
+                return NepRonde()
+
+            def __exit__(self, *a):
+                return False
+        return Ronde()
 
     def log(self, *a, **k):
         self.logboek.append(a)
@@ -82,12 +94,12 @@ class vervangen:
             setattr(obj, naam, waarde)
 
 
-def _labelronde(rijen, model):
+def _labelronde(rijen, model, alleen=False):
     ag, r = NepAgent(), NepRonde()
     with vervangen((AR, "ag", ag), (AR, "db", _db(rijen)), (AR, "afspraken", lambda van, tot: []),
                    (AR.projectadressen, "index", lambda: {}), (AR, "locatie_op", lambda d, u: ("", None)),
                    (AR, "label_met_model", model), (AR, "BORDMAP", os.path.join(DATA, "bord"))):
-        AR._ronde(r, "2026-10-20", "2026-10-22", "2026-10-22")
+        AR._ronde(r, "2026-10-20", "2026-10-22", "2026-10-22", alleen)
     return ag, r
 
 
@@ -579,6 +591,60 @@ def test_proef_met_het_model_uit_vraagt_niets_en_noemt_het():
     pad, u, nieuw, gewijzigd, scherm = _proef(False, _geen_model)
     assert [g["toestand"] for g in u["gesprekken"] if g["bron"] == "plaud"] == ["model staat uit"] * 2, u["gesprekken"]
     assert u["model_aan"] is False and u["tokens"] == 0 and not gewijzigd
+
+
+
+# --------------------------------------------------------------------------- inhaalweg en hernoemde mappen ---
+def test_alleen_analyse_labelt_niet_en_vraagt_dus_de_api_niet():
+    """De inhaalweg voor oktober (X7: bouwen mag, draaien niet): archivaris.py --alleen-analyse slaat de labels over,
+    want die gaan nog via de API (label_met_model). Ook een gesprek zonder label gaat dan alleen door versie 3."""
+    map_ = _fathom_map("2026-10-21 1500 inhaal")
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": 9300})
+    rijen = [{"datum": "2026-10-21", "start": "15:00", "uniek": "fathom:9300", "archief": map_}]
+    uitvoer = os.path.join(THUIS, "inhaal")
+    with vervangen((GA, "UITVOER", uitvoer), (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (GA, "ANALYSE_AAN", True)):
+        ag, r = _labelronde(rijen, _geen_model, alleen=True)
+    rec = json.load(open(os.path.join(uitvoer, "fathom", "9300.json"), encoding="utf-8"))
+    assert rec["label"] == "" and rec["samenvatting_van"] == "fathom" and r.noden == [], (rec, r.noden)
+    assert "archivaris" not in json.load(open(os.path.join(map_, "gesprek.json"), encoding="utf-8"))
+    ag, r = _labelronde(rijen, _geen_model, alleen=True)
+    assert any("staat uit" in str(a) for a in ag.logboek), "zonder de vlag zegt de inhaalweg dat hij niets deed"
+    nep = NepAgent()
+    with vervangen((AR, "ag", nep), (AR, "_ronde", lambda r, van, tot, vandaag, alleen=False: nep.logboek.append(alleen)),
+                   (sys, "argv", ["archivaris.py", "--alleen-analyse", "--van", "2026-10-01", "--tot", "2026-10-31"])):
+        assert AR.main() == 0
+    assert nep.rondes == ["gesprekken analyseren 2026-10-01 tot 2026-10-31"] and nep.logboek == [True], nep.rondes
+
+
+def test_een_hernoemde_fathommap_wordt_ook_gelezen():
+    """De labelronde vindt een hernoemde map op het recording_id (archivaris.py, zoek op uniek); versie 3 leest dan
+    dezelfde map en niet het oude pad."""
+    map_ = _fathom_map("2026-10-21 1600 hernoemd")
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": "rec9400", "archivaris": {
+        "label": "HA project", "zekerheid": "hoog", "versie": 2, "week": "2026-W43", "datum": "2026-10-21", "start": "16:00"}})
+    rijen = [{"datum": "2026-10-21", "start": "16:00", "uniek": "fathom:rec9400",
+              "archief": os.path.join(DATA, "fathom-data", "2026-10-21 1400 oude naam")}]
+    uitvoer = os.path.join(THUIS, "hernoemd")
+    with vervangen((GA, "UITVOER", uitvoer), (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg")), (GA, "ANALYSE_AAN", True)):
+        ag, r = _labelronde(rijen, _geen_model)
+    rec = json.load(open(os.path.join(uitvoer, "fathom", "rec9400.json"), encoding="utf-8"))
+    assert rec["label"] == "HA project" and rec["actiepunten"], rec
+
+
+def test_een_meting_zonder_weekvenster_na_een_vraag_stopt_het_model():
+    """Meldt het abonnement na de vraag alleen het venster van vijf uur, dan is het weekvenster onbekend: geen tweede
+    vraag (onbekend is geen ruimte). Alleen de eerste vraag van een ronde mag het venster meten."""
+    class VijfUur(NepVraag):
+        def __call__(self, *a, **k):
+            uit = super().__call__(*a, **k)
+            _schrijf(LIMIET, {"info": {"status": "allowed", "unifiedWindows": {"five_hour": {"utilization": 0.1}}},
+                              "gezien": time.time()})
+            return uit
+    vraag = VijfUur()
+    with vervangen((GA, "MODEL_AAN", True)):
+        budget = _budget()
+        uit = [GA.verwerk(g, budget, vraag)[1] for g in _plaud(n=3)]
+    assert len(vraag.vragen) == 1 and uit[1:] == ["weekvenster na de vorige vraag niet gemeten"] * 2, uit
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ samenvatting en de actiepunten met een letterlijk citaat, alleen als gespreksana
 via het model alleen als gespreksanalist.MODEL_AAN (beide staan uit).
 
 Gebruik: archivaris.py [--van JJJJ-MM-DD --tot JJJJ-MM-DD]   (standaard: de laatste drie dagen)
+         archivaris.py --alleen-analyse --van ... --tot ...     (inhaalweg van versie 3: geen labels, dus geen API)
 """
 import glob
 import json
@@ -220,10 +221,11 @@ def weekoverzicht(week):
     return len(rijen)
 
 
-def geval_van(g, lijst, projecten):
-    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json, het label dat ik
-    gaf en het bewezen H-A-nummer, zoals in de labelronde (ha_projectnummer)."""
-    map_ = g.get("archief") or ""
+def geval_van(g, lijst, projecten, gevonden=None):
+    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json (gevonden: de map
+    die de labelronde vond, ook als ze hernoemd is), het label dat ik gaf en het bewezen H-A-nummer, zoals in de
+    labelronde (ha_projectnummer)."""
+    map_ = gevonden or g.get("archief") or ""
     if g.get("bron") == "plaud":    # De Plaudwacht noemt de map op de Mac; op de VM staat transcript.json in plaud-invoer
         deel = map_[len(GA.PLAUD_OP_MAC):].split("/")[0] if map_.startswith(GA.PLAUD_OP_MAC) else ""
         map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel else ""
@@ -237,14 +239,14 @@ def geval_van(g, lijst, projecten):
             "ha_nummer": ha_projectnummer(a, g.get("project"), {("HARC", str(n)) for n in projecten})}
 
 
-def _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag):
+def _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden=None):
     """Versie 3, De Gespreksanalist (gespreksanalist.py): alleen als GA.ANALYSE_AAN; Plaud en Zoom-tekst alleen met
     GA.MODEL_AAN, op het abonnement en binnen GA.Budget. De uitvoer staat op de VM, buiten gesprek.json; het werkverslag
     krijgt alleen aantallen, geen naam, onderwerp of citaat."""
     if not GA.ANALYSE_AAN:
         return
-    tel, budget = Counter(), GA.Budget(vandaag)
-    for geval in [geval_van(g, lijst, projecten) for g in gesprekken] + GA.zoom_gevallen(van, tot):
+    tel, budget, gevonden = Counter(), GA.Budget(vandaag), gevonden or {}
+    for geval in [geval_van(g, lijst, projecten, gevonden.get(g["uniek"])) for g in gesprekken] + GA.zoom_gevallen(van, tot):
         rec, toestand = GA.stap(geval, budget)
         if rec:
             GA.bewaar(rec)
@@ -270,23 +272,31 @@ def main():
     van = van or (datetime.fromisoformat(tot) - timedelta(days=3)).strftime("%Y-%m-%d")
     # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de Correcties van Mehdi, of geen ronde; en wat ik
     # las (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, zonder kennis.
+    alleen = "--alleen-analyse" in sys.argv
     try:
-        with ag.ronde(f"gesprekken labelen {van} tot {tot}") as r:
-            _ronde(r, van, tot, vandaag)
+        with ag.ronde(f"gesprekken {'analyseren' if alleen else 'labelen'} {van} tot {tot}") as r:
+            _ronde(r, van, tot, vandaag, alleen)
     except bord.RondeGestopt as e:
         print(f"ronde gestopt: {e}", file=sys.stderr)
         return 1
     return 0
 
 
-def _ronde(r, van, tot, vandaag):
+def _ronde(r, van, tot, vandaag, alleen=False):
     try:
         corr = correcties(r.werkwijze)
         regels_mehdi = [f"{d} {u} {n} = {l}" + (f" ({r})" if r else "") for (d, u), (l, r, n) in corr.items()]
         lijst = afspraken(van, tot)
         projecten = projectadressen.index()
         gesprekken = [dict(r) for r in db().execute("select * from gesprek_log where bron in ('fathom','plaud') and datum between ? and ? order by datum, start", (van, tot))]
+        if alleen:      # de inhaalweg van versie 3 (X7: bouwen mag, draaien niet): geen labels, dus geen API
+            if not GA.ANALYSE_AAN:
+                ag.log(f"{van} tot {tot}", "melding", "alleen analyse gevraagd, maar De Gespreksanalist staat uit")
+            _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag)
+            r.detail = f"alleen analyse ({van} tot {tot})"
+            return
         gelabeld = overgeslagen = tokens = ongeldig = 0
+        gevonden = {}               # uniek -> de archiefmap die ik vond, voor versie 3
         twijfel, tel, weken = [], Counter(), set()
         for g in gesprekken:
             map_ = g.get("archief") or ""
@@ -300,6 +310,7 @@ def _ronde(r, van, tot, vandaag):
                     continue
                 gj = kandidaten[0]
                 map_ = os.path.dirname(gj)
+            gevonden[g["uniek"]] = map_
             d = json.load(open(gj, encoding="utf-8"))
             sleutel = (g["datum"], g["start"])
             c = corr.get(sleutel)
@@ -337,7 +348,7 @@ def _ronde(r, van, tot, vandaag):
             if uit["zekerheid"] == "laag" or uit["label"] == "Onbekend":
                 twijfel.append(f"{g['datum']} {g['start']} {(g.get('personen') or '')[:35]} · voorstel {uit['label']} · {uit.get('vraag_aan_mehdi') or uit['reden'][:80]}")
         n_week = sum(weekoverzicht(w) for w in weken if w)
-        _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag)
+        _analyse(r, gesprekken, lijst, projecten, van, tot, vandaag, gevonden)
         if twijfel:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"Archivaris: {len(twijfel)} gesprek(ken) waar ik twijfel",
                           "uniek": f"archivaris-twijfel:{vandaag}:{len(twijfel)}",

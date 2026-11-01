@@ -342,8 +342,9 @@ def weekbenutting(bestand=None, nu=None):
 
 class Budget:
     """Mag er nog een gesprek naar het model? Hoogstens MAX_PER_DAG per dag (teller.json in UITVOER; een mislukte vraag
-    telt mee), en geen vraag als het weekvenster op WEEKGRENS of hoger staat. Na een vraag moet het venster opnieuw
-    gemeten zijn: zonder nieuwe meting stopt het model voor de rest van de ronde (onbekend is geen ruimte). Een fout van
+    telt mee), en geen vraag als het weekvenster op WEEKGRENS of hoger staat. Is het weekvenster onbekend, dan mag
+    alleen de eerste vraag van de ronde (die meet het); na elke vraag moet er een nieuwe meting van het weekvenster zijn,
+    anders stopt het model voor de rest van de ronde (onbekend is geen ruimte). Een fout van
     het abonnement stopt het ook (stop, fout). teller=None: alleen in het geheugen (de proef), vanaf de stand in het
     bestand."""
 
@@ -368,7 +369,7 @@ class Budget:
         if self.vandaag >= MAX_PER_DAG:
             return f"al {MAX_PER_DAG} gesprekken naar het model vandaag"
         benutting, gezien = weekbenutting(self.limiet, self.klok())
-        if self.sinds is not None and gezien < self.sinds:
+        if self.sinds is not None and (gezien < self.sinds or benutting is None):
             self.stop = "weekvenster na de vorige vraag niet gemeten"
         elif benutting is not None and benutting >= WEEKGRENS:
             self.stop = f"weekvenster op {int(benutting * 100)} procent (grens {int(WEEKGRENS * 100)})"
