@@ -8,8 +8,9 @@
 # 4. de eerste ronde met controle, zonder vraag (kost niets, toetst de normen). Geen cron: ze werken op verzoek.
 set -euo pipefail
 cd ~/appportal
-# Codex X14: alleen met een schone werkboom, zodat het opzij zetten en terughalen van de runners geen ander werk raakt
-if [ -n "$(git status --porcelain -- mijnagents-runner)" ]; then
+# Codex X14: alleen zonder gewijzigde bestanden uit git. Losse bestanden buiten git (runners van andere agents) blijven
+# staan: de generator draait in een kopie, en een pull --ff-only stopt zelf als hij er een zou overschrijven (01-11-2026).
+if [ -n "$(git status --porcelain --untracked-files=no -- mijnagents-runner)" ]; then
   echo "STOP: mijnagents-runner heeft wijzigingen die niet in git staan"; git status --short -- mijnagents-runner; exit 1
 fi
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
