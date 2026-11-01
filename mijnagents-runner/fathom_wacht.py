@@ -369,14 +369,24 @@ def main():
         return 1
     # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de personentabel, of geen ronde; en wat ik las
     # (N4), de lessen (N13) en de collega's (N14). Een fout of een stopsignaal (SIGTERM als SystemExit, Ctrl-C) zet de
-    # ronde zelf op fout, en wat al open stond blijft open (N11, J1, K3); de eigen fouthartslagen van voordien zijn weg.
+    # ronde zelf op fout, en wat al open stond blijft open (N11, J1, K3).
+    afgesloten = False
     try:
-        with ag.ronde("Fathom ophalen") as r:
-            _ronde(r)
-    except bord.RondeGestopt as e:
-        print(f"ronde gestopt: {e}", file=sys.stderr)
-        return 1
-    return 0
+        try:
+            with ag.ronde("Fathom ophalen") as r:
+                _ronde(r)
+        except bord.RondeGestopt as e:
+            afgesloten = True
+            bord.diagnose(f"ronde gestopt: {e}")
+            return 1
+        afgesloten = True
+        return 0
+    finally:
+        # Vangnet zoals voor 01-11 (overleg 15, F3): een signaal op een moment dat de ronde het zelf niet meer kon melden
+        # (de time-out van de keten, een tweede signaal), liet de hartslag op actief. Kwam haar fouthartslag niet aan,
+        # dan hier nog een, zonder noodlijst, zodat wat open stond open blijft. Een eenmalige beste poging, zoals op main.
+        if not afgesloten and ag.laatste_status != "fout":
+            ag.hartslag("fout", taak="ronde afgebroken", detail="ronde afgebroken voor het einde (time-out of stopsignaal)")
 
 
 def _ronde(r):

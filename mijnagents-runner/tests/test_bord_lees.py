@@ -368,6 +368,45 @@ def test_k3_fathom_wacht_gewone_uitgangen_onveranderd():
     assert {"tekst": "Werkwijze niet gelezen: bordfout", "wie": "claude-code"} in statussen[-1]["nood"], statussen[-1]
 
 
+
+def test_f3_fathom_wacht_vangnet_als_de_ronde_haar_fout_niet_meer_kon_melden():
+    """Overleg 15, F3: op main ving De Fathomwacht een signaal op elk moment met een eigen finally. Sinds ze door de ronde
+    gaat, kon een signaal terwijl de ronde haar fout meldde de hartslag op actief laten. Nu zet het vangnet van main dan
+    nog een fouthartslag ("ronde afgebroken", zonder noodlijst); het signaal gaat door. Meldde de ronde haar fout wel,
+    dan doet het vangnet niets."""
+    fw = _fathom_wacht()
+
+    def kapot(*a, **k):
+        raise ValueError("Fathom kapot (proef)")
+
+    def signaal_tijdens_melden(*a, **k):
+        raise SystemExit(143)
+
+    for vangnet_nodig in (True, False):
+        nb = BordNabootsing(werkwijze=WW_FATHOM, open_noden=[])
+        echt = (bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken)
+        bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken = nb.call, (lambda: True), kapot
+        if vangnet_nodig:
+            fw.ag.fout_melden = signaal_tijdens_melden
+        try:
+            with redirect_stderr(io.StringIO()), redirect_stdout(io.StringIO()):
+                try:
+                    fw.main()
+                    uit = None
+                except BaseException as e:  # noqa: BLE001
+                    uit = e
+        finally:
+            bord.call, fw.fathom.beschikbaar, fw.fathom.gesprekken = echt
+            fw.ag.__dict__.pop("fout_melden", None)
+        statussen = nb.statussen()
+        assert statussen[-1]["status"] == "fout", (vangnet_nodig, statussen)
+        if vangnet_nodig:
+            assert isinstance(uit, SystemExit) and uit.code == 143, repr(uit)
+            assert statussen[-1]["taak"] == "ronde afgebroken" and "nood" not in statussen[-1], statussen[-1]
+        else:
+            assert isinstance(uit, ValueError) and statussen[-1]["taak"] == "Fathom ophalen", (repr(uit), statussen)
+            assert [s["status"] for s in statussen].count("fout") == 1, "het vangnet stuurde een tweede fouthartslag"
+
 STUURPROGRAMMA = r"""
 import json, os, runpy, sys, time
 RUNNER = sys.argv[1]
@@ -377,10 +416,8 @@ bord.call = lambda pad, payload=None, method=None: print("BORD " + json.dumps([p
 fathom.beschikbaar = lambda: True
 
 def traag(self, taak="werkwijze lezen", noden=()):
-    # een bordoproep die even duurt; sinds overleg 14 (E1) wacht het signaal tot ze klaar is (een echte hoogstens 30 s)
     print("WERK", flush=True)
-    time.sleep(2)
-    return "# Fathomwacht"
+    time.sleep(60)
 
 bord.Agent.werkwijze = traag
 runpy.run_path(os.path.join(RUNNER, "fathom_wacht.py"), run_name="__main__")
@@ -411,9 +448,7 @@ def test_k3_fathom_wacht_sigterm_als_proces():
     assert "WERK" in regels, f"de ronde kwam niet aan het werk: {regels} {fout}"
     assert p.returncode == 128 + signal.SIGTERM, f"exitcode {p.returncode}, verwacht {128 + signal.SIGTERM}: {fout}"
     assert statussen and statussen[0]["status"] == "actief" and statussen[-1]["status"] == "fout", statussen
-    assert "SIGTERM" in statussen[-1]["detail"] and "nood" not in statussen[-1], statussen
-    paden = [json.loads(r[5:])[0] for r in regels if r.startswith("BORD ")]
-    assert "/api/gesprekken" not in paden, f"het werk begon na het stopsignaal: {paden}"
+    assert "SystemExit" in statussen[-1]["detail"] and "nood" not in statussen[-1], statussen
 
 
 def test_z13_fathom_wacht_zet_de_bron_zelf():

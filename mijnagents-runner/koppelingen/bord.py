@@ -6,10 +6,8 @@ import http.client
 import json
 import os
 import re
-import signal
 import sqlite3
 import sys
-import threading
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -43,75 +41,12 @@ def call(pad, payload=None, method=None):
 
 
 def diagnose(*delen):
-    """Diagnostische uitvoer naar stderr die zelf nooit faalt (Codex NA65, overleg 14 E2): een gesloten of volle uitvoer
-    mag het afsluiten van een ronde niet afbreken."""
+    """Diagnostische uitvoer naar stderr die zelf nooit faalt (Codex NA65 en NA70, overleg 14 E2 en 15 F1): een gesloten,
+    volle of vervangen uitvoer mag het afsluiten van een ronde niet afbreken."""
     try:
         print(*delen, file=sys.stderr)
-    except (OSError, ValueError):
+    except Exception:  # noqa: BLE001
         pass
-
-
-UITSTELBAAR = tuple(s for s in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGINT", None)) if s is not None)
-
-
-class SignalenUitgesteld:
-    """Zolang de ronde haar eigen boekhouding doet (de start met de eerste hartslag, een breuk melden, het afsluiten),
-    wacht een SIGTERM of Ctrl-C tot die klaar is (overleg 14, E1, na Codex NA64). Met try/except per stap raak je nooit
-    rond: een signaal kan als uitzondering op elk moment binnenkomen, ook tussen twee stappen.
-
-    Op de hoofdthread zet ze voor die signalen een handler die alleen noteert (een signaal dat de agent negeert, blijft
-    genegeerd). Bij het verlaten komt de oude handler terug, met de signalen even geblokkeerd, en wordt het eerste
-    genoteerde signaal alsnog afgeleverd: met die handler (De Fathomwacht maakt er SystemExit 143 van, Ctrl-C wordt
-    KeyboardInterrupt), of met de standaardactie (os.kill op zichzelf). Gaat er al een signaal als uitzondering door, het
-    werk zelf of `voorrang`, dan blijft dat de oorzaak. Genest werkt vanzelf: de binnenste geeft door aan de buitenste.
-    Buiten de hoofdthread doet ze niets. De prijs: een time-out wacht op de lopende bordoproepen, elk hoogstens 30 s."""
-
-    def __init__(self, voorrang=None):
-        self.binnen = []
-        self.voorrang = voorrang
-        self._oud = {}
-
-    def naam(self):
-        """De naam van het eerste genoteerde signaal (SIGTERM, SIGINT), of "" als er geen kwam."""
-        return signal.Signals(self.binnen[0]).name if self.binnen else ""
-
-    def __enter__(self):
-        if threading.current_thread() is not threading.main_thread():
-            return self
-        for s in UITSTELBAAR:
-            oud = signal.getsignal(s)
-            if oud is signal.SIG_IGN or oud is None:        # genegeerd blijft genegeerd; niet van Python: niet aankomen
-                continue
-            try:
-                signal.signal(s, self._noteer)
-            except (ValueError, OSError):
-                continue
-            self._oud[s] = oud
-        return self
-
-    def _noteer(self, signum, frame):
-        self.binnen.append(signum)
-
-    def __exit__(self, soort, fout, spoor):
-        blok = bool(self._oud) and hasattr(signal, "pthread_sigmask")
-        if blok:
-            signal.pthread_sigmask(signal.SIG_BLOCK, set(self._oud))
-        try:
-            for s, h in self._oud.items():
-                signal.signal(s, h)
-        finally:
-            if blok:
-                # een signaal dat tijdens het herstel kwam, wacht hier en gaat nu naar de herstelde handler
-                signal.pthread_sigmask(signal.SIG_UNBLOCK, set(self._oud))
-        oorzaak = fout if fout is not None else self.voorrang
-        if self.binnen and (oorzaak is None or isinstance(oorzaak, Exception)):
-            s = self.binnen[0]
-            h = self._oud.get(s)
-            if callable(h):
-                h(s, None)
-            else:
-                os.kill(os.getpid(), s)
-        return False
 
 
 class RondeGestopt(RuntimeError):
@@ -248,6 +183,7 @@ class Agent:
         # kwam de laatste hartslag aan; None zolang er geen was. Een runner die zijn eindhartslag moet zien aankomen,
         # leest dit na de ronde (De Bouwwacht, Codex-resultaattoets 4, 27-10-2026)
         self.hartslag_ok = None
+        self.laatste_status = ""      # de status van de laatste hartslag die aankwam
 
     # Privacygrens (nacontrole v1.3, R1): een agent meldt de teksten uit een privébron aan (privé-agenda, Lara,
     # Hotmail). Elk bericht naar het bord (hartslag, nood, logboek, klaargezet) gaat door maskeer(), welke route ook.
@@ -286,6 +222,7 @@ class Agent:
         try:
             call("/agent-status", self.maskeer(p))
             self.hartslag_ok = True
+            self.laatste_status = status       # voor een vangnet buiten de ronde (De Fathomwacht, overleg 15 F3)
         except Exception as e:  # noqa: BLE001
             self.hartslag_ok = False
             diagnose("hartslag mislukt:", e)
@@ -355,34 +292,30 @@ class Agent:
             raise signalen[0]
         raise RondeGestopt(tekst) from oorzaak
 
-    def fout_melden(self, taak, detail, nieuw, ook=(), verslag=True, nood_ophalen=True, voorrang=None):
-        """De fouthartslag van een ronde die niet afliep (N11), ook als onderweg een stopsignaal binnenkomt (SIGTERM,
-        Ctrl-C; NA61, overleg 13 en 14). Eerst het werkverslag (verslag), dan de noodlijst (noden_bij_breuk, als
-        nood_ophalen), dan de hartslag. Een signaal wacht tot de hartslag weg is (SignalenUitgesteld; voorrang: de oorzaak
-        die al doorgaat). Na een signaal geen bordoproep meer behalve de hartslag: die gaat dan uit zonder noodlijst,
-        zodat het bord niets sluit, met wat de ronde vond (ook) in het detail. Geeft de signalen die toch als uitzondering
-        binnenkwamen (buiten de hoofdthread); de aanroeper laat het eerste door. De hartslag zelf is een eenmalige beste
-        poging; een harde stop of een reeks signalen vangt niemand nog op (AGENTNORM 5)."""
-        with SignalenUitgesteld(voorrang) as uitstel:
-            signalen, lijst = [], None
-            for stap in ((self.log_verstuur,) if verslag else ()) + \
-                    ((lambda: self.noden_bij_breuk(nieuw),) if nood_ophalen else ()):
-                if signalen or uitstel.binnen:
-                    break
-                try:
-                    uit = stap()
-                except BaseException as e:  # een Exception vangen log_verstuur en open_noden zelf
-                    signalen.append(e)
-                    continue
-                if stap is not self.log_verstuur:
-                    lijst = uit
-            if lijst is None and ook:
-                detail += "; ook: " + "; ".join(ook)
+    def fout_melden(self, taak, detail, nieuw, ook=(), verslag=True, nood_ophalen=True):
+        """De fouthartslag van een ronde die niet afliep (N11), ook als onderweg een stopsignaal binnenkomt (SIGTERM als
+        SystemExit, Ctrl-C; NA61, overleg 13). Eerst het werkverslag (verslag), dan de noodlijst (noden_bij_breuk, als
+        nood_ophalen), dan de hartslag. Na een signaal geen bordoproep meer behalve de hartslag: die gaat dan uit zonder
+        noodlijst, zodat het bord niets sluit, met wat de ronde vond (ook) in het detail. Geeft de signalen die onderweg
+        binnenkwamen; de aanroeper laat het eerste door. De hartslag zelf is een eenmalige beste poging: een signaal
+        daarin, of een reeks signalen, vangt niemand nog op (AGENTNORM 5)."""
+        signalen, lijst = [], None
+        for stap in ((self.log_verstuur,) if verslag else ()) + \
+                ((lambda: self.noden_bij_breuk(nieuw),) if nood_ophalen else ()):
             if signalen:
-                detail += "; daarna " + "; ".join(f"{type(s).__name__}: {str(s)[:60]}" for s in signalen)
-            if uitstel.binnen:
-                detail += f"; daarna {uitstel.naam()} (uitgesteld)"
-            self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
+                break
+            try:
+                uit = stap()
+            except BaseException as e:  # een Exception vangen log_verstuur en open_noden zelf
+                signalen.append(e)
+                continue
+            if stap is not self.log_verstuur:
+                lijst = uit
+        if lijst is None and ook:
+            detail += "; ook: " + "; ".join(ook)
+        if signalen:
+            detail += "; daarna " + "; ".join(f"{type(s).__name__}: {str(s)[:60]}" for s in signalen)
+        self.hartslag("fout", taak=taak, detail=detail, nood=lijst)
         return signalen
 
     def noden_bij_breuk(self, nieuw):
@@ -502,29 +435,24 @@ class Ronde:
             for naam, inhoud in self._bronnen.items())
 
     def __enter__(self):
-        # De start, met de eerste hartslag, gebeurt met uitgestelde signalen (overleg 14, E1 en X1; Codex NA62, NA64): een
-        # SIGTERM of Ctrl-C wacht tot de fouthartslag weg is, en gaat dan door; het werk begint dan niet.
-        with SignalenUitgesteld() as uitstel:
-            try:
-                self.agent.hartslag("actief", taak=self.taak)
-                self._begin()
-            except RondeGestopt:
+        try:
+            # ook de eerste hartslag valt onder de bescherming (Codex NA62): een signaal terwijl het bord "actief" al
+            # aannam, liet de agent anders op actief staan
+            self.agent.hartslag("actief", taak=self.taak)
+            self._begin()
+        except RondeGestopt:
+            raise
+        except BaseException as e:
+            if getattr(e, "al_gemeld", False):
                 raise
-            except BaseException as e:
-                if getattr(e, "al_gemeld", False):
-                    raise
-                # Codex NA15: een fout in de startfase liet de agent op "actief" staan, want __exit__ draait dan
-                # niet. Ook hier geldt N11: nooit blijven hangen op actief. BaseException: ook een SystemExit of Ctrl-C
-                # die toch als uitzondering kwam (buiten de hoofdthread). De oorspronkelijke oorzaak gaat door (X2).
-                self.agent.fout_melden(self.taak, f"{type(e).__name__}: {str(e)[:180]}", self._noden,
-                                       ook=[n["tekst"] for n in self._noden], voorrang=e)
-                raise
-            if uitstel.binnen:
-                self.agent.fout_melden(self.taak, f"{uitstel.naam()} tijdens de start (uitgesteld)", self._noden,
-                                       ook=[n["tekst"] for n in self._noden], nood_ophalen=False)
-        if uitstel.binnen:
-            # de handler van de agent wierp niets op: het werk begint toch niet, want de fouthartslag is al weg
-            raise RondeGestopt(f"{uitstel.naam()} tijdens de start")
+            # Codex NA15: een fout in de startfase liet de agent op "actief" staan, want __exit__ draait dan
+            # niet. Ook hier geldt N11: nooit blijven hangen op actief. BaseException: ook SIGTERM (als
+            # SystemExit, keten.py en de timeout van De Regisseur) en Ctrl-C (ontwerp regie-zoom v1.2, J1). Een tweede
+            # signaal tijdens het melden houdt de fouthartslag niet meer tegen; de oorspronkelijke oorzaak gaat door
+            # (overleg 13, X2).
+            self.agent.fout_melden(self.taak, f"{type(e).__name__}: {str(e)[:180]}", self._noden,
+                                   ook=[n["tekst"] for n in self._noden])
+            raise
         return self
 
     def _begin(self):
@@ -557,37 +485,31 @@ class Ronde:
             self._bronnen.setdefault("collega's op het bord", collega_tekst(self.collegas))
 
     def __exit__(self, soort, fout, spoor):
-        # Het hele afsluiten gebeurt met uitgestelde signalen (overleg 14, E1 en X1; Codex NA64): een SIGTERM of Ctrl-C
-        # wacht tot de eindhartslag weg is, maakt die eindhartslag "fout" in plaats van klaar, en gaat dan door; was het
-        # werk zelf al door een signaal gestopt, dan blijft dat de oorzaak.
-        with SignalenUitgesteld(voorrang=fout) as uitstel:
-            onderbrekingen = []
-            for wat, stap in (("kennis", lambda: self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")),
-                              ("werkverslag", self.agent.log_verstuur)):
-                try:
-                    stap()
-                except Exception as e:  # noqa: BLE001  Codex NA45: de laatste hartslag gaat altijd uit (N11)
-                    diagnose(f"{wat} niet verstuurd: {type(e).__name__}: {e}")
-                except BaseException as e:
-                    # Codex NA49, NA53 en NA57: een signaal dat toch als uitzondering kwam (buiten de hoofdthread); de
-                    # andere stap gaat nog, en de fouthartslag noemt elke oorzaak; daarna gaat het eerste door.
-                    onderbrekingen.append(e)
-            if fout is not None or onderbrekingen or uitstel.binnen:
-                # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden die ze niet
-                # meer kon nakijken. Kwam al een signaal, dan haalt ze de noodlijst niet meer op (NA61).
-                oorzaken = [f"{type(x).__name__}: {str(x)[:180]}" for x in [fout] + onderbrekingen if x is not None]
-                if uitstel.binnen:
-                    oorzaken.append(f"{uitstel.naam()} (uitgesteld)")
-                onderbrekingen += self.agent.fout_melden(
-                    self.taak, "; daarna ".join(oorzaken), self._noden, ook=[n["tekst"] for n in self._noden],
-                    verslag=False, nood_ophalen=not onderbrekingen and not uitstel.binnen, voorrang=fout)
-                # het eerste signaal gaat door: dat van het werk zelf (return False), anders het eerste bij het afsluiten;
-                # een uitgesteld signaal levert SignalenUitgesteld bij het verlaten af
-                if onderbrekingen and (fout is None or isinstance(fout, Exception)):
-                    raise onderbrekingen[0]
-                return False
-            self.agent.hartslag("klaar" if not self._noden else "waakt",
-                                taak=self.taak, detail=self.detail, nood=self._noden, sluiten=not self.noden_onbekend)
+        onderbrekingen = []
+        for wat, stap in (("kennis", lambda: self.agent.kennis(self._kennis(), bron=", ".join(self._bronnen) or "geen")),
+                          ("werkverslag", self.agent.log_verstuur)):
+            try:
+                stap()
+            except Exception as e:  # noqa: BLE001  Codex NA45: de laatste hartslag gaat altijd uit (N11)
+                diagnose(f"{wat} niet verstuurd: {type(e).__name__}: {e}")
+            except BaseException as e:
+                # Codex NA49, NA53 en NA57 (01-11-2026): een SIGTERM (als SystemExit) of Ctrl-C tijdens het afsluiten
+                # sloeg de eindhartslag over, en dan bleef de agent op actief staan. Nu gaat ook de andere stap nog, en
+                # de fouthartslag noemt de fout van het werk en elk signaal; daarna gaat het eerste signaal door.
+                onderbrekingen.append(e)
+        if fout is not None or onderbrekingen:
+            # N11: nooit blijven hangen op "actief". Een ronde die breekt meldt dat, en sluit geen noden
+            # die ze niet meer kon nakijken. Kwam al een signaal, dan haalt ze de noodlijst niet meer op (NA61).
+            onderbrekingen += self.agent.fout_melden(
+                self.taak, "; daarna ".join(f"{type(x).__name__}: {str(x)[:180]}"
+                                            for x in [fout] + onderbrekingen if x is not None),
+                self._noden, ook=[n["tekst"] for n in self._noden], verslag=False, nood_ophalen=not onderbrekingen)
+            # het eerste signaal gaat door: dat van het werk zelf (return False), anders het eerste bij het afsluiten
+            if onderbrekingen and (fout is None or isinstance(fout, Exception)):
+                raise onderbrekingen[0]
+            return False
+        self.agent.hartslag("klaar" if not self._noden else "waakt",
+                            taak=self.taak, detail=self.detail, nood=self._noden, sluiten=not self.noden_onbekend)
         return False
 
 
