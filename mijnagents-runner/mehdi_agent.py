@@ -99,6 +99,7 @@ PRIORITEIT = ("hoog", "normaal", "laag")
 STATUS = ("open", "gedaan", "vervallen")
 VELDEN = ("id", "tekst", "voor", "wie", "waarom", "bron", "dag", "prioriteit", "status", "concept")
 PRIVE = re.compile(r"priv[eé]", re.I)
+PRIVE_KOPPEN = ("eigen werk en gezondheid",)   # een blok van de dagbundel dat privé is, ook zonder het woord per regel
 DAGNAMEN = ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag")
 
 _TEKST = {"type": "string"}
@@ -395,15 +396,38 @@ def normaal(t):
     return re.sub(r"\s+", " ", t).strip()
 
 
+def _stukken(bron):
+    bron = re.sub(r"^\s*\d{4}-\d{2}-\d{2}\s*[,:;-]?\s*", "", str(bron or ""))
+    stukken = [normaal(s).strip(" .,:;-") for s in re.split(r"\.\.\.|…", bron)]
+    stukken = [s[2:] if s.startswith("- ") else s for s in stukken]
+    return [s for s in stukken if len(s) >= 6]
+
+
 def bron_in(bron, corpus):
     """Staat de bron letterlijk in de bundel of in Mehdi's woorden? Een datum vooraan (de dag staat al apart) en een
     lijstteken tellen niet mee. Een weglating (... of het teken voor drie puntjes) mag: dan moet elk stuk van minstens
     zes tekens erin staan."""
-    bron = re.sub(r"^\s*\d{4}-\d{2}-\d{2}\s*[,:;-]?\s*", "", str(bron or ""))
-    stukken = [normaal(s).strip(" .,:;-") for s in re.split(r"\.\.\.|…", bron)]
-    stukken = [s[2:] if s.startswith("- ") else s for s in stukken]
-    stukken = [s for s in stukken if len(s) >= 6]
+    stukken = _stukken(bron)
     return bool(stukken) and all(s in corpus for s in stukken)
+
+
+def bron_prive(bron, bundels):
+    """Komt de bron uit een regel van de dagbundel die privé zegt, of uit een blok dat privé is (een kop met privé, of
+    Eigen werk en gezondheid)? Dan is de taak privé, ook als het woord niet in de taak zelf staat (Codex, toets 1 van
+    T-0120)."""
+    stukken = _stukken(bron)
+    for b in bundels if stukken else []:
+        kop, blok = "", []
+        for regel in b["dagbestand"].splitlines() + ["## einde"]:
+            if regel.startswith("## "):
+                if (PRIVE.search(kop) or kop.startswith(PRIVE_KOPPEN)) and any(s in normaal(" ".join(blok)) for s in stukken):
+                    return True
+                kop, blok = normaal(regel[3:]), []
+                continue
+            blok.append(regel)
+            if PRIVE.search(regel) and any(s in normaal(regel) for s in stukken):
+                return True
+    return False
 
 
 def zoek_collega(wie, kern):
@@ -505,7 +529,10 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
         if voor != "mehdi" and not wie:
             telling["onbekend_wie"] += 1                    # bestaat niet in kern of op het bord: dan is het voor Mehdi
             voor = "mehdi"
-        if voor != "mehdi" and PRIVE.search(" ".join((oud.get("bron", ""), t["bron"], t["tekst"], t["waarom"]))):
+        if oud.get("prive") or PRIVE.search(" ".join((oud.get("bron", ""), t["bron"], t["tekst"], t["waarom"]))) \
+                or bron_prive(oud.get("bron"), bundels) or bron_prive(t["bron"], bundels):
+            oud["prive"] = True                             # blijft zo, ook als de bundel van die dag niet meer leest
+        if voor != "mehdi" and oud.get("prive"):
             telling["prive_bij_mehdi"] += 1                 # privé gaat nooit naar een ander
             voor, wie = "mehdi", ""
         oud.update(tekst=t["tekst"][:300], voor=voor, wie=wie, waarom=t["waarom"][:300],
@@ -638,6 +665,14 @@ def klaarzetten(te_zetten, nu, zet=None, lees=None):
 
 
 # ------------------------------------------------------------------------------------------- doorgeven ---
+def klaarzet_items(antwoord):
+    """De items uit een antwoord van /api/klaarzet. Zonder lijst is het bord onbekend, niet leeg (Codex, toets 1)."""
+    items_ = antwoord.get("items") if isinstance(antwoord, dict) else None
+    if not isinstance(items_, list):
+        raise bord.BordOnbekend("klaarzet: antwoord zonder lijst van items")
+    return items_
+
+
 def doorgeef_besluiten(staat, agents, ontvangers=None, aan=None):
     """Per open taak voor een agent die nog niet weg is, wat De Doorgever ermee doet: [{id, naar, besluit}]. naar is de
     agent als de taak deze ronde weggaat (met de vlag uit: zou weggaan), anders leeg. Zet niets (droog en test)."""
@@ -648,7 +683,7 @@ def doorgeef_besluiten(staat, agents, ontvangers=None, aan=None):
         if t.get("voor") != "agent" or t.get("doorgegeven"):
             continue
         naam = agent_naam(t.get("wie"), agents)
-        if PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))):
+        if t.get("prive") or PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))):
             reden = "privé"                              # privé gaat nooit naar een ander
         elif t.get("teruggekomen"):
             reden = "ging al eens terug"                 # een agent liet ze liggen: nu is ze van Mehdi
@@ -677,8 +712,11 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
     ontvangers = ONTVANGERS if ontvangers is None else ontvangers
     aan = DOORGEVEN if aan is None else aan
     zet = zet or ag.klaarzet
-    lees = lees or (lambda uniek: bord.call("/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"}))
-                    .get("items") or [])
+    if not aan:
+        # vlag uit: geen bordhandeling, ook niet voor wat al weg was (dat blijft staan tot de vlag weer aan staat)
+        return doorgeef_besluiten(staat, agents, ontvangers, aan), Counter()
+    lees = lees or (lambda uniek: klaarzet_items(bord.call(
+        "/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"}))))
     pak = pak or (lambda kid: bord.opgepakt(kid, NAAM))
     nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
     grens = (nu - timedelta(days=STIL_DAGEN)).astimezone(timezone.utc).isoformat(timespec="seconds")
@@ -692,7 +730,9 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
         nog_voor = open_ and t.get("voor") == "agent" and agent_naam(t.get("wie"), agents) == weg["naar"]
         try:
             terug = lees(weg["uniek"])
-            if any(x.get("status") == "opgepakt" for x in terug):
+            if not isinstance(terug, list) or not all(isinstance(x, dict) for x in terug):
+                raise bord.BordOnbekend("klaarzet: geen lijst van items")
+            if any(x.get("status") == "opgepakt" and x.get("opgepakt_door") != NAAM for x in terug):
                 weg["status"] = "opgepakt"
                 telling["opgepakt_door_agent"] += 1
                 continue
@@ -705,7 +745,8 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
             telling["niet_gelezen"] += 1
             continue
         if not nog_voor:                                 # afgerond of niet meer voor die agent: alleen terugnemen
-            if open_:
+            if open_:                                    # en niet opnieuw weg: het uniek item is van mij opgepakt
+                t["teruggekomen"] = sorted(set(t.get("teruggekomen") or []) | {weg["naar"]})
                 del t["doorgegeven"]
             else:
                 weg["status"] = "ingetrokken"
@@ -718,7 +759,7 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
         telling["terug_naar_mehdi"] += 1
     besluiten = doorgeef_besluiten(staat, agents, ontvangers, aan)
     nieuw = []
-    for b in besluiten if aan else []:
+    for b in besluiten:
         t = staat["taken"].get(b["id"]) if b["naar"] else None
         if t:
             nieuw.append({"voor": b["naar"], "soort": "taak", "sleutel": t["id"], "uniek": f"{NAAM}:taak:{t['id']}",
@@ -731,7 +772,8 @@ def doorgeven(staat, nu, agents, zet=None, lees=None, pak=None, ontvangers=None,
         try:
             zet(nieuw)
             for it in ag.maskeer(nieuw):
-                if any(x.get("inhoud") == it["inhoud"] and x.get("voor") == it["voor"] for x in lees(it["uniek"])):
+                if any(x.get("inhoud") == it["inhoud"] and x.get("voor") == it["voor"] and x.get("status") == "klaar"
+                       for x in lees(it["uniek"])):
                     staat["taken"][it["sleutel"]]["doorgegeven"] = {"naar": it["voor"], "uniek": it["uniek"], "ts": nu_s}
                     telling["doorgegeven"] += 1
                 else:
@@ -802,11 +844,10 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         ag.log("claude", "fout", str(e)[:200])
         r.nood("Claude weigerde de takenlijst te maken", wie="claude-code")
     except claude_abonnement.Fout as e:  # het abonnement (ANGEL-3): wacht tot het weer kan, zonder extra verbruik
-        if e.soort:                      # een vaste tekst van de koppeling: mag in het werkverslag
-            ag.log("claude", "fout", f"abonnement, {e.soort}: {str(e)[:200]}")
-        else:                            # kan een stuk antwoord dragen: alleen in het cronlog op de VM, nooit op het bord
-            ag.log("claude", "fout", "abonnement: geen bruikbaar antwoord (de reden staat in het cronlog)")
-            print(f"abonnement: {str(e)[:300]}", file=sys.stderr)
+        # De tekst van de fout kan een stuk antwoord dragen (ook bij aanmelden): in het werkverslag alleen de soort, de
+        # tekst alleen in het cronlog op de VM, nooit op het bord.
+        ag.log("claude", "fout", f"abonnement: {e.soort or 'geen bruikbaar antwoord'} (de reden staat in het cronlog)")
+        print(f"abonnement: {str(e)[:300]}", file=sys.stderr)
         tekst, wie = {"aanmelden": (claude_abonnement.AANMELDEN_NOOD, "mehdi"),
                       "limiet": (claude_abonnement.LIMIET_NOOD, "mehdi"),
                       "bron": (claude_abonnement.BRON_NOOD, "claude-code")}.get(

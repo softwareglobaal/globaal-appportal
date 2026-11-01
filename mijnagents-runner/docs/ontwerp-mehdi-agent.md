@@ -77,10 +77,14 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
   kiest Mehdi per soort taak (werkwijze, Wat Mehdi beslist). Een ontvanger komt er pas op als zijn eigen code een taak
   van `mehdi-agent` aanneemt; De Agendawacht neemt nu alleen taken van De Werfverslag voorbereider aan
   (`agenda_wacht.py`, `terugkijktaken`), en daar verandert dit niets aan.
-- Nooit iets privé, hoogstens vijf per ronde, en een taak die al eens terugkwam, gaat niet opnieuw weg.
-- Elke ronde met Claude leest hij de status van wat weg is terug. Opgepakt is beweging. Ligt een item na drie dagen nog
-  klaar, of staat het niet meer klaar, dan neemt hij het terug (opgepakt door `mehdi-agent`, zodat de ontvanger het niet
-  later toch doet) en is de taak weer voor Mehdi, met de reden erbij. Een bord dat niet antwoordt, beslist niets.
+- Nooit iets privé: ook niet als alleen de bron privé is (een regel met privé, of een blok als Eigen werk en gezondheid;
+  `bron_prive`), en zo'n taak blijft voortaan privé. Hoogstens vijf per ronde. Een taak die al eens terugkwam, gaat
+  niet opnieuw weg.
+- Elke ronde met Claude, met de vlag aan, leest hij de status van wat weg is terug. Opgepakt door de ontvanger is
+  beweging. Ligt een item na drie dagen nog klaar, of staat het niet meer klaar, dan neemt hij het terug (opgepakt door
+  `mehdi-agent`, zodat de ontvanger het niet later toch doet) en is de taak weer voor Mehdi, met de reden erbij. Een bord
+  dat niet of onvolledig antwoordt (geen lijst van items), beslist niets.
+- Met de vlag uit raakt hij het bord niet, ook niet voor wat al weg was: dat blijft staan tot de vlag weer aan staat.
 - `--droog` zet niets en neemt niets terug: het toont per taak "gaat naar", "zou naar" of "blijft bij Mehdi" met de reden.
 
 Volgende stap, pas na Mehdi's ja: een runbook dat een goedgekeurd concept via De Bode verstuurt, of een taak als
