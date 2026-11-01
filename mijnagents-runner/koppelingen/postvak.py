@@ -118,9 +118,6 @@ VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius",
 # een gratis adres in de naam niet (een klant via een webformulier is een mens), een mailinglijst ook niet.
 ADRES_IN_NAAM = re.compile(r"[\w.+-]+@((?:[\w-]+\.)+[a-z]{2,})")
 LIJSTDIENSTEN = ("googlegroups.com",)   # "'iemand@firma.be' via Groep": de groep stuurt door wat een lid schreef
-# Een onderwerp met een van deze woorden is nooit nepmail door de naam alleen: een aanvraag via een webformulier
-# ("Aanvraag: barsten en scheuren") mag nooit uit de opvolging vallen (B&S). AANVRAAG blijft zelf ongewijzigd.
-NEP_NOOIT = ["aanvraag", "barst", "scheur", "plaatsbezoek"]
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
 # de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
@@ -365,9 +362,14 @@ def nepmail(b, eigen_domeinen=(), bekend=frozenset(), oplichting=None):
     if not reden:
         return ""
     o = schoon(b.get("onderwerp")).lower()
+    # bekend: de afzender (adres of domein, zoals bij trieer), of precies het adres in de naam; een ander adres op een bekend
+    # domein claimen ("ceo@klant" terwijl alleen "jan@klant" bekend is) blijft verdacht (Codex-toets 2)
     gemaild = {_domein(a) for a in bekend if not zelfde_domein(_domein(a), GRATIS_DIENSTEN)}
-    kent = any(a in bekend or zelfde_domein(_domein(a), gemaild) for a in [van] + genoemd)
-    return "" if kent or any(w in o for w in AANVRAAG + NEP_NOOIT) else reden
+    kent = van in bekend or zelfde_domein(dom, gemaild) or any(a in bekend for a in genoemd)
+    # een aanvraag via een webformulier ("Aanvraag: barsten en scheuren") valt nooit uit de opvolging (B&S); AANVRAAG zelf
+    # blijft gelijk, de ruimere toets is die van het sorteren (sorteren.AANVRAAG_ONDERWERP)
+    aanvraag = any(w in o for w in AANVRAAG) or _sorteren().AANVRAAG_ONDERWERP.search(o)
+    return "" if kent or aanvraag else reden
 
 
 def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel="", oplichting=None):
@@ -617,9 +619,11 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
         for b in berichten:
             if automatisch_antwoord(b.get("onderwerp")) and _datum(b):
                 afwezig.setdefault((b.get("van") or "").lower(), []).append((_datum(b), b.get("onderwerp") or ""))
+        zonder = 0
         for b in berichten:
             d = _datum(b)
             if not d or not (b.get("message_id") or b.get("uid")):
+                zonder += 1
                 continue  # zonder datum of zonder sleutel kan ik het niet volgen (resultaattoets K5)
             regel = regel_voor(regels, adres, b.get("van"))
             soort, waarom = trieer(b, eigen, bekend, regel, opl)
@@ -657,6 +661,8 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
                                   "afdeling": cfg.get("afdeling", ""), "thema": ond[:90], "project": "", "prive": 0,
                                   "zekerheid": "middel", "waarom": f"{soort}; {waarom}", "archief": "", "link": "",
                                   "opgenomen_door": adres, "bron": "mail"})
+        if zonder:  # niet stil: dan zegt de wachtenpagina nooit "postvak gelezen, 0 nieuwe mails" (Codex-toets 2, T-0120)
+            ag.log("inbox", "bron", f"{adres}: {zonder} berichten zonder leesbare datum of sleutel, niet gevolgd")
     # Een open punt ouder dan mijn venster: komt er nog een antwoord, dan sluit het ook (ontwerptoets 19-10-2026, Codex O4).
     # Een open punt binnen mijn venster dat ik niet meer zie terwijl ik het postvak volledig las, is verplaatst of
     # verwijderd: dan 'verdwenen', zichtbaar bij Afgesloten met Toch open (resultaattoets 19-10-2026, K4, 2-1).

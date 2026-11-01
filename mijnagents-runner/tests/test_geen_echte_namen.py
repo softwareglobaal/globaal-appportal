@@ -81,6 +81,14 @@ VERBODEN = frozenset({
     "b3bfac5c26330023bc5ab0e5befc33ba975dee4508347f8da262c310ef6303f5",   # klantnaam, 22-10-2026
 })
 
+# T-0120 (Codex-toets 2): de voornaam van nog een collega, alleen voor de testbestanden van de mail. Andere testbestanden
+# (van andere groepen) dragen die naam nog als proefgegeven; zijn die schoon, dan gaat deze hash naar VERBODEN.
+MAIL_BESTANDEN = ("mijnagents-runner/tests/test_postvak.py", "mijnagents-runner/mailregels/test_sorteren.py",
+                  "mijnagents/test_mail.py", "mijnagents/test_wachten_dag.py", "dagboek/test_dagboek.py")
+MAIL_VERBODEN = frozenset({
+    "62332e46621ef8cab1d6038f6a498e8e7e825502782a8576db305a1a57638237",
+})
+
 WOORD = re.compile(r"(?:[^\W_]|[@.\-])+")
 DELEN = re.compile(r"[@.\-]+")
 
@@ -139,6 +147,13 @@ def test_de_grendel_vangt_een_woord_in_elke_vorm():
     for tekst in ("Proefpersoon Zeta", "zetaproefje", "niemand@kantoor.test", "iemand@kantoor.testen"):
         assert not treffers(tekst, proef), tekst
     assert treffers("eerste regel\ntweede met Zetaproef", proef) == [(2, _hash("zetaproef")[:12])]
+
+
+def test_geen_collega_in_de_mailtests():
+    assert set(MAIL_BESTANDEN) <= set(BESTANDEN) and len(MAIL_VERBODEN) == 1
+    gevonden = [(p, nr, h) for p in MAIL_BESTANDEN
+                for nr, h in treffers(open(os.path.join(REPO, p), encoding="utf-8").read(), VERBODEN | MAIL_VERBODEN)]
+    assert not gevonden, f"echte namen in de mailtests (bestand, regel, begin van de hash): {gevonden}"
 
 
 def test_geen_echte_namen_in_de_testbestanden():

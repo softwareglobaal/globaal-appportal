@@ -224,7 +224,7 @@ def test_drempels_eigen_domein_en_kopieermachine():
         _uit(90, "klant@bouwheer.be", "Offerte", "2026-09-01T09:00:00+02:00"),
         _in(1, "klant@bouwheer.be", "Vraag over de offerte", "2026-10-16T10:00:00+02:00"),       # vrijdag: 1 werkdag
         _in(2, "klant@bouwheer.be", "Nog een vraag", "2026-10-19T09:00:00+02:00"),               # vandaag
-        _in(3, "shaniel@h-architects.be", "Vraag over dossier 2145", "2026-10-16T10:00:00+02:00"),
+        _in(3, "collega2@h-architects.be", "Vraag over dossier 2145", "2026-10-16T10:00:00+02:00"),
         _in(4, "scan@harmoniebouw.be", "Message from KM_C258", "2026-10-16T10:00:00+02:00"),
         _in(5, "collega@globaal.be", "Fwd: Message from KM_C258", "2026-10-16T10:00:00+02:00"),
         _in(6, "noreply@h-architects.be", "Uw bestelling", "2026-10-16T10:00:00+02:00"),
@@ -846,6 +846,62 @@ def test_nepmail_nooit_uitschrijven_ook_niet_na_helemaal_weg():
         postvak.postvak = oud_pv
 
 
+def test_een_aanvraag_wordt_nooit_uitgeschreven_of_als_oplichting_opgeruimd():
+    """MAIL-1, Codex-toets 2: "Aanvraag: barsten en scheuren" is in de wacht nooit nepmail; dan mag het uitschrijven zo'n
+    terugkerende afzender ook niet raken, en mogen de sorteerregels haar niet als oplichting naar Opgeruimd zetten (de
+    volledige sorteerroute: sorteren.bestemming, die postvak.sorteer en de Mac gebruiken, met elk regelbestand)."""
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    ond = "Aanvraag: barsten en scheuren"
+    brieven = [_nieuwsbrief(onderwerp=ond), _nieuwsbrief(onderwerp=ond, message_id="<o@brand.be>",
+                                                          datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    assert postvak.trieer(brieven[0], ("h-architects.be",))[0] == "koud", "zonder de bescherming zou dit kunnen"
+    oud_pv = postvak.postvak
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+    finally:
+        postvak.postvak = oud_pv
+    assert not uit and redenen.get("antwoord, doorgestuurd of aanvraag") == 2, redenen
+    s = postvak._sorteren()
+
+    def rij(addr, name, subject):
+        return {"addr": addr, "name": name, "subject": subject, "unsub": False, "datum": None}
+    for bestand in ("regels_hinvest.txt", "regels_info.txt", "regels_mch.txt", "regels_melo.txt"):
+        r = s.laad_regels(os.path.join(postvak.REGELMAP, bestand))
+        for name, subject in (("De Watergroep", "Aanvraag plaatsbezoek barsten in de gevel"),
+                              ("Isabel Proefnaam", "Scheuren in de muur, kan u komen kijken?")):
+            assert s.bestemming(rij("proefklant@gmail.com", name, subject), r, True, None)[1] != "oplichting", (bestand, name)
+        assert s.bestemming(rij("itgroep@googlegroups.com", "'Microsoft 365 nieuws' via ITgroep", "Nieuwe functies"),
+                            r, False, None)[1] != "oplichting", bestand
+        assert s.bestemming(rij("x@anderdomein.test", "De Watergroep", "Terugbetaling"), r, False, None) == \
+            (s.OPGERUIMD, "oplichting"), bestand
+
+
+def test_mail_zonder_datum_staat_in_het_werkverslag():
+    """MAIL-6, Codex-toets 2: een bericht zonder leesbare datum of sleutel wordt overgeslagen, maar niet meer stil: het
+    staat als bron in het werkverslag, zodat de wachtenpagina dan nooit "postvak gelezen, 0 nieuwe mails" zegt."""
+    log = []
+
+    class Ag:
+        def log(self, *a):
+            log.append(a)
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    # zoals imapbron.lijst een onleesbare Date-kop geeft: datum None (de server vond het bericht op zijn eigen datum)
+    zonder = dict(_in(1, "klant@voorbeeld.test", "Zonder datum", "2026-10-19T10:00:00+02:00"), datum=None, map_="INBOX")
+    oud, oud_km = postvak._DroogAgent, postvak.koppen_mappen
+    postvak._DroogAgent = Ag
+    postvak.koppen_mappen = lambda adres, mappen, sinds, ag=None, plafond=1000, fouten=None: [zonder]
+    try:
+        alle, _, _, _ = _ronde([], nu)
+    finally:
+        postvak._DroogAgent, postvak.koppen_mappen = oud, oud_km
+    assert not alle and ("inbox", "bron") in [(a[0], a[1]) for a in log], log
+
+
 def test_een_plafond_staat_in_het_werkverslag():
     """MAIL-6, Codex-toets 1: een map die het plafond haalt, is niet volledig gelezen. Dat staat nu als bron in het
     werkverslag, zodat de wachtenpagina nooit 'postvak gelezen' zegt na een onvolledige lezing."""
@@ -1097,6 +1153,8 @@ def test_nepmail_die_een_firma_claimt_is_verdacht():
              bekend=klant)[0] != "verdacht"
     assert t("formulier@webdienst.test", "iemand@firmaproef.test via webformulier", ond="Aanvraag: barsten en scheuren")[0] \
         != "verdacht", "een onbekende klant met een firma-adres die een plaatsbezoek vraagt"
+    assert t("lid@enquetedienst.test", "ceo@aannemerproef.test via Enquetedienst", ond="Uw factuur", bekend=klant)[0] \
+        == "verdacht", "Codex-toets 2: een ander adres op een bekend domein claimen blijft verdacht"
     assert t("bestelling@amazon.co.uk", "Amazon.co.uk", ond="Uw bestelling")[0] != "verdacht"
     assert t("itgroep@googlegroups.com", "'Microsoft 365 nieuws' via ITgroep", ond="Nieuwe functies")[0] != "verdacht"
     assert t("x@anderdomein.test", "Amazon", ond="Uw account is geblokkeerd")[0] == "verdacht", "nep-Amazon blijft verdacht"

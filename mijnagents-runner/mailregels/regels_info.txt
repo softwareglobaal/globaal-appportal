@@ -648,6 +648,8 @@ e-box.noreply@socialsecurity.be
 [oplichting]
 # eigen domeinen zijn nooit oplichting
 eigen = h-invest.be, h-aannemingen.be, h-architects.be, globaal.be, hdssr.com, harmoniebouw.be, unabo.be, tkn-buro.be, energie-efficient.be, elevaitnv.com, contrax.be, zidiconstruct.be
+# T-0120: een mailinglijst is nooit oplichting door de naam van een lid
+lijstdienst = googlegroups.com
 CSAM = csam.be
 sdworx = sdworx.com, sdworx.be
 # Naam in het Van-veld bevat de merknaam, maar het domein hoort niet bij het merk: naar INBOX.Opgeruimd, gemeld als oplichting.

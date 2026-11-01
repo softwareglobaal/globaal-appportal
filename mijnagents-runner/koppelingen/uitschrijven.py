@@ -365,7 +365,8 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
             return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
         if regel in ("belangrijk", "houden"):
             return None, f"regel {regel} van Mehdi"
-        if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG):
+        if (ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG)
+                or postvak._sorteren().AANVRAAG_ONDERWERP.search(onderwerp)):  # ook "Aanvraag: barsten" (Codex-toets 2)
             return None, "antwoord, doorgestuurd of aanvraag"
         knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
         reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)
