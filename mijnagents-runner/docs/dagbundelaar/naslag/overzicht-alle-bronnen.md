@@ -8,7 +8,7 @@ Werkt = de wacht liep vandaag en meldt geen fout.
 | Agenda | Je Google-agenda's (server) | werkdagen 06:30, daarna elke 2 uur | elke afspraak, en of ze doorging | werkt, 12 meldingen over titels en adressen |
 | Zoom-gesprekken | Zoom-account (server) | 2 keer per dag | met wie, hoe lang | werkt |
 | Zoom-chat | Zoom-account (server) | 2 keer per dag | aantal chatgesprekken | werkt, alleen een telling |
-| Fathom | Fathom-account (server) | elk uur | met wie, hoe lang; transcript staat op de server | werkt |
+| Fathom | Fathom-account (server) | 2 keer per dag, 08:00 en 14:00 (winteruur) | met wie, hoe lang; transcript staat op de server | werkt |
 | Plaud | Plaud-account (server) | elk uur | met wie, hoe lang | werkt deels, 1 melding: de Plaud-routine op claude.ai moet draaien |
 | Mail, 5 postvakken | mch, info H-Architects, H-Invest, Melodie, hotmail (server) | elk uur 07-21 | aantal binnen en verzonden, nooit de tekst | werkt |
 | WhatsApp | WhatsApp op je laptop | elk uur als de laptop wakker is | aantal berichten en oproepen per persoon, nooit de tekst | werkt |

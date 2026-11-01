@@ -43,7 +43,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
 
 ## Wat ik doe, in deze volgorde
 
-1. **Twee keer per dag** (07:00 en 13:00) en **op verzoek**: zegt Mehdi tegen
+1. **Twee keer per dag** (07:00 en 13:00 UTC: in Brussel 08:00 en 14:00 in de
+   winter, 09:00 en 15:00 in de zomer) en **op verzoek**: zegt Mehdi tegen
    De Regisseur "haal Fathom nu op", dan draai ik meteen (`agent_ronde`), zodat
    hij niet een halve dag hoeft te wachten.
 2. **Alles ophalen** van de laatste veertien dagen, met transcript, van elke
@@ -66,7 +67,8 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
    Pipedrive: welke personen, welk bedrijf, welke afdeling, welk dossier of
    project, welk thema, en of het **privé** is. Privé is: alleen Mehdi en
    Angela, of Mehdi alleen, of een onderwerp dat duidelijk persoonlijk is. Bij
-   twijfel: privé, en ik vraag het aan Mehdi.
+   twijfel: privé, de veilige kant. Ik stel Mehdi daar geen aparte vraag over,
+   en een knop om de vlag met de hand te zetten bestaat (nog) niet.
 5. **Logboek per dag**: hoeveel gesprekken, welke uren, met wie, over welk
    bedrijf, thema en project, per afdeling. Als tekst in de archiefmap
    (`logboek/<datum>.md`) en als rijen in de gesprekkentabel op het bord
@@ -119,11 +121,15 @@ afdeling gaat is een kopie, en dat staat in mijn logboek.
   herken (bv. met Angela, of persoonlijk) krijgt `prive: true` in de herkenning in
   `gesprek.json` en staat gewoon tussen de andere mappen, want het archief is plat.
   Wie deelt, filtert op die vlag. Tot 18-09 stond privé apart in `Fathom/Prive/<jaar>/`.
-  Twijfel ik, dan werk; Mehdi zet de vlag dan zelf en ik leer daaruit via de tabel.
+  Twijfel ik, dan privé, zoals in stap 4. De vlag met de hand zetten kan niet: ik maak
+  de herkenning een keer, en elke ronde zet ze opnieuw in de gesprekkentabel.
 - **Deellink**: de Fathom-deellink (`share_url`) opent zonder login; gemeten op
   12-09-2026 met een browser zonder Fathom-account: video, transcript en samenvatting
   zichtbaar. Een collega kan de link dus gewoon openen. De gewone link
   (`fathom.video/calls/...`) vraagt wél een login; die gebruik ik niet om te delen.
+  In de gesprekkentabel zet ik de deellink alleen bij een werkgesprek (voor 'open in
+  Fathom' op de wachtenpagina); een privégesprek krijgt de gewone link, en een
+  klaarzet-item ook (sinds T-0120).
 
 ## Wat ik nooit doe
 

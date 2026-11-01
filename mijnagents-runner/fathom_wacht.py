@@ -4,7 +4,8 @@ wie erbij was en waarover het ging, houdt een dagelijks logboek en een
 gesprekkentabel bij, en zet klaar voor de afdelingen. Werkwijze v2 (10-09-2026):
 het volledige proces staat op het bord (werkwijze/fathom-wacht.md is het zaad).
 
-Twee keer per dag (07:00, 13:00) en op verzoek via De Regisseur (agent_ronde).
+Twee keer per dag, 07:00 en 13:00 UTC (in Brussel 08:00 en 14:00 in de winter, 09:00 en 15:00 in de zomer; keten.py,
+planning/gesprekken.cron), en op verzoek via De Regisseur (agent_ronde).
 Archief: FATHOM_ARCHIEF_PAD (standaard mijnagents-data/fathom-data op de VM, plat:
 één map per gesprek `JJJJ-MM-DD UUMM <titel in Fathom>`, sinds 18-09-2026 zonder
 jaarmap en zonder Prive-submap; de privé-vlag staat in gesprek.json). De launchd-sync
