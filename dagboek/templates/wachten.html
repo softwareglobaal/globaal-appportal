@@ -29,7 +29,7 @@
     {% for w in vak['wachten'] %}
       <a class="tegel wacht kleur-{{ w['kleur'] }}" href="{{ url_for('wacht_pagina', naam=w['naam'], dag=dag) }}">
         <div class="kop"><span class="stip {{ w['kleur'] }}"></span><span class="naam">{{ w['label'] }}</span></div>
-        <div class="groot">{{ w['aantal'] }}</div>
+        <div class="groot">{{ w['aantal'] }}{% if w['noden'] %} <span class="open">{{ w['noden']|length }} open</span>{% endif %}</div>
         <div class="klein regel {{ 'fouttekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</div>
       </a>
     {% endfor %}
@@ -54,6 +54,7 @@
   .tegel .kop .stip{margin-top:1px}
   .tegel .regel{color:var(--zacht);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
   .tegel .fouttekst{color:var(--rood)}
+  .tegel .open{font-size:12px;font-weight:600;color:var(--oranje);margin-left:6px;vertical-align:middle}
   .tegel.kleur-grijs .groot{color:var(--grijs)}
   @media (max-width:900px){.wachttegels{grid-template-columns:repeat(3,1fr)}}
   @media (max-width:600px){.wachttegels{grid-template-columns:repeat(2,1fr)}}

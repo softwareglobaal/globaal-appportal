@@ -448,6 +448,7 @@ def wachten_dag(dag):
                 if li:
                     w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
                              kleur="groen" if w.get("kleur") != "rood" else "rood")
+            w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)
             w["fouten_kort"] = fouten_kort(w.get("fouten") or [])
     alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
@@ -457,16 +458,26 @@ def wachten_dag(dag):
 
 
 def fouten_kort(fouten):
-    """Dezelfde fout tien keer op een dag is één regel met een aantal (de Fotowacht meldt elke ronde hetzelfde)."""
-    uit = []
+    """Dezelfde fout tien keer op een dag is één regel met een aantal en de laatste tijd (de Fotowacht meldt elke ronde
+    hetzelfde), ook als er andere fouten tussen staan; de volgorde is die van de eerste keer."""
+    uit, per = [], {}
     for f in fouten:
         t = str(f.get("tekst") or "")
-        if uit and uit[-1]["tekst"] == t:
-            uit[-1]["aantal"] += 1
-            uit[-1]["tijd"] = f.get("tijd") or uit[-1]["tijd"]
+        if t in per:
+            per[t]["aantal"] += 1
+            per[t]["tijd"] = f.get("tijd") or per[t]["tijd"]
         else:
-            uit.append({"tijd": f.get("tijd") or "", "tekst": t, "aantal": 1})
+            per[t] = {"tijd": f.get("tijd") or "", "tekst": t, "aantal": 1}
+            uit.append(per[t])
     return uit
+
+
+def stand_fout(w, dag):
+    """Rood door de hartslag van nu (alleen vandaag) zonder fout in het werkverslag: dan is dit de reden."""
+    st = w.get("status") or {}
+    if dag == vandaag().isoformat() and str(st.get("status")) in ("fout", "error"):
+        return "stand van nu: fout" + (": " + str(st["detail"]) if st.get("detail") else "")
+    return ""
 
 
 def wacht_kort(w):
@@ -475,6 +486,8 @@ def wacht_kort(w):
         return "kon niet lezen: " + str(w["leesfout"])
     if w.get("fouten"):
         return "fout: " + str(w["fouten"][-1].get("tekst") or "")
+    if w.get("stand_fout"):
+        return w["stand_fout"]
     if w.get("items"):
         it = w["items"][0]
         return " ".join(x for x in (it.get("tijd") or "", it.get("wie") or "", it.get("wat") or "") if x)

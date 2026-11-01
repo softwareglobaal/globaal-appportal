@@ -23,10 +23,11 @@
       {% if w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
     </div>
   </div>
-  {% if w['leesfout'] or w['fouten'] %}
+  {% if w['leesfout'] or w['fouten'] or w['stand_fout'] %}
   <div class="kaart">
     <h2 class="rood-tekst">Fout</h2>
     {% if w['leesfout'] %}<p class="foutregel">Kon niet lezen: {{ w['leesfout'] }}</p>{% endif %}
+    {% if w['stand_fout'] %}<p class="foutregel">{{ w['stand_fout'] }}</p>{% endif %}
     {% for f in w['fouten_kort'] %}<p class="foutregel">{{ f['tijd'] }} {{ f['tekst'] }}{% if f['aantal'] > 1 %} <span class="zacht">({{ f['aantal'] }} keer)</span>{% endif %}</p>{% endfor %}
   </div>
   {% endif %}

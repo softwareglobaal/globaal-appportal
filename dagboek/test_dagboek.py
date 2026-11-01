@@ -149,7 +149,12 @@ check("D14 tegel per wacht met link", "De WhatsApp-wacht" in html and 'href="/wa
 check("D14 tegel toont het eerste item", "09:15 Sara Proef 3 berichten" in html)
 check("D14 tegel toont de fout", "fout: kopie niet leesbaar" in html)
 check("D14 telling", "1</span> fout" in html and "2</span> items binnen" in html, html[:3000])
-check("D14 dagknoppen", "vandaag, " in html and html.count('class="dagkeuze"') == 1)
+with A.app.test_request_context():
+    KZ = A.dagkeuze(A.vandaag())
+check("D14 dagknoppen: vier, de laatste is vandaag", html.count('class="dagkeuze"') == 1
+      and [k["dag"] for k in KZ] == [(A.vandaag() - timedelta(days=3 - i)).isoformat() for i in range(4)]
+      and KZ[-1]["naam"].startswith("vandaag, ") and KZ[-1]["actief"] and not KZ[0]["actief"], KZ)
+check("D14 tegel toont open meldingen naast het item", "1 open</span>" in html)
 r = C.get("/wachten/whatsapp-wacht?dag=2026-10-31", headers=MET)
 html = r.get_data(as_text=True)
 check("D14 wacht laadt", r.status_code == 200, r.status_code)
@@ -161,6 +166,23 @@ check("D14 wacht dagknoppen blijven bij de wacht", 'href="/wachten/whatsapp-wach
 html = C.get("/wachten/sms-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 wacht fout en open melding", "kopie niet leesbaar" in html and "Full Disk Access ontbreekt" in html)
 check("D14 lege wacht zegt het", "Niets binnengekomen op deze dag." in html)
+ROOD = json.loads(json.dumps(WACHTEN))
+ROOD["dag"] = A.vandaag().isoformat()
+ROOD["vakken"][0]["wachten"][2].update(kleur="rood", oordeel="fout", status={"status": "fout", "detail": "Geen browsergeschiedenis", "laatste": "09:00"})
+ROOD["vakken"][0]["wachten"][1]["fouten"] = [{"tijd": "10:00", "stap": "fout", "tekst": "a", "fout": True},
+                                            {"tijd": "11:00", "stap": "fout", "tekst": "b", "fout": True},
+                                            {"tijd": "12:00", "stap": "fout", "tekst": "a", "fout": True}]
+A.haal_wachten = lambda dag: json.loads(json.dumps(ROOD))
+html = C.get("/wachten/locatie-wacht?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
+check("D14 rood zonder logfout: stand van nu als reden", "stand van nu: fout: Geen browsergeschiedenis" in html, html[-2500:])
+html = C.get("/wachten?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
+check("D14 tegel: stand van nu als reden", "stand van nu: fout: Geen browsergeschiedenis" in html)
+html = C.get("/wachten/sms-wacht?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
+check("D14 gelijke fouten gegroepeerd, ook niet opeenvolgend", "12:00 a <span class=\"zacht\">(2 keer)</span>" in html
+      and "11:00 b" in html and html.count("10:00 a") == 0, html[-2500:])
+html = C.get("/wachten/locatie-wacht?dag=2026-10-31", headers=MET).get_data(as_text=True)
+check("D14 hartslag telt niet voor een vorige dag", "stand van nu" not in html)
+A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
 A.haal_wachten = lambda dag: None

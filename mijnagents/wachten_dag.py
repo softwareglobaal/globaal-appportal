@@ -12,8 +12,10 @@ from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 BRUSSEL = ZoneInfo("Europe/Brussels")
-MAX_ITEMS = 300
-MAX_LOG = 40
+# Mehdi leest de wacht per dag in het Dagboek: niets wegkappen wat hij daar wil zien (Codex 01-11). Een dag heeft hoogstens
+# enkele honderden rondes (de Fotowacht 435 op 30-10).
+MAX_ITEMS = 2000
+MAX_LOG = 1000
 KORT = 160
 # Welke wacht schrijft welke bron in de gesprekkentabel (gesprek_log.bron).
 GESPREK_BRON = {"whatsapp-wacht": "whatsapp", "belwacht": "telefoon", "sms-wacht": "sms", "xelion-wacht": "xelion",
@@ -115,7 +117,7 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
         if titel.startswith(dag + " "):
             # "2026-10-31 20:25-20:56: 22 foto's bij ...": de eerste tijd is de tijd, de rest is wat; een bereik komt erachter.
             wat = titel[len(dag) + 1:]
-            m = re.match(r"(\d\d:\d\d)(?:-(\d\d:\d\d))?:?\s*", wat)
+            m = re.match(r"([01]\d:[0-5]\d|2[0-3]:[0-5]\d)(?:-([01]\d:[0-5]\d|2[0-3]:[0-5]\d))?(?::\s*|\s+|$)", wat)
             if m:
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
@@ -162,7 +164,7 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
-            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten[-10:], "log": log[-MAX_LOG:],
+            "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten, "log": log[-MAX_LOG:],
             "gedekt": gedekt, "leesfout": leesfout, "noden": list(noden),
             "status": None if not st else {"status": st.get("status"), "detail": kort(st.get("detail"), 200),
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")}}
