@@ -37,6 +37,7 @@ jobs:
       - run: python3 -m pip install -r mijnagents/requirements.txt
       - run: python3 -m pip install PyYAML==6.0.2   # post/config.py, voor test_agent.py
       - run: python3 mijnagents-runner/tests/test_postvak.py
+      - run: python3 mijnagents-runner/tests/test_geen_echte_namen.py   # de mailtests staan erin sinds T-0120
       - run: python3 mijnagents-runner/tests/test_hotmail_server.py
       - run: python3 mijnagents-runner/mailregels/test_sorteren.py
       - run: cd mijnagents && python3 test_mail.py

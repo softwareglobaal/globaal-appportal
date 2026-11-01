@@ -718,10 +718,12 @@ Proximus = proximus.be, proximus.com
 DHL = dhl.com, dhl.de, dhlparcel.nl, dhlecommerce.nl
 PostNL = postnl.be, postnl.nl, edm.postnl.be, edm.postnl.nl, markteffect.postnl.be, privault.rpip.nl
 Coolblue = coolblue.be, coolblue.nl, coolblue.eu
-Microsoft = microsoft.com
+# T-0120 (Codex-toets 1): de echte Microsoft-diensten mailen ook van deze domeinen
+Microsoft = microsoft.com, microsoftonline.com, office.com, office365.com
 Apple = apple.com
 Google = google.com, gmail.com, googlemail.com
-Amazon = amazon.com, amazon.com.be, amazon.de, amazon.nl
+# T-0120 (Codex-toets 1): de andere Europese winkels van Amazon en AWS
+Amazon = amazon.com, amazon.com.be, amazon.de, amazon.nl, amazon.co.uk, amazon.fr, amazon.es, amazon.it, amazon.se, amazon.pl, amazonaws.com
 PayPal = paypal.com, paypal.be
 # 'Vlaanderen' alleen was te breed: echte bedrijven dragen het in hun naam (NAV, Netwerk Architecten Vlaanderen;
 # Asbestattesten Vlaanderen BV via eenvoudigfactureren.be). Wat zich als de overheid voordoet, blijft gevangen.

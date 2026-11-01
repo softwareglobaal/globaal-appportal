@@ -21,7 +21,7 @@ import sys
 HIER = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HIER))
 
-# Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf.
+# Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf; sinds T-0120 ook de testbestanden van de mail.
 BESTANDEN = (
     "mijnagents-runner/tests/test_bode_regie.py",
     "mijnagents-runner/tests/test_bord_lees.py",
@@ -35,6 +35,8 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_hotmail_server.py",
     "mijnagents-runner/tests/test_keten.py",
     "mijnagents-runner/tests/test_mehdi_agent.py",
+    "mijnagents-runner/tests/test_postvak.py",          # T-0120 groep mail, sinds 01-11-2026
+    "mijnagents-runner/mailregels/test_sorteren.py",
     "mijnagents-runner/tests/test_plaud_wacht.py",
     "mijnagents-runner/tests/test_regisseur.py",
     "mijnagents-runner/tests/test_taken.py",
@@ -49,6 +51,9 @@ BESTANDEN = (
     "mijnagents-runner/tests/fixtures/claude_stream_proef.jsonl",
     "mijnagents-runner/tests/fixtures/zoom_leesapp_scopes.txt",
     "mijnagents/test_gesprekken_api.py",
+    "mijnagents/test_mail.py",                          # T-0120 groep mail, sinds 01-11-2026
+    "mijnagents/test_wachten_dag.py",
+    "dagboek/test_dagboek.py",
 )
 
 # Elke hash staat voor een echt gegeven uit het privéleven van de eigenaar of van een collega: voornamen, gevoelige

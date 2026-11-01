@@ -118,6 +118,9 @@ VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius",
 # een gratis adres in de naam niet (een klant via een webformulier is een mens), een mailinglijst ook niet.
 ADRES_IN_NAAM = re.compile(r"[\w.+-]+@((?:[\w-]+\.)+[a-z]{2,})")
 LIJSTDIENSTEN = ("googlegroups.com",)   # "'iemand@firma.be' via Groep": de groep stuurt door wat een lid schreef
+# Een onderwerp met een van deze woorden is nooit nepmail door de naam alleen: een aanvraag via een webformulier
+# ("Aanvraag: barsten en scheuren") mag nooit uit de opvolging vallen (B&S). AANVRAAG blijft zelf ongewijzigd.
+NEP_NOOIT = ["aanvraag", "barst", "scheur", "plaatsbezoek"]
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
 # de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
@@ -166,8 +169,11 @@ def koppen_mappen(adres, mappen, sinds, ag=None, plafond=1000, fouten=None):
             deel = koppen(adres, m, sinds=sinds, plafond=plafond)
             uit += [dict(b, map_=m) for b in deel]
             gelukt += 1
-            if fouten is not None and len(deel) >= plafond:
-                fouten.append(f"{adres} {m}: meer dan {plafond} berichten")
+            if len(deel) >= plafond:
+                if fouten is not None:
+                    fouten.append(f"{adres} {m}: meer dan {plafond} berichten")
+                if ag:  # niet volledig gelezen: zo zegt de wachtenpagina nooit "postvak gelezen" (Codex-toets 1, T-0120)
+                    ag.log("mappen", "bron", f"{adres} {m}: meer dan {plafond} berichten, niet volledig gelezen")
         except Exception as e:  # noqa: BLE001
             if fouten is not None:
                 fouten.append(f"{adres} {m}: {type(e).__name__}")
@@ -341,25 +347,27 @@ def nepmail(b, eigen_domeinen=(), bekend=frozenset(), oplichting=None):
     """Waarom dit bericht nepmail lijkt die een firma of dienst claimt, of ''. (a) De naam noemt een adres op een ander
     hoofddomein dan de afzender; (b) de naam claimt een merk uit de [oplichting]-lijst van mailregels op een domein dat er
     niet bij hoort (sorteren.is_oplichting, dezelfde toets als het sorteren; `oplichting` is laad_regels van die lijst).
-    Nooit bij een eigen domein, een bekend contact of een aanvraag: een klant die via een webformulier om een plaatsbezoek
-    vraagt (barsten en scheuren), blijft een aanvraag."""
+    Nooit bij een eigen domein, een mailinglijst (Google Groups), een bekend contact (de afzender of het adres in de naam)
+    of een aanvraag: een klant die via een webformulier om een plaatsbezoek vraagt (barsten en scheuren), blijft een
+    aanvraag (Codex-toets 1, T-0120)."""
     van, naam = (b.get("van") or "").lower(), b.get("van_naam") or ""
     dom = _domein(van)
-    if not dom or zelfde_domein(dom, eigen_domeinen):
+    if not dom or zelfde_domein(dom, eigen_domeinen) or zelfde_domein(dom, LIJSTDIENSTEN):
         return ""
-    reden = ""
-    if not zelfde_domein(dom, LIJSTDIENSTEN):
-        for d in ADRES_IN_NAAM.findall(naam.lower()):
-            if not zelfde_domein(d, GRATIS_DIENSTEN) and _hoofddomein(d) != _hoofddomein(dom):
-                reden = f"de naam noemt een adres op {d}, de afzender is {dom}"
-                break
+    reden, genoemd = "", [m.group(0) for m in ADRES_IN_NAAM.finditer(naam.lower())]
+    for a in genoemd:
+        d = _domein(a)
+        if not zelfde_domein(d, GRATIS_DIENSTEN) and _hoofddomein(d) != _hoofddomein(dom):
+            reden = f"de naam noemt een adres op {d}, de afzender is {dom}"
+            break
     if not reden and oplichting and _sorteren().is_oplichting(naam, van, oplichting):
         reden = f"'{naam[:60]}' claimt een firma of dienst die niet bij {dom} hoort"
     if not reden:
         return ""
     o = schoon(b.get("onderwerp")).lower()
-    kent = van in bekend or zelfde_domein(dom, {_domein(a) for a in bekend if not zelfde_domein(_domein(a), GRATIS_DIENSTEN)})
-    return "" if kent or any(w in o for w in AANVRAAG) else reden
+    gemaild = {_domein(a) for a in bekend if not zelfde_domein(_domein(a), GRATIS_DIENSTEN)}
+    kent = any(a in bekend or zelfde_domein(_domein(a), gemaild) for a in [van] + genoemd)
+    return "" if kent or any(w in o for w in AANVRAAG + NEP_NOOIT) else reden
 
 
 def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel="", oplichting=None):
@@ -902,7 +910,8 @@ def bijlagen_uit_structuur(deel, uit=None):
     dsp = deel[begin + 1] if len(deel) > begin + 1 else None
     dsp_soort = _txt(dsp[0]).lower() if isinstance(dsp, list) and dsp else ""
     naam = _bestandsnaam(_paren(dsp[1]) if isinstance(dsp, list) and len(dsp) > 1 else {}) or _bestandsnaam(params)
-    if dsp_soort == "attachment" or (naam and not (soort == "image" and cid)):
+    # een meegestuurd bericht telt altijd, ook zonder dispositie of naam (Codex-toets 1, T-0120)
+    if dsp_soort == "attachment" or (soort, sub) == ("message", "rfc822") or (naam and not (soort == "image" and cid)):
         ext = naam.rsplit(".", 1)[-1].lower() if "." in naam else ""
         if not re.fullmatch(r"[a-z0-9]{1,8}", ext):
             ext = SOORT_VAN_SUBTYPE.get(sub) or re.sub(r"[^a-z0-9-]", "", sub)[:12] or "bestand"

@@ -27,6 +27,7 @@ Wanneer (ontwerptoets 19/20-10-2026, elke regel heeft een test in tests/test_pos
     of een poging die stopte tussen POST en logboek, mag na 24 uur opnieuw, hoogstens drie keer (K5);
   - hoogstens per_ronde pogingen per wacht per ronde; geen doorverwijzing gevolgd; tijdslimiet 10 seconden.
   - nooit uit een map die alleen gelezen wordt (mailwachten.json, 'alleen_lezen'; VOL-3, 01-11-2026).
+  - nooit bij nepmail (postvak.nepmail), ook niet na Helemaal weg (T-0120, MAIL-1).
 Resultaattoets 20-10-2026 (run 20261020-001828, 3-0 of 2-0-1), daarom ook:
   - de geslaagde handtekening is dezelfde die de knop dekt: domein, selector en het begin van b= uit Authentication-Results
     horen bij precies een DKIM-Signature, en geen enkel ander resultaat met die sleutel faalde (X1); Gmail schrijft
@@ -584,6 +585,11 @@ def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=
                 continue
             regel = postvak.regel_voor(regels, adres, b["van"])
             soort, _waarom = postvak.trieer(b, eigen, bekend, regel, opl)
+            # Ook bij Helemaal weg, ruis of opruimen (die gaan in trieer voor de nepmailtoets): de knop van nepmail
+            # bevestigt het adres bij de afzender; opruimen gebeurt wel (Codex-toets 1, T-0120)
+            if postvak.nepmail(b, eigen, bekend, opl):
+                tel("lijkt nepmail: nooit uitschrijven")
+                continue
             url, reden = beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerend(per_van[b["van"]], nu))
             if not url:
                 tel(reden)

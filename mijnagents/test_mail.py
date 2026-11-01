@@ -392,9 +392,9 @@ c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<oud
 check("de stand geeft per wacht de laatste ronde en de open noden", "mail-mch" in stand["wachten"]
       and "noden" in stand["wachten"]["mail-mch"])
 
-# --- delen met Angela en Shaniel (Mehdi, 20-10-2026; gekozen: kijken en mee afhandelen): de groep mail opent /mail en
+# --- delen met twee collega's (Mehdi, 20-10-2026; gekozen: kijken en mee afhandelen): de groep mail opent /mail en
 # klikt mee, met de eigen naam erbij; de rest van het bord blijft dicht
-MAILGROEP = {"X-authentik-groups": "mail", "X-authentik-username": "angela"}
+MAILGROEP = {"X-authentik-groups": "mail", "X-authentik-username": "proefcollega"}
 check("de groep mail ziet het maildashboard", c.get("/mail", headers=MAILGROEP).status_code == 200)
 r = c.get("/", headers=MAILGROEP)
 check("de groep mail ziet de rest van het bord niet: naar /mail", r.status_code == 302 and r.headers["Location"].endswith("/mail"),
@@ -411,12 +411,12 @@ c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<
 c.post("/mail/besluit", headers=MAILGROEP, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "weg"})
 _r = rij("mch@h-architects.be:<klant@x>")
 _regels = [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]]
-check("Helemaal weg: het punt is ruis, door wie klikte", (_r["besluit"], _r["besluit_door"]) == ("ruis", "angela"), _r)
+check("Helemaal weg: het punt is ruis, door wie klikte", (_r["besluit"], _r["besluit_door"]) == ("ruis", "proefcollega"), _r)
 check("Helemaal weg: de afzender staat op uitschrijven in dat postvak",
       ("mch@h-architects.be", "klant@bouwheer.be", "uitschrijven") in _regels, _regels)
 _html = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
-check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helemaal weg door angela)",
-      "Teruggezet door angela" in _html and "Helemaal weg door angela" in _html)
+check("de geschiedenis per bericht toont elke klik met wie (Teruggezet en Helemaal weg door proefcollega)",
+      "Teruggezet door proefcollega" in _html and "Helemaal weg door proefcollega" in _html)
 check("Op te volgen heeft de knop Helemaal weg", ">Helemaal weg</button>" in _html.split('id="opvolgen"')[1].split("</section>")[0])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
@@ -438,9 +438,9 @@ check("Terugzetten na Helemaal weg haalt ook de regel weg",
       [(x["postvak"], x["wie"], x["actie"]) for x in c.get("/api/mailregels", headers=K).get_json()["regels"]])
 c.post("/mail/regel", headers=MAILGROEP, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "uitschrijven"})
 _g = c.get("/mail?periode=30", headers=BEHEER).get_data(as_text=True)
-check("een klik op de afzender staat in de geschiedenis van zijn berichten", "afzender op Helemaal weg (uitschrijven en opruimen) door angela" in _g)
+check("een klik op de afzender staat in de geschiedenis van zijn berichten", "afzender op Helemaal weg (uitschrijven en opruimen) door proefcollega" in _g)
 _gesch = _g.split("Gewone vraag van een klant")[1].split("</details>")[0]
-check("de geschiedenis staat op tijd: binnengekomen eerst", _gesch.find("binnengekomen") < _gesch.find("door angela"), _gesch[:400])
+check("de geschiedenis staat op tijd: binnengekomen eerst", _gesch.find("binnengekomen") < _gesch.find("door proefcollega"), _gesch[:400])
 c.post("/mail/besluit", headers=BEHEER, data={"uniek": "mch@h-architects.be:<klant@x>", "actie": "terug"})
 c.post("/mail/regel", headers=BEHEER, data={"postvak": "mch@h-architects.be", "wie": "klant@bouwheer.be", "actie": "weg"})
 check("Helemaal weg is terug te draaien bij Jouw regels",
