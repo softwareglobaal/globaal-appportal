@@ -1011,6 +1011,14 @@ def test_plaud13_launchd_alleen_uit_een_checkout_op_main_en_zonder_paden_van_een
     shutil.rmtree(tmp)
 
 
+def test_plaud14_de_handleiding_van_de_routine_zegt_bovenaan_dat_ze_vervallen_is():
+    """PLAUD-14 (T-0120): T-0080 stuurde naar 'Plaud-routine instellen (voor Mehdi).md', maar die routine is sinds 12-10
+    vervangen door de ophaler op de Mac en kan geen transcript maken dat Plaud niet heeft."""
+    pad = os.path.join(HIER, "docs", "Plaud-routine instellen (voor Mehdi).md")
+    kop = "\n".join(open(pad, encoding="utf-8").read().splitlines()[:6])
+    assert "Vervallen sinds 12-10-2026" in kop and "plaud_haal_alles.py" in kop, kop
+
+
 def test_bron_houdt_de_grenzen():
     bron = open(os.path.join(HIER, "plaud_wacht.py"), encoding="utf-8").read()
     assert "client_modified" not in bron.split('"""', 2)[2], "nooit de wijzigingsdatum als opnametijd"
