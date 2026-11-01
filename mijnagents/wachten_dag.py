@@ -4,6 +4,11 @@ binnengekomen is en dat ik het kan controleren ... ik wil het als mens zien en b
 Alleen lezen uit de databank van het bord. Per wacht uit de groep Dagbundelaar: hoeveel items, de items zelf (tijd, van
 wie of wat, kort), de rondes van die dag uit het werkverslag, en of er een fout was. Een wacht die die dag niets meldde,
 staat als "niets binnen", nooit als nul. Nooit de tekst van een bericht: de wachten bewaren die ook niet.
+
+Per item ook alles wat de wacht erover weet (detail: wie, firma, afdeling, thema, waarom dit oordeel, zekerheid, link
+naar opname of archief), zodat Mehdi het oordeel kan nakijken (02-11-2026: "ik wil de tekst lezen en zien hoe we het
+kunnen verbeteren"). Een privégesprek draagt het label "privé" en blijft leesbaar: deze pagina is alleen voor Mehdi, en
+hij wil juist zien wat er op privé staat (02-11-2026: "te veel staat op privé, zo begrijp ik de agent niet").
 """
 import json
 import re
@@ -71,50 +76,72 @@ def _telling_tekst(t):
     return kort(", ".join(delen))
 
 
-def _item(tijd, wie, wat, fout=False):
-    return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout)}
+DETAIL_MAX = 600
+
+
+def _item(tijd, wie, wat, fout=False, label="", detail=None):
+    """Eén item: tijd, van wie of wat, kort, een label (bv. privé) en het detail: alles wat de wacht erover weet, als
+    lijst van (naam, waarde) in een vaste volgorde; lege waarden blijven weg."""
+    d = [(k, kort(v, DETAIL_MAX)) for k, v in (detail or []) if v not in (None, "", 0, False)]
+    return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout), "label": label, "detail": d}
 
 
 def is_prive_gesprek(r):
-    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé.
-    De vlag prive=1 alleen betekent "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke rij); die
-    rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
+    """De privéregel van De Regisseur (RZ3-01): afdeling prive of privé. Hier alleen een label, geen masker: de pagina
+    is alleen voor Mehdi en hij kijkt juist na of dat oordeel klopt. De vlag prive=1 alleen betekent "van de Mac van
+    Mehdi" (WhatsApp, sms, telefoon: elke rij) en is geen privégesprek."""
     return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
 
 
+GESPREK_VELDEN = (("personen", "wie"), ("bedrijf", "firma"), ("afdeling", "afdeling"), ("thema", "thema"),
+                  ("project", "project"), ("minuten", "minuten"), ("zekerheid", "zekerheid"),
+                  ("waarom", "waarom dit oordeel"), ("opgenomen_door", "opgenomen door"), ("bron", "bron"),
+                  ("link", "link"), ("archief", "archief"), ("dubbel_van", "dubbel van"), ("uniek", "nummer"))
+
+
 def lees_gesprekken(conn, bron, dag):
-    rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
-                         "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
-                         "ORDER BY start", (dag, bron)).fetchall()
+    rijen = conn.execute("SELECT * FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start",
+                         (dag, bron)).fetchall()
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
             if str(r["uniek"] or "").startswith(f"dekking:{bron}:"):
                 gedekt = True
             continue
-        if is_prive_gesprek(r):
-            # RZ2-01: van een privégesprek alleen "privégesprek, N min", zonder naam of onderwerp.
-            wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "",
-                                        "dubbel, telt niet" if r["dubbel_van"] else "") if x)
-            items.append(_item(uur(r["start"]), "privégesprek", wat))
-            continue
-        wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "", kort(r["thema"], 100),
-                                    "dubbel, telt niet" if r["dubbel_van"] else "") if x)
-        items.append(_item(uur(r["start"]), r["personen"] or "onbekend", wat))
+        r = dict(r)
+        dubbel = r.get("dubbel_van")
+        wat = ", ".join(x for x in (f"{r['minuten']} min" if r.get("minuten") else "", kort(r.get("thema"), 100),
+                                    "dubbel, telt niet" if dubbel else "") if x)
+        detail = [(label, r.get(k)) for k, label in GESPREK_VELDEN]
+        items.append(_item(uur(r.get("start")), r.get("personen") or "onbekend", wat,
+                           label="privé" if is_prive_gesprek(r) else "", detail=detail))
     return items, gedekt
 
 
+MAIL_VELDEN = (("van_naam", "van"), ("van", "adres"), ("onderwerp", "onderwerp"), ("soort", "soort"),
+               ("waarom", "waarom dit oordeel"), ("postvak", "postvak"), ("map", "map"), ("datum", "datum"),
+               ("uniek", "nummer"))
+
+
 def lees_mail(conn, wacht, dag):
-    rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map FROM mailbericht WHERE wacht=? AND dag=? "
-                         "ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
-    return [_item(uur(r["datum"]), r["van_naam"] or r["van"] or "onbekend",
-                  " · ".join(x for x in (r["onderwerp"] or "(geen onderwerp)", r["soort"] or "") if x)) for r in rijen]
+    rijen = conn.execute("SELECT * FROM mailbericht WHERE wacht=? AND dag=? ORDER BY datum LIMIT ?",
+                         (wacht, dag, MAX_ITEMS)).fetchall()
+    uit = []
+    for r in rijen:
+        r = dict(r)
+        detail = [(label, r.get(k)) for k, label in MAIL_VELDEN]
+        detail += [("mailinglijst", "ja" if r.get("mailinglijst") else ""), ("beantwoord", "ja" if r.get("beantwoord") else ""),
+                   ("opgeruimd", "ja" if r.get("opgeruimd") else "")]
+        uit.append(_item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend",
+                         " · ".join(x for x in (r.get("onderwerp") or "(geen onderwerp)", r.get("soort") or "") if x),
+                         detail=detail))
+    return uit
 
 
 def lees_klaarzet(conn, wacht, dag, van, tot):
     """Wat de wacht die dag klaarzette, of wat over die dag gaat (sleutel, uniek of titel met de dag)."""
     rijen = conn.execute(
-        "SELECT ts, soort, titel, inhoud, uniek, sleutel FROM klaarzet WHERE van=? AND status!='vervallen' AND "
+        "SELECT ts, soort, titel, inhoud, uniek, sleutel, status FROM klaarzet WHERE van=? AND status!='vervallen' AND "
         "((ts>=? AND ts<?) OR sleutel=? OR uniek LIKE ? OR uniek LIKE ? OR titel LIKE ?) ORDER BY ts LIMIT ?",
         (wacht, van, tot, dag, f"%:{dag}", f"%:{dag}:%", f"{dag} %", MAX_ITEMS)).fetchall()
     items = []
@@ -136,7 +163,10 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
-        items.append(_item(tijd, r["soort"] or "item", wat))
+        inhoud_tekst = json.dumps(inhoud, ensure_ascii=False) if isinstance(inhoud, (dict, list)) else (r["inhoud"] or "")
+        detail = [("soort", r["soort"]), ("titel", r["titel"]), ("status", r["status"]), ("sleutel", r["sleutel"]),
+                  ("nummer", r["uniek"]), ("klaargezet", uur(r["ts"])), ("inhoud", inhoud_tekst)]
+        items.append(_item(tijd, r["soort"] or "item", wat, detail=detail))
     return items
 
 

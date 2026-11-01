@@ -8,8 +8,9 @@
 - W06: een wacht die draaide maar niets kreeg is oranje; een wacht zonder ronde is grijs, nooit groen;
 - W07: een klaargezet item over die dag (Wispr) komt erbij met zijn telling van die dag;
 - W08: wat op een andere dag binnenkwam, telt niet mee;
-- W11: een gesprek met afdeling prive (RZ3-01) toont alleen 'privégesprek, N min', zonder naam of onderwerp;
-  prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
+- W11: een gesprek met afdeling prive draagt het label privé en blijft leesbaar (Mehdi 02-11-2026: hij kijkt het
+  oordeel na); prive=1 zonder afdeling (WhatsApp van de Mac) heeft geen label;
+- W12: elk item draagt het detail: alles wat de wacht weet (wie, firma, afdeling, thema, waarom, link), zonder lege velden;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -101,9 +102,14 @@ check("W09 geen tijd: titel blijft heel", fo["items"][2]["wat"] == "20:25pizza b
       and fo["items"][3]["wat"] == "99:99: geen tijd" and fo["items"][3]["tijd"] == "21:17", fo["items"][2:])
 
 fa = w["fathom-wacht"]
-check("W11 privégesprek zonder naam of onderwerp", fa["aantal"] == 1 and fa["items"][0]["wie"] == "privégesprek"
-      and fa["items"][0]["wat"] == "10 min" and "Geheim" not in str(fa["items"]), fa["items"])
-check("W11 whatsapp prive=1 zonder afdeling houdt de naam", wa["items"][0]["wie"] == "Sara")
+check("W11 privégesprek leesbaar met label privé", fa["aantal"] == 1 and fa["items"][0]["wie"] == "Geheim Persoon"
+      and fa["items"][0]["label"] == "privé" and "Geheim onderwerp" in fa["items"][0]["wat"], fa["items"])
+check("W11 whatsapp prive=1 zonder afdeling: naam, geen label", wa["items"][0]["wie"] == "Sara" and wa["items"][0]["label"] == "")
+fd = dict(fa["items"][0]["detail"])
+check("W12 detail van een gesprek", fd.get("wie") == "Geheim Persoon" and fd.get("afdeling") == "prive"
+      and fd.get("thema") == "Geheim onderwerp" and fd.get("minuten") == "10" and "firma" not in fd, fd)
+md = dict(m["items"][0]["detail"])
+check("W12 detail van een mail", md.get("van") == "Klant A" and md.get("adres") == "a@b.be" and "onderwerp" in md, md)
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
 
 print("klaar" if not fout else f"{fout} fout(en)")
