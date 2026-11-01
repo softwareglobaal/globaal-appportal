@@ -252,8 +252,9 @@ def test_rz2_02_fathom_niet_gelezen_is_geen_geslaagde_keten():
     """RZ2-02 (bouwcontrole RZ2, 21-10-2026): zonder Fathom-sleutel eindigde fathom_wacht.py met exit 0. Werkte Zoom, dan
     schreef keten.py 'geslaagd' en kon het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Nu eindigt een ronde
     die Fathom niet kon lezen niet op 0, en is de keten niet geslaagd; de hartslag (fout, zonder noodlijst) blijft zoals
-    voordien. Een sleutel die faalt, gaf al een fout (exit 1); dat blijft zo."""
-    for gedrag, taak in (({}, "geen Fathom-sleutel"), ({"sleutel_faalt": True}, "ronde mislukt")):
+    voordien. Een sleutel die faalt, gaf al een fout (exit 1); dat blijft zo. Sinds NA09-rest (01-11-2026) zet de gedeelde
+    ronde die fout, met haar eigen taak en de fout in het detail."""
+    for gedrag, taak in (({}, "geen Fathom-sleutel"), ({"sleutel_faalt": True}, "Fathom ophalen")):
         p = Proef({"fathom_wacht.py": gedrag})
         with open(os.path.join(p.runners, "fathom_wacht.py"), "w", encoding="utf-8") as f:
             f.write(ECHTE_FATHOMWACHT)

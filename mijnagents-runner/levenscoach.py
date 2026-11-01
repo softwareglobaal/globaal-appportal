@@ -106,10 +106,20 @@ def spiegel(dagen, bronnen, werkwijze, week=False):
 
 
 def main():
-    ag.hartslag("actief", taak=f"{'weekspiegel' if WEEK else 'dagspiegel'} {DAG}")
+    # De gedeelde ronde (N12, NA09-rest 01-11-2026): mijn werkwijze, of geen spiegel; en wat ik las (N4), de lessen (N13)
+    # en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, zonder kennis.
     try:
-        werkwijze = ag.werkwijze()
-        dagen = [(datetime.fromisoformat(DAG).date() - timedelta(days=i)).isoformat() for i in range(6, -1, -1)] if WEEK else [DAG]
+        with ag.ronde(f"{'weekspiegel' if WEEK else 'dagspiegel'} {DAG}") as r:
+            _ronde(r, r.werkwijze)
+    except bord.RondeGestopt as e:
+        print(f"ronde gestopt: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _ronde(r, werkwijze):
+    try:
+        dagen =[(datetime.fromisoformat(DAG).date() - timedelta(days=i)).isoformat() for i in range(6, -1, -1)] if WEEK else [DAG]
         bronnen = bronnen_van(dagen)
         aantal = sum(len(v) for v in bronnen.values())
         soorten = sorted({it["soort"] for v in bronnen.values() for it in v})
@@ -119,21 +129,17 @@ def main():
         uit = ag.klaarzet([{"voor": "mehdi", "soort": "coaching", "sleutel": sleutel,
                             "titel": ("Weekspiegel tot " if WEEK else "Dagspiegel ") + DAG,
                             "uniek": f"coaching:{sleutel}:{datetime.now().strftime('%d%H%M')}", "inhoud": tekst}])
-        nood = []
         if "gezondheid" in ontbreekt:
-            nood.append({"tekst": "Gezondheidsgegevens van de Apple Watch komen nog niet op het bord (Gezondheidswacht op de Mac)", "wie": "mehdi"})
+            r.nood("Gezondheidsgegevens van de Apple Watch komen nog niet op het bord (Gezondheidswacht op de Mac)", wie="mehdi")
         if "locatie" in ontbreekt:
-            nood.append({"tekst": f"Geen locatiedagboek voor {DAG}", "wie": "claude-code"})
+            r.nood(f"Geen locatiedagboek voor {DAG}", wie="claude-code")
         ag.log(f"dag {DAG}", "bron", f"{aantal} bronnen over {len(dagen)} dag(en): {', '.join(soorten) or 'geen'}; ontbreekt: {', '.join(ontbreekt) or 'niets'}")
         ag.log(f"dag {DAG}", "melding", f"{'weekspiegel' if WEEK else 'dagspiegel'} klaargezet ({tokens} tokens)", tekst)
-        ag.log_verstuur()
-        ag.hartslag("klaar", taak=f"{'weekspiegel' if WEEK else 'dagspiegel'} {DAG} klaar", detail=f"{aantal} bronnen; mist: {', '.join(ontbreekt) or 'niets'}", nood=nood)
-    except Exception as e:  # noqa: BLE001
+        r.detail = f"{aantal} bronnen; mist: {', '.join(ontbreekt) or 'niets'}"
+    except Exception as e:  # noqa: BLE001  de ronde zet de fouthartslag en houdt de open noden open
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
         raise
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

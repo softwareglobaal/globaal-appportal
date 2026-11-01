@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import types
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -89,7 +90,9 @@ class Wereld:
         P.bronnen.zoek_salesmap = lambda naam="", nummer="": f"/Sales/{nummer} klant" if nummer else None
         P.LC.verblijf_op = lambda moment, ook_kandidaten=False: None
         FW.herken = self.herken
-        FW.personen_uit_werkwijze = lambda w: []
+        # een tabel met een rij: een lege personentabel is voor De Plaudwacht onbekend (NA09-rest), dan herkent ze niets
+        FW.personen_uit_werkwijze = lambda w: [{"naam": "Proef Collega", "mails": ["proef@h-architects.be"],
+                                                 "afdeling": "regie", "rol": "proef", "bijzonder": ""}]
         self.pipedrive_fout = False
         FW.deals_index = self._deals
 
@@ -189,8 +192,9 @@ class Wereld:
             (self.invoer / "00 manifest.json").write_text(json.dumps(m))
 
     def ronde(self):
-        r = types.SimpleNamespace(noden=[], detail="")
+        r = types.SimpleNamespace(noden=[], detail="", bronnen=[])
         r.nood = lambda tekst, wie="mehdi": r.noden.append(tekst)
+        r.bron = lambda naam, inhoud: r.bronnen.append(naam)
         code, tellers = P.ronde(r)
         return code, tellers, r.noden
 
@@ -313,6 +317,46 @@ def test_onbekende_afdeling_of_lage_zekerheid_blijft_bij_mehdi():
     w.ronde()
     assert w.klaar[0]["voor"] == "mehdi" and not w.uploads and not w.opgepakt, (w.klaar[0]["voor"], w.uploads, w.opgepakt)
     assert any("niet geleverd" in l[1] for l in w.logs), "een afgewezen levering laat de taak open met reden"
+
+
+def test_na09_onbekende_personentabel_herkent_en_publiceert_niets():
+    """NA09-rest (T-0075, 01-11-2026): de personentabel komt uit de werkwijze van De Fathomwacht. Tot dan werd een
+    antwoord zonder werkwijze een lege tabel, en herkende het model privé en afdeling zonder voorkennis; een fout van het
+    bord brak de hele ronde. Onbekend is niet leeg, en een lege tabel is geen tabel (overleg 12, X2): nu een nood, geen
+    herkenning, geen publicatie en geen staat voor de opname (ze blijft voor de volgende ronde), wel het toezicht. Met de
+    tabel terug gaat ze gewoon door, en de nood valt weg."""
+    fout = urllib.error.HTTPError("http://127.0.0.1:3022/api/agent/fathom-wacht/werkwijze", 502, "proef", None, None)
+    for antwoord, nood in (({}, "Personentabel van De Fathomwacht niet gelezen"),
+                           (fout, "Personentabel van De Fathomwacht niet gelezen"),
+                           ({"werkwijze": "# Fathomwacht\n\nGeen tabel."}, "Personentabel van De Fathomwacht leeg")):
+        w = Wereld()
+        w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+        w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+        w.push()
+        w.taken = [werftaak(101)]
+        echt, echte_tabel = w.call, FW.personen_uit_werkwijze
+
+        def call(pad, payload=None, method=None, _a=antwoord):
+            if pad == "/api/agent/fathom-wacht/werkwijze":
+                if isinstance(_a, Exception):
+                    raise _a
+                return _a
+            return echt(pad, payload, method)
+
+        P.bord.call = call
+        if "Geen tabel" in str(antwoord):
+            FW.personen_uit_werkwijze = lambda tekst: []
+        try:
+            code, tel, noden = w.ronde()
+        finally:
+            P.bord.call, FW.personen_uit_werkwijze = echt, echte_tabel
+        assert nood in noden, (antwoord, noden)
+        assert not w.herkend and not w.rijen and not w.klaar and not w.uploads and not w.opgepakt, \
+            (antwoord, w.herkend, w.rijen, w.klaar, w.uploads)
+        assert not (w.staat / f"{ID1}.json").exists(), "de opname kreeg een staat: ze zou als gezien kunnen gelden"
+        assert code == P.DEELS and tel["gedaan"] == 0, (code, tel)
+        code, tel, noden = w.ronde()
+        assert code == P.OK and tel["gedaan"] == 1 and len(w.herkend) == 1 and not noden, (code, tel, noden)
 
 
 def dagbundelaar_op(items, dag):

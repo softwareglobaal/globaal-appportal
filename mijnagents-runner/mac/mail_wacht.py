@@ -11,12 +11,14 @@ Gebruik: mail_wacht.py --account mch@h-architects.be --naam mail-mch [--uren 24]
 import argparse
 import email
 import email.utils
+import http.client
 import imaplib
 import json
 import os
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
@@ -74,14 +76,52 @@ def tekst_van(b):
 HOOG_ROLLEN = {"boekhouder", "bank", "overheid", "notaris", "advocaat", "deurwaarder"}
 
 
+class WerkwijzeOnbekend(RuntimeError):
+    """Zoals bord.WerkwijzeOnbekend (koppelingen/bord.py): het bord kon de werkwijze niet geven. `soort` zonder getal."""
+
+    def __init__(self, soort, reden=""):
+        self.soort, self.reden = soort, reden
+        super().__init__(f"{soort} ({reden})" if reden else soort)
+
+
 def werkwijze(naam):
-    """De werkwijze van deze wacht op het bord (zelfde token als de hartslag)."""
+    """De werkwijze van deze wacht op het bord (zelfde token als de hartslag). Onbekend is niet leeg (NA09-rest,
+    01-11-2026): tot dan werd elke fout een lege tekst en las de wacht het postvak zonder zijn afzenders met hoog belang.
+    Let op: de publieke ingang laat /werkwijze niet door; deze wacht hoort dan via de tunnel (AGENTNORM.md 5)."""
     try:
         req = urllib.request.Request(f"{BORD}/api/agent/{naam}/werkwijze", headers={"X-Agents-Token": token()})
         with urllib.request.urlopen(req, timeout=30) as r:
-            return (json.loads(r.read().decode() or "{}")).get("werkwijze") or ""
-    except Exception:  # noqa: BLE001
-        return ""
+            antwoord = json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        soort = {403: "geen toegang tot het bord", 404: "agent staat niet op het bord"}.get(e.code, "bordfout")
+        raise WerkwijzeOnbekend(soort, f"HTTP {e.code}") from e
+    except (OSError, http.client.HTTPException) as e:
+        raise WerkwijzeOnbekend("bord onbereikbaar", type(e).__name__) from e
+    except ValueError as e:
+        raise WerkwijzeOnbekend("onleesbaar antwoord van het bord", type(e).__name__) from e
+    tekst = antwoord.get("werkwijze") if isinstance(antwoord, dict) else None
+    if not isinstance(tekst, str):
+        raise WerkwijzeOnbekend("onleesbaar antwoord van het bord", "geen werkwijze in het antwoord")
+    return tekst
+
+
+def regelboek(naam):
+    """Mijn werkwijze, of None nadat ik gestopt ben: zonder regelboek geen ronde (NA09). Een nood met eigenaar en
+    hartslag fout. Mijn open noden kan ik langs de publieke ingang niet lezen, dus komt deze nood erbij en sluit het bord
+    niets (nood_sluiten false)."""
+    try:
+        tekst = werkwijze(naam)
+        stop = None if tekst.strip() else ("Werkwijze leeg op het bord", "mehdi", "")
+    except WerkwijzeOnbekend as e:
+        stop = (f"Werkwijze niet gelezen: {e.soort}", "claude-code", e.reden)
+    if stop is None:
+        return tekst
+    nood, wie, reden = stop
+    bord("/agent-status", {"naam": naam, "status": "fout", "taak": "mail lezen",
+                           "detail": f"{nood}{f' ({reden})' if reden else ''}; ronde gestopt voor het werk",
+                           "nood": [{"tekst": nood, "wie": wie}], "nood_sluiten": False})
+    print(f"ronde gestopt: {nood}", file=sys.stderr)
+    return None
 
 
 def afzenders_uit_werkwijze(tekst):
@@ -127,13 +167,16 @@ def main():
     p.add_argument("--prive", action="store_true", help="alles alleen voor Mehdi, nooit voor een afdeling")
     a = p.parse_args()
     naam = a.naam
+    bord("/agent-status", {"naam": naam, "status": "actief", "taak": "mail lezen"})
+    regels = regelboek(naam)             # voor het wachtwoord en het postvak (overleg 12, X3)
+    if regels is None:
+        return 1
     pw = wachtwoord(a.account)
     if not pw:
         bord("/agent-status", {"naam": naam, "status": "rust", "taak": "geen wachtwoord", "detail": "wacht op Keychain",
                                "nood": [{"tekst": f"Geen wachtwoord in de Keychain voor {a.account}: security add-generic-password -s onemail -a {a.account} -w (hotmail: app-wachtwoord)", "wie": "mehdi"}]})
         print("geen wachtwoord"); return
-    bord("/agent-status", {"naam": naam, "status": "actief", "taak": "mail lezen"})
-    extra = afzenders_uit_werkwijze(werkwijze(naam))
+    extra = afzenders_uit_werkwijze(regels)
     if extra:
         print(f"{extra} afzender-kenmerken met hoog belang uit de werkwijze op het bord")
     host = PROVIDERS.get(a.account.split("@")[-1].lower(), ("imap.one.com", 993))
@@ -191,4 +234,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
