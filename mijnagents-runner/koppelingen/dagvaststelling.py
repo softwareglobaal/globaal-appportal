@@ -23,6 +23,8 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import privegrens
+
 BRUSSEL = ZoneInfo("Europe/Brussels")
 MARGE = timedelta(minutes=15)          # een gesprek dat zo dicht bij een afspraak ligt, hoort er mogelijk bij
 MIN_GESPREK = 2                        # kortere oproepen of sessies zijn geen ongepland gesprek
@@ -40,7 +42,6 @@ STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg",
 GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon", "sms", "xelion")
 CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:", "sms:")
 OPROEP_VOORVOEGSELS = ("whatsapp-oproep:", "telefoon:", "xelion:")
-PRIVEBRONNEN = ("whatsapp", "telefoon", "sms", "xelion")
 SECTIES = ("Gepland", "Niet gepland", "Communicatie", "Eigen werk en gezondheid")
 
 
@@ -127,9 +128,9 @@ def soort(g):
 
 
 def is_prive(g):
-    """RZ3-01 en D5: de privévlag of afdeling privé; alles van WhatsApp, telefoon, sms en Xelion is privé."""
-    return bool(g.get("prive") or str(g.get("afdeling") or "").strip().casefold() in ("prive", "privé")
-                or str(g.get("bron") or "") in PRIVEBRONNEN)
+    """RZ3-01 en D5: de privévlag of afdeling privé; alles van WhatsApp, telefoon, sms en Xelion is privé. De regel staat
+    op één plek, in privegrens.py (T-0120 VOL-2), voor De Communicatiebundelaar en de wachtenpagina ook."""
+    return privegrens.is_prive(g)
 
 
 PARTIKELS = {"de", "den", "der", "van", "von", "la", "le", "du", "del", "da", "di", "ten", "ter", "het", "en"}

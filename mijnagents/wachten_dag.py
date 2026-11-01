@@ -11,6 +11,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
+import privegrens
+
 BRUSSEL = ZoneInfo("Europe/Brussels")
 # Mehdi leest de wacht per dag in het Dagboek: niets wegkappen wat hij daar wil zien (Codex 01-11). Een dag heeft hoogstens
 # enkele honderden rondes (de Fotowacht 435 op 30-10).
@@ -76,16 +78,19 @@ def _item(tijd, wie, wat, fout=False):
 
 
 def is_prive_gesprek(r):
-    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé.
-    De vlag prive=1 alleen betekent "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke rij); die
-    rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
-    return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
+    """De privéregel van de gesprekkentabel, dezelfde als bij De Dagbundelaar en De Communicatiebundelaar
+    (privegrens.py, T-0120 VOL-2): de vlag prive of afdeling privé. De bewuste uitzondering: bij een Mac-kanaal
+    (WhatsApp, telefoon, sms, Xelion) betekent prive=1 alleen "van de Mac van Mehdi, alleen voor Mehdi"; die rijen
+    dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar. Tot 01-11-2026 keek
+    ik alleen naar de afdeling, en toonde ik van een Zoom-, Fathom- of Plaud-rij met prive=1 en afdeling onbekend naam
+    en onderwerp (DB-8)."""
+    return privegrens.is_prive(r, voor_mehdi=True)
 
 
 def lees_gesprekken(conn, bron, dag):
     rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
-                         "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
-                         "ORDER BY start", (dag, bron)).fetchall()
+                         "COALESCE(afdeling,'') AS afdeling, COALESCE(prive,0) AS prive FROM gesprek_log "
+                         "WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start", (dag, bron)).fetchall()
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
