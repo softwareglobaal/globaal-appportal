@@ -33,8 +33,10 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
 
 1. Grenzen uit de werkwijze (N2); zonder grenzen geen werk.
 2. De bundel lezen. Geen bundel van de laatste drie dagen: nood, niets klaargezet (onbekend is niet leeg).
-3. Moment bepalen op de Brusselse klok: de eerste ronde tussen 07:00 en 12:00 is de ochtend, de eerste vanaf 19:00 de
-   avond, de rest tussendoor. Tussendoor zonder nieuwe bundel en zonder nieuw bericht van Mehdi: geen aanroep van Claude.
+3. Moment bepalen op de Brusselse klok: de eerste ronde tussen 07:00 en 12:00 is de ochtend, de eerste vanaf 16:00 de
+   avond (de ronde van 16:20, zodat het avondoverzicht in de avondbundel van De Bode van 17:00 zit; ANGEL-4 van
+   T-0120), de rest tussendoor. Tussendoor zonder nieuwe bundel en zonder nieuw bericht van Mehdi: geen aanroep van
+   Claude, wel een regel "overgeslagen" in het werkverslag (ANGEL-10).
 4. Claude (`claude-opus-5-5`, effort medium, gestructureerd antwoord met een strikt JSON-schema, server-side fallback
    zoals `weekconsolidatie.py`) krijgt de werkwijze van het bord letterlijk (N12), de collega's op het bord (N14), de
    gedeelde lessen (N13), en als invoer de bundel, de open taken met hun nummer, de onlangs afgeronde taken, wat Mehdi
@@ -61,9 +63,32 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
 - Doen: hij schrijft concepten (een bericht of een mail) die Mehdi zelf stuurt. Hij verstuurt nooit zelf iets.
 - Dispatchen: bij elke taak staat voor wie ze is. Een taak voor een agent zet hij nog niet bij die agent klaar: een
   ontvanger als De Plaudwacht leest elk `verzoek` als een eigen opdracht, en dat zou ruis geven. Mehdi beslist per
-  soort wanneer de agent zelf mag doorsturen (werkwijze, Wat Mehdi beslist).
+  soort wanneer de agent zelf mag doorsturen (werkwijze, Wat Mehdi beslist). Versie 2 daarvan, De Doorgever, is
+  gebouwd maar staat uit (hieronder).
 - Leren: Mehdi zegt via WhatsApp of op het bord "Mehdi-agent, 3 gaat naar" en een naam, of "2 is gedaan". De Regisseur
   antwoordt in de rol van de agent; de volgende ronde leest de agent dat gesprek, past de taak aan en bewaart een regel.
+
+### De Doorgever (dispatchen versie 2, M10 van T-0120; gebouwd 01-11-2026, staat uit)
+
+- Met `MEHDI_AGENT_DOORGEVEN=aan` zet de agent een taak voor een agent zelf bij die agent klaar: `soort: taak`, uniek
+  `mehdi-agent:taak:<id>`, sleutel het id van de taak, een titel zonder naam, en als inhoud een JSON met `voorstel: true`,
+  wat de ontvanger aanneemt, de taak, de reden, de bron, de dag en het concept. Daarna leest hij het item terug.
+- Alleen bij een ontvanger op de witte lijst `ONTVANGERS` in `mehdi_agent.py`. Die is leeg, en de vlag staat uit: beide
+  kiest Mehdi per soort taak (werkwijze, Wat Mehdi beslist). Een ontvanger komt er pas op als zijn eigen code een taak
+  van `mehdi-agent` aanneemt; De Agendawacht neemt nu alleen taken van De Werfverslag voorbereider aan
+  (`agenda_wacht.py`, `terugkijktaken`), en daar verandert dit niets aan.
+- Nooit iets privé: ook niet als alleen de bron privé is, en zo'n taak blijft voortaan privé. De herkomst telt per stuk
+  van de bron (`herkomst`): openbaar als het in een openbaar stuk van de bundel staat, privé als het alleen in een regel
+  met privé, in een blok als Eigen werk en gezondheid, of over zo'n regel of een kop heen staat. Elke bewaarde taak gaat
+  voor ze weggaat opnieuw langs de bundel van nu: elk stuk moet openbaar zijn of uit Mehdi's woorden komen, anders blijft
+  ze bij Mehdi. Hoogstens vijf
+  per ronde. Een taak die al eens terugkwam, gaat niet opnieuw weg.
+- Elke ronde met Claude, met de vlag aan, leest hij de status van wat weg is terug. Alleen opgepakt door de ontvanger
+  zelf (zijn naam als `opgepakt_door`) is beweging. Ligt een item na drie dagen nog klaar, of staat het niet meer klaar, dan neemt hij het terug (opgepakt door
+  `mehdi-agent`, zodat de ontvanger het niet later toch doet) en is de taak weer voor Mehdi, met de reden erbij. Een bord
+  dat niet of onvolledig antwoordt (geen lijst van items), beslist niets.
+- Met de vlag uit raakt hij het bord niet, ook niet voor wat al weg was: dat blijft staan tot de vlag weer aan staat.
+- `--droog` zet niets en neemt niets terug: het toont per taak "gaat naar", "zou naar" of "blijft bij Mehdi" met de reden.
 
 Volgende stap, pas na Mehdi's ja: een runbook dat een goedgekeurd concept via De Bode verstuurt, of een taak als
 activiteit in Pipedrive zet, telkens als voorstel op het bord.
@@ -101,6 +126,15 @@ Claude Opus 5.5 kost 4 dollar per miljoen tokens in en 20 dollar per miljoen uit
 40.000 tokens en schrijft er enkele duizenden, samen ongeveer 0,20 tot 0,35 dollar. Met overslaan als er niets nieuws is,
 zijn dat twee tot zes rondes met Claude per dag: naar schatting 15 tot 60 dollar per maand. Ander model kiezen kan met
 `MEHDI_AGENT_MODEL`.
+
+Op het abonnement (ANGEL-3 en VOL-17 van T-0120, gebouwd op 01-11-2026, staat uit): met `MEHDI_AGENT_ROUTE=abonnement`
+vraagt de agent Claude via `koppelingen/claude_abonnement.py`, zoals De Prijsonderzoeker: zonder API-sleutel en zonder
+gereedschap, met het JSON-schema in de opdracht. De code leest het antwoord met `json.loads` en houdt het tegen het
+schema (`schema_fout`); past het niet, dan is het een fout zonder inhoud in het werkverslag. Zit het abonnement aan zijn
+limiet of is Claude op de VM niet aangemeld, dan blijft de lijst van de vorige ronde staan en komt de vaste nood van de
+koppeling voor Mehdi. De sleutelbron en `anthropic` laadt de agent alleen nog op de API-weg. De standaard blijft de API
+tot Mehdi kiest (werkstand T-0122): het abonnement deelt zijn weekvenster met Claude 1, 2 en 3, en zolang extra
+verbruik op het account aan staat, is nul euro niet gegarandeerd.
 
 ## Live zetten (gedaan op 31-10-2026, op Mehdi's ja)
 

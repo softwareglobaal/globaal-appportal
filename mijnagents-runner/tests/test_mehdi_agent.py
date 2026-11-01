@@ -34,6 +34,7 @@ import mehdi_agent as M  # noqa: E402
 WERKWIJZE = os.path.join(RUNNER, "werkwijze", "mehdi-agent.md")
 OCHTEND_UTC = datetime(2026, 10, 31, 6, 20, tzinfo=timezone.utc)      # 07:20 in Brussel (wintertijd)
 MIDDAG_UTC = datetime(2026, 10, 31, 12, 20, tzinfo=timezone.utc)      # 13:20
+NAMIDDAG_UTC = datetime(2026, 10, 31, 15, 20, tzinfo=timezone.utc)    # 16:20
 AVOND_UTC = datetime(2026, 10, 31, 18, 20, tzinfo=timezone.utc)       # 19:20
 GISTEREN = "2026-10-30"
 
@@ -65,6 +66,7 @@ DAGBESTAND = """# Dag 2026-10-30 vastgesteld
 - versie 2, gemaakt 31-10-2026 00:31
 """
 TELLING = {"dag": GISTEREN, "whatsapp": {"berichten": 40}, "telefoon": {"oproepen": 3}}
+BUNDELS = [{"dag": GISTEREN, "dagbestand": DAGBESTAND, "telling": TELLING}]
 KERN = [
     {"naam": "Proefpersoon Zeta", "voornaam": "Zeta", "functie": "tekenaar", "afdeling": "Architecture", "firma": "Proeffirma"},
     {"naam": "Proefpersoon Eta", "voornaam": "Eta", "functie": "boekhouder", "afdeling": "Finance", "firma": "Proeffirma"},
@@ -121,14 +123,16 @@ class Omgeving:
         for it in items:
             if it["uniek"] in self.opgepakt:
                 continue          # het bord laat een opgepakt item staan
-            self.bord[it["uniek"]] = dict(it, status="klaar")
+            self.bord[it["uniek"]] = dict(it, status="klaar", id=self.bord.get(it["uniek"], {}).get("id") or len(self.bord) + 1)
         return {"nieuw": len(items)}
 
     def lees(self, uniek):
         x = self.bord.get(uniek)
         if x is None:
             return []
-        return [dict(x, status="opgepakt" if uniek in self.opgepakt else "klaar")]
+        if uniek in self.opgepakt:          # de ontvanger zelf pakte het op, zoals agents dat doen (opgepakt_door NAAM)
+            return [dict(x, status="opgepakt", opgepakt_door=x["voor"])]
+        return [dict(x, status="klaar")]
 
     def ronde(self, uit=None, nu=OCHTEND_UTC, moment=None, fout=None, werkwijze=None):
         r = NepRonde(werkwijze)
@@ -298,6 +302,22 @@ def test_tussendoor_zonder_nieuws_roept_claude_niet_aan():
         o.weg()
 
 
+def test_overgeslagen_ronde_laat_een_logregel():
+    """ANGEL-10 (T-0120): een overgeslagen ronde liet op 01-11 geen spoor in het werkverslag, alleen een hartslag."""
+    o = Omgeving()
+    try:
+        o.ronde(uit=antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega")]))
+        o.bord.clear()
+        M.ag._log.clear()
+        o.ronde(nu=MIDDAG_UTC)
+        assert len(o.claude_oproepen) == 1 and o.bord == {}
+        assert [(x["onderwerp"], x["stap"], x["tekst"]) for x in M.ag._log] == [
+            ("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")], M.ag._log
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
 def test_ochtend_en_avond_een_keer_per_dag_op_de_brusselse_klok():
     vandaag = "2026-10-31"
     assert M.moment(OCHTEND_UTC, {}) == "ochtend"
@@ -308,6 +328,28 @@ def test_ochtend_en_avond_een_keer_per_dag_op_de_brusselse_klok():
     assert M.aan_de_beurt(OCHTEND_UTC) and not M.aan_de_beurt(datetime(2026, 10, 31, 5, 20, tzinfo=timezone.utc))
     assert M.aan_de_beurt(datetime(2026, 7, 1, 5, 20, tzinfo=timezone.utc))       # zomertijd: 07:20 in Brussel
     assert M.dagen_terug(datetime(2026, 10, 31, 23, 30, tzinfo=timezone.utc)) == ["2026-11-01", "2026-10-31", "2026-10-30"]
+
+
+def test_avondoverzicht_klaar_voor_de_avondbundel_van_de_bode():
+    """ANGEL-4 (T-0120): De Bode bundelt het avondbericht vanaf 17:00 (bode.py, AVOND_VANAF). Het avondoverzicht van de
+    ronde van 19:20 kwam daardoor pas de volgende dag mee. Nu is de ronde van 16:20 de avond."""
+    import ast
+    bode = ast.parse(open(os.path.join(RUNNER, "bode.py"), encoding="utf-8").read())
+    (vanaf,) = [ast.literal_eval(n.value) for n in bode.body if isinstance(n, ast.Assign)
+                and [getattr(t, "id", "") for t in n.targets] == ["AVOND_VANAF"]]
+    eerste = min(u for u in M.UREN if u >= M.AVOND)
+    assert (eerste, 20) < tuple(vanaf), (eerste, vanaf)          # de cron draait op :20
+    assert M.moment(NAMIDDAG_UTC, {}) == "avond"
+    assert M.moment(AVOND_UTC, {"avond": "2026-10-31"}) == "tussendoor"
+    assert M.moment(MIDDAG_UTC, {}) == "tussendoor"
+    ww = open(WERKWIJZE, encoding="utf-8").read()
+    assert "na 19:00" not in ww and "vanaf 16:00" in ww
+    o = Omgeving()
+    try:
+        _, staat = o.ronde(nu=NAMIDDAG_UTC, uit=antwoord([], overzicht="Vandaag bleef een oproep liggen.", tip="Bel na."))
+        assert o.bord["mehdi-agent:avond:2026-10-31"]["titel"] == "Avondoverzicht 31-10" and staat["avond"] == "2026-10-31"
+    finally:
+        o.weg()
 
 
 def test_ochtend_geeft_plan_en_avond_een_tip():
@@ -466,6 +508,97 @@ def test_vraag_claude_met_nagebootste_client():
             pass
 
 
+# ANGEL-3 en VOL-17 (T-0120): Ai Angel kan op het Claude-abonnement van Mehdi draaien, zoals De Prijsonderzoeker. De
+# route staat achter MEHDI_AGENT_ROUTE; de standaard blijft de API tot Mehdi kiest (werkstand T-0122). Geen echt model:
+# de vraag aan het abonnement is nagebootst.
+class NepAbonnement:
+    """Bootst claude_abonnement.vraag na: geeft tekst zoals lees_stroom, of gooit een Fout."""
+
+    def __init__(self, tekst="", fout=None):
+        self.tekst, self.fout, self.oproepen = tekst, fout, []
+
+    def __call__(self, systeem, gebruiker, **kw):
+        self.oproepen.append((systeem, gebruiker, kw))
+        if self.fout:
+            raise self.fout
+        return {"tekst": self.tekst, "gereedschap": [], "tokens": 1234, "beurten": 1, "stop": "success",
+                "model": "nepmodel", "fout": None}
+
+
+def test_route_staat_standaard_op_de_api_en_importeert_geen_sleutel_bovenaan():
+    import ast
+    assert M.ROUTE == "api", M.ROUTE                     # wat nu draait, tot Mehdi kiest (T-0122)
+    bron = open(os.path.join(RUNNER, "mehdi_agent.py"), encoding="utf-8").read()
+    assert 'os.environ.get("MEHDI_AGENT_ROUTE", "api")' in bron
+    bovenaan = set()
+    for n in ast.parse(bron).body:
+        if isinstance(n, ast.Import):
+            bovenaan |= {a.name.split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ImportFrom):
+            bovenaan.add((n.module or "").split(".")[0])
+    assert not bovenaan & {"anthropic", "sleutelbron"}, bovenaan
+    assert "claude_abonnement" in bovenaan
+
+
+def test_abonnement_geeft_een_geldig_antwoord_zonder_api_sleutel():
+    nep = NepAbonnement("```json\n" + json.dumps(antwoord([taak("Bel Klant Omega terug", "16:10 telefoon")])) + "\n```")
+    weg = object()
+    oud = {k: sys.modules.get(k, weg) for k in ("sleutelbron", "anthropic")}
+    sys.modules["sleutelbron"] = None                    # elke import van de API-weg faalt nu meteen
+    sys.modules["anthropic"] = None
+    try:
+        uit, meta = M.vraag_claude("regelboek", {"a": 1}, route="abonnement", vraag=nep)
+    finally:
+        for k, v in oud.items():
+            if v is weg:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    assert uit["taken"][0]["tekst"] == "Bel Klant Omega terug"
+    assert meta["tokens_in"] + meta["tokens_uit"] == 1234 and meta["model"] == "nepmodel"
+    ((systeem, gebruiker, kw),) = nep.oproepen
+    assert systeem.startswith("regelboek") and json.dumps(M.SCHEMA, ensure_ascii=False) in systeem
+    assert json.loads(gebruiker) == {"a": 1} and kw["tools"] == () and kw["max_beurten"] <= 2
+    uit, _ = M.vraag_claude("regelboek", {}, route="abonnement", vraag=NepAbonnement(json.dumps(antwoord())))
+    assert uit == antwoord()                             # ook zonder codeblok
+
+
+def test_abonnement_buiten_het_schema_of_geen_json_is_een_fout_zonder_inhoud():
+    slecht = antwoord([taak("Bel Proefpersoon Zeta", "16:10 telefoon", voor="Proefpersoon Zeta")])
+    extra = dict(antwoord(), uitleg="Proefpersoon Zeta")
+    zonder = {k: v for k, v in antwoord().items() if k != "tip"}
+    for tekst in (json.dumps(slecht), json.dumps(extra), json.dumps(zonder), "Ik kan dit niet.", "[]"):
+        try:
+            M.vraag_claude("regelboek", {}, route="abonnement", vraag=NepAbonnement(tekst))
+            raise AssertionError(f"geen fout bij {tekst[:40]}")
+        except RuntimeError as e:
+            assert "Zeta" not in str(e), e              # de melding komt in het werkverslag: nooit een naam
+    assert M.schema_fout(antwoord(), M.SCHEMA) == ""
+    assert M.schema_fout(slecht, M.SCHEMA) == "antwoord.taken[0].voor: geen toegelaten waarde"
+
+
+def test_abonnement_aan_zijn_limiet_of_niet_aangemeld_lijst_blijft_met_nood():
+    import claude_abonnement as CA
+    o = Omgeving()
+    try:
+        o.ronde(uit=antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega")]))
+        for soort, nood, wie in (("limiet", CA.LIMIET_NOOD, "mehdi"), ("aanmelden", CA.AANMELDEN_NOOD, "mehdi"),
+                                 ("bron", CA.BRON_NOOD, "claude-code"),
+                                 (None, "Claude niet bereikbaar voor de takenlijst", "claude-code")):
+            o.gezegd.append({"id": len(o.gezegd) + 20, "ts": "2026-10-31T11:00", "tekst": "nog iets?", "antwoord": ""})
+            nep = NepAbonnement(fout=CA.Fout("Claude via het abonnement: proef", soort))
+            r = NepRonde()
+            staat = M.werk(r, nu=MIDDAG_UTC, map_=o.map, gezegd=lambda nu: list(o.gezegd), kern=lambda: list(KERN),
+                           claude=lambda s, i: M.vraag_claude(s, i, route="abonnement", vraag=nep),
+                           zet=o.zet, lees=o.lees, staatpad=o.staat)
+            assert len(nep.oproepen) == 1 and r.noden == [(nood, wie)], (soort, r.noden)
+            assert [t["tekst"] for t in staat["taken"].values()] == ["Bel Klant Omega terug"]
+            assert "Bel Klant Omega terug" in o.bord["mehdi-agent:taken:2026-10-31"]["inhoud"]
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
 def test_staat_wordt_atomair_bewaard_en_teruggelezen():
     d = tempfile.mkdtemp(prefix="mehdi-agent-staat-")
     try:
@@ -508,6 +641,336 @@ def test_droog_stil_toont_geen_namen_en_schrijft_het_volledige_resultaat_apart()
         assert not os.path.exists(M.STAAT)                       # droog bewaart geen staat
     finally:
         M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei = oud
+        M.ag._log.clear()
+        shutil.rmtree(d, ignore_errors=True)
+
+
+# ANGEL-9 (T-0120, M10): De Doorgever. Een taak voor een agent zet Ai Angel zelf bij die agent klaar, als voorstel, maar
+# alleen met de vlag aan en bij een ontvanger op de witte lijst. Beide zijn een keuze van Mehdi: de vlag staat uit en de
+# lijst is leeg. Geen ontvangende agent verandert.
+ZOOM_TAAK = taak("Zoek de opname van het gesprek", "11:00 Fathom, met Klant Omega, 45 min", voor="agent", wie="De Zoomwacht")
+AGENTS_TWEE = AGENTS + [{"naam": "plaud-wacht", "label": "De Plaudwacht", "afdeling": "regie", "rol": "", "cadans": ""}]
+
+
+def _agenttaak(tid, wie="De Zoomwacht", bron="11:00 Fathom, met Klant Omega", tekst="Zoek de opname"):
+    return {"id": tid, "tekst": tekst, "voor": "agent", "wie": wie, "waarom": "omdat", "bron": bron, "dag": GISTEREN,
+            "prioriteit": "normaal", "status": "open", "concept": "", "sinds": "2026-10-31T06:20:00+00:00"}
+
+
+def test_doorgever_staat_uit_met_een_lege_witte_lijst():
+    assert M.DOORGEVEN is False and M.ONTVANGERS == {}
+    bron = open(os.path.join(RUNNER, "mehdi_agent.py"), encoding="utf-8").read()
+    assert 'os.environ.get("MEHDI_AGENT_DOORGEVEN", "uit") == "aan"' in bron
+    o = Omgeving()
+    try:
+        _, staat = o.ronde(uit=antwoord([ZOOM_TAAK]))
+        assert [t["voor"] for t in staat["taken"].values()] == ["agent"]
+        assert list(o.bord) == ["mehdi-agent:taken:2026-10-31"]            # niets bij De Zoomwacht
+        assert not any(t.get("doorgegeven") for t in staat["taken"].values())
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_doorgever_besluit_per_taak_zonder_iets_te_zetten():
+    staat = {"taken": {"t-1": _agenttaak("t-1"), "t-2": _agenttaak("t-2", wie="De Plaudwacht"),
+                       "t-3": _agenttaak("t-3", bron="14:00 (privé): geen spoor"),
+                       "t-4": _agenttaak("t-4", wie="De Onbekende Wacht"),
+                       "t-5": dict(_agenttaak("t-5"), voor="mehdi", wie="")}}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), BUNDELS)}
+    assert besluit == {"t-1": ("", "blijft bij Mehdi: zoom-wacht staat niet op de witte lijst"),
+                       "t-2": ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst"),
+                       "t-3": ("", "blijft bij Mehdi: privé"),
+                       "t-4": ("", "blijft bij Mehdi: de agent staat niet op het bord")}, besluit
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), lijst, aan=False)}
+    assert besluit["t-1"] == ("zoom-wacht", "zou naar zoom-wacht (doorgeven staat uit)")
+    assert besluit["t-2"] == ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst")   # De Plaudwacht niet
+    assert besluit["t-3"][0] == "" and M.doorgeef_besluiten(staat, AGENTS_TWEE, BUNDELS, (), lijst, aan=True)[0]["besluit"] == \
+        "gaat naar zoom-wacht"
+    veel = {"taken": {f"t-{i}": _agenttaak(f"t-{i}") for i in range(7)}}
+    besluiten = M.doorgeef_besluiten(veel, AGENTS, BUNDELS, (), lijst, aan=True)
+    assert sum(1 for b in besluiten if b["naar"]) == M.MAX_DOORGEVEN == 5
+    assert sum(1 for b in besluiten if b["besluit"] == "blijft bij Mehdi: hoogstens 5 per ronde") == 2
+
+
+def test_doorgever_zet_als_voorstel_leest_terug_en_geeft_na_drie_dagen_terug_aan_mehdi():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    gepakt = []
+
+    def doorgeef(staat, nu, agents, bundels, gezegd):
+        return M.doorgeven(staat, nu, agents, bundels, gezegd, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+
+    try:
+        r = NepRonde()
+        staat = M.werk(r, nu=OCHTEND_UTC, map_=o.map, gezegd=lambda nu: [], kern=lambda: list(KERN),
+                       claude=lambda s, i: (antwoord([ZOOM_TAAK]), {}), zet=o.zet, lees=o.lees, staatpad=o.staat,
+                       doorgeef=doorgeef)
+        (tid,) = staat["taken"]
+        it = o.bord[f"mehdi-agent:taak:{tid}"]
+        assert it["voor"] == "zoom-wacht" and it["soort"] == "taak" and it["sleutel"] == tid
+        assert "Omega" not in it["titel"] and r.noden == []
+        inhoud = json.loads(it["inhoud"])
+        assert inhoud["voorstel"] is True and inhoud["taak"] == ZOOM_TAAK["tekst"] and inhoud["wat"] == "zoekt een opname"
+        assert staat["taken"][tid]["doorgegeven"]["naar"] == "zoom-wacht"
+        assert "Doorgegeven aan zoom-wacht" in o.bord["mehdi-agent:taken:2026-10-31"]["inhoud"]
+        assert "1 doorgegeven" in r.detail and "Omega" not in r.detail, r.detail
+        # een dag later ligt het nog klaar: niets verandert, en het gaat niet een tweede keer weg
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 1, 6, 20, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
+                                 lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        assert sum(telling.values()) == 0 and staat["taken"][tid]["voor"] == "agent" and gepakt == []
+        # na drie dagen nog altijd klaar: terug naar Mehdi, en het item neem ik terug zodat het niet dubbel gebeurt
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 3, 6, 21, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
+                                 lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        t = staat["taken"][tid]
+        assert telling["terug_naar_mehdi"] == 1 and t["voor"] == "mehdi" and t["wie"] == "" and "doorgegeven" not in t
+        assert gepakt == [it["id"]] and t["teruggekomen"] == ["zoom-wacht"]
+        t["voor"], t["wie"] = "agent", "De Zoomwacht"                      # het model zet het opnieuw bij de agent
+        (b,) = M.doorgeef_besluiten(staat, AGENTS, BUNDELS, (), lijst, aan=True)
+        assert b["naar"] == "" and b["besluit"] == "blijft bij Mehdi: ging al eens terug"
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_doorgever_opgepakt_is_beweging_en_onleesbaar_bord_beslist_niets():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1")}}
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=None, ontvangers=lijst, aan=True)
+        o.opgepakt.add("mehdi-agent:taak:t-1")
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 5, 6, 20, tzinfo=timezone.utc), AGENTS, BUNDELS, zet=o.zet,
+                                 lees=o.lees, pak=None, ontvangers=lijst, aan=True)
+        assert telling["opgepakt_door_agent"] == 1 and staat["taken"]["t-1"]["doorgegeven"]["status"] == "opgepakt"
+        assert staat["taken"]["t-1"]["voor"] == "agent"
+        staat = {"taken": {"t-2": dict(_agenttaak("t-2"), doorgegeven={"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-2",
+                                                                      "ts": "2026-10-20T06:20:00+00:00"})}}
+
+        def stuk(uniek):
+            raise bord.BordOnbekend("bord weg")
+
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=stuk, pak=None, ontvangers=lijst, aan=True)
+        assert telling["niet_gelezen"] == 1 and staat["taken"]["t-2"]["voor"] == "agent"     # onbekend is niet leeg
+    finally:
+        o.weg()
+
+
+def test_doorgever_neemt_terug_wat_afgerond_of_niet_meer_voor_die_agent_is():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    gepakt = []
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1"), "t-2": _agenttaak("t-2")}, "afgerond": []}
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        assert all(staat["taken"][k].get("doorgegeven") for k in ("t-1", "t-2"))
+        staat["afgerond"].append(dict(staat["taken"].pop("t-1"), status="gedaan"))     # "1 is gedaan"
+        staat["taken"]["t-2"].update(voor="mehdi", wie="")                             # "2 doe ik zelf"
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+                                 ontvangers=lijst, aan=True)
+        assert telling["ingetrokken"] == 2 and sorted(gepakt) == sorted(o.bord[f"mehdi-agent:taak:t-{i}"]["id"] for i in (1, 2))
+        assert staat["afgerond"][0]["doorgegeven"]["status"] == "ingetrokken" and "doorgegeven" not in staat["taken"]["t-2"]
+        assert staat["taken"]["t-2"]["voor"] == "mehdi" and staat["taken"]["t-2"]["teruggekomen"] == ["zoom-wacht"]
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+                                 ontvangers=lijst, aan=True)
+        assert sum(telling.values()) == 0 and len(gepakt) == 2                          # een keer terugnemen is genoeg
+        staat["taken"]["t-2"].update(voor="agent", wie="De Zoomwacht")                 # weer bij de agent: niet opnieuw
+        assert [b["besluit"] for b in M.doorgeef_besluiten(staat, AGENTS, BUNDELS, (), lijst, aan=True)] == [
+            "blijft bij Mehdi: ging al eens terug"]
+        # wat ik zelf terugnam, is geen beweging van de ontvanger
+        weg = {"naar": "zoom-wacht", "uniek": "u-3", "ts": "2026-10-20T06:20:00+00:00"}
+        staat = {"taken": {"t-3": dict(_agenttaak("t-3"), doorgegeven=weg)}, "afgerond": []}
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=o.zet, pak=gepakt.append, ontvangers=lijst, aan=True,
+                                 lees=lambda uniek: [{"id": 9, "status": "opgepakt", "opgepakt_door": "mehdi-agent"}])
+        assert telling == {"terug_naar_mehdi": 1} and staat["taken"]["t-3"]["voor"] == "mehdi", telling
+    finally:
+        o.weg()
+
+
+def test_abonnementsfout_met_een_naam_komt_nooit_in_het_werkverslag():
+    """Codex toets 1, bezwaar 1: ook een Fout met een soort kan een stuk antwoord dragen (aanmelden uit de fouttekst)."""
+    import claude_abonnement as CA
+    o = Omgeving()
+    try:
+        for soort in ("aanmelden", "limiet", "bron", "tijd", None):
+            M.ag._log.clear()
+            o.gezegd.append({"id": len(o.gezegd) + 40, "ts": "2026-10-31T11:00", "tekst": "nog iets?", "antwoord": ""})
+            nep = NepAbonnement(fout=CA.Fout("Claude via het abonnement: 401 voor Klant Omega", soort))
+            r = NepRonde()
+            M.werk(r, nu=MIDDAG_UTC, map_=o.map, gezegd=lambda nu: list(o.gezegd), kern=lambda: list(KERN),
+                   claude=lambda s, i: M.vraag_claude(s, i, route="abonnement", vraag=nep), zet=o.zet, lees=o.lees,
+                   staatpad=o.staat)
+            assert M.ag._log and not any("Omega" in x["tekst"] for x in M.ag._log), (soort, M.ag._log)
+            assert "Omega" not in r.detail and not any("Omega" in n for n, _ in r.noden), (soort, r.detail, r.noden)
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_doorgever_met_de_vlag_uit_raakt_het_bord_niet():
+    """Codex toets 1, bezwaar 2: met de vlag uit leest, zet en neemt De Doorgever niets, ook niet wat al weg was."""
+    oud = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-20T06:20:00+00:00"}
+    staat = {"taken": {"t-1": dict(_agenttaak("t-1"), doorgegeven=dict(oud)), "t-2": _agenttaak("t-2")}, "afgerond": []}
+    voor = json.dumps(staat, sort_keys=True)
+
+    def nooit(*a, **k):
+        raise AssertionError("bord geraakt met de vlag uit")
+
+    besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=nooit, lees=nooit, pak=nooit,
+                                     ontvangers={"zoom-wacht": "zoekt een opname"}, aan=False)
+    assert json.dumps(staat, sort_keys=True) == voor and sum(telling.values()) == 0
+    assert [(b["id"], b["naar"]) for b in besluiten] == [("t-2", "zoom-wacht")]          # alleen: zou naar
+
+
+def test_taak_uit_een_priveblok_of_priveregel_gaat_nooit_naar_een_ander():
+    """Codex toets 1, bezwaar 3: de bron telt, ook als het woord privé niet in de taak zelf staat."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n\n## Over deze vaststelling")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    assert M.bron_prive("2 uur aan tekening Proefplan", bundels)
+    assert M.bron_prive("18:00 privégesprek", bundels) and M.bron_prive("14:00 (privé): geen spoor", bundels)
+    assert not M.bron_prive("16:10 telefoon met Klant Omega", bundels)
+    staat, telling, _ = M.verwerk(antwoord([taak("Zoek de tekening op", "2 uur aan tekening Proefplan", voor="agent",
+                                                 wie="De Zoomwacht"),
+                                            taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega",
+                                                 voor="collega", wie="Zeta")]),
+                                  M.laad_staat("/nergens/staat.json"), bundels, [], KERN, AGENTS, OCHTEND_UTC)
+    per = {t["tekst"]: t for t in staat["taken"].values()}
+    assert per["Zoek de tekening op"]["voor"] == "mehdi" and per["Zoek de tekening op"]["prive"] is True
+    assert per["Bel Klant Omega terug"]["voor"] == "collega" and not per["Bel Klant Omega terug"].get("prive")
+    assert telling["prive_bij_mehdi"] >= 1
+    t = per["Zoek de tekening op"]
+    t["voor"], t["wie"] = "agent", "De Zoomwacht"           # ook als het later toch bij een agent staat: nooit weg
+    (b,) = [b for b in M.doorgeef_besluiten(staat, AGENTS, bundels, (), {"zoom-wacht": "zoekt"}, aan=True)
+            if b["id"] == t["id"]]
+    assert b == {"id": t["id"], "naar": "", "besluit": "blijft bij Mehdi: privé"}
+
+
+def test_doorgever_een_onvolledig_bordantwoord_beslist_niets():
+    """Codex toets 1, bezwaar 4: {} of {"items": null} is geen lege lijst."""
+    for antwoord_bord in ({}, {"items": None}, {"items": "x"}, None):
+        try:
+            M.klaarzet_items(antwoord_bord)
+            raise AssertionError(f"geen fout bij {antwoord_bord!r}")
+        except bord.BordOnbekend:
+            pass
+    assert M.klaarzet_items({"items": []}) == []
+    weg = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-20T06:20:00+00:00"}
+    for terug in (None, {}, "x"):
+        staat = {"taken": {"t-1": dict(_agenttaak("t-1"), doorgegeven=dict(weg))}, "afgerond": []}
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, BUNDELS, zet=None, lees=lambda uniek, terug=terug: terug,
+                                 pak=None, ontvangers={"zoom-wacht": "zoekt"}, aan=True)
+        assert telling == {"niet_gelezen": 1} and staat["taken"]["t-1"]["voor"] == "agent", (terug, telling)
+
+
+def test_doorgever_gaat_elke_bewaarde_taak_na_tegen_de_bundel_van_nu():
+    """Codex toets 2, bezwaar 1: een oude taak zonder privévlag, die Claude deze ronde wegliet, gaat niet weg als haar
+    bron privé is of niet meer in de bundel staat."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n\n## Over deze vaststelling")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    staat = {"taken": {"t-1": _agenttaak("t-1", bron="2 uur aan tekening Proefplan"),
+                       "t-2": _agenttaak("t-2", bron="12:00 Zoom, met Klant Psi, 30 min"),
+                       "t-3": _agenttaak("t-3")}, "afgerond": []}
+    o = Omgeving()
+    try:
+        besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, bundels, zet=o.zet, lees=o.lees, pak=None,
+                                         ontvangers={"zoom-wacht": "zoekt"}, aan=True)
+        assert {b["id"]: b["besluit"] for b in besluiten} == {
+            "t-1": "blijft bij Mehdi: privé", "t-2": "blijft bij Mehdi: bron niet meer na te gaan in de dagbundel",
+            "t-3": "gaat naar zoom-wacht"}
+        assert list(o.bord) == ["mehdi-agent:taak:t-3"] and telling == {"doorgegeven": 1}
+    finally:
+        o.weg()
+
+
+def test_een_gedeelde_projectnaam_maakt_een_gewone_taak_niet_prive():
+    """Codex toets 2, bezwaar 2: elk stuk van de bron moet in dezelfde privéregel of hetzelfde privéblok staan."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n\n## Over deze vaststelling").replace(
+        "Zeta tekent het plan.", "Zeta tekent het plan Proefplan.")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    assert not M.bron_prive("Zeta tekent het plan ... Proefplan", bundels)
+    assert not M.bron_prive("Zeta tekent het plan Proefplan", bundels)
+    assert M.bron_prive("2 uur aan tekening ... op de computer", bundels)
+    staat, _, _ = M.verwerk(antwoord([taak("Teken het plan", "Zeta tekent het plan ... Proefplan", voor="collega",
+                                           wie="Zeta")]), M.laad_staat("/nergens/staat.json"), bundels, [], KERN, AGENTS,
+                            OCHTEND_UTC)
+    (t,) = staat["taken"].values()
+    assert t["voor"] == "collega" and t["wie"] == "Proefpersoon Zeta" and not t.get("prive")
+
+
+def test_een_gemengde_bron_met_een_privestuk_gaat_nooit_weg():
+    """Codex toets 3: een openbaar stuk, een weglating en een stuk dat alleen in een privéblok staat. De herkomst telt per
+    stuk: een stuk dat alleen privé voorkomt, maakt de bron privé; een stuk dat ook openbaar staat, niet."""
+    bundel = DAGBESTAND.replace("## Over deze vaststelling", "## Eigen werk en gezondheid\n\n- 2 uur aan tekening Proefplan "
+                                "op de computer\n- slaap 5 uur, rustpols hoog\n\n## Over deze vaststelling")
+    bundels = [{"dag": GISTEREN, "dagbestand": bundel, "telling": TELLING}]
+    gemengd = "16:10 telefoon met Klant Omega ... slaap 5 uur, rustpols hoog"
+    assert M.bron_in(gemengd, M.corpus_van(bundels, [])) and M.bron_prive(gemengd, bundels)
+    assert M.herkomst("16:10 telefoon met Klant Omega ... slaap 5 uur", bundels) == ["publiek", "prive"]
+    assert M.herkomst("Zeta tekent het plan ... tekening Proefplan", bundels) == ["publiek", "prive"]
+    assert M.herkomst("rustpols hoog\n\n## Over deze vaststelling", bundels) == ["prive"]   # over een kop heen: privé
+    assert M.herkomst("Bel Proefpersoon Eta morgen", bundels, [{"tekst": "Bel Proefpersoon Eta morgen"}]) == ["mehdi"]
+    assert M.herkomst("verzonnen bron die nergens staat", bundels) == [""]
+    assert M.herkomst("op de computer - slaap 5 uur", bundels) == ["prive"]               # twee regels van een privéblok
+    assert M.herkomst("(auto ter plaatse) - 14:00", bundels) == ["prive"]                  # over een privéregel heen
+    o = Omgeving()
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1", bron=gemengd)}, "afgerond": []}
+        besluiten, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, bundels, zet=o.zet, lees=o.lees, pak=None,
+                                         ontvangers={"zoom-wacht": "zoekt"}, aan=True)
+        assert [b["besluit"] for b in besluiten] == ["blijft bij Mehdi: privé"] and o.bord == {} and not telling
+        staat, _, _ = M.verwerk(antwoord([taak("Zoek het op", gemengd, voor="agent", wie="De Zoomwacht")]),
+                                M.laad_staat("/nergens/staat.json"), bundels, [], KERN, AGENTS, OCHTEND_UTC)
+        (t,) = staat["taken"].values()
+        assert t["voor"] == "mehdi" and t["prive"] is True
+    finally:
+        o.weg()
+
+
+def test_doorgever_alleen_de_ontvanger_zelf_is_beweging():
+    """Codex toets 2, bezwaar 3: opgepakt door Mehdi, een andere agent of zonder naam is geen beweging van de ontvanger."""
+    weg = {"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-1", "ts": "2026-10-31T06:20:00+00:00"}
+    for door, beweging in (("zoom-wacht", True), ("zoom-wacht: opname gevonden", True), ("mehdi (op het bord)", False),
+                           ("plaud-wacht", False), ("", False), (None, False), ("mehdi-agent", False),
+                           ("zoom-wachter", False)):
+        assert M.door_ontvanger(door, "zoom-wacht") is beweging, door
+        staat = {"taken": {"t-1": dict(_agenttaak("t-1"), doorgegeven=dict(weg))}, "afgerond": []}
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, BUNDELS, zet=None, pak=None, ontvangers={"zoom-wacht": "x"},
+                                 aan=True, lees=lambda uniek, door=door: [{"id": 3, "status": "opgepakt",
+                                                                           "opgepakt_door": door}])
+        t = staat["taken"]["t-1"]
+        if beweging:
+            assert telling == {"opgepakt_door_agent": 1} and t["doorgegeven"]["status"] == "opgepakt", (door, telling)
+        else:
+            assert telling == {"terug_naar_mehdi": 1} and t["voor"] == "mehdi", (door, telling)
+
+
+def test_droog_toont_per_taak_waar_ze_heen_zou_gaan():
+    import contextlib
+    import io
+    d = tempfile.mkdtemp(prefix="mehdi-agent-droog-")
+    gisteren = M.dagen_terug(datetime.now(timezone.utc))[1]
+    os.makedirs(os.path.join(d, gisteren[:4]))
+    with open(os.path.join(d, gisteren[:4], f"{gisteren}.md"), "w", encoding="utf-8") as f:
+        f.write(DAGBESTAND)
+    oud = (M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas)
+    M.DAGBOEK, M.STAAT = d, os.path.join(d, "staat.json")
+    M.collegas_kern, M.wat_mehdi_zei, bord.collegas = (lambda: list(KERN)), (lambda nu: []), (lambda zonder=None: AGENTS)
+    M.vraag_claude = lambda system, inhoud: (antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega"),
+                                                       dict(ZOOM_TAAK, dag=gisteren)]), {})
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = M.droog(["mehdi_agent.py", "--droog", "--zaad", "--moment", "ochtend", "--stil"])
+        tekst = buf.getvalue()
+        assert code == 0 and "Omega" not in tekst, tekst
+        assert "(droog) 1. mehdi, normaal, begint met 'Bel'" in tekst and "blijft bij Mehdi: eigen taak" in tekst, tekst
+        assert "blijft bij Mehdi: zoom-wacht staat niet op de witte lijst" in tekst, tekst
+    finally:
+        M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas = oud
         M.ag._log.clear()
         shutil.rmtree(d, ignore_errors=True)
 

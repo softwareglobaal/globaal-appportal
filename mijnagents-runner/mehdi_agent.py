@@ -25,8 +25,12 @@ Wat ik doe, op de uren van UREN (Brussel; de cron draait elk uur op :20, plannin
      taken), 's ochtends "Te doen vandaag" en 's avonds "Avondoverzicht" (soort verslag; De Bode bundelt die), en lees
      elk item terug van het bord.
 Lukt Claude niet, dan blijft de lijst van de vorige ronde staan, met een nood.
+Claude via de API (standaard) of, met MEHDI_AGENT_ROUTE=abonnement, op het Claude-abonnement van Mehdi zonder
+API-sleutel (koppelingen/claude_abonnement.py, ANGEL-3); die keuze is van Mehdi (werkstand T-0122).
 
-Ik verstuur nooit zelf iets: een concept blijft een concept tot Mehdi het zelf stuurt.
+Ik verstuur nooit zelf iets: een concept blijft een concept tot Mehdi het zelf stuurt. Met MEHDI_AGENT_DOORGEVEN=aan
+zet ik een taak voor een agent op de witte lijst ONTVANGERS ook bij die agent klaar, als voorstel (De Doorgever,
+ANGEL-9); de vlag staat uit en de lijst is leeg tot Mehdi per soort taak kiest.
 
 Draaien: python3 mehdi_agent.py                         (een ronde, als het uur in UREN valt)
          python3 mehdi_agent.py --nu                    (een ronde, ook buiten UREN)
@@ -53,7 +57,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import organisatie  # noqa: E402
-import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
+import claude_abonnement  # noqa: E402  alleen met MEHDI_AGENT_ROUTE=abonnement (ANGEL-3); start niets bij import
 
 NAAM = "mehdi-agent"
 ag = bord.Agent(NAAM)
@@ -62,6 +66,10 @@ DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.environ.get("MEHDI_AGENT_DAGBOEK", os.path.join(DATA, "dagboek"))
 STAAT = os.environ.get("MEHDI_AGENT_STAAT", os.path.join(DATA, "mehdi-agent", "staat.json"))
 MODEL = os.environ.get("MEHDI_AGENT_MODEL", "claude-opus-5-5")
+# "api" (wat nu draait) of "abonnement": Claude op het abonnement van Mehdi, zoals De Prijsonderzoeker (ANGEL-3 en VOL-17
+# van T-0120). De standaard blijft de API tot Mehdi kiest (werkstand T-0122); het model op het abonnement kiest
+# ABONNEMENT_MODEL (koppelingen/claude_abonnement.py).
+ROUTE = os.environ.get("MEHDI_AGENT_ROUTE", "api")
 # Twintig minuten na de rondes van De Dagbundelaar (driehoeksoverleg Dagboek compleet, P5). De VM loopt in UTC en
 # Debian-cron kent geen tijdzone: de cron draait elk uur en ik kijk zelf of het een van deze uren is in Brussel.
 UREN = tuple(int(u) for u in os.environ.get("MEHDI_AGENT_UREN", "7,10,13,16,19,22").split(",") if u.strip())
@@ -75,12 +83,23 @@ OUD_DAGEN = 14          # een open taak die zo lang niet bijgewerkt werd, verval
 MAX_AFGEROND = 100
 MAX_GELEERD = 30
 OCHTEND = (7, 12)       # de eerste ronde tussen 07:00 en 12:00 (Brussel) is de ochtend
-AVOND = 19              # de eerste ronde vanaf 19:00 is de avond
+AVOND = 16              # de eerste ronde vanaf 16:00 is de avond: zo zit het avondoverzicht in de avondbundel
+                        # van De Bode om 17:00 (bode.py, AVOND_VANAF; ANGEL-4)
+# De Doorgever (ANGEL-9, M10 van T-0120): een taak voor een agent zet ik zelf bij die agent klaar, als voorstel, maar alleen
+# met MEHDI_AGENT_DOORGEVEN=aan en bij een ontvanger op de witte lijst. Beide kiest Mehdi per soort taak (werkwijze, Wat
+# Mehdi beslist); tot dan staat de vlag uit en is de lijst leeg. Een ontvanger komt er pas op als zijn eigen code een taak
+# van mehdi-agent aanneemt: De Agendawacht neemt nu alleen taken van De Werfverslag voorbereider aan (agenda_wacht.py,
+# terugkijktaken), en De Plaudwacht leest elke taak als een eigen opdracht.
+DOORGEVEN = os.environ.get("MEHDI_AGENT_DOORGEVEN", "uit") == "aan"
+ONTVANGERS = {}         # naam van de agent op het bord: wat hij van mij aanneemt, bv. "agenda-wacht": "zet bezoek in agenda"
+MAX_DOORGEVEN = 5       # nieuwe doorgaven per ronde
+STIL_DAGEN = 3          # zo lang mag een doorgegeven taak onopgepakt liggen; dan gaat ze terug naar Mehdi
 VOOR = ("mehdi", "collega", "agent")
 PRIORITEIT = ("hoog", "normaal", "laag")
 STATUS = ("open", "gedaan", "vervallen")
 VELDEN = ("id", "tekst", "voor", "wie", "waarom", "bron", "dag", "prioriteit", "status", "concept")
 PRIVE = re.compile(r"priv[eé]", re.I)
+PRIVE_KOPPEN = ("eigen werk en gezondheid",)   # een blok van de dagbundel dat privé is, ook zonder het woord per regel
 DAGNAMEN = ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag")
 
 _TEKST = {"type": "string"}
@@ -289,10 +308,14 @@ def invoer(nu, m, bundels, staat, gezegd, kern):
     }
 
 
-def vraag_claude(system, inhoud, client=None):
+def vraag_claude(system, inhoud, client=None, route=None, vraag=None):
     """Een aanroep met een gestructureerd antwoord (json_schema), zoals weekconsolidatie.py. Een weigering of een afgekapt
-    antwoord is een gewoon antwoord met status 200: dat vang ik apart op, anders lijkt een leeg antwoord een rustige dag."""
+    antwoord is een gewoon antwoord met status 200: dat vang ik apart op, anders lijkt een leeg antwoord een rustige dag.
+    route (standaard ROUTE): "abonnement" gaat naar vraag_abonnement en raakt de API-sleutel nooit aan."""
+    if (route or ROUTE) == "abonnement":
+        return vraag_abonnement(system, inhoud, vraag)
     if client is None:
+        import sleutelbron  # de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064), alleen op de API-weg
         sleutelbron.zet_anthropic()
         from anthropic import Anthropic
         client = Anthropic()
@@ -314,6 +337,57 @@ def vraag_claude(system, inhoud, client=None):
     return json.loads(tekst), meta
 
 
+VORM = ("=== VORM VAN JE ANTWOORD ===\nAntwoord met precies een JSON-object volgens dit JSON-schema, zonder tekst ervoor of "
+        "erna. Elk veld is verplicht; een veld zonder inhoud is een lege tekst of een lege lijst.\n")
+
+
+def vraag_abonnement(system, inhoud, vraag=None):
+    """Dezelfde vraag op het abonnement van Mehdi (koppelingen/claude_abonnement.py), zonder gereedschap, zoals De
+    Prijsonderzoeker: het schema staat in de opdracht, het antwoord gaat door json.loads en schema_fout. Een
+    claude_abonnement.Fout (aanmelden, limiet) gaat ongewijzigd naar werk(): de lijst van de vorige ronde blijft staan.
+    vraag is te vervangen in een test."""
+    vraag = vraag or claude_abonnement.vraag
+    uit = vraag(system + "\n\n" + VORM + json.dumps(SCHEMA, ensure_ascii=False), json.dumps(inhoud, ensure_ascii=False),
+                tools=(), timeout=900, max_beurten=2)
+    meta = {"model": uit.get("model") or claude_abonnement.MODEL, "stop_reason": uit.get("stop") or "",
+            "tokens_in": int(uit.get("tokens") or 0), "tokens_uit": 0}
+    tekst = str(uit.get("tekst") or "").strip()
+    blok = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", tekst, re.S)     # een codeblok rond het object mag
+    try:
+        obj = json.loads(blok.group(1) if blok else tekst)
+    except ValueError:
+        raise RuntimeError(f"antwoord van het abonnement is geen JSON ({len(tekst)} tekens)") from None
+    fout = schema_fout(obj, SCHEMA)
+    if fout:
+        raise RuntimeError(f"antwoord van het abonnement past niet in het schema: {fout}")
+    return obj, meta
+
+
+def schema_fout(w, s, pad="antwoord"):
+    """De eerste plek waar w niet in het strikte schema s past (object, array, string en enum, zoals SCHEMA), of "".
+    Zonder de waarde zelf: die kan een naam dragen, en de melding komt in het werkverslag."""
+    soort = s.get("type")
+    if soort == "object":
+        if not isinstance(w, dict):
+            return f"{pad}: geen object"
+        velden = s.get("properties") or {}
+        for k in s.get("required") or ():
+            if k not in w:
+                return f"{pad}.{k}: ontbreekt"
+        if s.get("additionalProperties") is False and set(w) - set(velden):
+            return f"{pad}: {len(set(w) - set(velden))} velden die het schema niet kent"
+        return next((f for k, sub in velden.items() if k in w for f in [schema_fout(w[k], sub, f"{pad}.{k}")] if f), "")
+    if soort == "array":
+        if not isinstance(w, list):
+            return f"{pad}: geen lijst"
+        return next((f for i, x in enumerate(w) for f in [schema_fout(x, s.get("items") or {}, f"{pad}[{i}]")] if f), "")
+    if soort == "string":
+        if not isinstance(w, str):
+            return f"{pad}: geen tekst"
+        return f"{pad}: geen toegelaten waarde" if "enum" in s and w not in s["enum"] else ""
+    return f"{pad}: soort {soort} kent de controle niet"
+
+
 # ----------------------------------------------------------------------------------------- controleren ---
 def normaal(t):
     """Voor het vergelijken: kleine letters, zonder opmaak- en aanhalingstekens, een spatie tussen woorden."""
@@ -322,15 +396,68 @@ def normaal(t):
     return re.sub(r"\s+", " ", t).strip()
 
 
+def _stukken(bron):
+    bron = re.sub(r"^\s*\d{4}-\d{2}-\d{2}\s*[,:;-]?\s*", "", str(bron or ""))
+    stukken = [normaal(s).strip(" .,:;-") for s in re.split(r"\.\.\.|…", bron)]
+    stukken = [s[2:] if s.startswith("- ") else s for s in stukken]
+    return [s for s in stukken if len(s) >= 6]
+
+
+def corpus_van(bundels, gezegd):
+    """Waar een bron letterlijk in moet staan: de dagbundel (tekst en telling) en Mehdi's woorden, genormaliseerd."""
+    return normaal(" \n ".join([b["dagbestand"] + " " + json.dumps(b["telling"], ensure_ascii=False) for b in bundels]
+                               + [g["tekst"] for g in gezegd or []]))
+
+
 def bron_in(bron, corpus):
     """Staat de bron letterlijk in de bundel of in Mehdi's woorden? Een datum vooraan (de dag staat al apart) en een
     lijstteken tellen niet mee. Een weglating (... of het teken voor drie puntjes) mag: dan moet elk stuk van minstens
     zes tekens erin staan."""
-    bron = re.sub(r"^\s*\d{4}-\d{2}-\d{2}\s*[,:;-]?\s*", "", str(bron or ""))
-    stukken = [normaal(s).strip(" .,:;-") for s in re.split(r"\.\.\.|…", bron)]
-    stukken = [s[2:] if s.startswith("- ") else s for s in stukken]
-    stukken = [s for s in stukken if len(s) >= 6]
+    stukken = _stukken(bron)
     return bool(stukken) and all(s in corpus for s in stukken)
+
+
+def _openbare_stukken(dagbestand):
+    """De openbare tekst van een dagbestand, als losse stukken: een reeks opeenvolgende regels zonder privé binnen een
+    blok, genormaliseerd. Privé is een regel met privé, of een blok met privé in de kop of Eigen werk en gezondheid."""
+    uit, kop_prive, reeks = [], False, []
+    for regel in dagbestand.splitlines() + ["## einde"]:
+        prive = kop_prive or bool(PRIVE.search(regel))
+        if regel.startswith("## ") or prive:
+            if reeks:
+                uit.append(normaal(" ".join(reeks)))
+            reeks = []
+            if regel.startswith("## "):
+                kop = normaal(regel[3:])
+                kop_prive = bool(PRIVE.search(kop)) or kop.startswith(PRIVE_KOPPEN)
+                if not kop_prive:
+                    uit.append(kop)
+            continue
+        reeks.append(regel)
+    return uit
+
+
+def herkomst(bron, bundels, gezegd=()):
+    """Per stuk van de bron waar het vandaan komt (Codex, toetsen 1 tot 3 van T-0120): "publiek" als het in een openbaar
+    stuk van de dagbundel staat (ook als het daarnaast in een privéblok staat: dan is die tekst al openbaar), "prive" als
+    het verder alleen in het dagbestand staat (in een privéregel of -blok, of over een privéregel of een kop heen),
+    "mehdi" als het uit Mehdi's woorden komt, "publiek" ook voor de telling, en "" als het nergens staat."""
+    openbaar = [s for b in bundels for s in _openbare_stukken(b["dagbestand"])]
+    heel = [normaal(b["dagbestand"]) for b in bundels]
+    telling = [normaal(json.dumps(b["telling"], ensure_ascii=False)) for b in bundels]
+    woorden = [normaal(g.get("tekst")) for g in gezegd or []]
+    uit = []
+    for s in _stukken(bron):
+        uit.append("publiek" if any(s in x for x in openbaar) else "prive" if any(s in x for x in heel)
+                   else "mehdi" if any(s in x for x in woorden) else "publiek" if any(s in x for x in telling) else "")
+    return uit
+
+
+def bron_prive(bron, bundels):
+    """Is een stuk van de bron privé (herkomst)? Dan is de taak privé, ook als het woord niet in de taak zelf staat. Op
+    elke dag van de bundel: een verkeerde dag van het model mag een privébron niet verbergen; wat zo te veel privé wordt,
+    blijft alleen bij Mehdi in zijn eigen lijst."""
+    return "prive" in herkomst(bron, bundels)
 
 
 def zoek_collega(wie, kern):
@@ -360,6 +487,17 @@ def zoek_agent(wie, agents):
     return None
 
 
+def agent_naam(wie, agents):
+    """De naam op het bord (voor klaarzet) van de agent die zoek_agent herkent, op naam of label; anders None."""
+    w = _zonder_lidwoord(wie)
+    if not w:
+        return None
+    for a in agents or []:
+        if w in (_zonder_lidwoord(a.get("naam")), _zonder_lidwoord(a.get("label"))):
+            return a.get("naam") or None
+    return None
+
+
 def _datum(s, standaard):
     s = str(s or "").strip()[:10]
     return s if re.match(r"^\d{4}-\d{2}-\d{2}$", s) else standaard
@@ -370,8 +508,7 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
     staat = json.loads(json.dumps(staat))
     taken, afgerond = staat["taken"], staat["afgerond"]
     nummers = staat.get("nummers") or {}
-    corpus = normaal(" \n ".join([b["dagbestand"] + " " + json.dumps(b["telling"], ensure_ascii=False) for b in bundels]
-                                 + [g["tekst"] for g in gezegd or []]))
+    corpus = corpus_van(bundels, gezegd)
     nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
     laatste_dag = bundels[0]["dag"] if bundels else brussel(nu).date().isoformat()
     al_af = {t.get("id") for t in afgerond}
@@ -421,7 +558,10 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
         if voor != "mehdi" and not wie:
             telling["onbekend_wie"] += 1                    # bestaat niet in kern of op het bord: dan is het voor Mehdi
             voor = "mehdi"
-        if voor != "mehdi" and PRIVE.search(" ".join((oud.get("bron", ""), t["bron"], t["tekst"], t["waarom"]))):
+        if oud.get("prive") or PRIVE.search(" ".join((oud.get("bron", ""), t["bron"], t["tekst"], t["waarom"]))) \
+                or bron_prive(oud.get("bron"), bundels) or bron_prive(t["bron"], bundels):
+            oud["prive"] = True                             # blijft zo, ook als de bundel van die dag niet meer leest
+        if voor != "mehdi" and oud.get("prive"):
             telling["prive_bij_mehdi"] += 1                 # privé gaat nooit naar een ander
             voor, wie = "mehdi", ""
         oud.update(tekst=t["tekst"][:300], voor=voor, wie=wie, waarom=t["waarom"][:300],
@@ -489,6 +629,10 @@ def lijst(staat, nu, ontbreekt=()):
             regels.append(f"   Bron: {t.get('dag', '')}, {_inspring(t.get('bron', ''))}")
             if t.get("concept"):
                 regels.append(f"   Concept: {_inspring(t['concept'])}")
+            if t.get("doorgegeven"):
+                weg = t["doorgegeven"]
+                regels.append(f"   Doorgegeven aan {weg['naar']} op {_brusselse_dag(weg.get('ts'))}, als voorstel ("
+                              + ("opgepakt" if weg.get("status") == "opgepakt" else "wacht") + ")")
     if not nr:
         regels += ["", "Geen open taken."]
     af = [t for t in staat.get("afgerond", []) if t.get("reden") not in ("te lang open zonder nieuws", "lijst te lang")
@@ -549,6 +693,138 @@ def klaarzetten(te_zetten, nu, zet=None, lees=None):
     return antwoord, fout
 
 
+# ------------------------------------------------------------------------------------------- doorgeven ---
+def klaarzet_items(antwoord):
+    """De items uit een antwoord van /api/klaarzet. Zonder lijst is het bord onbekend, niet leeg (Codex, toets 1)."""
+    items_ = antwoord.get("items") if isinstance(antwoord, dict) else None
+    if not isinstance(items_, list):
+        raise bord.BordOnbekend("klaarzet: antwoord zonder lijst van items")
+    return items_
+
+
+def doorgeef_besluiten(staat, agents, bundels, gezegd=(), ontvangers=None, aan=None):
+    """Per open taak voor een agent die nog niet weg is, wat De Doorgever ermee doet: [{id, naar, besluit}]. naar is de
+    agent als de taak deze ronde weggaat (met de vlag uit: zou weggaan), anders leeg. Elke bewaarde taak gaat opnieuw
+    langs de bundel van nu, ook een oude die Claude deze ronde wegliet: is een stuk van de bron privé of niet meer na te
+    gaan (herkomst), dan blijft ze bij Mehdi (Codex, toetsen 2 en 3). Zet niets (droog en test)."""
+    ontvangers = ONTVANGERS if ontvangers is None else ontvangers
+    aan = DOORGEVEN if aan is None else aan
+    uit, n = [], 0
+    for t in open_taken(staat):
+        if t.get("voor") != "agent" or t.get("doorgegeven"):
+            continue
+        naam = agent_naam(t.get("wie"), agents)
+        h = herkomst(t.get("bron"), bundels, gezegd)
+        if t.get("prive") or PRIVE.search(" ".join(str(t.get(k) or "") for k in ("tekst", "bron", "waarom", "concept"))) \
+                or "prive" in h:
+            reden = "privé"                              # privé gaat nooit naar een ander
+        elif t.get("teruggekomen"):
+            reden = "ging al eens terug"                 # een agent liet ze liggen: nu is ze van Mehdi
+        elif not h or "" in h:
+            reden = "bron niet meer na te gaan in de dagbundel"   # elk stuk moet openbaar of van Mehdi zijn
+        elif not naam:
+            reden = "de agent staat niet op het bord"
+        elif naam not in ontvangers:
+            reden = f"{naam} staat niet op de witte lijst"
+        elif n >= MAX_DOORGEVEN:
+            reden = f"hoogstens {MAX_DOORGEVEN} per ronde"
+        else:
+            n += 1
+            uit.append({"id": t["id"], "naar": naam,
+                        "besluit": f"gaat naar {naam}" if aan else f"zou naar {naam} (doorgeven staat uit)"})
+            continue
+        uit.append({"id": t["id"], "naar": "", "besluit": f"blijft bij Mehdi: {reden}"})
+    return uit
+
+
+def door_ontvanger(door, naar):
+    """Pakte de bedoelde ontvanger het item op? Agents zetten hun naam als opgepakt_door, soms met een toevoeging na een
+    dubbele punt. Mehdi, een andere agent, ik zelf of geen naam is geen beweging van de ontvanger (Codex, toets 2)."""
+    door = str(door or "").strip()
+    return bool(naar) and (door == naar or door.startswith(f"{naar}:"))
+
+
+def doorgeven(staat, nu, agents, bundels, gezegd=(), zet=None, lees=None, pak=None, ontvangers=None, aan=None):
+    """De Doorgever (ANGEL-9). Eerst wat al weg is teruglezen: opgepakt is beweging. Ligt het na STIL_DAGEN nog klaar, of
+    staat het niet meer klaar, dan neem ik het item terug (opgepakt door mij, zodat het niet dubbel gebeurt) en is de taak
+    weer voor Mehdi. Is de taak intussen afgerond of niet meer voor die agent (Mehdi of het model veranderde ze), dan
+    neem ik het item meteen terug. Dan, met de vlag aan, de nieuwe: soort taak, uniek mehdi-agent:taak:<id>, als voorstel,
+    en teruglezen. Een bord dat niet antwoordt, beslist niets (onbekend is niet leeg). Verandert de staat ter plaatse;
+    geeft (besluiten, telling)."""
+    ontvangers = ONTVANGERS if ontvangers is None else ontvangers
+    aan = DOORGEVEN if aan is None else aan
+    zet = zet or ag.klaarzet
+    if not aan:
+        # vlag uit: geen bordhandeling, ook niet voor wat al weg was (dat blijft staan tot de vlag weer aan staat)
+        return doorgeef_besluiten(staat, agents, bundels, gezegd, ontvangers, aan), Counter()
+    lees = lees or (lambda uniek: klaarzet_items(bord.call(
+        "/api/klaarzet?" + urllib.parse.urlencode({"uniek": uniek, "status": "alle"}))))
+    pak = pak or (lambda kid: bord.opgepakt(kid, NAAM))
+    nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
+    grens = (nu - timedelta(days=STIL_DAGEN)).astimezone(timezone.utc).isoformat(timespec="seconds")
+    telling = Counter()
+    taken = staat.get("taken", {})
+    for t in list(taken.values()) + list(staat.get("afgerond") or []):
+        weg = t.get("doorgegeven")
+        if not weg or weg.get("status") in ("opgepakt", "ingetrokken"):
+            continue
+        open_ = taken.get(t.get("id")) is t
+        nog_voor = open_ and t.get("voor") == "agent" and agent_naam(t.get("wie"), agents) == weg["naar"]
+        try:
+            terug = lees(weg["uniek"])
+            if not isinstance(terug, list) or not all(isinstance(x, dict) for x in terug):
+                raise bord.BordOnbekend("klaarzet: geen lijst van items")
+            if any(x.get("status") == "opgepakt" and door_ontvanger(x.get("opgepakt_door"), weg["naar"]) for x in terug):
+                weg["status"] = "opgepakt"
+                telling["opgepakt_door_agent"] += 1
+                continue
+            klaar = [x for x in terug if x.get("status") == "klaar"]
+            if klaar and nog_voor and weg.get("ts", "") > grens:
+                continue                                 # ligt nog klaar, binnen de termijn
+            for x in klaar:
+                pak(x["id"])
+        except Exception:  # noqa: BLE001  bord onbekend: volgende ronde opnieuw
+            telling["niet_gelezen"] += 1
+            continue
+        if not nog_voor:                                 # afgerond of niet meer voor die agent: alleen terugnemen
+            if open_:                                    # en niet opnieuw weg: het uniek item is van mij opgepakt
+                t["teruggekomen"] = sorted(set(t.get("teruggekomen") or []) | {weg["naar"]})
+                del t["doorgegeven"]
+            else:
+                weg["status"] = "ingetrokken"
+            telling["ingetrokken"] += 1
+            continue
+        t.update(voor="mehdi", wie="", bijgewerkt=nu_s,
+                 waarom=(f"{weg['naar']} pakte ze niet op binnen {STIL_DAGEN} dagen. " + str(t.get("waarom") or ""))[:300])
+        t["teruggekomen"] = sorted(set(t.get("teruggekomen") or []) | {weg["naar"]})
+        del t["doorgegeven"]
+        telling["terug_naar_mehdi"] += 1
+    besluiten = doorgeef_besluiten(staat, agents, bundels, gezegd, ontvangers, aan)
+    nieuw = []
+    for b in besluiten:
+        t = staat["taken"].get(b["id"]) if b["naar"] else None
+        if t:
+            nieuw.append({"voor": b["naar"], "soort": "taak", "sleutel": t["id"], "uniek": f"{NAAM}:taak:{t['id']}",
+                          "titel": f"Voorstel van Ai Angel, taak {t['id']}",
+                          "inhoud": json.dumps({"voorstel": True, "wat": ontvangers[b["naar"]], "taak": t["tekst"],
+                                                "waarom": t.get("waarom", ""), "bron": t.get("bron", ""),
+                                                "dag": t.get("dag", ""), "concept": t.get("concept", "")},
+                                               ensure_ascii=False)})
+    if nieuw:
+        try:
+            zet(nieuw)
+            for it in ag.maskeer(nieuw):
+                if any(x.get("inhoud") == it["inhoud"] and x.get("voor") == it["voor"] and x.get("status") == "klaar"
+                       for x in lees(it["uniek"])):
+                    staat["taken"][it["sleutel"]]["doorgegeven"] = {"naar": it["voor"], "uniek": it["uniek"], "ts": nu_s}
+                    telling["doorgegeven"] += 1
+                else:
+                    telling["niet_gezet"] += 1
+        except Exception:  # noqa: BLE001  de taak blijft bij Mehdi in de lijst; de volgende ronde probeert opnieuw
+            telling["niet_gezet"] += len(nieuw) - telling["doorgegeven"]
+    return besluiten, telling
+
+
 # ------------------------------------------------------------------------------------------------- werk ---
 def werkverslag(m, bundels, telling, staat, meta, overgeslagen=False):
     """Alleen aantallen, nooit een naam of inhoud."""
@@ -557,15 +833,18 @@ def werkverslag(m, bundels, telling, staat, meta, overgeslagen=False):
     dagen = ", ".join(b["dag"] for b in bundels) or "geen"
     if overgeslagen:
         return f"{m}: niets nieuw in de dagbundel ({dagen}); {len(open_)} taken open"
+    doorgegeven = (f"; {telling.get('doorgegeven', 0)} doorgegeven, {telling.get('terug_naar_mehdi', 0)} terug naar Mehdi"
+                   if telling.get("doorgegeven") or telling.get("terug_naar_mehdi") else "")
     return (f"{m}: dagbundel {dagen}; {telling.get('nieuw', 0)} nieuw, {telling.get('bijgewerkt', 0)} bijgewerkt, "
             f"{telling.get('gedaan', 0)} gedaan, {telling.get('vervallen', 0)} vervallen, {telling.get('zonder_bron', 0)} "
             f"zonder bron geweigerd, {telling.get('onbekend_wie', 0)} naar Mehdi omdat de ontvanger onbekend was; "
             f"{len(open_)} open ({per.get('mehdi', 0)} voor Mehdi, {per.get('collega', 0)} voor een collega, "
-            f"{per.get('agent', 0)} voor een agent); {meta.get('tokens_in', 0) + meta.get('tokens_uit', 0)} tokens")
+            f"{per.get('agent', 0)} voor een agent){doorgegeven}; "
+            f"{meta.get('tokens_in', 0) + meta.get('tokens_uit', 0)} tokens")
 
 
 def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, lees=None, staatpad=None, kies_moment=None,
-         bewaar=True):
+         bewaar=True, doorgeef=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         # N2: zonder grenzen geen werk. De vaste vorm staat in bord.grenzen.
@@ -596,6 +875,7 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
     m = kies_moment or moment(nu, staat)
     vinger = vingerafdruk(bundels, gezegd_lijst)
     if m == "tussendoor" and vinger == staat.get("vingerafdruk"):
+        ag.log("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")   # anders alleen een hartslag (ANGEL-10)
         r.detail = werkverslag(m, bundels, Counter(), staat, {}, overgeslagen=True)
         return staat
     inhoud = invoer(nu, m, bundels, staat, gezegd_lijst, kern_lijst)
@@ -605,6 +885,16 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
     except Weigering as e:
         ag.log("claude", "fout", str(e)[:200])
         r.nood("Claude weigerde de takenlijst te maken", wie="claude-code")
+    except claude_abonnement.Fout as e:  # het abonnement (ANGEL-3): wacht tot het weer kan, zonder extra verbruik
+        # De tekst van de fout kan een stuk antwoord dragen (ook bij aanmelden): in het werkverslag alleen de soort, de
+        # tekst alleen in het cronlog op de VM, nooit op het bord.
+        ag.log("claude", "fout", f"abonnement: {e.soort or 'geen bruikbaar antwoord'} (de reden staat in het cronlog)")
+        print(f"abonnement: {str(e)[:300]}", file=sys.stderr)
+        tekst, wie = {"aanmelden": (claude_abonnement.AANMELDEN_NOOD, "mehdi"),
+                      "limiet": (claude_abonnement.LIMIET_NOOD, "mehdi"),
+                      "bron": (claude_abonnement.BRON_NOOD, "claude-code")}.get(
+                          e.soort, ("Claude niet bereikbaar voor de takenlijst", "claude-code"))
+        r.nood(tekst, wie=wie)
     except Exception as e:  # noqa: BLE001  netwerk, sleutel, limiet, onleesbaar antwoord: de lijst van gisteren blijft
         ag.log("claude", "fout", f"{type(e).__name__}: {str(e)[:200]}")
         r.nood("Claude niet bereikbaar voor de takenlijst", wie="claude-code")
@@ -616,6 +906,10 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         if ontbreekt:
             # alleen het aantal: de tekst kan een naam dragen, en die hoort niet in het werkverslag (werkwijze, nooit)
             ag.log("dagbundel", "bron", f"{len(ontbreekt)} punten gemist in de dagbundel; ze staan onderaan de takenlijst")
+    _, door = (doorgeef or doorgeven)(staat, nu, r.collegas, bundels, gezegd_lijst)   # De Doorgever (ANGEL-9)
+    telling.update(door)
+    if door.get("niet_gelezen") or door.get("niet_gezet"):
+        r.nood("Een doorgegeven taak staat niet zo op het bord", wie="claude-code")
     te_zetten, nummers = items(staat, nu, m, uit, ontbreekt)
     antwoord, fout = klaarzetten(te_zetten, nu, zet=zet, lees=lees)
     if fout:
@@ -668,8 +962,24 @@ def droog(argv):
         gezet.extend(its)
         return {"nieuw": len(its)}
 
+    besluiten = {}
+
+    def doorgeef(staat, nu, agents, bundels, gezegd):
+        # droog: niets doorgeven of terugnemen, alleen zeggen wat er zou gebeuren (ANGEL-9)
+        besluiten.update({b["id"]: b["besluit"] for b in doorgeef_besluiten(staat, agents, bundels, gezegd)})
+        return [], Counter()
+
     staat = werk(d, zet=zet, lees=lambda uniek: [x for x in ag.maskeer(gezet) if x["uniek"] == uniek],
-                 kies_moment=m, bewaar=False)
+                 kies_moment=m, bewaar=False, doorgeef=doorgeef)
+
+    def besluit(t):
+        if t["id"] in besluiten:
+            return besluiten[t["id"]]
+        if t.get("doorgegeven"):
+            return f"al doorgegeven aan {t['doorgegeven']['naar']}"
+        return "blijft bij Mehdi: " + ("voor een collega, Mehdi stuurt het zelf" if t.get("voor") == "collega"
+                                       else "eigen taak")
+
     if staat is None:
         print(f"(droog) {d.detail}")
         return 1
@@ -688,9 +998,11 @@ def droog(argv):
         for nr, tid in sorted(staat.get("nummers", {}).items(), key=lambda x: int(x[0])):
             t = staat["taken"][tid]
             print(f"(droog) {nr}. {t['voor']}, {t['prioriteit']}, begint met '{t['tekst'].split()[0]}', "
-                  f"concept {'ja' if t.get('concept') else 'nee'}, bron {len(t.get('bron', ''))} tekens")
+                  f"concept {'ja' if t.get('concept') else 'nee'}, bron {len(t.get('bron', ''))} tekens, {besluit(t)}")
     else:
         print(volledig)
+        for nr, tid in sorted(staat.get("nummers", {}).items(), key=lambda x: int(x[0])):
+            print(f"(droog) doorgeven {nr}: {besluit(staat['taken'][tid])}")
     print(f"(droog) {d.detail}")
     return 0
 
