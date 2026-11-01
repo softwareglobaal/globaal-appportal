@@ -114,6 +114,18 @@ md = vb._md(voorbeeld_verslag, s_ak, rij)
 check("_md schrapt opname (S4), eurobedrag (S6) en verjaard (S7)",
       "00:14:20" not in md and "3.200" not in md and "verjaard" not in md and "code UN" in md and "waterinsijpeling" in md, md)
 check("_md muteert het invoer-dict niet", "3.200" in voorbeeld_verslag["hoofdstukken"][1]["punten"][0]["tekst"])
+check("_md laat geen stuk van het bedrag staan (V14: de punt in 3.200 knipt de zin niet)", "200." not in md.replace("3.200", ""), md)
+
+# V14: de punt van het duizendtal knipt de zin niet; het hele bedrag gaat weg
+for zin in ("De herstelling kost ongeveer 4.500 euro.", "Herstel kost € 3.200.", "De vraagprijs van 1.250.000 euro is hoog."):
+    t14, ing14 = S.toepassen(zin, profiel="aankoopkeuring")
+    check(f"V14 S6 schrapt de hele zin '{zin[:34]}'", t14 == S.MARKERING.format(regel="S6") and ing14 == [("S6", zin)], (t14, ing14))
+t14, _ = S.toepassen("Zichtbare waterinsijpeling aan de dakrand. Herstel kost € 3.200.", profiel="aankoopkeuring")
+check("V14 geen restbedrag achter de markering", t14 == "Zichtbare waterinsijpeling aan de dakrand. " + S.MARKERING.format(regel="S6"), t14)
+# V16: ook 'verjaring' is S7
+t16, ing16 = S.toepassen("Het bouwmisdrijf is door verjaring gedekt.", profiel="aankoopkeuring")
+check("V16 S7 'verjaring' geschrapt", [r for r, _ in ing16] == ["S7"], (t16, ing16))
+check("V16 'verjaring' raakt een gewoon verslag niet", not S.controleer("Het bouwmisdrijf is door verjaring gedekt."))
 
 # 5. Eigen UNABO-nummering AK- buiten 46xxx in zoek_dossiermap (X5/K6)
 nep_mappen = [

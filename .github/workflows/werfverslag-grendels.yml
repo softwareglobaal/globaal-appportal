@@ -1,9 +1,9 @@
 name: werfverslag-grendels
 on:
   push:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents-runner/schrijfregels.py", "mijnagents-runner/docs/Werfverslagen - schrijfregels v1.0.md", "mijnagents-runner/sjabloon_*.py", "mijnagents-runner/verslag_pdf.py", "mijnagents-runner/aankoopkeuring_verslag.py", "mijnagents-runner/verslag_basis.py", "mijnagents-runner/koppelingen/verslagsoorten.py", "mijnagents-runner/werkwijze/aankoopkeuring-verslag.md", "mijnagents-runner/tests/test_schrijfregels.py", "mijnagents-runner/tests/test_aankoopkeuring.py", "mijnagents-runner/tests/test_werfherstel_2026.py", "mijnagents-runner/tests/test_verslag_pdf.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
   pull_request:
-    paths: ["mijnagents/app.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
+    paths: ["mijnagents/app.py", "mijnagents-runner/schrijfregels.py", "mijnagents-runner/docs/Werfverslagen - schrijfregels v1.0.md", "mijnagents-runner/sjabloon_*.py", "mijnagents-runner/verslag_pdf.py", "mijnagents-runner/aankoopkeuring_verslag.py", "mijnagents-runner/verslag_basis.py", "mijnagents-runner/koppelingen/verslagsoorten.py", "mijnagents-runner/werkwijze/aankoopkeuring-verslag.md", "mijnagents-runner/tests/test_schrijfregels.py", "mijnagents-runner/tests/test_aankoopkeuring.py", "mijnagents-runner/tests/test_werfherstel_2026.py", "mijnagents-runner/tests/test_verslag_pdf.py", "mijnagents/Dockerfile", "mijnagents/werf*.py", "mijnagents/test_werf*.py", "mijnagents/templates/werf*.html", "mijnagents-runner/werf*.py", "mijnagents-runner/koppelingen/werf*.py", "mijnagents-runner/koppelingen/bronnen.py", "mijnagents-runner/tests/test_werf*.py", "mijnagents-runner/mac/icloud_wacht.py", "mijnagents-runner/tests/test_icloud_status.py", "mijnagents-runner/werkwijze/werfverslag-*.md", "mijnagents-runner/werkwijze_naar_bord.py", ".github/workflows/werfverslag-grendels.yml"]
 jobs:
   werfketen:
     runs-on: ubuntu-latest
@@ -15,12 +15,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: pip install flask markdown pytest jsonschema pypdf
+      # Echte Word-, beeld- en PDF-afhankelijkheden: de sjablonen (python-docx), verslag_basis (pillow) en
+      # verslag_pdf (weasyprint, met pango uit apt) worden echt uitgevoerd, niet overgeslagen.
+      - run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
+      - run: pip install flask markdown pytest jsonschema pypdf 'python-docx==1.2.0' 'pillow>=12,<14' 'weasyprint==70.0'
       - run: python mijnagents/test_werfverwerking.py
       - run: python mijnagents/test_werf_frontend.py
       - run: python mijnagents/test_werfbezoek.py
       - run: python mijnagents-runner/tests/test_werfverslag_nummer.py
       - run: python mijnagents-runner/tests/test_werfverslag_bereik.py
+      - run: python mijnagents-runner/tests/test_schrijfregels.py
+      - run: python mijnagents-runner/tests/test_aankoopkeuring.py
+      - run: python mijnagents-runner/tests/test_verslag_pdf.py
       - run: python mijnagents-runner/tests/test_icloud_status.py
       - run: python mijnagents-runner/tests/test_werf_fotoproducent.py
       - run: python mijnagents-runner/tests/test_werf_cli_11.py
@@ -31,4 +37,5 @@ jobs:
       - run: python mijnagents-runner/tests/test_werf_derden_verslag.py
       - run: pytest -q mijnagents-runner/tests/test_werfketen_controles_11.py
       - run: pytest -q mijnagents-runner/tests/test_werf_agenda_bezoek_12.py
+      - run: pytest -q mijnagents-runner/tests/test_werfherstel_2026.py
       - run: pytest -q mijnagents-runner/tests/test_werfverslag_verwerking.py mijnagents-runner/tests/test_werfapp_brug.py

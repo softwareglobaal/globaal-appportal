@@ -185,5 +185,44 @@ with A.app.app_context():
     n = A.db().execute("SELECT COUNT(*) FROM voorstel WHERE naam='ontwikkelaar'").fetchone()[0]
 check("een voorstel zonder parameters (alleen een signaal) blijft zoals vroeger", n == 2, f"{n}")
 
+# 23-10-2026: Word en PDF van de proef met één klik, alleen de namen uit proef_info.bestanden, alleen uit de map van die rij
+leeg_db()
+c.post("/api/werfbezoek", json={"rijen": [rij(OUD)]}, headers=K)
+rid = rijen_db()[0]["id"]
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_pad", "proef_ts", "proef_info"], proef_pad="/x/2145-1 werfverslag (concept).docx",
+                                               proef_ts="2026-10-23", proef_info={"verslagtype": "werfverslag", "bestanden": {
+                                                   "docx": "2145-1 werfverslag (concept).docx", "pdf": "2145-1 werfverslag (concept).pdf"}})]}, headers=K)
+bm = os.path.join(os.path.dirname(A.DB_PAD), "werfbezoek", str(rid)); os.makedirs(bm, exist_ok=True)
+open(os.path.join(bm, "2145-1 werfverslag (concept).pdf"), "wb").write(b"%PDF-proef")
+open(os.path.join(bm, "geheim.txt"), "w").write("niet serveren")
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("bezoekpagina toont de knoppen Word en PDF", "Word downloaden" in pag and "PDF downloaden" in pag)
+r = c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER)
+check("PDF wordt als download geserveerd", r.status_code == 200 and r.data == b"%PDF-proef" and "attachment" in r.headers.get("Content-Disposition", ""), r.status_code)
+check("Word ontbreekt op schijf: 404, geen fout", c.get(f"/werfverslag/2145/1/bestand/docx?rij_id={rid}", headers=BEHEER).status_code == 404)
+check("ander bestand in de map is niet bereikbaar", c.get(f"/werfverslag/2145/1/bestand/txt?rij_id={rid}", headers=BEHEER).status_code == 404)
+check("zonder beheerrecht: 403", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}").status_code in (401, 403))
+
+# Vijfde review 26-10-2026: na een verhuisde projectmap draagt een rij met een ander id de proef; de bestanden staan nog in de
+# map van de rij die ze maakte (proef_info.bestanden.map)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag", "bestanden": {
+    "pdf": "2145-1 werfverslag (concept).pdf", "map": "999999"}})]}, headers=K)
+oud = os.path.join(os.path.dirname(A.DB_PAD), "werfbezoek", "999999"); os.makedirs(oud, exist_ok=True)
+open(os.path.join(oud, "2145-1 werfverslag (concept).pdf"), "wb").write(b"%PDF-oude-map")
+r = c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER)
+check("na een verhuizing komt de PDF uit de map van de rij die hem maakte", r.status_code == 200 and r.data == b"%PDF-oude-map", r.status_code)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag", "bestanden": {
+    "pdf": "2145-1 werfverslag (concept).pdf", "map": "../geheim"}})]}, headers=K)
+check("een map die geen rijnummer is: 404", c.get(f"/werfverslag/2145/1/bestand/pdf?rij_id={rid}", headers=BEHEER).status_code == 404)
+
+# Zevende review: een proces-verbaal of een mislukte lokale kopie krijgt geen onjuiste tip "van vóór 23-10-2026"
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "voorlopige_oplevering"})]}, headers=K)
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("proces-verbaal: uitleg zonder Herlayout-tip", "Een proces-verbaal heeft geen downloadknoppen" in pag and "van vóór 23-10-2026" not in pag)
+c.post("/api/werfbezoek", json={"rijen": [dict(rij(OUD), _alleen=["proef_info"], proef_info={"verslagtype": "werfverslag",
+                                                                                              "bestanden": {"fout": "lokale kopie niet geschreven"}})]}, headers=K)
+pag = c.get("/werfverslag/2145/1", headers=BEHEER).get_data(as_text=True)
+check("mislukte lokale kopie: zegt dat, geen knoppen", "Downloads niet klaargezet" in pag and "Word downloaden" not in pag)
+
 print(f"\n{ok} ok, {fout} fout")
 sys.exit(1 if fout else 0)

@@ -46,7 +46,10 @@ def gegevens(waarde="Proef BV"):
 
 
 @pytest.fixture
-def runtime(monkeypatch):
+def runtime(monkeypatch, tmp_path):
+    # nooit in de echte data-map (op de VM het productievolume van de bezoekpagina): downloads en home in een tijdelijke map
+    monkeypatch.setenv("WERF_BESTANDEN", str(tmp_path / "werfbezoek"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.syspath_prepend(str(HIER))
     monkeypatch.syspath_prepend(str(HIER / "koppelingen"))
     bord = ModuleType("bord")
@@ -325,6 +328,143 @@ def test_bestaande_proef_naar_de_werfapp_zonder_claude(runtime):
     assert kw["bronnen"] == []   # een bestaande proef: de bronlijst stond niet in de markdown
     info = [w[1]["rijen"][0]["proef_info"] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
     assert info["punten"] == 2 and info["werfapp"]["nummer"] == "9999-2"
+
+
+def test_downloads_naar_werf_bestanden_gelezen_bij_gebruik(runtime, monkeypatch, tmp_path):
+    p = runtime.p
+    later = tmp_path / "later gezet"
+    monkeypatch.setenv("WERF_BESTANDEN", str(later))
+    assert p.lokale_map() == str(later)   # pas bij gebruik gelezen, niet bij de import van de module
+    p.lees_bezoekmap = lambda *args, **kwargs: ([{"naam": "transcript.txt", "pad": "/proef/transcript.txt", "tekst": "eigen"}], [], [])
+    p.vraag_verslag = lambda *args, **kwargs: ({"status_nl": "x", "status_en": "", "aanwezigen": [], "categorieen": [], "raming": [],
+                                                 "acties": [], "volgend": "", "akkoord": []}, SimpleNamespace(input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(p.sjab, "naar_markdown", lambda *args: "# Concept")
+    monkeypatch.setattr(p.sjab, "naar_docx", lambda *args: b"word")
+    p.bronnen.upload = lambda pad, data: pad
+    p.proef(Agent(), "9999", 1)
+    assert {"9999-1 werfverslag (concept).docx", "9999-1 werfverslag (concept).md"} <= set(os.listdir(later / "47"))
+    # de bezoekpagina biedt alleen de namen aan die in proef_info.bestanden staan (downloadroute in app.py)
+    info = next(w[1]["rijen"][0]["proef_info"] for w in reversed(runtime.writes) if w[1]["rijen"][0].get("proef_info"))
+    assert info["bestanden"]["docx"] == "9999-1 werfverslag (concept).docx" and info["bestanden"]["md"] == "9999-1 werfverslag (concept).md"
+    assert info["bestanden"]["map"] == "47"   # de map van deze rij, ook als een andere rij de proef later overneemt
+
+
+def _oude_proef(p):
+    """Een proef van vóór de grendel: de bewaarde markdown met een opnameverwijzing, een S1-zin en het opnametijdstip."""
+    schoon = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+              "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [],
+              "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei", "tekst_nl": "De latei ontbreekt.",
+                                                                              "vlag": "dringend", "bron": "transcript.txt 00:12:00", "fotos": []}]}]}
+    md = p.sjab.naar_markdown(schoon)
+    assert "Herkomst: transcript.txt <!-- bron: transcript.txt 00:12:00 -->" in md
+    return md.replace("De latei ontbreekt.", "De latei ontbreekt (opname 00:12:00). De architect is eerder niet geweest.")
+
+
+def test_herlayout_van_een_oude_proef_past_de_grendel_toe_en_logt(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    word = []
+    p.bronnen.upload = lambda pad, data: word.append(data) or pad
+    ag = Agent()
+    p.herlayout(ag, "9999", 1)
+    assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1}
+    # Word is gefilterd; de bewaarde markdown blijft zoals ze was (18e review: zoals productie, geen verliesgevende omweg)
+    tekst = " ".join(par.text for par in __import__("docx").Document(io.BytesIO(word[-1])).paragraphs)
+    assert "De latei ontbreekt." in tekst and "opname" not in tekst and "eerder niet geweest" not in tekst
+    assert "verslag_md" not in laatste
+
+
+def test_herlayout_bevindingen_zet_een_ruwe_herkomst_om_maar_laat_na_te_kijken_staan(runtime):
+    """Vierde review 26-10-2026: '(na te kijken)' is geen bron en mag geen 'blijkt uit de stukken' worden."""
+    p, rij = runtime.p, runtime.rij
+    bv = p.vb.leeg("9999", "Proefstraat 1")
+    bv["onderdelen"] = [{"naam": "Dak", "bevindingen": [
+        {"nr": "B1", "titel": "Goot", "herkomst": "transcript.txt 12m30s", "vaststelling": "De goot lekt.", "fotos": []},
+        {"nr": "B2", "titel": "Kil", "herkomst": "(na te kijken)", "vaststelling": "De kil is open.", "fotos": []},
+        {"nr": "B3", "titel": "Dorpel", "herkomst": "V", "vaststelling": "De dorpel is niet vlak.", "fotos": []}]}]
+    rij.update(verslag_md="# oud", proef_pad="/proef/bezoek/9999 verslag.docx", proef_info={"verslagtype": p.vb.SOORT, "bevindingen": bv})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    p.herlayout(Agent(), "9999", 1)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    b1, b2, b3 = laatste["proef_info"]["bevindingen"]["onderdelen"][0]["bevindingen"]
+    assert (b1["herkomst"], b1["bron"]) == ("transcript.txt", "transcript.txt 12m30s")   # geen geraden V (18e review)
+    assert b2["herkomst"] == "(na te kijken)" and not b2.get("bron")
+    assert b3["herkomst"] == "V" and not b3.get("bron")
+    assert "12m30s" not in laatste["verslag_md"] and "(na te kijken)" in laatste["verslag_md"]
+
+
+def test_herlayout_zet_alleen_de_herkomstregels_om_en_laat_de_rest_letterlijk(runtime):
+    """Zesde review 26-10-2026: van_markdown is niet verliesvrij (tweede regels, tabelcellen); een proef zonder verboden
+    tekst maar met 'Herkomst: transcript.txt 00:12:00' krijgt alleen die regels omgezet."""
+    p, rij = runtime.p, runtime.rij
+    schoon = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+              "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw loopt.", "aanwezigen": [], "acties": [],
+              "akkoord": [], "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei",
+              "tekst_nl": "De latei ontbreekt.", "vlag": "dringend", "bron": "V", "fotos": []}]}]}
+    oud = p.sjab.naar_markdown(schoon).replace("Herkomst: V", "Herkomst: transcript.txt 00:12:00").replace(
+        "Ruwbouw loopt.", "Ruwbouw loopt.\nDe dakwerken starten volgende week.")
+    rij.update(verslag_md=oud, proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    p.herlayout(Agent(), "9999", 1)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "verslag_md" in w[1]["rijen"][0]][-1]["verslag_md"]
+    assert laatste == oud.replace("Herkomst: transcript.txt 00:12:00", "Herkomst: transcript.txt <!-- bron: transcript.txt 00:12:00 -->")
+
+
+def test_herlayout_van_een_proces_verbaal_geeft_een_duidelijke_melding(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md="# Proces-verbaal van voorlopige oplevering 9999", proef_pad="/proef/pv.docx",
+               proef_info={"verslagtype": "voorlopige_oplevering"})
+    with pytest.raises(RuntimeError, match="proces-verbaal"):
+        p.herlayout(Agent(), "9999", 1)
+
+
+def test_herlayout_en_werfapp_met_ingreep_laten_de_bewaarde_markdown_staan(runtime):
+    """Bevestigingsronde en 18e review 26-10-2026: grijpt de grendel in bij een oude proef, dan blijft verslag_md zoals ze
+    was (productie schreef ze hier nooit terug): geen regel van een status over meer regels gaat verloren."""
+    p, rij = runtime.p, runtime.rij
+    oud = _oude_proef(p)
+    oud = oud.replace("Ruwbouw", "Ruwbouw loopt.\nDe dakwerken starten volgende week.\nDe stelling blijft staan tot eind november.", 1)
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    p.bronnen.upload = lambda pad, data: pad
+    for route in (p.herlayout, p.werfapp_uit_proef):
+        voor = len(runtime.writes)
+        rij.update(verslag_md=oud, proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+        route(Agent(), "9999", 1)
+        assert not [w for w in runtime.writes[voor:] if "verslag_md" in w[1]["rijen"][0]], route.__name__
+
+
+def test_bron_over_twee_regels_blijft_een_regel_herkomst(runtime):
+    """Bevestigingsronde 21: een bron met een regelovergang breekt de regel Herkomst niet; na teruglezen blijft de
+    vaststelling schoon en de volledige bron bewaard."""
+    sj = runtime.p.sjab
+    v = {"dossier": "9999", "bezoek": "2", "soort_bezoek": "werfbezoek", "adres": "Proefstraat 1", "datum": "2026-10-14",
+         "opgemaakt": "2026-10-15", "verslagtype": "werfverslag", "status_nl": "Ruwbouw", "aanwezigen": [], "acties": [], "akkoord": [],
+         "volgend": "", "categorieen": [{"naam": "Ruwbouw", "punten": [{"nummer": "2.1", "titel": "Latei", "tekst_nl": "De latei ontbreekt.",
+                                                                       "bron": "transcript.txt (00:12:00)\n00 fotos.md", "fotos": []}]}]}
+    md = sj.naar_markdown(v)
+    regel = next(r for r in md.splitlines() if r.startswith("Herkomst: "))
+    assert "00 fotos.md" in regel and "<!-- bron:" in regel and "00:12" not in regel.split("<!--")[0]
+    punt = sj.van_markdown(md)["categorieen"][0]["punten"][0]
+    assert punt["tekst_nl"] == "De latei ontbreekt." and "00:12:00" in punt["bron"] and "00 fotos.md" in punt["bron"]
+
+
+def test_oude_proef_naar_de_werfapp_gaat_gefilterd(runtime):
+    p, rij = runtime.p, runtime.rij
+    rij.update(verslag_md=_oude_proef(p), proef_pad="/proef/bezoek/9999-2 werfverslag (concept).docx", proef_info={"punten": 1})
+    p.lees_bezoekmap = lambda *args, **kwargs: ([], [], [])
+    ag = Agent()
+    p.werfapp_uit_proef(ag, "9999", 1)
+    (v, _), = runtime.werf.concepten
+    tekst = v["categorieen"][0]["punten"][0]["tekst_nl"]
+    assert tekst.startswith("De latei ontbreekt.") and "opname" not in tekst and "eerder niet geweest" not in tekst
+    assert any("schrijfregels toegepast" in str(a) for a in ag.logs)
+    laatste = [w[1]["rijen"][0] for w in runtime.writes if "proef_info" in w[1]["rijen"][0]][-1]
+    assert laatste["proef_info"]["schrijfregels"] == {"S4": 1, "S1": 1} and "verslag_md" not in laatste
 
 
 def test_eigen_tekst_alleen_de_naamvormen_van_mehdis_eigen_hulpmiddelen(runtime):
