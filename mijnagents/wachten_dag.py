@@ -75,16 +75,25 @@ def _item(tijd, wie, wat, fout=False):
     return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout)}
 
 
+# Bronnen waarvan de wacht prive=1 zet volgens haar herkenning (De Fathomwacht: is_prive, ook bij een andere afdeling;
+# De Plaudwacht en De Zoomwacht net zo). Daar betekent de vlag een privégesprek (T-0120, Codex bij FATHOM-3).
+PRIVE_VLAG_BRONNEN = ("fathom", "plaud", "zoom")
+
+
 def is_prive_gesprek(r):
-    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé.
-    De vlag prive=1 alleen betekent "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke rij); die
-    rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
-    return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
+    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé,
+    en bij Fathom, Plaud en Zoom ook de vlag prive=1 (in oktober 2 Fathom-gesprekken met de vlag en een andere afdeling).
+    Bij de Mac-bronnen betekent de vlag alleen "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke
+    rij); die rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
+    if str(r["afdeling"] or "").strip().casefold() in ("prive", "privé"):
+        return True
+    return bool(r["prive"]) and str(r["bron"] or "") in PRIVE_VLAG_BRONNEN
 
 
 def lees_gesprekken(conn, bron, dag):
     rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
-                         "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
+                         "COALESCE(afdeling,'') AS afdeling, COALESCE(prive,0) AS prive FROM gesprek_log "
+                         "WHERE datum=? AND bron IN (?, 'dekking') "
                          "ORDER BY start", (dag, bron)).fetchall()
     items, gedekt = [], False
     for r in rijen:

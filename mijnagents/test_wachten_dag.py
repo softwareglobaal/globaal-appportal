@@ -15,6 +15,8 @@
   nog eens bij, ook niet op de dag waarop het klaargezet werd; ontdubbeld op uniek, voor de privémaskering. Een ander
   item van dezelfde wacht blijft.
 - W13 (FATHOM-4, T-0120): een rij dekking:fathom:<dag> van De Fathomwacht maakt die dag gedekt, en telt niet als item.
+- W14 (T-0120, Codex bij FATHOM-3): bij Fathom, Plaud en Zoom is prive=1 ook met een andere afdeling een privégesprek:
+  'privégesprek, N min', zonder naam of onderwerp. Bij WhatsApp blijft prive=1 de naam tonen (W11).
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -137,6 +139,17 @@ con.close()
 w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
 check("W13 de dekkingsrij van Fathom maakt de dag gedekt, zonder extra item",
       w30["fathom-wacht"]["gedekt"] is True and w30["fathom-wacht"]["aantal"] == 1, w30["fathom-wacht"])
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, bron in (("fathom:14", "fathom"), ("plaud:14", "plaud"), ("zoom:meeting:14", "zoom")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+                "VALUES(?,'2026-10-29','11:00',12,'Verborgen Persoon','Verborgen onderwerp','regie',1,?,'x')", (uniek, bron))
+con.commit()
+con.close()
+w29 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-29", headers=K).get_json()["vakken"] for x in v["wachten"]}
+for wacht in ("fathom-wacht", "plaud-wacht", "zoom-wacht"):
+    it = w29[wacht]["items"]
+    check(f"W14 {wacht}: prive=1 met afdeling regie is een privégesprek", len(it) == 1 and it[0]["wie"] == "privégesprek"
+          and it[0]["wat"] == "12 min" and "Verborgen" not in str(it), it)
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
