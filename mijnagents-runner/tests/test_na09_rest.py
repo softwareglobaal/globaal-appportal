@@ -178,6 +178,31 @@ def test_na49_stopsignaal_bij_het_afsluiten_blijft_niet_op_actief():
         assert [n["tekst"] for n in laatste["nood"]] == ["Oude nood", "Nieuwe nood"], laatste
 
 
+def test_na53_werkfout_en_stopsignaal_bij_het_afsluiten_blijven_allebei_zichtbaar():
+    """Codex NA53 (ronde 13): brak het werk (ValueError) en kwam daarna bij het afsluiten een SIGTERM binnen, dan toonde
+    de fouthartslag alleen het signaal, en ging het werkverslag niet weg. Nu noemt de hartslag beide, en gaat het verslag
+    nog weg; het signaal gaat door."""
+    draad = Draad(open_noden=[])
+    ag = bord.Agent("proef")
+
+    def stop(*a, **k):
+        raise SystemExit(143)
+
+    ag.kennis = stop
+    with op_het_bord(draad):
+        try:
+            with ag.ronde("proef"):
+                ag.log("proef", "fout", "halverwege stuk")
+                raise ValueError("werk kapot")
+        except BaseException as e:  # noqa: BLE001
+            doorgegaan = e
+    assert isinstance(doorgegaan, SystemExit) and doorgegaan.code == 143, repr(doorgegaan)
+    laatste = draad.statussen("proef")[-1]
+    assert laatste["status"] == "fout" and "ValueError: werk kapot" in laatste["detail"] \
+        and "SystemExit" in laatste["detail"], laatste
+    assert any(r["tekst"] == "halverwege stuk" for r in draad.logregels()), "het werkverslag ging niet weg"
+
+
 # ------------------------------------------------------------------------------------------- De Contractmaker ---
 import contracten_agent as CA  # noqa: E402
 
