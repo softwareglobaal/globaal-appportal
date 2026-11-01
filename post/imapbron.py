@@ -179,13 +179,19 @@ def _leesbaar(gegevens):
 
 # ---- tekst en koppen -------------------------------------------------
 def _kop(waarde):
-    """(=?utf-8?...)-koptekst naar leesbare tekst."""
+    """(=?utf-8?...)-koptekst naar leesbare tekst, op één regel.
+
+    Een lange kop (References van een lange keten) staat over meerdere regels
+    (RFC 5322-vouwing). Die regeleinden gaan eruit: een kopwaarde met CR of LF
+    wordt geweigerd bij het opstellen van een antwoord (22-10-2026).
+    """
     if not waarde:
         return ""
     try:
-        return str(make_header(decode_header(waarde))).strip()
+        tekst = str(make_header(decode_header(waarde)))
     except Exception:
-        return str(waarde).strip()
+        tekst = str(waarde)
+    return re.sub(r"[\r\n]+[ \t]*", " ", tekst).strip()
 
 
 def _adressen(waarde):
