@@ -61,6 +61,7 @@ typedef struct {
     int profielen;         /* 1: een databank per submap (een profiel van de browser, een bron van het adresboek) */
     int kopie;             /* 1: eerst een eigen kopie, want de browser houdt zijn geschiedenis open en vergrendeld */
     const char *vraag;     /* een INSERT; :begin is het begin van het venster in Unix-seconden, :pk en :browser */
+    const char *zonder_oorsprong;   /* WEB-3: de vraag voor een oudere databank zonder kolom oorsprong, of NULL */
 } Extra;
 
 typedef struct {
@@ -184,20 +185,25 @@ static const char FIREFOX_VRAAG[] = BEZOEK_IN
     "(SELECT v.visit_date / 1000000.0 AS t, p.url AS a, p.title AS k, NULL AS d FROM extra.moz_historyvisits v "
     "  JOIN extra.moz_places p ON p.id = v.place_id WHERE v.visit_date >= :begin * 1000000.0) "
     "WHERE site(a) IS NOT NULL";
-static const char SAFARI_VRAAG[] = BEZOEK_IN
-    "(SELECT v.visit_time + 978307200 AS t, i.url AS a, v.title AS k, NULL AS d FROM extra.history_visits v "
-    "  JOIN extra.history_items i ON i.id = v.history_item WHERE v.visit_time >= :begin - 978307200) "
-    "WHERE site(a) IS NOT NULL";
+/* WEB-3 (T-0120): bij Safari alleen de bezoeken van deze Mac; history_visits.origin 1 komt via iCloud van een ander
+   toestel (de gsm). Een oudere Safari zonder die kolom kent geen oorsprong: dan telt elk bezoek, nooit "onverwacht". */
+#define SAFARI_BEZOEK(voorwaarde) BEZOEK_IN \
+    "(SELECT v.visit_time + 978307200 AS t, i.url AS a, v.title AS k, NULL AS d FROM extra.history_visits v " \
+    "  JOIN extra.history_items i ON i.id = v.history_item WHERE v.visit_time >= :begin - 978307200" voorwaarde ") " \
+    "WHERE site(a) IS NOT NULL"
+static const char SAFARI_VRAAG[] = SAFARI_BEZOEK(" AND v.origin = 0");
+static const char SAFARI_VRAAG_ZONDER_OORSPRONG[] = SAFARI_BEZOEK("");
 
 static const Extra ADRESBOEK[] = {
-    {"adresboek", "Library/Application Support/AddressBook", "AddressBook-v22.abcddb", 0, 0, ADRESBOEK_VRAAG},
-    {"adresboek", "Library/Application Support/AddressBook/Sources", "AddressBook-v22.abcddb", 1, 0, ADRESBOEK_VRAAG},
+    {"adresboek", "Library/Application Support/AddressBook", "AddressBook-v22.abcddb", 0, 0, ADRESBOEK_VRAAG, NULL},
+    {"adresboek", "Library/Application Support/AddressBook/Sources", "AddressBook-v22.abcddb", 1, 0, ADRESBOEK_VRAAG,
+     NULL},
 };
 static const Extra BROWSERS[] = {
-    {"Chrome", "Library/Application Support/Google/Chrome", "History", 1, 1, CHROMIUM_VRAAG},
-    {"Edge", "Library/Application Support/Microsoft Edge", "History", 1, 1, CHROMIUM_VRAAG},
-    {"Firefox", "Library/Application Support/Firefox/Profiles", "places.sqlite", 1, 1, FIREFOX_VRAAG},
-    {"Safari", "Library/Safari", "History.db", 0, 1, SAFARI_VRAAG},
+    {"Chrome", "Library/Application Support/Google/Chrome", "History", 1, 1, CHROMIUM_VRAAG, NULL},
+    {"Edge", "Library/Application Support/Microsoft Edge", "History", 1, 1, CHROMIUM_VRAAG, NULL},
+    {"Firefox", "Library/Application Support/Firefox/Profiles", "places.sqlite", 1, 1, FIREFOX_VRAAG, NULL},
+    {"Safari", "Library/Safari", "History.db", 0, 1, SAFARI_VRAAG, SAFARI_VRAAG_ZONDER_OORSPRONG},
 };
 
 static const Set SETS[] = {
@@ -691,6 +697,12 @@ static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const cha
                 /* Een vraag die faalt, wijst op een ander schema: onverwacht, en van deze bron komt dan niets mee. */
                 stmt = NULL;
                 rc = sqlite3_prepare_v2(db, x->vraag, -1, &stmt, NULL);
+                if (rc != SQLITE_OK && x->zonder_oorsprong != NULL) {
+                    /* WEB-3: de vraag verschilt alleen in de kolom oorsprong; ontbreekt die, dan de vraag zonder */
+                    sqlite3_finalize(stmt);
+                    stmt = NULL;
+                    rc = sqlite3_prepare_v2(db, x->zonder_oorsprong, -1, &stmt, NULL);
+                }
                 if (rc == SQLITE_OK) {
                     int i;
                     if ((i = sqlite3_bind_parameter_index(stmt, ":begin")) > 0)

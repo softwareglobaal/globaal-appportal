@@ -13,7 +13,9 @@ dezelfde regel), en deze wacht leest zijn kopie (koppelingen/mac_gesprekken.brow
 Python zelf: dat gaf elk python-script volledige toegang.
 
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
-op in het dagbestand. Een browser die niet te lezen is, staat bij 'onleesbaar'.
+op in het dagbestand. Safari telt alleen wat op deze Mac bekeken werd, niet wat iCloud van de gsm meebrengt (WEB-3,
+01-11-2026: de filter op history_visits.origin staat in de Safari-vraag van de helper). Een browser die niet te lezen
+is, staat bij 'onleesbaar'.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
 import json

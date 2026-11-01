@@ -7,14 +7,17 @@ Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.p
   een foute hartslag en een foutregel in het werkverslag;
 - C03 (WEB-3): Safari telt alleen de bezoeken van deze Mac (origin 0), niet die van een ander toestel via iCloud
   (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube; een oudere Safari zonder kolom origin blijft
-  leesbaar en telt mee (Codex-toets 1), ook naast een lege Chrome;
+  leesbaar en telt mee (Codex-toets 1), ook naast een lege Chrome. Sinds YT-1 en WEB-1 (groep telefoon) leest alleen
+  de helper MacGesprekkenKopie de browsers: de filter op origin staat in zijn Safari-vraag en wordt getest in
+  tests/test_mac_gesprekken.py (test_web3_safari_alleen_de_bezoeken_van_deze_mac); hier de wacht met de kopie;
 - C04 (WISPR-2): de inhaalweg van De Wispr-wacht (--dag voor een vroegere dag): per_dag is precies het venster tot die
   dag, ook een dag zonder dictaat (0, de wacht keek), niets erna; de titel is de telling van die dag; het rapport in
   Dropbox blijft staan (het toont de stand van vandaag); een gewone ronde van vandaag schrijft het wel. De Licentiewacht
   en het teamrapport van de Wispr-teamwacht nemen daarna nog steeds het item van de nieuwste gebruiksdag, ook als een
   inhaalronde een oude dag later bijwerkte.
 
-Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis.
+Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis. De browserwachten krijgen
+een verzonnen kopie van de helper (main(vragen)): nooit launchctl, nooit de echte helper.
 Draaien: python3 mijnagents-runner/tests/test_computer_wachten.py
 """
 import importlib.util
@@ -57,42 +60,33 @@ class NepBord:
         return [p for x, p in self.oproepen if x == pad]
 
 
-def bestand(thuis, deel):
-    pad = os.path.join(thuis, deel)
-    os.makedirs(os.path.dirname(pad), exist_ok=True)
-    return pad
+def kopie(bronnen=(), bezoeken=()):
+    """Een verzonnen kopie van de helper (set browser, zoals mac_gesprekken.browser_kopie ze leest): bronnen
+    [(browser, uitkomst)] per databank, bezoeken [(browser, tijd, site, video, titel, duur)]."""
+    def vragen(_kanaal):
+        pad = os.path.join(tempfile.mkdtemp(), "kopie.sqlite")
+        c = sqlite3.connect(pad)
+        c.executescript("CREATE TABLE BEZOEK (browser, tijd, site, video, titel, duur); CREATE TABLE BRON (browser, uitkomst);"
+                        "CREATE TABLE META (sleutel, waarde);")
+        c.executemany("INSERT INTO BEZOEK VALUES (?, ?, ?, ?, ?, ?)", bezoeken)
+        c.executemany("INSERT INTO BRON VALUES (?, ?)", bronnen)
+        c.commit()
+        c.close()
+        return pad, datetime.now()
+    return vragen
 
 
-def geweigerd_bestand(m, thuis, deel):
-    """Een geschiedenis die macOS niet laat lezen: onder launchd zonder toestemming een PermissionError. Als root helpt
-    chmod niet; dan geeft de lezer zelf de weigering."""
-    pad = bestand(thuis, deel)
-    open(pad, "wb").close()
-    os.chmod(pad, 0)
-    if os.geteuid() == 0:
-        echt = m.lees_bestand
-
-        def lees(p, q, s):
-            if p == pad:
-                raise PermissionError(1, "Operation not permitted")
-            return echt(p, q, s)
-        m.lees_bestand = lees
-
-
-def ronde(m, thuis, dag="2026-10-30"):
-    m.THUIS, m.DAG, m.DROOG = thuis, dag, False
+def ronde(m, vragen, dag="2026-10-30"):
+    m.DAG, m.DROOG = dag, False
     nep = NepBord()
     m.bord = nep
-    return m.main(), nep
+    return m.main(vragen), nep
 
 
 # C01 (YT-2): 01-11-2026 weigerde macOS Chrome en Firefox onder launchd; de melding zei "niet gevonden" en het
 # werkverslag bleef leeg ("geen ronde" terwijl er 8 rondes waren).
 Y = laad("youtube_wacht")
-thuis = tempfile.mkdtemp()
-geweigerd_bestand(Y, thuis, "Library/Application Support/Google/Chrome/Default/History")
-os.makedirs(bestand(thuis, "Library/Application Support/Firefox/Profiles/proef.default/places.sqlite"))
-rc, nep = ronde(Y, thuis)
+rc, nep = ronde(Y, kopie([("Chrome", "geweigerd"), ("Firefox", "fout")]))
 st = nep.naar("/agent-status")[-1]
 check("C01 YouTube: ronde mislukt", rc == 1 and st["status"] == "fout", (rc, st))
 check("C01 YouTube: melding noemt geweigerd en onleesbaar",
@@ -103,17 +97,27 @@ check("C01 YouTube: fout in het werkverslag", any(r["stap"] == "fout" and "gewei
 check("C01 YouTube: niets klaargezet", not nep.naar("/api/klaarzet"), nep.oproepen)
 check("C01 ook de uitkomst geweigerd van de helper (YT-1)", "geweigerd: Chrome" in Y.niet_gelezen({"Chrome": "geweigerd"})
       and "geweigerd: Safari" in laad("browser_wacht").niet_gelezen({"Safari": "geweigerd"}))
-rc, nep = ronde(laad("youtube_wacht"), tempfile.mkdtemp())
+rc, nep = ronde(laad("youtube_wacht"), kopie())
 st = nep.naar("/agent-status")[-1]
 check("C01 YouTube: zonder bestand niet gevonden", rc == 1 and st["nood"][0]["tekst"] == "Geen browsergeschiedenis gevonden op deze Mac"
       and any(r["stap"] == "fout" for p in nep.naar("/api/logboek") for r in p["regels"]), nep.oproepen)
 
+
+def geen_kopie(_kanaal):
+    raise laad("youtube_wacht").M.MacFout("MacGesprekkenKopie niet gestart", "MacGesprekkenKopie staat niet in launchd op de Mac")
+
+
+for naam in ("youtube_wacht", "browser_wacht"):
+    rc, nep = ronde(laad(naam), geen_kopie)
+    log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+    check(f"C01 {naam}: zonder kopie van de helper een fout in het werkverslag, niets klaargezet",
+          rc == 1 and not nep.naar("/api/klaarzet") and [r["stap"] for r in log] == ["fout"]
+          and "staat niet in launchd" in log[0]["tekst"], nep.oproepen)
+
 # C02 (WEB-2): zonder gelezen browser zette de Websitewacht 14 dagen met 0 bezoeken klaar; De Dagbundelaar nam die over.
-for naam, thuis in (("lege map", tempfile.mkdtemp()), ("geweigerd", tempfile.mkdtemp())):
+for naam, bronnen in (("lege map", []), ("geweigerd", [("Chrome", "geweigerd")])):
     B = laad("browser_wacht")
-    if naam == "geweigerd":
-        geweigerd_bestand(B, thuis, "Library/Application Support/Google/Chrome/Default/History")
-    rc, nep = ronde(B, thuis)
+    rc, nep = ronde(B, kopie(bronnen))
     st = nep.naar("/agent-status")[-1]
     log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
     check(f"C02 websites ({naam}): geen klaarzet", not nep.naar("/api/klaarzet"), nep.naar("/api/klaarzet"))
@@ -121,52 +125,20 @@ for naam, thuis in (("lege map", tempfile.mkdtemp()), ("geweigerd", tempfile.mkd
           and any(("geweigerd: Chrome" if naam == "geweigerd" else "Geen browsergeschiedenis gevonden") in n["tekst"] for n in st["nood"]), st)
     check(f"C02 websites ({naam}): fout in het werkverslag", [r["stap"] for r in log] == ["fout"], log)
 
-# C03 (WEB-3): een verzonnen Safari-geschiedenis met een bezoek op deze Mac en een van de gsm (iCloud).
-SAFARI_EPOCH = 978307200
+# C03 (WEB-3): de filter op origin zit in de helper (test_mac_gesprekken.py). Hier: een Safari die de helper las, naast
+# een lege Chrome (Codex-toets 1: dat gaf 0 bezoeken met "Safari onleesbaar"), telt mee bij de websites en bij YouTube.
 middag = datetime(2026, 10, 30, 12, 0, tzinfo=ZoneInfo("Europe/Brussels")).timestamp()
-thuis = tempfile.mkdtemp()
-pad = bestand(thuis, "Library/Safari/History.db")
-c = sqlite3.connect(pad)
-c.execute("CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT)")
-c.execute("CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, title TEXT, "
-          "origin INTEGER)")
-for i, (adres, oorsprong) in enumerate((("https://proef-werk.test/a", 0), ("https://proef-gsm.test/b", 1),
-                                         ("https://www.youtube.com/watch?v=werkvideo1", 0),
-                                         ("https://www.youtube.com/watch?v=gsmvideo12", 1)), 1):
-    c.execute("INSERT INTO history_items VALUES (?, ?)", (i, adres))
-    c.execute("INSERT INTO history_visits VALUES (?, ?, ?, ?, ?)", (i, i, middag - SAFARI_EPOCH + i, f"Proef {i}", oorsprong))
-c.commit()
-c.close()
-B, Y = laad("browser_wacht"), laad("youtube_wacht")
-q = next(x for b, _, x in B.BRONNEN if b == "Safari")
-sites = sorted({s for _, s in B.lees_bestand(pad, q, 0)})
-check("C03 websites: alleen Safari van deze Mac", sites == ["proef-werk.test", "youtube.com"], sites)
-q = next(x for b, _, x in Y.BRONNEN if b == "Safari")
-videos = [v for _, v, _, _ in Y.lees_bestand(pad, q, 0)]
-check("C03 YouTube: alleen Safari van deze Mac", videos == ["werkvideo1"], videos)
-# Codex-toets 1: een Safari zonder kolom origin naast een lege Chrome gaf 0 bezoeken met "Safari onleesbaar".
-thuis = tempfile.mkdtemp()
-c = sqlite3.connect(bestand(thuis, "Library/Safari/History.db"))
-c.execute("CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT)")
-c.execute("CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, title TEXT)")
-c.execute("INSERT INTO history_items VALUES (1, 'https://www.youtube.com/watch?v=oudevideo1')")
-c.execute("INSERT INTO history_visits VALUES (1, 1, ?, 'Proef oud')", (middag - SAFARI_EPOCH,))
-c.commit()
-c.close()
-c = sqlite3.connect(bestand(thuis, "Library/Application Support/Google/Chrome/Default/History"))
-c.execute("CREATE TABLE urls (id INTEGER PRIMARY KEY, url TEXT, title TEXT)")
-c.execute("CREATE TABLE visits (id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER, visit_duration INTEGER)")
-c.commit()
-c.close()
+safari = kopie([("Chrome", "ok"), ("Safari", "ok")],
+               [("Safari", middag, "youtube.com", "oudevideo1", "Proef oud", None)])
 B = laad("browser_wacht")
 B.DAGEN = 3
-rc, nep = ronde(B, thuis)
+rc, nep = ronde(B, safari)
 inh = nep.naar("/api/klaarzet")[-1]["items"][0]["inhoud"] if nep.naar("/api/klaarzet") else {}
 check("C03 websites: Safari zonder origin telt mee naast een lege Chrome", rc == 0 and inh.get("onleesbaar") == {}
       and inh["per_dag"]["2026-10-30"]["per_browser"] == {"Safari": 1}, (rc, inh))
 Y = laad("youtube_wacht")
 Y.DAGEN = 3
-rc, nep = ronde(Y, thuis)
+rc, nep = ronde(Y, safari)
 inh = nep.naar("/api/klaarzet")[-1]["items"][0]["inhoud"] if nep.naar("/api/klaarzet") else {}
 check("C03 YouTube: Safari zonder origin telt mee", rc == 0 and inh.get("onleesbaar") == {}
       and inh["per_dag"]["2026-10-30"]["keer"] == 1, (rc, inh))

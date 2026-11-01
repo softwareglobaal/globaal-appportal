@@ -1690,6 +1690,43 @@ def test_vol11_yt1_web1_helper_set_browser():
             os.chmod(safari, 0o700)
 
 
+def test_web3_safari_alleen_de_bezoeken_van_deze_mac():
+    """WEB-3 (T-0120, groep computer-locatie): Safari telt alleen de bezoeken van deze Mac (history_visits.origin 0),
+    niet die van de gsm via iCloud (origin 1, sinds 18-10-2026 elke dag), bij de websites en bij YouTube. Tot YT-1 deed
+    browser_wacht.py en youtube_wacht.py dat zelf; sinds YT-1 leest alleen de helper Safari. Een oudere Safari zonder
+    kolom origin blijft leesbaar en telt elk bezoek (test_vol11_yt1_web1_helper_set_browser)."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_)
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        nu = time.time()
+        safari = thuis / "Library/Safari"
+        safari.mkdir(parents=True)
+        con = sqlite3.connect(safari / "History.db")
+        con.executescript("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url);"
+                          "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item, visit_time, title, origin);")
+        for i, (adres, oorsprong) in enumerate((("https://proef-werk.test/a", 0), ("https://proef-gsm.test/b", 1),
+                                                 ("https://www.youtube.com/watch?v=werkvideo1", 0),
+                                                 ("https://www.youtube.com/watch?v=gsmvideo12", 1)), 1):
+            con.execute("INSERT INTO history_items VALUES(?, ?)", (i, adres))
+            con.execute("INSERT INTO history_visits VALUES(?, ?, ?, ?, ?)",
+                        (i, i, nu - 3000 + i - 978307200, f"Proef {i}", oorsprong))
+        con.commit()
+        con.close()
+        status, uit, _ = _vraag(helper, str(thuis), "browser")
+        assert status["uitkomst"] == "ok" and status["extra"]["Safari"] == "ok", status
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT browser, site, video FROM BEZOEK ORDER BY tijd").fetchall()
+        bronnen = con.execute("SELECT browser, uitkomst FROM BRON").fetchall()
+        con.close()
+        assert rijen == [("Safari", "proef-werk.test", None), ("Safari", "youtube.com", "werkvideo1")], rijen
+        assert bronnen == [("Safari", "ok")], bronnen
+
+
 def test_vol11_tijdgrens_ook_tijdens_het_kopieren():
     """Codex 01-11 (toets 2): de tijdgrens van de extra bronnen geldt ook midden in het kopieren (en in een vraag),
     niet alleen voor een nieuwe databank. Een trage schijf (testbouw: <bron>.traag, een seconde per megabyte) met een
@@ -1797,6 +1834,15 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
             post, hart = [], []
             mod.bord = lambda pad, payload, _p=post: (_p.append((pad, payload)), {"nieuw": 2})[1]
             mod.hartslag = lambda status, taak="", detail="", nood=None, _h=hart: _h.append((status, nood or []))
+
+            def mislukt(_p=post):
+                """YT-2 (groep computer-locatie): een mislukte ronde zet niets klaar en staat als fout in het werkverslag
+                (anders zegt de wachtenpagina 'geen ronde'). Geeft de foutregels en maakt post leeg."""
+                klaar = [x for x in _p if x[0] == "/api/klaarzet"]
+                fouten = [r for pad, x in _p if pad == "/api/logboek" for r in x["regels"] if r["stap"] == "fout"]
+                _p.clear()
+                assert not klaar and len(fouten) == 1, (klaar, fouten)
+                return fouten
             with redirect_stdout(io.StringIO()):
                 assert mod.main(kopie) == 0
             assert not Path(map_, "kopie.sqlite").exists()
@@ -1819,7 +1865,7 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
                         lambda k: kopie(k, (("Chrome", "ok"), ("Chrome", "fout")))):
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                     assert mod.main(kop) == 1
-                assert not post and hart[-1][0] == "fout" and hart[-1][1], hart[-1]
+                assert mislukt() and hart[-1][0] == "fout" and hart[-1][1], hart[-1]
             assert any(n["wie"] == "mehdi" and "Full Disk Access" in n["tekst"] and "Python" not in n["tekst"]
                        for n in M.browser_nood({"Safari": "geweigerd"}))
             assert [n["wie"] for n in M.browser_nood({"Chrome": "fout"})] == ["claude-code"]
@@ -1830,8 +1876,9 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
                                 wie="mehdi")
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 assert mod.main(geen) == 1
-            assert not post and hart[-1] == ("fout", [{"tekst": "MacGesprekkenKopie heeft geen volledige schijftoegang",
-                                                      "wie": "mehdi"}]), hart[-1]
+            assert "geen volledige schijftoegang" in mislukt()[0]["tekst"]
+            assert hart[-1] == ("fout", [{"tekst": "MacGesprekkenKopie heeft geen volledige schijftoegang",
+                                          "wie": "mehdi"}]), hart[-1]
             # Codex 01-11: geen enkele browser gelezen is onbekend, nooit 0: geen telling klaargezet, wel een fout
             def leeg(_kanaal):
                 pad = Path(map_, "kopie.sqlite")
@@ -1842,8 +1889,9 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
                 return pad, datetime.now(timezone.utc)
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 assert mod.main(leeg) == 1
-            assert not post and hart[-1][0] == "fout" and any("Geen browsergeschiedenis" in n["tekst"]
-                                                             for n in hart[-1][1]), hart[-1]
+            # YT-2: de reden is de uitkomst van de browser (onleesbaar: Chrome), niet 'niet gevonden'
+            assert "onleesbaar: Chrome" in mislukt()[0]["tekst"]
+            assert hart[-1][0] == "fout" and any("onleesbaar: Chrome" in n["tekst"] for n in hart[-1][1]), hart[-1]
     assert M.HELPER["browser"] == "be.globaal.mijnagents.kopie-browser"
 
 
