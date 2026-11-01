@@ -7,7 +7,8 @@ een bouwheer of om onderaanneming gaat. Nooit de naam van de firma die zoekt, de
 Grendels in de code:
   - een firma telt alleen als het model haar website in deze ronde echt las (aankoop.onderzoek.alleen_gelezen);
   - een ondernemingsnummer moet de Belgische controle (modulo 97) halen, anders vervalt het;
-  - "actief in de KBO" alleen als een KBO-pagina met dat nummer in deze ronde gelezen is en "Actief" toont;
+  - "actief in de KBO" alleen als een KBO-pagina met dat nummer in deze ronde gelezen is en "Actief" toont; de code leest
+    die pagina zelf (kbo_van_code), want web_fetch van het model opent de KBO niet (gemeten 01-11-2026);
   - de afstand rekent de code met Geopunt (koppelingen/adresregister.py); buiten de straal komt apart.
 """
 import math
@@ -38,8 +39,7 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
     {"naam": "naam zoals op de website", "url": "de pagina van de firma die je met web_fetch las",
      "gemeente": "gemeente van de vestiging", "postcode": "1234", "adres": "straat en nummer, of null",
      "telefoon": "zoals op de site, of null", "email": "zoals op de site, of null",
-     "ondernemingsnummer": "0123.456.789 zoals op de site of in de KBO, of null",
-     "kbo_url": "de KBO-pagina die je met web_fetch las, of null",
+     "ondernemingsnummer": "0123.456.789 zoals op de eigen site, of null",
      "specialiteit": "wat ze doen, kort", "bewijs": "een zin letterlijk overgenomen van een gelezen eigen pagina die toont dat ze dit werk doen",
      "werkgebied": "wat de site zegt over hun werkgebied, of null", "waarom": "een zin: waarom deze firma past"}
   ],
@@ -50,7 +50,8 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
 }
 Regels: geef alleen firma's waarvan je een eigen pagina (website, of hun pagina op een vakfederatie of gids) zelf met
 web_fetch las en waar het werk op staat. Verzin nooit een telefoonnummer, mailadres of ondernemingsnummer: null als je
-het niet zag. Zoek het ondernemingsnummer op in de KBO (kbopub.economie.fgov.be) en lees die pagina als dat lukt.
+het niet zag. Zoek het ondernemingsnummer op de eigen site (voettekst, contactpagina, algemene voorwaarden); de code leest
+de KBO zelf, lees die dus niet.
 Geen bemiddelingsplatformen of offertesites als firma (zoals sites die je aanvraag doorverkopen)."""
 
 
@@ -87,7 +88,7 @@ def opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang="", ke
              # Live gemeten 01-11-2026: zonder deze zin las het model "zonder firma begin ik niet" en zocht het niets
              "VOOR DEZE VRAAG: de firma die zoekt is gekend en bewust weggelaten; de code houdt ze apart, doet haar eigen "
              "mappen en boekhouding en schrijft de mails. Vraag dus nooit voor welke firma het is en begin meteen: jij "
-             "doet alleen het web en de KBO."]
+             "doet alleen het web."]
     if kennis:
         delen.append(kennis)
     systeem = "\n\n".join(delen + [VORM])
@@ -139,6 +140,68 @@ def kbo_actief(nummer, gelezen):
             return False
         uitslag = True
     return uitslag
+
+
+KBO_PAGINA = "https://kbopub.economie.fgov.be/kbopub/{}.html?ondernemingsnummer={}&lang=nl"
+KBO_STATUS = {"actief": True, "stopgezet": False, "niet actief": False, "doorgehaald": False, "ontbonden": False}
+KBO_TIMEOUT = 10     # seconden per KBO-pagina; een oproep start alleen als ze voor de deadline klaar kan zijn
+
+
+def _tijd_voor(deadline):
+    return not deadline or time.monotonic() + KBO_TIMEOUT <= deadline
+
+
+def kbo_van_code(nummer, haal, deadline=None):
+    """{"actief": True/False/None, "plaats": 'postcode gemeente' of None} uit de openbare KBO-pagina's, door de code zelf
+    gelezen. De plaats is de zetel; toont de pagina geen zetel (een natuurlijk persoon), dan de enige vestigingseenheid.
+    Nooit de straat: alleen postcode en gemeente. Een pagina met een ander nummer telt niet. haal: url -> html; een
+    OSError op de hoofdpagina gaat naar boven, op de vestigingspagina laat ze de plaats leeg."""
+    from .kern_adres import POSTCODE, _cel, _regels
+    kaal = re.sub(r"\D", "", nummer or "").zfill(10)
+
+    def eigen(pagina):
+        return re.sub(r"\D", "", " ".join(_regels(_cel(pagina, "Ondernemingsnummer")))) == kaal
+
+    def plaats(pagina, label):
+        for regel in _regels(_cel(pagina, label)):
+            m = POSTCODE.match(regel)
+            if m:
+                return f"{m['postcode']} {m['gemeente']}"
+        return None
+
+    pagina = haal(KBO_PAGINA.format("toonondernemingps", kaal))
+    if not eigen(pagina):
+        return {"actief": None, "plaats": None}
+    status = " ".join(" ".join(_regels(_cel(pagina, "Status"))).lower().split())
+    uit = {"actief": KBO_STATUS.get(status), "plaats": plaats(pagina, "Adres van de zetel")}
+    aantal = " ".join(_regels(_cel(pagina, re.escape("Aantal vestigingseenheden (VE)"))))
+    if uit["actief"] and not uit["plaats"] and re.match(r"^1\b", aantal) and _tijd_voor(deadline):  # Codex 15, punt 3
+        try:
+            ve = haal(KBO_PAGINA.format("toonvestigingps", kaal))
+        except OSError:
+            ve = ""
+        if eigen(ve):
+            uit["plaats"] = plaats(ve, r"Adres van de vestigingseenheid\s*:?\s*(?:<br\s*/?>)?")   # label met <br/>
+    return uit
+
+
+def lees_kbo(firmas, haal, deadline=None):
+    """{nummer: kbo_van_code(...)} voor elk geldig ondernemingsnummer, elk een keer (Codex 15, punt 2: ook na een fout);
+    een KBO die niet antwoordt, laat het nummer weg. Een oproep start alleen als ze voor de deadline (time.monotonic)
+    klaar kan zijn."""
+    uit, gevraagd = {}, set()
+    for f in firmas or []:
+        nr = btw_geldig(f.get("ondernemingsnummer")) if isinstance(f, dict) else None
+        if not nr or nr in gevraagd:
+            continue
+        if not _tijd_voor(deadline):
+            break
+        gevraagd.add(nr)
+        try:
+            uit[nr] = kbo_van_code(nr, haal, deadline)
+        except OSError:
+            continue
+    return uit
 
 
 def afstand_km(a, b):
@@ -242,10 +305,11 @@ def sleutel(f):
     return url.split("/")[2] if url else ""
 
 
-def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
+def keur(firmas, gelezen, centrum, straal_km, lokaliseer, kbo=None):
     """{"goed", "na_te_kijken", "buiten", "afgewezen"} (overleg X2, G2). Bovenaan alleen wie een gelezen eigen pagina
     heeft, een gelezen KBO-pagina die actief toont en binnen de straal ligt. Zonder KBO-bewijs of zonder bekende afstand:
-    na te kijken, nooit groen. lokaliseer: 'postcode gemeente' -> {lat, lon} of None (Geopunt)."""
+    na te kijken, nooit groen. lokaliseer: 'postcode gemeente' -> {lat, lon} of None (Geopunt). kbo: wat de code zelf in
+    de KBO las (lees_kbo); dat gaat voor op een pagina die het model las."""
     gelezen_firmas, afgewezen = O.alleen_gelezen([f for f in firmas or [] if isinstance(f, dict)], gelezen)
     met_tekst = []
     for f in gelezen_firmas:     # Codex X6 (controle 2): een gelezen pagina zonder tekst bewijst niets
@@ -261,7 +325,9 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
     gezien = set()
     for f in gelezen_firmas:
         f["ondernemingsnummer"] = btw_geldig(f.get("ondernemingsnummer"))
-        f["kbo_actief"] = kbo_actief(f["ondernemingsnummer"], gelezen)
+        door_code = f["ondernemingsnummer"] in (kbo or {})      # Codex 15, punt 1: dan telt alleen wat de code las
+        zelf = (kbo or {}).get(f["ondernemingsnummer"]) or {}
+        f["kbo_actief"] = zelf.get("actief") if door_code else kbo_actief(f["ondernemingsnummer"], gelezen)
         # Codex X2 (controle 6): de site hoort bij de onderneming als het nummer op een gelezen pagina van die site
         # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
         f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
@@ -276,7 +342,9 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer):
         gezien.add(k)
         # De afstand alleen vanaf de zetel in de KBO (Codex X3 controle 3, X3 controle 4, X1 controle 5): wat het model of
         # de website als adres geeft, kan een werkgebied of een project zijn.
-        plaats = kbo_zetel(f["ondernemingsnummer"], gelezen) if f["kbo_actief"] else None
+        plaats = None
+        if f["kbo_actief"]:
+            plaats = zelf.get("plaats") if door_code else kbo_zetel(f["ondernemingsnummer"], gelezen)
         f["zetel"] = plaats
         if not plaats:
             f["vestiging_onbewezen"] = True

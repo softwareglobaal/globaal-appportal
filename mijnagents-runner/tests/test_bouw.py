@@ -6,6 +6,7 @@ geen echte bouwheren, adressen of offertes.
 Draaien: python3 mijnagents-runner/tests/test_bouw.py
 """
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -604,6 +605,134 @@ check("controle 11: zonder volledige kern eindigt het hulpmiddel met een fout, z
       "sys.exit(0 if compleet else 1)" in open(Path(K.__file__), encoding="utf-8").read())
 check("de uitrol vult het adres voor de eerste ronde", "bouw.kern_adres --schrijf" in open(
     Path(__file__).resolve().parents[1] / "docs" / "bouw" / "uitrol.sh", encoding="utf-8").read())
+
+print("\nDe code leest de KBO zelf (01-11-2026: web_fetch van het model opent de KBO niet)")
+def kbo_html(nummer="0123.456.749", status="Actief", zetel=None, ve=None):
+    h = ('<tr><td class="QL">Ondernemingsnummer:</td><td class="QL" colspan="3">' + nummer + '\n\t</td></tr>'
+         '<tr><td class="RL">Status:</td><td class="RL" colspan="3"><strong><span class="pageactief">' + status +
+         '</span></strong></td></tr>')
+    if zetel:
+        h += ('<tr><td class="RL">Adres van de zetel:</td><td class="RL" colspan="3">' + zetel +
+              '<span class="upd"><br/>Sinds 1 januari 2020</span></td></tr>')
+    if ve:
+        h += ('<tr><td class="QL">Aantal vestigingseenheden (VE): </td><td class="QL" colspan="2"><strong>' + ve +
+              '</strong>&nbsp; <a href="toonvestigingps.html" class="QL">Gegevens en activiteiten per VE</a><br/></td></tr>')
+    return h
+
+
+def ve_html(nummer="0123.456.749", adres="Voorbeeldstraat&nbsp;12<br/>3020&nbsp;&nbsp;Herent"):
+    return ('<tr><td>Ondernemingsnummer:</td><td>' + nummer + '</td></tr><tr><td class="QL">Adres van de vestigingseenheid:<br/></td><td class="QL" colspan="3">\n\t'
+            + adres + '<br/><span class="upd">Sinds 1 januari 2020</span></td></tr>')
+
+
+class NepKbo:
+    def __init__(self, hoofd, ve=""):
+        self.hoofd, self.ve, self.urls = hoofd, ve, []
+
+    def __call__(self, url):
+        self.urls.append(url)
+        if "toonvestigingps" in url:
+            return self.ve
+        return self.hoofd
+
+
+nk = NepKbo(kbo_html(zetel="Voorbeeldstraat&nbsp;12<br/>3000&nbsp;Leuven"))
+check("met een zetel: actief en alleen postcode en gemeente, nooit de straat",
+      Z.kbo_van_code("0123.456.749", nk) == {"actief": True, "plaats": "3000 Leuven"} and len(nk.urls) == 1
+      and "ondernemingsnummer=0123456749" in nk.urls[0])
+nk = NepKbo(kbo_html(ve="1"), ve_html())
+check("een natuurlijk persoon zonder zetel: de plaats van de enige vestigingseenheid",
+      Z.kbo_van_code("0123456749", nk) == {"actief": True, "plaats": "3020 Herent"} and "toonvestigingps" in nk.urls[1])
+nk = NepKbo(kbo_html(ve="2"), ve_html())
+check("met meer vestigingseenheden: geen plaats, dus na te kijken", Z.kbo_van_code("0123456749", nk)["plaats"] is None
+      and len(nk.urls) == 1)
+check("een vestigingspagina met een ander nummer telt niet",
+      Z.kbo_van_code("0123456749", NepKbo(kbo_html(ve="1"), ve_html(nummer="0123.456.850")))["plaats"] is None)
+check("een KBO-pagina met een ander nummer telt niet",
+      Z.kbo_van_code("0123456749", NepKbo(kbo_html(nummer="0123.456.850"))) == {"actief": None, "plaats": None})
+nk = NepKbo(kbo_html(status="Stopgezet", ve="1"), ve_html())
+check("stopgezet: niet actief en geen vestiging opgezocht", Z.kbo_van_code("0123456749", nk)["actief"] is False
+      and len(nk.urls) == 1)
+check("een onbekende status is onbekend, nooit actief",
+      Z.kbo_van_code("0123456749", NepKbo(kbo_html(status="Iets anders")))["actief"] is None)
+
+
+def kbo_weg(url):
+    raise OSError("kbo weg")
+
+
+check("lees_kbo: alleen geldige nummers, een keer per nummer",
+      list(Z.lees_kbo([{"ondernemingsnummer": "0123.456.749"}, {"ondernemingsnummer": "BE0123456749"},
+                       {"ondernemingsnummer": "0123.456.789"}, {"ondernemingsnummer": None}, "x"],
+                      NepKbo(kbo_html(zetel="X 1<br/>3000 Leuven")))) == ["0123.456.749"])
+check("lees_kbo: een KBO die niet antwoordt laat het nummer weg", Z.lees_kbo([{"ondernemingsnummer": "0123.456.749"}],
+                                                                             kbo_weg) == {})
+check("lees_kbo: na de deadline leest het niets meer", Z.lees_kbo([{"ondernemingsnummer": "0123.456.749"}],
+                                                                  NepKbo(""), deadline=time.monotonic() - 1) == {})
+EEN = {"https://dak-een.voorbeeld.com": GELEZEN["https://dak-een.voorbeeld.com"]}
+
+
+def dak_een():
+    return [{"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "ondernemingsnummer": "0537.405.239",
+             "bewijs": "Dakwerken, platte daken, EPDM, renovatie", "postcode": "3000", "gemeente": "Leuven"}]
+
+
+zonder = Z.keur(dak_een(), EEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+met = Z.keur(dak_een(), EEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p),
+             {"0537.405.239": {"actief": True, "plaats": "3020 Herent"}})
+check("zonder KBO-pagina: na te kijken", [f["naam"] for f in zonder["na_te_kijken"]] == ["Dak Een"] and not zonder["goed"])
+check("met de KBO van de code: bovenaan, met de afstand vanaf de KBO-plaats",
+      [f["naam"] for f in met["goed"]] == ["Dak Een"] and met["goed"][0]["zetel"] == "3020 Herent"
+      and met["goed"][0]["afstand_km"] is not None)
+stop = Z.keur(dak_een(), EEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p),
+              {"0537.405.239": {"actief": False, "plaats": None}})
+check("stopgezet volgens de KBO van de code valt weg", not stop["goed"] and not stop["na_te_kijken"])
+check("het verslag toont de plaats uit de KBO, niet die van het model",
+      "3020 Herent" in V._firma_regel(1, met["goed"][0], S.HB, {}, True)
+      and "3000 Leuven" not in V._firma_regel(1, met["goed"][0], S.HB, {}, True))
+check("het model leest de KBO niet meer zelf", "lees die dus niet" in Z.VORM and "Zoek het ondernemingsnummer op in" not in Z.VORM)
+_az = open(Path(__file__).resolve().parents[1] / "aannemerszoeker.py", encoding="utf-8").read()
+check("De Aannemerszoeker geeft de KBO van de code aan de keuring",
+      "Z.lees_kbo(firmas, lambda url: kbo_haal(url, timeout=Z.KBO_TIMEOUT), deadline)" in _az and "lokaliseer, kbo)" in _az)
+# Codex 15
+MET_KBO_PAGINA = dict(EEN, **{k: v for k, v in GELEZEN.items() if "0537405239" in k})
+onbekend = Z.keur(dak_een(), MET_KBO_PAGINA, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p),
+                  {"0537.405.239": {"actief": None, "plaats": None}})
+check("Codex 15-1: las de code de KBO zonder uitslag, dan telt een pagina van het model niet",
+      not onbekend["goed"] and onbekend["na_te_kijken"][0]["kbo_actief"] is None and onbekend["na_te_kijken"][0]["zetel"] is None)
+check("zonder lezing door de code blijft een gelezen KBO-pagina van het model gelden",
+      [f["naam"] for f in Z.keur(dak_een(), MET_KBO_PAGINA, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))["goed"]]
+      == ["Dak Een"])
+teller = []
+
+
+def kbo_weg_tel(url):
+    teller.append(url)
+    raise OSError("kbo weg")
+
+
+Z.lees_kbo([{"ondernemingsnummer": "0123.456.749"}, {"ondernemingsnummer": "0123456749"}], kbo_weg_tel)
+check("Codex 15-2: na een fout wordt hetzelfde nummer niet opnieuw gevraagd", len(teller) == 1)
+nk = NepKbo(kbo_html(ve="1"), ve_html())
+check("Codex 15-3: geen vestigingspagina als ze niet meer voor de deadline klaar kan zijn",
+      Z.kbo_van_code("0123456749", nk, deadline=time.monotonic() + Z.KBO_TIMEOUT - 1)["plaats"] is None and len(nk.urls) == 1)
+check("Codex 15-3: geen oproep die niet meer voor de deadline klaar kan zijn",
+      Z.lees_kbo([{"ondernemingsnummer": "0123.456.749"}], NepKbo(""), deadline=time.monotonic() + 1) == {})
+
+
+def ve_weg(url):
+    if "toonvestigingps" in url:
+        raise OSError("ve weg")
+    return kbo_html(ve="1")
+
+
+check("een vestigingspagina die niet antwoordt laat alleen de plaats leeg", Z.kbo_van_code("0123456749", ve_weg)
+      == {"actief": True, "plaats": None})
+sys_kbo, _ = Z.opdracht("werkwijze", "dakwerken", "3000 Leuven", 25, "uitvoering", "2026-11-01")
+check("Codex 15-4: het model krijgt geen KBO-veld en geen KBO-taak meer", "kbo_url" not in sys_kbo
+      and "het web en de KBO" not in sys_kbo and "in de KBO, of null" not in sys_kbo)
+_ww = open(Path(__file__).resolve().parents[1] / "werkwijze" / "aannemerszoeker.md", encoding="utf-8").read()
+check("de werkwijze zegt dat de code de KBO leest (versie 1.1)", "Versie 1.1" in _ww and "leest de code zelf" in _ww)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

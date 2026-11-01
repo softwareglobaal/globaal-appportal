@@ -55,9 +55,9 @@ def zetel(pagina, nummer):
     return {"straat": s["straat"], "huisnummer": s["nr"], "postcode": p["postcode"], "gemeente": p["gemeente"]}
 
 
-def haal(url):
+def haal(url, timeout=30):
     verzoek = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (mijnagents bouw)"})
-    with urllib.request.urlopen(verzoek, timeout=30) as antwoord:
+    with urllib.request.urlopen(verzoek, timeout=timeout) as antwoord:
         return antwoord.read().decode(antwoord.headers.get_content_charset() or "utf-8", errors="replace")
 
 

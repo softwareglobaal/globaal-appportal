@@ -30,7 +30,8 @@ def tegengehouden(soorten):
 
 def _firma_regel(i, f, firma, eerder, boekhouding_bekend):
     delen = [f"{i}. [{f.get('naam') or 'naam onbekend'}]({f['url']})"]
-    plaats = " ".join(str(x) for x in (f.get("postcode"), f.get("gemeente")) if x)
+    # De plaats van de KBO als de code die las: daar rekent de afstand vanaf, niet vanaf wat het model of de site zegt
+    plaats = f.get("zetel") or " ".join(str(x) for x in (f.get("postcode"), f.get("gemeente")) if x)
     if plaats:
         delen.append(plaats + (f" ({f['afstand_km']} km)" if f.get("afstand_km") is not None else " (afstand onbekend)"))
     nr = f.get("ondernemingsnummer")
