@@ -3,7 +3,44 @@
 > Parkeerlijst van afgesproken maar nog niet gebouwde zaken. Bron: Zoom-meetings
 > 2026-07-01 t/m 2026-07-03 + lopende afspraken. Afvinken of verplaatsen bij oppakken.
 
+## Overdracht Dagboek compleet (01-11-2026, naar Claude 1 op de laptop)
+
+> De takenlijst is de werkstand (overleg T-0073, ja van Mehdi 01-11). Deze punten staan daar als: blok "Eigen werk en
+> gezondheid" live = vraag uit T-0079; Browserwacht en Wispr-wacht = T-0077; Health Auto Export = T-0078 (wacht op
+> Mehdi); overleg Dagboek compleet = T-0079; wachten = T-0042 en T-0088; getypte tekst = T-0100 (wacht op Mehdi);
+> pagina Wachten nakijken = T-0099. Zie `python3 ~/dev/werkstand/werkstand.py lijst` en `voor-mehdi`.
+
+Alles staat op main (commit 4b25b01 en eerder). Niets hiervan is live gezet zonder ja van Mehdi.
+
+- [x] Live: locatie (Onderweg, Waar was ik), blok Zoom, Fathom en Plaud, pagina Bronnen in het Dagboek.
+- [ ] Live zetten (wacht op ja van Mehdi): blok "Eigen werk en gezondheid" (Wispr, websites, Apple Watch).
+      Op de VM: `cd ~/appportal && git pull && docker compose up -d --build app-dagboek`; de Dagbundelaar neemt het
+      blok mee in zijn volgende nachtronde.
+- [ ] Claude 1, laptop: Browserwacht en nieuwe Wispr-wacht aanzetten, stappen in
+      `mijnagents-runner/docs/wispr-websites-gezondheid-naar-het-dagboek.md`.
+- [ ] Mehdi, iPhone: Health Auto Export aanzetten (zelfde document, onderaan). Daarna controleert Claude 1 of
+      gezondheid-wacht "gegevens aanwezig" meldt.
+- [ ] Claude 1: driehoeksoverleg Dagboek compleet (P1 tot P8) starten met
+      `mijnagents-runner/docs/driehoeksoverleg-starten-voor-claude-1.md`; daarna bouwen wat 3-0 of 2-1 is aangenomen.
+- [ ] Thread "Laat alle wachten werken": Fotowacht, sms en iMessage, Xelion, YouTube (regel in het blok Eigen werk).
+- [ ] Getypte tekst: niet gebouwd, advies nee (toetsenbordregistratie ziet wachtwoorden). Keuze van Mehdi.
+
 ## Ai Angel, de Mehdi-agent (31-10-2026)
+
+Overdracht 01-11-2026 (Mehdi neemt over via Claude 1 op de laptop): alles staat op main (laatste eigen commit 24e793e) en
+draait live op de VM. Technische naam `mehdi-agent`, op het bord Ai Angel.
+
+- Waar: code `mijnagents-runner/mehdi_agent.py`, werkwijze `werkwijze/mehdi-agent.md`, ontwerp
+  `docs/ontwerp-mehdi-agent.md`, tests `tests/test_mehdi_agent.py` (alleen verzonnen namen), planning
+  `planning/mehdi-agent.cron`, staat `mijnagents-data/mehdi-agent/staat.json`, log `~/agents/mehdi_agent.log`.
+- Bekijken: mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
+- Nakijken: workflow vm in globaal-vm-beheer met
+  `cd mijnagents-runner && ~/agents/.venv/bin/python controle_agenten.py --agent mehdi-agent --uitleg`.
+- Werkwijze wijzigen: bestand aanpassen, pushen, op de VM `git pull` en `werkwijze_naar_bord.py mehdi-agent --zet`
+  (anders zakt N6). Code wijzigen: tests draaien, pushen, op de VM `git pull`; de volgende ronde op :20 neemt het mee.
+- [ ] Claude 1: Claude op het abonnement in plaats van de API-sleutel (Mehdi, 01-11-2026, PR #153): `vraag_claude` in
+      `mehdi_agent.py` omzetten naar `koppelingen/claude_abonnement.py`. Tot dan kost Ai Angel 15 tot 60 dollar per
+      maand aan API.
 
 - [x] Agent gebouwd en getest: leest alleen de dagbundel, zet taken klaar met concepten en voor wie, ochtend- en
       avondoverzicht, leert van Mehdi's correcties (`mijnagents-runner/docs/ontwerp-mehdi-agent.md`).
@@ -14,17 +51,17 @@
 - [x] Live gezet op Mehdi's ja (31-10-2026, "alles nu live"), voor het driehoeksoverleg: kaart met de generator,
       eerste ronde met alle 14 normen ok, planning elk uur op :20 (draait op 7, 10, 13, 16, 19 en 22 uur Brussel).
       De lijst staat op mijnagents.globaal.be/agent/mehdi-agent, blok Laatst klaargezet.
-- [ ] Dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
+- [ ] Claude 1: dispatchen versie 2 (Mehdi, 31-10-2026: "maak niks dubbel ... hieruit moet mijn agents komen die de werk voor
       mij doen"): een taak voor een bestaande agent wordt een klaarzet-item `soort: taak` voor die agent, zoals De
       Werfverslagvoorbereider al doet; eerst een dag meten welke agents taken krijgen, dan de ontvangers een voor een.
       Meting 01-11-2026 (ochtendronde): 9 open, 7 voor Mehdi, 0 voor een collega, 2 voor een agent, beide voor De
       Werfverslagvoorbereider, die elk werfbezoek uit de agenda al vanzelf volgt. Dus eerst niets dubbel: de werkwijze
       zegt sinds 01-11 dat Ai Angel geen taak zet voor werk dat een agent vanzelf doet. Echt doorgeven alleen voor werk
       dat geen agent vanzelf oppakt (punt M10 van het driehoeksoverleg).
-- [ ] De Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
+- [ ] Claude 1, overdracht Dagboek compleet: de Dagbundelaar levert P2, P5 en P7 (driehoeksoverleg Dagboek compleet): actiepunten van gesprekken, wie op
       antwoord wacht, afspraken van morgen, zes keer per dag.
-- [ ] Keuze van Mehdi: mag de agent de tekst van berichten lezen.
-- [ ] Later, na Mehdi's ja: runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
+- [ ] Mehdi: mag Ai Angel de tekst van berichten lezen (kaart in de chat, nog niet beantwoord).
+- [ ] Later, na Mehdi's ja (Claude 1): runbook om een goedgekeurd concept via De Bode te sturen of een taak in Pipedrive te zetten.
 
 ## Pipedrive-backup (19-10-2026)
 
@@ -1318,3 +1355,9 @@ subdiscipline-statistieken.
 - [x] VM live 01-11-2026 08:07: pull, apps herbouwd, drie wachten op het bord, cron xelion_wacht.py elk uur
 - [ ] Laptop: mijnagents-runner/docs/dagbundelaar/opdrachten/opdracht-claude1-macbook-01-11.md door Claude 1 (Full Disk Access opnieuw voor MacGesprekkenKopie)
 - [ ] Oproepen op de gsm-lijn kunnen zowel in Xelion als in de iPhone-belgeschiedenis staan: nakijken op dubbeltelling
+
+Overdracht 01-11-2026 (Mehdi neemt over via Claude 1 op de laptop):
+- Claude 1 (laptop): de opdracht hierboven, stap 0 tot 8. Meldt per stap gelukt of niet aan Mehdi.
+- Mehdi: Full Disk Access voor MacGesprekkenKopie (en zo nodig iCloudWacht en /usr/bin/python3), op de iPhone Messages in iCloud en Text Message Forwarding.
+- Claude 2 (server): niets open op de VM; alles staat op main. Na de laptopstappen: op het bord nakijken of Fotowacht, Sms-wacht en YouTube-wacht groen staan.
+- Nog niet gebouwd: een werkwijze voor youtube-wacht op het bord (draait zonder ronde, dus niet blokkerend).

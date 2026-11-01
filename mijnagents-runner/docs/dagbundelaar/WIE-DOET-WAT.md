@@ -34,8 +34,8 @@ zoals het was.
 | 10 | Agendawacht: meldingen over titels en adressen | T-0083 |
 | 11 | Laptopwachten groen op het bord | T-0088 (na het herstel van de YouTube-wacht) |
 | 12 | Oproepen dubbel tellen (Xelion en iPhone), vanaf 08-11 | T-0084 |
-| 13 (Mehdi) | Ja of nee: pagina Wachten in het Dagboek live | T-0087 (wacht op Mehdi) |
-| 14 | Na die ja: bord en Dagboek opnieuw bouwen, pagina nakijken | T-0087 |
+| 13 (Mehdi) | Ja of nee: pagina Wachten in het Dagboek live | T-0087: ja 01-11 16:26, live 16:27. Overdracht aan Claude 1: `opdrachten/overdracht-pagina-wachten-01-11.md` |
+| 14 | Na die ja: bord en Dagboek opnieuw bouwen, pagina nakijken | Live sinds 01-11 16:27 (T-0087 klaar); nakijken met Mehdi: T-0099 |
 | 13 (Claude 2) | De nieuwe werkwijze lezen en toepassen, eigen id | T-0085 |
 
 De oude tabel staat in de git-geschiedenis van dit bestand (laatste versie: commit b85103a).
