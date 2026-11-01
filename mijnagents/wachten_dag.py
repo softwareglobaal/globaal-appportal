@@ -192,6 +192,16 @@ def lees_plaud(conn, dag):
         gemaakt = str((m.get("meta") or {}).get("gemaakt") or "")
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return [], None
+    # Codex-toets 1: een manifest van voor die dag kent die dag niet; dat is onbekend, geen nul. Van tijdens de dag
+    # (vandaag) is de telling nog niet af: na_de_dag zegt het.
+    van, tot = (datetime.fromisoformat(x) for x in grenzen(dag))
+    try:
+        gemaakt_t = datetime.fromisoformat(gemaakt.replace("Z", "+00:00"))
+        gemaakt_t = gemaakt_t if gemaakt_t.tzinfo else gemaakt_t.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return [], None
+    if gemaakt_t < van:
+        return [], None
     unieken = [f"plaud:{o.get('plaud_id')}" for o in opnames]
     in_tabel = {r["uniek"] for r in conn.execute(
         f"SELECT uniek FROM gesprek_log WHERE bron='plaud' AND uniek IN ({','.join('?' * len(unieken))})", unieken)} \
@@ -218,7 +228,7 @@ def lees_plaud(conn, dag):
              "kort": sum(1 for o in opnames if _kort_wachtend(o)),
              "onvolledig": sum(1 for o in opnames if o.get("toestand") == "onvolledig"),
              "zonder_audio": sum(1 for o in opnames if (o.get("audio") or {}).get("staat") == "ontbreekt"),
-             "manifest_van": gemaakt}
+             "manifest_van": gemaakt, "na_de_dag": gemaakt_t >= tot}
     return items, stand
 
 

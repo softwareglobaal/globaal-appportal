@@ -1038,36 +1038,60 @@ def test_k5_hotmailkopie_dekt_de_nachtelijke_inhaal():
         assert vanaf <= sinds, (nacht, vanaf, sinds)
 
 
-def test_plaud10_nieuwere_plaud_of_fathom_rij_laat_een_oude_dag_inhalen():
+def test_plaud10_gewijzigde_plaud_of_fathom_rij_laat_een_oude_dag_inhalen_op_inhoud():
     """PLAUD-10 (T-0120): de 7 Plaud-opnames van 13-10 en 14-10 kwamen pas op 28-10 in de gesprekkentabel, na de laatste
-    vaststelling van hun dag en buiten het nachtvenster van 14 dagen. Het inhalen keek alleen naar dekkingsrijen van de
-    Mac-wachten, dus die dagen bleven zonder hun opnames. Nu telt ook een nieuwere Plaud- of Fathom-rij."""
+    vaststelling van hun dag en buiten het nachtvenster van 14 dagen. Het inhalen keek alleen naar dekkingsrijen.
+    - vlag uit (standaard, overleg X7): alleen de dekkingsrij, zoals voordien;
+    - vlag aan, eerste nacht: een dag met een Plaud- of Fathom-rij die nieuwer is dan zijn vaststelling;
+    - tweede nacht: een herschrijving zonder verschil (De Fathomwacht schrijft elke ronde haar venster) haalt niet opnieuw
+      in, een gewijzigde rij wel (Codex-toets 1)."""
     import sqlite3
     nu = datetime(2026, 10, 28, 23, 30, tzinfo=timezone.utc)
     venster = D.V.venster(nu, D.NACHTVENSTER)
     vastgesteld, daarna = (nu - timedelta(days=1)).isoformat(), (nu - timedelta(hours=2)).isoformat()
     con = sqlite3.connect(":memory:")
     con.row_factory = sqlite3.Row
-    con.execute("CREATE TABLE gesprek_log(uniek TEXT, datum TEXT, bron TEXT, ts TEXT)")
-    con.executemany("INSERT INTO gesprek_log VALUES(?,?,?,?)", [
-        ("plaud:of_" + "1" * 32, "2026-10-13", "plaud", daarna),        # na de vaststelling: inhalen
-        ("fathom:801", "2026-10-12", "fathom", daarna),                   # idem
-        ("whatsapp-oproep:1", "2026-10-11", "whatsapp", daarna),          # geen dekkingsrij, geen Plaud of Fathom
-        ("plaud:of_" + "2" * 32, "2026-10-10", "plaud", (nu - timedelta(days=3)).isoformat()),   # al vastgesteld
-        ("dekking:telefoon:2026-10-09", "2026-10-09", "dekking", daarna)])  # zoals voordien: inhalen
+    con.execute("CREATE TABLE gesprek_log(uniek TEXT PRIMARY KEY, datum TEXT, start TEXT, minuten INTEGER, personen TEXT, "
+                "afdeling TEXT, thema TEXT, prive INTEGER, bron TEXT, dubbel_van TEXT, ts TEXT)")
+    rij = "INSERT OR REPLACE INTO gesprek_log VALUES(?,?,'10:00',20,'Proef Klant','regie',?,0,?,'',?)"
+    con.executemany(rij, [
+        ("plaud:of_" + "1" * 32, "2026-10-13", "werf", "plaud", daarna),         # na de vaststelling: inhalen
+        ("fathom:801", "2026-10-12", "overleg", "fathom", daarna),                 # idem
+        ("whatsapp-oproep:1", "2026-10-11", "", "whatsapp", daarna),               # geen Plaud, Fathom of dekking
+        ("plaud:of_" + "2" * 32, "2026-10-10", "werf", "plaud", (nu - timedelta(days=3)).isoformat()),  # al vastgesteld
+        ("dekking:telefoon:2026-10-09", "2026-10-09", "gelezen", "dekking", daarna)])                   # zoals voordien
+
+    def lees(sql, args=()):
+        return [dict(r) for r in con.execute(sql, args).fetchall()]
     with tempfile.TemporaryDirectory() as map_:
-        oud = D.STAAT, D.INHAALSTAAT, bord.db_lees
+        oud = D.STAAT, D.INHAALSTAAT, D.INHAALVINGERS, D.INHAAL_GESPREKKEN, bord.db_lees
         D.STAAT, D.INHAALSTAAT = os.path.join(map_, "staat.json"), os.path.join(map_, "inhaal.json")
+        D.INHAALVINGERS = os.path.join(map_, "vingers.json")
         try:
             with open(D.STAAT, "w") as f:
                 json.dump({d: {"ts": vastgesteld} for d in ("2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12",
                                                             "2026-10-13")}, f)
-            bord.db_lees = lambda sql, args=(): [dict(r) for r in con.execute(sql, args).fetchall()]
-            uit = D.inhaaldagen(nu, venster)
+            bord.db_lees = lees
+            assert min(venster) == "2026-10-15", venster
+            D.INHAAL_GESPREKKEN = False
+            assert D.inhaaldagen(nu, venster) == ["2026-10-09"], "vlag uit: alleen de dekkingsrij, zoals voordien"
+            D.INHAAL_GESPREKKEN = True
+            eerste = D.inhaaldagen(nu, venster)
+            assert eerste == ["2026-10-09", "2026-10-12", "2026-10-13"], eerste
+            # zoals main na een geslaagde inhaal: het tijdstip en de vingerafdruk van voor het vastleggen
+            vooraf = D.gespreksvingers(min(eerste), max(eerste))
+            with open(D.INHAALSTAAT, "w") as f:
+                json.dump({d: nu.isoformat() for d in eerste}, f)
+            D.vingers_bewaren(eerste, vooraf)
+            nacht2 = nu + timedelta(days=1)
+            later = (nacht2 - timedelta(hours=2)).isoformat()
+            con.execute(rij, ("fathom:801", "2026-10-12", "overleg", "fathom", later))         # zelfde inhoud, nieuwe ts
+            con.execute(rij, ("plaud:of_" + "1" * 32, "2026-10-13", "werf en dak", "plaud", later))   # andere inhoud
+            tweede = D.inhaaldagen(nacht2, D.V.venster(nacht2, D.NACHTVENSTER))
+            assert tweede == ["2026-10-13"], tweede
         finally:
-            D.STAAT, D.INHAALSTAAT, bord.db_lees = oud
-    assert min(venster) == "2026-10-15", venster
-    assert uit == ["2026-10-09", "2026-10-12", "2026-10-13"], uit
+            D.STAAT, D.INHAALSTAAT, D.INHAALVINGERS, D.INHAAL_GESPREKKEN, bord.db_lees = oud
+    assert D.INHAAL_GESPREKKEN is False, "standaard uit tot Mehdi's ja op X7"
 
 
 def test_lens5_9_dekking_per_dag():

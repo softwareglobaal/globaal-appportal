@@ -430,7 +430,7 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
     if b["firma"] == "HARC" and b["projectnummer"] and deals:
         passend = [d for d in deals if str(d.get("nummer")) == b["projectnummer"]]
         deal = passend[0] if len(passend) == 1 else None
-    zonder_kopie = reden_zonder_dossierkopie(b, deals, passend)
+    zonder_kopie = reden_zonder_dossierkopie(b, herk, deals, passend, deal, tekst)
     st["beslissing"] = b
     st["vingerafdruk"] = vinger
     staat.plan(st, opdrachten_voor(o, tekst, b, herk, deal, taken, verslagsoort_van(tekst, o.get("naam_in_plaud") or "")))
@@ -455,11 +455,15 @@ def verwerk(o, uitingen, tekst, st_obj, items, personen, deals, taken, budget):
     return {"uitkomst": "gedaan", "fouten": fouten}
 
 
-def reden_zonder_dossierkopie(b, deals, passend):
-    """PLAUD-12 (T-0120): waarom een HARC-opname die zakelijk gekopieerd mag worden, toch geen dossierkopie krijgt, of
-    None. In oktober 7 keer, zonder reden in het werkverslag. Een kopie vraagt precies één open Pipedrive-deal met dat
-    nummer (fathom_wacht.deals_index leest alleen open deals). Alleen bij een nieuwe beslissing, dus niet elke ronde."""
-    if not b.get("kopie_toegestaan") or b.get("firma") != "HARC":
+def reden_zonder_dossierkopie(b, herk, deals, passend, deal, tekst):
+    """PLAUD-12 (T-0120): waarom een opname van H-Architects geen dossierkopie krijgt, of None (er komt een kopie, of het
+    is geen H-A-opname). In oktober mochten 7 HARC-opnames gekopieerd worden en kwam er geen, zonder reden in het
+    werkverslag. Een kopie vraagt een beslissing die ze toestaat en precies één open Pipedrive-deal met dat nummer
+    (fathom_wacht.deals_index leest alleen open deals). De regel zelf verandert niet: dit zegt alleen waarom. De
+    aanroeper logt het alleen bij een nieuwe beslissing en nooit bij een privé-opname (BAS-01)."""
+    afdeling = str((herk or {}).get("afdeling") or "").strip().lower()
+    ha = b.get("firma") == "HARC" or (not b.get("firma") and afdeling == "h-architects")
+    if not ha or (b.get("kopie_toegestaan") and deal and tekst):
         return None
     if deals is None:
         return "Pipedrive niet gelezen"
@@ -470,7 +474,8 @@ def reden_zonder_dossierkopie(b, deals, passend):
     if len(passend) > 1:
         return (f"meer dan één open Pipedrive-deal met nummer {b['projectnummer']} ("
                 + ", ".join(str(d.get("id")) for d in passend) + ")")
-    return None
+    return (f"de beslissing staat geen zakelijke kopie toe (zekerheid {b.get('zekerheid')}"
+            + (", conflict" if b.get("conflict") else "") + ")")
 
 
 # ------------------------------------------------------------- toezicht ---

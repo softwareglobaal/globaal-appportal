@@ -6,7 +6,10 @@ elkaar daar niet in de weg zitten; het draait in dezelfde Docker-build.
 - P02 (PLAUD-7): een opname uit het manifest van de Mac zonder rij in de gesprekkentabel (wacht op transcript, kort,
   onvolledig) staat er als item met tijd, duur en toestand, zonder naam; een opname met een rij staat er niet nog eens bij.
   'plaud' telt per dag de opnames, ook die zonder audio. Nooit een naam uit Plaud, nooit een pad of link.
-- P03 (PLAUD-7): zonder leesbaar manifest blijven de items uit de tabel, en is de stand onbekend, nooit 0.
+- P03 (PLAUD-7): zonder leesbaar manifest, of met een manifest van voor die dag, blijven de items uit de tabel en is de
+  stand onbekend, nooit 0; een manifest van tijdens de dag zegt dat de telling nog niet af is (na_de_dag).
+- P04, P05 (Codex-toets 1): privémaskering en geen dubbele klaarzet-regel bij De Plaudwacht; actief na het samenvoegen
+  met FATHOM-3 (t0120-fathom) en DB-8 (t0120-prive), die dat bouwen.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -101,13 +104,57 @@ check("P02 nooit een naam uit Plaud, een pad of een link", "Geheime" not in teks
       and not any("link" in x for x in pl["items"]), tekst[:400])
 check("P02 stand per dag, ook de audio", pl["plaud"] == {"opnames": 4, "in_tabel": 2, "wacht_op_transcript": 2, "kort": 1,
                                                           "onvolledig": 1, "zonder_audio": 1,
-                                                          "manifest_van": "2026-10-28T06:05:00+00:00"}, pl["plaud"])
+                                                          "manifest_van": "2026-10-28T06:05:00+00:00", "na_de_dag": True},
+      pl["plaud"])
 check("P02 een andere dag telt alleen zijn eigen opname", wachten("2026-10-26")["plaud-wacht"]["plaud"]["opnames"] == 1)
 check("P02 groen: er kwam iets binnen", pl["kleur"] == "groen", pl["kleur"])
+check("P03 een manifest van voor die dag kent die dag niet: onbekend, geen nul", wachten("2026-10-29")["plaud-wacht"]["plaud"]
+      is None)
+MANIFEST["meta"]["gemaakt"] = "2026-10-27T14:00:00+00:00"                      # tijdens de dag gemaakt
+with open(os.path.join(INVOER, "00 manifest.json"), "w", encoding="utf-8") as f:
+    json.dump(MANIFEST, f)
+check("P03 een manifest van tijdens de dag: de telling is nog niet af", wachten("2026-10-27")["plaud-wacht"]["plaud"]["na_de_dag"]
+      is False)
+MANIFEST["meta"]["gemaakt"] = ""
+with open(os.path.join(INVOER, "00 manifest.json"), "w", encoding="utf-8") as f:
+    json.dump(MANIFEST, f)
+check("P03 een manifest zonder tijdstip: onbekend", wachten("2026-10-27")["plaud-wacht"]["plaud"] is None)
 os.remove(os.path.join(INVOER, "00 manifest.json"))
 pl = wachten("2026-10-27")["plaud-wacht"]
 check("P03 zonder manifest: de rijen blijven, de stand is onbekend", pl["aantal"] == 2 and pl["plaud"] is None
       and pl["leesfout"] == "", pl)
+
+# ------------------------------------------- P04, P05: samen met FATHOM-3 (t0120-fathom) en DB-8 (t0120-prive) ---
+# Codex-toets 1: de privémaskering (prive=1 bij Plaud is privé, ook met een andere afdeling) en het weglaten van een
+# klaarzet-regel met de uniek van een gesprek zijn van die groepen, en gelden ook voor De Plaudwacht (zelfde uniek
+# plaud:<id> in beide tabellen). Deze toetsen worden actief zodra die takken samengevoegd zijn; tot dan staan ze er luid.
+import inspect  # noqa: E402
+
+DEDUP = "zonder_gesprekken" in inspect.signature(WD.lees_klaarzet).parameters
+PRIVE = hasattr(WD, "PRIVE_VLAG_BRONNEN") or hasattr(WD, "privegrens")
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+            "VALUES('plaud:of_" + "p" * 32 + "','2026-10-25','11:00',12,'Verborgen Persoon','Verborgen onderwerp','regie',1,"
+            "'plaud','x')")
+for letter, start in (("f", "09:00"), ("g", "14:00")):
+    uniek = "plaud:of_" + letter * 32
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+                "VALUES(?,'2026-10-24',?,20,'Proef Klant','Proefthema','h-architects',0,'plaud','x')", (uniek, start))
+    con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('plaud-wacht','h-architects','transcript',"
+                "?,'{}',?,'2026-10-24T15:00:00+00:00')", (f"2026-10-24 {start} Plaud: Proef Klant · Proefthema", uniek))
+con.commit()
+con.close()
+if PRIVE:
+    it = wachten("2026-10-25")["plaud-wacht"]["items"]
+    check("P04 prive=1 bij Plaud met afdeling regie: alleen 'privégesprek, N min'", len(it) == 1
+          and it[0]["wie"] == "privégesprek" and "Verborgen" not in str(it), it)
+else:
+    print("WACHT P04: actief na het samenvoegen van FATHOM-3 (t0120-fathom) of DB-8 (t0120-prive)")
+if DEDUP:
+    pl = wachten("2026-10-24")["plaud-wacht"]
+    check("P05 een dag met 2 opnames: 2 items, niet 4 (klaarzet met dezelfde uniek valt weg)", pl["aantal"] == 2, pl["items"])
+else:
+    print("WACHT P05: actief na het samenvoegen van FATHOM-3 (t0120-fathom)")
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

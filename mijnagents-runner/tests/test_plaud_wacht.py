@@ -819,6 +819,17 @@ def test_plaud5_deels_en_onvolledige_mappen_geven_een_nood_met_het_aantal_in_het
     assert len([t for t, _ in r.noden if "deels" in t]) == 1, r.noden
 
 
+def test_plaud5_deels_zonder_onvolledige_mappen_geeft_ook_de_nood():
+    """Codex-toets 1: 'deels' alleen (bv. een detailvraag die faalde), zonder onvolledige map, is ook een nood."""
+    w = Wereld()
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    (w.archief / "00 status.json").write_text(json.dumps({"uitkomst": "deels", "tellers": {"mislukt": 1}}))
+    w.push()
+    _, tel, r = ronde_met_detail(w)
+    assert tel["onvolledig_archief"] == 0 and [wie for t, wie in r.noden if "deels" in t] == ["claude-code"], r.noden
+    assert "Mac: deels" in r.detail and "onvolledig in het archief" not in r.detail, r.detail
+
+
 def test_plaud5_status_ok_zonder_onvolledige_mappen_geeft_geen_nood():
     w = Wereld()
     w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
@@ -909,8 +920,41 @@ def test_plaud12_harc_zonder_passende_deal_geeft_een_bevinding_met_de_reden():
     w3.push()
     w3.ronde()
     assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")] and any(p.startswith("/Sales/") for p in w3.uploads)
-    assert P.reden_zonder_dossierkopie({"kopie_toegestaan": True, "firma": "HARC", "projectnummer": "2531"}, None, []) \
-        == "Pipedrive niet gelezen"
+    assert P.reden_zonder_dossierkopie({"kopie_toegestaan": False, "firma": "HARC", "projectnummer": "2531", "zekerheid": "laag",
+                                        "conflict": True}, {}, [{"id": 777}], [{"id": 777}], {"id": 777}, "tekst") \
+        == "de beslissing staat geen zakelijke kopie toe (zekerheid laag, conflict)"
+    assert P.reden_zonder_dossierkopie({"firma": "UNAB", "projectnummer": "3999"}, {"afdeling": "unabo"}, None, [], None, "t") is None
+
+
+def test_plaud12_pipedrive_niet_gelezen_en_geen_projectnummer_in_een_echte_ronde():
+    """Codex-toets 1: ook als de beslissing zelf geen kopie toestaat (Pipedrive niet gelezen maakt het bewijs onvolledig,
+    dossier.beslis) of er geen nummer is, staat de reden in het werkverslag. De kopieregel zelf blijft gelijk."""
+    w = Wereld()
+    w.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w.pipedrive_fout = True
+    w.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w.push()
+    w.ronde()
+    w.ronde()
+    reden = [t for s, t in w.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: Pipedrive niet gelezen"], w.logs
+    assert not [p for p in w.uploads if p.startswith("/Sales/")], "zonder Pipedrive geen kopie, zoals voordien"
+    w2 = Wereld()
+    w2.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w2.opname(ID1, "10-08 Vergadering kantoor", "2026-10-08T09:05:00", uitingen=ZONDER_NUMMER)
+    w2.push()
+    w2.ronde()
+    reden = [t for s, t in w2.logs if s == "bevinding" and t.startswith("geen dossierkopie")]
+    assert reden == ["geen dossierkopie: geen projectnummer"], w2.logs
+    # een privé-opname krijgt geen regel met een nummer of reden (BAS-01)
+    w3 = Wereld()
+    w3.deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    w3.opname(ID1, "10-08 Werfbezoek 2531 Fictiva", "2026-10-08T09:05:00")
+    w3.herkenning[ID1] = {"personen": ["vriend"], "hoofdpersoon": "vriend", "bedrijf": "", "afdeling": "prive",
+                          "thema": "privé", "project": "", "prive": True, "zekerheid": "hoog", "waarom": "proef"}
+    w3.push()
+    w3.ronde()
+    assert not [t for s, t in w3.logs if t.startswith("geen dossierkopie")], w3.logs
 
 
 def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
