@@ -63,9 +63,25 @@ Dropbox-kopie: die kopie maakt de Mac, en hij moet niet wachten tot de Mac wakke
 - Doen: hij schrijft concepten (een bericht of een mail) die Mehdi zelf stuurt. Hij verstuurt nooit zelf iets.
 - Dispatchen: bij elke taak staat voor wie ze is. Een taak voor een agent zet hij nog niet bij die agent klaar: een
   ontvanger als De Plaudwacht leest elk `verzoek` als een eigen opdracht, en dat zou ruis geven. Mehdi beslist per
-  soort wanneer de agent zelf mag doorsturen (werkwijze, Wat Mehdi beslist).
+  soort wanneer de agent zelf mag doorsturen (werkwijze, Wat Mehdi beslist). Versie 2 daarvan, De Doorgever, is
+  gebouwd maar staat uit (hieronder).
 - Leren: Mehdi zegt via WhatsApp of op het bord "Mehdi-agent, 3 gaat naar" en een naam, of "2 is gedaan". De Regisseur
   antwoordt in de rol van de agent; de volgende ronde leest de agent dat gesprek, past de taak aan en bewaart een regel.
+
+### De Doorgever (dispatchen versie 2, M10 van T-0120; gebouwd 01-11-2026, staat uit)
+
+- Met `MEHDI_AGENT_DOORGEVEN=aan` zet de agent een taak voor een agent zelf bij die agent klaar: `soort: taak`, uniek
+  `mehdi-agent:taak:<id>`, sleutel het id van de taak, een titel zonder naam, en als inhoud een JSON met `voorstel: true`,
+  wat de ontvanger aanneemt, de taak, de reden, de bron, de dag en het concept. Daarna leest hij het item terug.
+- Alleen bij een ontvanger op de witte lijst `ONTVANGERS` in `mehdi_agent.py`. Die is leeg, en de vlag staat uit: beide
+  kiest Mehdi per soort taak (werkwijze, Wat Mehdi beslist). Een ontvanger komt er pas op als zijn eigen code een taak
+  van `mehdi-agent` aanneemt; De Agendawacht neemt nu alleen taken van De Werfverslag voorbereider aan
+  (`agenda_wacht.py`, `terugkijktaken`), en daar verandert dit niets aan.
+- Nooit iets privé, hoogstens vijf per ronde, en een taak die al eens terugkwam, gaat niet opnieuw weg.
+- Elke ronde met Claude leest hij de status van wat weg is terug. Opgepakt is beweging. Ligt een item na drie dagen nog
+  klaar, of staat het niet meer klaar, dan neemt hij het terug (opgepakt door `mehdi-agent`, zodat de ontvanger het niet
+  later toch doet) en is de taak weer voor Mehdi, met de reden erbij. Een bord dat niet antwoordt, beslist niets.
+- `--droog` zet niets en neemt niets terug: het toont per taak "gaat naar", "zou naar" of "blijft bij Mehdi" met de reden.
 
 Volgende stap, pas na Mehdi's ja: een runbook dat een goedgekeurd concept via De Bode verstuurt, of een taak als
 activiteit in Pipedrive zet, telkens als voorstel op het bord.

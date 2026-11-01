@@ -122,7 +122,7 @@ class Omgeving:
         for it in items:
             if it["uniek"] in self.opgepakt:
                 continue          # het bord laat een opgepakt item staan
-            self.bord[it["uniek"]] = dict(it, status="klaar")
+            self.bord[it["uniek"]] = dict(it, status="klaar", id=self.bord.get(it["uniek"], {}).get("id") or len(self.bord) + 1)
         return {"nieuw": len(items)}
 
     def lees(self, uniek):
@@ -638,6 +638,167 @@ def test_droog_stil_toont_geen_namen_en_schrijft_het_volledige_resultaat_apart()
         assert not os.path.exists(M.STAAT)                       # droog bewaart geen staat
     finally:
         M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei = oud
+        M.ag._log.clear()
+        shutil.rmtree(d, ignore_errors=True)
+
+
+# ANGEL-9 (T-0120, M10): De Doorgever. Een taak voor een agent zet Ai Angel zelf bij die agent klaar, als voorstel, maar
+# alleen met de vlag aan en bij een ontvanger op de witte lijst. Beide zijn een keuze van Mehdi: de vlag staat uit en de
+# lijst is leeg. Geen ontvangende agent verandert.
+ZOOM_TAAK = taak("Zoek de opname van het gesprek", "11:00 Fathom, met Klant Omega, 45 min", voor="agent", wie="De Zoomwacht")
+AGENTS_TWEE = AGENTS + [{"naam": "plaud-wacht", "label": "De Plaudwacht", "afdeling": "regie", "rol": "", "cadans": ""}]
+
+
+def _agenttaak(tid, wie="De Zoomwacht", bron="11:00 Fathom, met Klant Omega", tekst="Zoek de opname"):
+    return {"id": tid, "tekst": tekst, "voor": "agent", "wie": wie, "waarom": "omdat", "bron": bron, "dag": GISTEREN,
+            "prioriteit": "normaal", "status": "open", "concept": "", "sinds": "2026-10-31T06:20:00+00:00"}
+
+
+def test_doorgever_staat_uit_met_een_lege_witte_lijst():
+    assert M.DOORGEVEN is False and M.ONTVANGERS == {}
+    bron = open(os.path.join(RUNNER, "mehdi_agent.py"), encoding="utf-8").read()
+    assert 'os.environ.get("MEHDI_AGENT_DOORGEVEN", "uit") == "aan"' in bron
+    o = Omgeving()
+    try:
+        _, staat = o.ronde(uit=antwoord([ZOOM_TAAK]))
+        assert [t["voor"] for t in staat["taken"].values()] == ["agent"]
+        assert list(o.bord) == ["mehdi-agent:taken:2026-10-31"]            # niets bij De Zoomwacht
+        assert not any(t.get("doorgegeven") for t in staat["taken"].values())
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_doorgever_besluit_per_taak_zonder_iets_te_zetten():
+    staat = {"taken": {"t-1": _agenttaak("t-1"), "t-2": _agenttaak("t-2", wie="De Plaudwacht"),
+                       "t-3": _agenttaak("t-3", bron="14:00 (privé): geen spoor"),
+                       "t-4": _agenttaak("t-4", wie="De Onbekende Wacht"),
+                       "t-5": dict(_agenttaak("t-5"), voor="mehdi", wie="")}}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE)}
+    assert besluit == {"t-1": ("", "blijft bij Mehdi: zoom-wacht staat niet op de witte lijst"),
+                       "t-2": ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst"),
+                       "t-3": ("", "blijft bij Mehdi: privé"),
+                       "t-4": ("", "blijft bij Mehdi: de agent staat niet op het bord")}, besluit
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    besluit = {b["id"]: (b["naar"], b["besluit"]) for b in M.doorgeef_besluiten(staat, AGENTS_TWEE, lijst, aan=False)}
+    assert besluit["t-1"] == ("zoom-wacht", "zou naar zoom-wacht (doorgeven staat uit)")
+    assert besluit["t-2"] == ("", "blijft bij Mehdi: plaud-wacht staat niet op de witte lijst")   # De Plaudwacht niet
+    assert besluit["t-3"][0] == "" and M.doorgeef_besluiten(staat, AGENTS_TWEE, lijst, aan=True)[0]["besluit"] == \
+        "gaat naar zoom-wacht"
+    veel = {"taken": {f"t-{i}": _agenttaak(f"t-{i}") for i in range(7)}}
+    besluiten = M.doorgeef_besluiten(veel, AGENTS, lijst, aan=True)
+    assert sum(1 for b in besluiten if b["naar"]) == M.MAX_DOORGEVEN == 5
+    assert sum(1 for b in besluiten if b["besluit"] == "blijft bij Mehdi: hoogstens 5 per ronde") == 2
+
+
+def test_doorgever_zet_als_voorstel_leest_terug_en_geeft_na_drie_dagen_terug_aan_mehdi():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    gepakt = []
+
+    def doorgeef(staat, nu, agents):
+        return M.doorgeven(staat, nu, agents, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+
+    try:
+        r = NepRonde()
+        staat = M.werk(r, nu=OCHTEND_UTC, map_=o.map, gezegd=lambda nu: [], kern=lambda: list(KERN),
+                       claude=lambda s, i: (antwoord([ZOOM_TAAK]), {}), zet=o.zet, lees=o.lees, staatpad=o.staat,
+                       doorgeef=doorgeef)
+        (tid,) = staat["taken"]
+        it = o.bord[f"mehdi-agent:taak:{tid}"]
+        assert it["voor"] == "zoom-wacht" and it["soort"] == "taak" and it["sleutel"] == tid
+        assert "Omega" not in it["titel"] and r.noden == []
+        inhoud = json.loads(it["inhoud"])
+        assert inhoud["voorstel"] is True and inhoud["taak"] == ZOOM_TAAK["tekst"] and inhoud["wat"] == "zoekt een opname"
+        assert staat["taken"][tid]["doorgegeven"]["naar"] == "zoom-wacht"
+        assert "Doorgegeven aan zoom-wacht" in o.bord["mehdi-agent:taken:2026-10-31"]["inhoud"]
+        assert "1 doorgegeven" in r.detail and "Omega" not in r.detail, r.detail
+        # een dag later ligt het nog klaar: niets verandert, en het gaat niet een tweede keer weg
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 1, 6, 20, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+                                 lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        assert sum(telling.values()) == 0 and staat["taken"][tid]["voor"] == "agent" and gepakt == []
+        # na drie dagen nog altijd klaar: terug naar Mehdi, en het item neem ik terug zodat het niet dubbel gebeurt
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 3, 6, 21, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+                                 lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        t = staat["taken"][tid]
+        assert telling["terug_naar_mehdi"] == 1 and t["voor"] == "mehdi" and t["wie"] == "" and "doorgegeven" not in t
+        assert gepakt == [it["id"]] and t["teruggekomen"] == ["zoom-wacht"]
+        t["voor"], t["wie"] = "agent", "De Zoomwacht"                      # het model zet het opnieuw bij de agent
+        (b,) = M.doorgeef_besluiten(staat, AGENTS, lijst, aan=True)
+        assert b["naar"] == "" and b["besluit"] == "blijft bij Mehdi: ging al eens terug"
+    finally:
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_doorgever_opgepakt_is_beweging_en_onleesbaar_bord_beslist_niets():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1")}}
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=None, ontvangers=lijst, aan=True)
+        o.opgepakt.add("mehdi-agent:taak:t-1")
+        _, telling = M.doorgeven(staat, datetime(2026, 11, 5, 6, 20, tzinfo=timezone.utc), AGENTS, zet=o.zet,
+                                 lees=o.lees, pak=None, ontvangers=lijst, aan=True)
+        assert telling["opgepakt_door_agent"] == 1 and staat["taken"]["t-1"]["doorgegeven"]["status"] == "opgepakt"
+        assert staat["taken"]["t-1"]["voor"] == "agent"
+        staat = {"taken": {"t-2": dict(_agenttaak("t-2"), doorgegeven={"naar": "zoom-wacht", "uniek": "mehdi-agent:taak:t-2",
+                                                                      "ts": "2026-10-20T06:20:00+00:00"})}}
+
+        def stuk(uniek):
+            raise bord.BordOnbekend("bord weg")
+
+        _, telling = M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=stuk, pak=None, ontvangers=lijst, aan=True)
+        assert telling["niet_gelezen"] == 1 and staat["taken"]["t-2"]["voor"] == "agent"     # onbekend is niet leeg
+    finally:
+        o.weg()
+
+
+def test_doorgever_neemt_terug_wat_afgerond_of_niet_meer_voor_die_agent_is():
+    o = Omgeving()
+    lijst = {"zoom-wacht": "zoekt een opname"}
+    gepakt = []
+    try:
+        staat = {"taken": {"t-1": _agenttaak("t-1"), "t-2": _agenttaak("t-2")}, "afgerond": []}
+        M.doorgeven(staat, OCHTEND_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append, ontvangers=lijst, aan=True)
+        assert all(staat["taken"][k].get("doorgegeven") for k in ("t-1", "t-2"))
+        staat["afgerond"].append(dict(staat["taken"].pop("t-1"), status="gedaan"))     # "1 is gedaan"
+        staat["taken"]["t-2"].update(voor="mehdi", wie="")                             # "2 doe ik zelf"
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+                                 ontvangers=lijst, aan=True)
+        assert telling["ingetrokken"] == 2 and sorted(gepakt) == sorted(o.bord[f"mehdi-agent:taak:t-{i}"]["id"] for i in (1, 2))
+        assert staat["afgerond"][0]["doorgegeven"]["status"] == "ingetrokken" and "doorgegeven" not in staat["taken"]["t-2"]
+        assert staat["taken"]["t-2"]["voor"] == "mehdi" and not staat["taken"]["t-2"].get("teruggekomen")
+        _, telling = M.doorgeven(staat, MIDDAG_UTC, AGENTS, zet=o.zet, lees=o.lees, pak=gepakt.append,
+                                 ontvangers=lijst, aan=True)
+        assert sum(telling.values()) == 0 and len(gepakt) == 2                          # een keer terugnemen is genoeg
+    finally:
+        o.weg()
+
+
+def test_droog_toont_per_taak_waar_ze_heen_zou_gaan():
+    import contextlib
+    import io
+    d = tempfile.mkdtemp(prefix="mehdi-agent-droog-")
+    gisteren = M.dagen_terug(datetime.now(timezone.utc))[1]
+    os.makedirs(os.path.join(d, gisteren[:4]))
+    with open(os.path.join(d, gisteren[:4], f"{gisteren}.md"), "w", encoding="utf-8") as f:
+        f.write(DAGBESTAND)
+    oud = (M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas)
+    M.DAGBOEK, M.STAAT = d, os.path.join(d, "staat.json")
+    M.collegas_kern, M.wat_mehdi_zei, bord.collegas = (lambda: list(KERN)), (lambda nu: []), (lambda zonder=None: AGENTS)
+    M.vraag_claude = lambda system, inhoud: (antwoord([taak("Bel Klant Omega terug", "16:10 telefoon met Klant Omega"),
+                                                       dict(ZOOM_TAAK, dag=gisteren)]), {})
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = M.droog(["mehdi_agent.py", "--droog", "--zaad", "--moment", "ochtend", "--stil"])
+        tekst = buf.getvalue()
+        assert code == 0 and "Omega" not in tekst, tekst
+        assert "(droog) 1. mehdi, normaal, begint met 'Bel'" in tekst and "blijft bij Mehdi: eigen taak" in tekst, tekst
+        assert "blijft bij Mehdi: zoom-wacht staat niet op de witte lijst" in tekst, tekst
+    finally:
+        M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas = oud
         M.ag._log.clear()
         shutil.rmtree(d, ignore_errors=True)
 
