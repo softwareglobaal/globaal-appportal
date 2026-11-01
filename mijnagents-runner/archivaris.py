@@ -26,6 +26,7 @@ import organisatie  # noqa: E402
 import organisatie  # noqa: E402
 import nummerlezer  # noqa: E402
 import projectadressen  # noqa: E402
+import gespreksanalist as GA  # noqa: E402  versie 3: samenvatting en actiepunten per gesprek (T-0120 ANGEL-1)
 
 DB = os.path.expanduser("~/appportal/mijnagents-data/mijnagents.db")
 BORDMAP = os.path.expanduser("~/appportal/mijnagents-data/bord")
@@ -215,6 +216,37 @@ def weekoverzicht(week):
     return len(rijen)
 
 
+def geval_van(g, lijst, projecten):
+    """Een rij van de gesprekkentabel als geval voor De Gespreksanalist: de map met transcript.json, het label dat ik
+    gaf en het bewezen H-A-nummer, zoals in de labelronde (ha_projectnummer)."""
+    map_ = g.get("archief") or ""
+    if g.get("bron") == "plaud":    # De Plaudwacht noemt de map op de Mac; op de VM staat transcript.json in plaud-invoer
+        deel = map_[len(GA.PLAUD_OP_MAC):].split("/")[0] if map_.startswith(GA.PLAUD_OP_MAC) else ""
+        map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel else ""
+    try:
+        with open(os.path.join(map_, "gesprek.json"), encoding="utf-8") as f:
+            label = str((json.load(f).get("archivaris") or {}).get("label") or "")
+    except (OSError, ValueError, AttributeError):
+        label = ""
+    a = afspraak_op(g, lijst)
+    return {**g, "map": map_, "label": label, "titel": (a or {}).get("titel", ""),
+            "ha_nummer": ha_projectnummer(a, g.get("project"), {("HARC", str(n)) for n in projecten})}
+
+
+def _analyse(gesprekken, lijst, projecten, van, tot):
+    """Versie 3, De Gespreksanalist (gespreksanalist.py): alleen als GA.ANALYSE_AAN. De uitvoer staat op de VM, buiten
+    gesprek.json; het werkverslag krijgt alleen aantallen, geen naam, onderwerp of citaat."""
+    if not GA.ANALYSE_AAN:
+        return
+    tel = Counter()
+    for geval in [geval_van(g, lijst, projecten) for g in gesprekken] + GA.zoom_gevallen(van, tot):
+        rec, toestand = GA.stap(geval)
+        if rec:
+            GA.bewaar(rec)
+        tel[toestand] += 1
+    ag.log(f"{van} tot {tot}", "schrijf", "gespreksanalist (versie 3): " + (", ".join(f"{v} {k}" for k, v in tel.most_common()) or "geen gesprekken"))
+
+
 def main():
     van = tot = None
     if "--van" in sys.argv:
@@ -293,6 +325,7 @@ def _ronde(r, van, tot, vandaag):
             if uit["zekerheid"] == "laag" or uit["label"] == "Onbekend":
                 twijfel.append(f"{g['datum']} {g['start']} {(g.get('personen') or '')[:35]} · voorstel {uit['label']} · {uit.get('vraag_aan_mehdi') or uit['reden'][:80]}")
         n_week = sum(weekoverzicht(w) for w in weken if w)
+        _analyse(gesprekken, lijst, projecten, van, tot)
         if twijfel:
             ag.klaarzet([{"voor": "mehdi", "soort": "signaal", "sleutel": vandaag, "titel": f"Archivaris: {len(twijfel)} gesprek(ken) waar ik twijfel",
                           "uniek": f"archivaris-twijfel:{vandaag}:{len(twijfel)}",

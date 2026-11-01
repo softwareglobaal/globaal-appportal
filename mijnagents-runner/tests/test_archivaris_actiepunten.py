@@ -125,6 +125,180 @@ def test_een_modelantwoord_zonder_zekerheid_wordt_niet_bewaard():
     assert d["archivaris"]["label"] == "HA project" and d["archivaris"]["versie"] == 2, d
 
 
+
+# ----------------------------------------------------------------------- versie 3: De Gespreksanalist ---
+import gespreksanalist as GA  # noqa: E402
+
+UIT = os.path.join(DATA, "gespreksanalist-proef")
+FATHOM_TRANSCRIPT = [
+    {"speaker": {"display_name": "Proefpersoon Zeta"}, "text": "Goedemorgen, zullen we beginnen?", "timestamp": "00:00:02"},
+    {"speaker": {"display_name": "Mehdi"}, "text": "Ik stuur het aangepaste plan van de Proefstraat vrijdag naar de klant.",
+     "timestamp": "00:04:10"},
+    {"speaker": {"display_name": "Proefpersoon Zeta"}, "text": "Goed.", "timestamp": "00:09:00"},
+    {"speaker": {"display_name": "Proefpersoon Zeta"}, "text": "Dan vraag ik de offerte voor het dak volgende week op bij de aannemer.",
+     "timestamp": "00:09:03"},
+]
+SAMENVATTING = ("# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n"
+                "## Meeting Purpose\n\n[Het ontwerp van de Proefstraat doornemen](https://fathom.video/x)\n\n"
+                "## Key Takeaways\n\n  - **Plan**: het plan wordt aangepast aan de opmerkingen van de klant.\n"
+                "  - De offerte voor het dak volgt.\n  - Een derde punt dat niet meer meetelt.\n")
+ACTIEPUNTEN = [
+    {"description": "Aangepast plan naar de klant sturen", "assignee": {"name": "Mehdi", "email": "m@voorbeeld.test"},
+     "recording_timestamp": "00:04:12"},
+    {"description": "Offerte dak opvragen", "assignee": {"name": "Proefpersoon Zeta"}, "recording_timestamp": "00:09:01"},
+    {"description": "Punt zonder tijdstip", "assignee": {"name": "Proefpersoon Zeta"}},
+]
+
+
+def _fathom_map(naam, samenvatting=SAMENVATTING, actiepunten=ACTIEPUNTEN):
+    map_ = os.path.join(DATA, "fathom-data", naam)
+    _schrijf(os.path.join(map_, "transcript.json"), FATHOM_TRANSCRIPT)
+    if samenvatting is not None:
+        _schrijf(os.path.join(map_, "samenvatting.md"), samenvatting)
+    if actiepunten is not None:
+        _schrijf(os.path.join(map_, "actiepunten.md"), actiepunten)
+    return map_
+
+
+def _geval(**kw):
+    return {"uniek": "fathom:9001", "bron": "fathom", "datum": "2026-10-14", "start": "10:00", "minuten": 34, "prive": 0,
+            "afdeling": "", "label": "HA project", "ha_nummer": "2612", "titel": "", **kw}
+
+
+def _geen_model(*a, **k):
+    raise AssertionError("het model werd gevraagd")
+
+
+def test_een_citaat_telt_alleen_als_het_letterlijk_in_het_transcript_staat():
+    tekst = GA.corpus(GA.uitingen(os.path.join(_fathom_map("2026-10-14 1000 citaat"), "transcript.json")))
+    assert GA.citaat_in("ik stuur het aangepaste plan van de Proefstraat vrijdag", tekst)
+    assert GA.citaat_in("“Ik stuur het AANGEPASTE plan”", tekst), "hoofdletters en aanhalingstekens tellen niet"
+    assert GA.citaat_in("vrijdag naar de klant. Goed. Dan vraag ik", tekst), "over twee uitingen heen is nog letterlijk"
+    assert not GA.citaat_in("ik stuur het plan vrijdag naar de klant", tekst), "eigen verwoording"
+    assert not GA.citaat_in("ik stuur het aangepaste plan ... naar de klant", tekst), "een weglating"
+    assert not GA.citaat_in("Goed.", tekst) and not GA.citaat_in("de klant", tekst), "te kort"
+    assert not GA.citaat_in("ik stuur het aangepaste plan " * 10, tekst), "meer dan 200 tekens"
+    goed, weg = GA.keur([{"wat": "plan sturen", "citaat": "Ik stuur het aangepaste plan", "voor_wie": "iedereen"},
+                         {"wat": "verzonnen", "citaat": "we tekenen morgen het contract"},
+                         {"wat": "", "citaat": "Ik stuur het aangepaste plan"}, "geen punt"], tekst)
+    assert weg == 3 and len(goed) == 1 and goed[0]["voor_wie"] == "onbekend", (goed, weg)
+    assert set(goed[0]) == {"wat", "wie", "tegen_wanneer", "voor_wie", "citaat"}
+
+
+def test_privegesprek_geeft_alleen_privegesprek_en_minuten_zonder_iets_te_lezen():
+    for kw in ({"prive": 1}, {"afdeling": "Privé"}, {"label": "Prive"}, {"bron": "plaud", "uniek": "plaud:ab12", "prive": True}):
+        rec, toestand = GA.verwerk(_geval(map="/bestaat/niet", **kw), vraag=_geen_model)
+        assert toestand == "privé" and rec["regel"] == "privégesprek, 34 min" and rec["prive"] is True, (kw, rec)
+        assert set(rec) == {"versie", "uniek", "bron", "datum", "start", "minuten", "prive", "regel", "ts"}, rec
+    rec, _ = GA.verwerk(_geval(prive=1, minuten=0))
+    assert rec["regel"] == "privégesprek, duur onbekend"
+
+
+def test_zoom_vangnettekst_is_altijd_prive():
+    """zoom_wacht.py:266 en vangnet_schrijven: zoom.json draagt altijd prive=true. Ontbreekt de vlag, dan ook privé.
+    Alleen een uitdrukkelijk prive=false kan ooit werk zijn."""
+    zoom = os.path.join(DATA, "zoom-data")
+    tekst = [{"speaker": {"display_name": "Proefpersoon Zeta"}, "text": "Een gesprek dat niemand mag lezen, ook het model niet.",
+              "timestamp": "00:00:01"}]
+    for naam, meta in (("2026-10-17 1400 Zoom vaste vergaderruimte [aaaa1111]", {"uuid": "u1/A==", "prive": True}),
+                       ("2026-10-18 0900 Zoom vaste vergaderruimte [bbbb2222]", {"uuid": "u2"}),
+                       ("2026-11-03 0900 Zoom vaste vergaderruimte [cccc3333]", {"uuid": "u3", "prive": True})):
+        _schrijf(os.path.join(zoom, naam, "transcript.json"), tekst)
+        _schrijf(os.path.join(zoom, naam, "zoom.json"), {**meta, "start_brussel": f"{naam[:10]}T{naam[11:13]}:{naam[13:15]}:00+02:00",
+                                                         "minuten": 41})
+    gevallen = GA.zoom_gevallen("2026-10-01", "2026-10-31", zoom)
+    assert [g["uniek"] for g in gevallen] == ["zoom:meeting:u1/A==", "zoom:meeting:u2"], gevallen
+    for g in gevallen:
+        rec, toestand = GA.verwerk(g, vraag=_geen_model)
+        assert toestand == "privé" and rec["regel"] == "privégesprek, 41 min" and "samenvatting" not in rec, rec
+    assert not GA.is_prive({"bron": "zoom", "zoom_prive": False})
+
+
+def test_fathom_gebruikt_eigen_samenvatting_en_actiepunten_en_slaat_het_model_over():
+    map_ = _fathom_map("2026-10-14 1000 ontwerp")
+    rec, toestand = GA.verwerk(_geval(map=map_), vraag=_geen_model)
+    assert toestand == "fathom" and rec["samenvatting_van"] == "fathom" and rec["tokens"] == 0, rec
+    assert rec["samenvatting"] == ("Het ontwerp van de Proefstraat doornemen. Plan: het plan wordt aangepast aan de "
+                                   "opmerkingen van de klant."), rec["samenvatting"]
+    tekst = GA.corpus(GA.uitingen(os.path.join(map_, "transcript.json")))
+    assert [p["wat"] for p in rec["actiepunten"]] == ["Aangepast plan naar de klant sturen", "Offerte dak opvragen"]
+    assert all(GA.citaat_in(p["citaat"], tekst) and len(p["citaat"]) <= 200 for p in rec["actiepunten"]), rec
+    assert rec["actiepunten"][1]["citaat"].startswith("Goed. Dan vraag ik de offerte"), "een korte uiting wordt aangevuld"
+    assert rec["weggegooid"] == 1, "het punt zonder tijdstip heeft geen citaat"
+
+
+def test_fathom_zonder_samenvatting_wacht_en_vraagt_geen_model():
+    rec, toestand = GA.verwerk(_geval(map=_fathom_map("2026-10-15 1000 zonder", samenvatting=None)), vraag=_geen_model)
+    assert rec is None and toestand == "wacht op de samenvatting van Fathom"
+
+
+def test_fathom_zonder_actiepunt_en_de_oude_samenvatting_als_python_dict():
+    """Tot FATHOM-1 schreef De Fathomwacht str() van het object (fathom_wacht.py:252); de markdown komt eruit."""
+    oud = "# Samenvatting van Fathom (niet als bron)\n\n" + str({"template_name": "general",
+                                                                   "markdown_formatted": "## Doel\n\nKennismaking met de klant. Geen afspraken."})
+    rec, toestand = GA.verwerk(_geval(map=_fathom_map("2026-10-16 1000 zonder punt", samenvatting=oud, actiepunten=None)))
+    assert toestand == "fathom" and rec["samenvatting"] == "Kennismaking met de klant. Geen afspraken." and rec["actiepunten"] == []
+
+
+def test_vol5_firmalabel_en_dossier_per_gesprek():
+    map_ = _fathom_map("2026-10-20 1000 dossier")
+    rec, _ = GA.verwerk(_geval(map=map_, label="UNABO project", ha_nummer="", titel="[UB-KO] 46118 Proefstraat opmeting"))
+    assert (rec["firma"], rec["soort"], rec["dossier"], rec["dossier_bewijs"]) == ("UNABO", "project", "46118",
+                                                                                 "agendatitel, niet bevestigd"), rec
+    rec, _ = GA.verwerk(_geval(map=map_, label="HA project", ha_nummer="2612"))
+    assert (rec["firma"], rec["soort"], rec["dossier"], rec["dossier_bewijs"]) == ("HA", "project", "2612", "bevestigd")
+    rec, _ = GA.verwerk(_geval(map=map_, label="HA sales", ha_nummer="", titel="[UB-KO] 46118 Proefstraat"))
+    assert (rec["firma"], rec["soort"], rec["dossier"]) == ("HA", "sales", ""), "geen nummer van een andere firma"
+    rec, _ = GA.verwerk(_geval(map=map_, label="UNABO sales", titel="[HA-KO] 2612 Proeflaan"))
+    assert rec["dossier"] == "", "de agendafirma moet de firma van het label zijn"
+    assert GA.firma_en_soort("Regie intern") == ("", "intern") and GA.firma_en_soort("Harmoniebouw") == ("Harmoniebouw", "")
+    rec, _ = GA.verwerk(_geval(map=map_, label="Prive"))
+    assert rec["prive"] and "dossier" not in rec and "firma" not in rec
+
+
+def test_uitvoer_600_een_keer_en_opnieuw_bij_nieuw_label_of_privé():
+    map_ = _fathom_map("2026-10-21 1000 uitvoer")
+    rec, toestand = GA.stap(_geval(map=map_, uniek="fathom:9100"), map_=UIT)
+    pad = GA.bewaar(rec, UIT)
+    assert toestand == "fathom" and os.stat(pad).st_mode & 0o777 == 0o600, oct(os.stat(pad).st_mode)
+    assert os.stat(os.path.dirname(pad)).st_mode & 0o777 == 0o700 and pad == os.path.join(UIT, "fathom", "9100.json")
+    assert GA.stap(_geval(map=map_, uniek="fathom:9100"), map_=UIT) == (None, "al gedaan")
+    rec, toestand = GA.stap(_geval(map=map_, uniek="fathom:9100", label="HA sales", ha_nummer=""), vraag=_geen_model, map_=UIT)
+    assert toestand == "nieuw label" and rec["soort"] == "sales" and rec["dossier"] == "" and rec["actiepunten"], rec
+    GA.bewaar(rec, UIT)
+    rec, toestand = GA.stap(_geval(map=map_, uniek="fathom:9100", label="Prive"), map_=UIT)
+    GA.bewaar(rec, UIT)
+    assert toestand == "privé" and set(json.load(open(pad, encoding="utf-8"))) == {
+        "versie", "uniek", "bron", "datum", "start", "minuten", "prive", "regel", "ts"}, "de samenvatting moet weg"
+    a, b = GA.pad_van("zoom:meeting:u1/A==", UIT), GA.pad_van("zoom:meeting:u1_A==", UIT)
+    assert a != b and os.path.dirname(a) == os.path.join(UIT, "zoom") and "/" not in os.path.basename(a), (a, b)
+
+
+def test_de_ronde_doet_niets_zolang_de_analyse_uit_staat_en_logt_daarna_alleen_aantallen():
+    map_ = _fathom_map("2026-10-22 1000 ronde")
+    _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": 9200, "archivaris": {
+        "label": "HA project", "zekerheid": "hoog", "versie": 2, "week": "2026-W43", "datum": "2026-10-22", "start": "10:00"}})
+    plaud = os.path.join(DATA, "plaud-invoer", "2026-10-22 1400 Proefpersoon Zeta")
+    _schrijf(os.path.join(plaud, "transcript.json"), [{"speaker": "Speaker 1", "content": "Een Plaud-opname over de werf.",
+                                                       "start_time": 1000}])
+    rijen = [{"datum": "2026-10-22", "start": "10:00", "uniek": "fathom:9200", "archief": map_},
+             {"datum": "2026-10-22", "start": "12:00", "uniek": "fathom:9201", "archief": map_, "prive": 1, "minuten": 12},
+             {"bron": "plaud", "datum": "2026-10-22", "start": "14:00", "uniek": "plaud:cd34",
+              "archief": "Data uit Mehdi/Plaud/2026-10-22 1400 Proefpersoon Zeta/transcript.md"}]
+    uitvoer = os.path.join(DATA, "gespreksanalist")
+    with vervangen((GA, "UITVOER", uitvoer), (GA, "ZOOM_DATA", os.path.join(DATA, "zoom-leeg"))):
+        ag, r = _labelronde(rijen, _geen_model)
+        assert not os.path.exists(uitvoer) and not any("gespreksanalist" in str(a) for a in ag.logboek)
+        with vervangen((GA, "ANALYSE_AAN", True)):
+            ag, r = _labelronde(rijen, _geen_model)
+    assert json.load(open(os.path.join(uitvoer, "fathom", "9200.json"), encoding="utf-8"))["dossier"] == ""
+    assert json.load(open(os.path.join(uitvoer, "fathom", "9201.json"), encoding="utf-8"))["regel"] == "privégesprek, 12 min"
+    assert not os.path.exists(os.path.join(uitvoer, "plaud")), "het model staat uit: Plaud wacht"
+    regel = [a for a in ag.logboek if "gespreksanalist" in str(a)]
+    assert len(regel) == 1 and "1 fathom" in regel[0][2] and "1 privé" in regel[0][2] and "1 model staat uit" in regel[0][2], regel
+    assert not any(w in str(ag.logboek) + str(ag.klaar) for w in ("Zeta", "Proefstraat", "offerte", "plan")), ag.logboek
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in list(globals().items()):
