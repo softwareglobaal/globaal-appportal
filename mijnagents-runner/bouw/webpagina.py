@@ -8,12 +8,12 @@ adres (Codex, controle 17: geen tweede opzoeking die naar binnen kan wijzen); ht
 naam. Een omleiding volgt de code zelf, met dezelfde keuring, hoogstens MAX_OMLEIDINGEN keer. Hoogstens MAX_BYTES per
 pagina, alleen HTML of tekst, en hoogstens TIMEOUT seconden in totaal per pagina.
 """
-import concurrent.futures
 import http.client
 import ipaddress
 import re
 import socket
 import ssl
+import threading
 import time
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
@@ -22,7 +22,29 @@ MAX_BYTES = 2_000_000
 TIMEOUT = 10
 MAX_OMLEIDINGEN = 4
 DNS_TIMEOUT = 3
-_DNS = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns")
+
+
+def binnen(fn, timeout):
+    """fn() met een harde tijdgrens (Codex, controle 19): na timeout seconden een TimeoutError, ook als een trage server
+    druppelsgewijs antwoordt of een opzoeking blijft hangen. fn loopt dan verder in een losse draad die het proces niet
+    ophoudt; elke socket in fn heeft zelf ook een timeout."""
+    if timeout <= 0:
+        raise TimeoutError("geen tijd meer")
+    uit = {}
+
+    def doe():
+        try:
+            uit["waarde"] = fn()
+        except BaseException as e:  # noqa: BLE001  doorgeven aan wie wacht
+            uit["fout"] = e
+    t = threading.Thread(target=doe, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError("te traag")
+    if "fout" in uit:
+        raise uit["fout"]
+    return uit["waarde"]
 SOORTEN = ("text/html", "application/xhtml+xml", "text/plain")
 KOPPEN = {"User-Agent": "Mozilla/5.0 (compatible; mijnagents-bouw)",
           "Accept": "text/html,application/xhtml+xml,text/plain;q=0.8", "Accept-Language": "nl-BE,nl;q=0.9,fr;q=0.5",
@@ -49,10 +71,10 @@ def openbaar_ip(host, poort, opzoeken=socket.getaddrinfo, timeout=DNS_TIMEOUT):
     """Het eerste IP-adres van de host als elk adres openbaar is, anders None; ook None als de opzoeking langer dan
     timeout seconden duurt (Codex, controle 18)."""
     try:
-        adressen = [a[4][0] for a in _DNS.submit(opzoeken, host, poort, proto=socket.IPPROTO_TCP).result(timeout=timeout)]
+        adressen = [a[4][0] for a in binnen(lambda: opzoeken(host, poort, proto=socket.IPPROTO_TCP), timeout)]
         if adressen and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in adressen):
             return adressen[0]
-    except (OSError, ValueError, concurrent.futures.TimeoutError):
+    except (OSError, ValueError):
         pass
     return None
 
@@ -89,7 +111,7 @@ def _een_verzoek(url, rest, opzoeken, verbinding):
         raise OSError("geen http(s)-adres op poort 80 of 443")
     schema, host, poort, pad = d
     begin = time.monotonic()
-    ip = openbaar_ip(host, poort, opzoeken, timeout=min(DNS_TIMEOUT, max(0.1, rest)))
+    ip = openbaar_ip(host, poort, opzoeken, timeout=min(DNS_TIMEOUT, rest))
     if not ip:
         raise OSError("geen openbaar adres")
     over = rest - (time.monotonic() - begin)
@@ -131,7 +153,7 @@ def haal(url, timeout=TIMEOUT, opzoeken=socket.getaddrinfo, verbinding=_verbindi
         if rest <= 0:
             raise OSError("te traag")
         try:
-            status, a, data = _een_verzoek(url, rest, opzoeken, verbinding)
+            status, a, data = binnen(lambda: _een_verzoek(url, rest, opzoeken, verbinding), rest)
         except http.client.HTTPException as e:      # een kapot antwoord is geen OSError
             raise OSError(f"kapot antwoord ({type(e).__name__})") from None
         if data is None:

@@ -907,6 +907,26 @@ try:
 except CA.Fout as e:
     check("controle 18: te weinig tijd in de ronde: de vraag wacht en Claude start niet", e.soort == "tijd" and not _zv)
 _t0 = time.monotonic()
+check("controle 19: een onbekende limietstatus stopt ook", CA.limiet_reden({}) is not None
+      and CA.limiet_reden({"status": "allowed"}) is None)
+_oud_lb, _oud_draai = CA.LIMIET_BESTAND, CA.draai
+CA.LIMIET_BESTAND = "/dev/null/geen/limiet.json"
+_gestart = []
+CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as _tf:
+    _tf.write("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-nep\n")
+try:
+    CA.vraag("s", "g", bron=_tf.name)
+    check("controle 19: kan de code een limiet niet onthouden, dan start er geen vraag", False)
+except CA.Fout as e:
+    check("controle 19: kan de code een limiet niet onthouden, dan start er geen vraag", e.soort == "bron"
+          and "niet te onthouden" in str(e) and not _gestart)
+os.remove(_tf.name)
+CA.LIMIET_BESTAND, CA.draai = _oud_lb, _oud_draai
+_t0 = time.monotonic()
+
+
+_t0 = time.monotonic()
 check("controle 18: een trage DNS-opzoeking houdt de code niet op", WP.openbaar_ip(
     "traag.voorbeeld.com", 443, opzoeken=lambda *a, **k: time.sleep(3) or [], timeout=0.2) is None
       and time.monotonic() - _t0 < 1)
@@ -994,6 +1014,33 @@ except OSError as e:
 check("een omleiding binnen de site wordt gevolgd", WP.haal("http://dakeen.voorbeeld.com/", opzoeken=_dns_naar(_dnst),
       verbinding=_web([_Antw(301, plaats="https://dakeen.voorbeeld.com/nl"), _Antw(data=b"<p>welkom</p>")], [])) ==
       "<p>welkom</p>")
+_t0 = time.monotonic()
+def _traag_web():
+    class Verbinding:
+        def __init__(self, *a):
+            pass
+
+        def request(self, *a, **k):
+            time.sleep(0.4)
+
+        def getresponse(self):
+            time.sleep(0.4)
+            return _Antw(data=b"x" * 400000, traag=0.4)
+
+        def close(self):
+            pass
+    return Verbinding
+
+
+try:
+    WP.haal("https://dakeen.voorbeeld.com/", timeout=0.6, opzoeken=_dns_naar(_dnst), verbinding=_traag_web())
+    check("controle 19: trage stappen na elkaar stoppen samen op de totale tijd", False)
+except OSError as e:
+    check("controle 19: trage stappen na elkaar stoppen samen op de totale tijd", time.monotonic() - _t0 < 1.5, str(e))
+_t0 = time.monotonic()
+_trdb = E._dropbox_zoek("dak", "/x", rpc=lambda m, b: time.sleep(3) or {"matches": []}, deadline=time.monotonic() + 1.5)
+check("controle 19: een druppelend antwoord van Dropbox stopt op de deadline", _trdb.volledig is False
+      and time.monotonic() - _t0 < 2.5)
 _html = ("<html><head><title>x</title><style>.a{}</style></head><body><script>var geheim=1</script><nav>Menu</nav>"
          "<p>Wij leggen&nbsp;EPDM op platte daken.</p><footer>BTW BE 0123.456.749 <a href='mailto:info@dakeen.voorbeeld.com'>"
          "mail ons</a> <span data-cfemail='" + bytes([0x42] + [ord(c) ^ 0x42 for c in "jo@dakeen.voorbeeld.com"]).hex()

@@ -117,7 +117,7 @@ def limiet_reden(info):
         return None
     if info.get("isUsingOverage"):
         return "limiet: het abonnement zou extra verbruik aanrekenen"
-    if info.get("status") not in (None, "allowed"):
+    if info.get("status") != "allowed":          # ook een onbekende status stopt (Codex, controle 19)
         return f"limiet: het abonnement staat op {info.get('status')}"
     for naam, venster in (info.get("unifiedWindows") or {}).items():
         if isinstance(venster, dict) and float(venster.get("utilization") or 0) >= GRENS:
@@ -132,13 +132,26 @@ def _einde(info):
 
 
 def onthoud_limiet(info, bestand=None):
+    """True als de limiet bewaard is; False als dat niet lukt (dan start geen nieuwe vraag, zie limiet_schrijfbaar)."""
     bestand = bestand or LIMIET_BESTAND
     try:
         os.makedirs(os.path.dirname(bestand), exist_ok=True)
         with open(bestand, "w", encoding="utf-8") as f:
             json.dump({"info": info, "gezien": time.time()}, f)
+        return True
     except OSError:
-        pass
+        return False
+
+
+def limiet_schrijfbaar(bestand=None):
+    """Kan de code een limiet onthouden? Zonder dat start geen vraag (Codex, controle 19): anders zou een volgende vraag
+    na extra verbruik toch starten."""
+    map_ = os.path.dirname(bestand or LIMIET_BESTAND)
+    try:
+        os.makedirs(map_, exist_ok=True)
+    except OSError:
+        return False
+    return os.access(map_, os.W_OK)
 
 
 def bekende_limiet(bestand=None, nu=None):
@@ -259,6 +272,8 @@ def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25
     token = waarde(bron, TOKEN)
     if not token:
         raise Fout(f"geen {TOKEN} in {bron}", "aanmelden")
+    if not limiet_schrijfbaar():
+        raise Fout(f"Claude via het abonnement: de limiet is niet te onthouden in {LIMIET_BESTAND}", "bron")
     gekend = bekende_limiet()
     if gekend:
         raise Fout(f"Claude via het abonnement: {gekend} (nog niet voorbij)", "limiet")
@@ -278,8 +293,8 @@ def vraag(systeem, gebruiker, tools=(), model=MODEL, timeout=420, max_beurten=25
                                                 env, max_gereedschap, staat)
         except OSError as e:
             raise Fout(f"Claude Code niet te starten ({type(e).__name__})") from None
-    if staat.get("limiet") is not None:
-        onthoud_limiet(staat["limiet"])
+    if staat.get("limiet") is not None and not onthoud_limiet(staat["limiet"]) and limiet_reden(staat["limiet"]):
+        raise Fout("Claude via het abonnement: limiet gezien maar niet te onthouden", "limiet")
     if reden:
         soort = "limiet" if reden.startswith("limiet") else "bron" if "abonnement draaien" in reden else None
         raise Fout(f"Claude via het abonnement: {reden}", soort)

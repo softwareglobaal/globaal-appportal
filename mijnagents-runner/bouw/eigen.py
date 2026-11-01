@@ -63,19 +63,26 @@ def _dropbox_zoek(query, pad, rpc=None, deadline=None):
     """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12). Met een
     deadline (time.monotonic, controle 17 en 18) start geen verzoek meer na de deadline en wacht elk verzoek hoogstens tot
     de deadline; dan zegt het verslag dat er meer zijn."""
+    from .webpagina import binnen
     if rpc is None:
         import bronnen
+        basis = lambda p, body, t: bronnen._rpc(p, body, timeout=t)     # noqa: E731
+    else:
+        basis = lambda p, body, t: rpc(p, body)     # noqa: E731
 
-        def rpc(p, body):
-            rest = deadline - time.monotonic() if deadline else 60
-            if rest < 1:
-                raise TimeoutError("deadline")
-            return bronnen._rpc(p, body, timeout=min(60, rest))
+    def vraag(p, body):
+        if not deadline:
+            return basis(p, body, 60)
+        rest = deadline - time.monotonic()
+        if rest < 1:
+            raise TimeoutError("deadline")
+        # Codex, controle 19: ook een antwoord dat druppelsgewijs binnenkomt, stopt op de deadline
+        return binnen(lambda: basis(p, body, min(60, rest)), rest)
     treffers = Onvolledig()
     try:
         if deadline and time.monotonic() > deadline:
             raise TimeoutError("deadline")
-        uit = rpc("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
+        uit = vraag("files/search_v2", {"query": query, "options": {"path": pad, "max_results": 100, "filename_only": True}})
         for _ in range(MAX_PAGINAS):
             for m in (uit or {}).get("matches") or []:
                 meta = ((m.get("metadata") or {}).get("metadata")) or {}
@@ -85,7 +92,7 @@ def _dropbox_zoek(query, pad, rpc=None, deadline=None):
                 return treffers
             if deadline and time.monotonic() > deadline:
                 break
-            uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
+            uit = vraag("files/search/continue_v2", {"cursor": uit["cursor"]})
     except TimeoutError:          # ook een verzoek dat niet voor de deadline antwoordt (socket-timeout)
         pass
     treffers.volledig = False
