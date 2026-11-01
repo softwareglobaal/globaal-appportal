@@ -184,8 +184,9 @@ def exporteer(fotos, dag, groepen):
 
 
 def werkafspraken(dag):
-    """Afspraken van die dag met een fysiek adres, uit de bak van De Agendawacht (alleen lezen)."""
-    req = urllib.request.Request(f"{BORD}/api/klaarzet?status=alle&n=500", headers={"X-Agents-Token": TOKEN})
+    """Afspraken van die dag met een fysiek adres, uit de bak van De Agendawacht (alleen lezen). T-0120 FOTO-3: alleen
+    afspraken gevraagd; zonder filter vielen ze tussen de 500 nieuwste items van de hele bak weg (31-10)."""
+    req = urllib.request.Request(f"{BORD}/api/klaarzet?status=alle&soort=afspraak&n=500", headers={"X-Agents-Token": TOKEN})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             items = json.loads(r.read().decode() or "{}").get("items", [])

@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import urllib.error
+from urllib.parse import parse_qs, urlsplit
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -273,6 +274,44 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
         self.fake_run([self.foto("goed"), self.foto("nog_een"), self.foto("geen_gps", lat=None)], inhoud=data)
         self.assertEqual(len(list(doel.glob("00 fotos*.md"))), 2)
+
+    def nep_bak(self, items):
+        """Een nep-bord dat /api/klaarzet beantwoordt zoals mijnagents/app.py: filter op soort, nieuwste eerst, hoogstens n (500)."""
+        vragen = []
+
+        class Antwoord:
+            def __init__(self, data):
+                self.data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return self.data
+
+        def urlopen(req, timeout=None):
+            url = req.full_url
+            vragen.append(url)
+            q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
+            lijst = [it for it in reversed(items) if not q.get("soort") or it["soort"] == q["soort"]]
+            return Antwoord(json.dumps({"items": lijst[:min(int(q.get("n", 100)), 500)]}).encode())
+        return vragen, urlopen
+
+    def test_foto3_afspraak_tussen_600_andere_items_wordt_gevonden(self):
+        # T-0120 FOTO-3: werkafspraken() las de laatste 500 items van de hele bak, zonder filter op soort; op 31-10 viel
+        # de buitenafspraak met adres er zo uit. Nu vraagt ze alleen afspraken.
+        afspraak = {"soort": "afspraak", "titel": "fictief", "inhoud": json.dumps(
+            {"datum": "2026-10-31", "start": "2026-10-31T09:00:00+01:00", "einde": "2026-10-31T12:00:00+01:00",
+             "titel": "[HA] 9999 plaatsbezoek", "locatie": "Proefstraat 1, 9999 Proefdorp", "firma": "HARC", "nummer": "9999"})}
+        items = [afspraak] + [{"soort": "signaal", "titel": f"ander {i}", "inhoud": "{}"} for i in range(600)]
+        vragen, urlopen = self.nep_bak(items)
+        with patch.object(self.module.urllib.request, "urlopen", urlopen):
+            gevonden = self.module.werkafspraken("2026-10-31")
+        self.assertEqual([a["adres"] for a in gevonden], ["Proefstraat 1, 9999 Proefdorp"])
+        self.assertIn("soort=afspraak", vragen[0])
 
     def test_geen_gps_of_tijd_blijft_onbeslist_en_wordt_niet_geexporteerd(self):
         code, exports, _ = self.fake_run([self.foto("goed"), self.foto("geen_gps", lat=None)])
