@@ -152,9 +152,8 @@ def waar(s):
     if h.get("plek") or s.get("plek"):
         return h.get("plek") or s.get("plek")
     if s.get("adres"):
-        return s["adres"]
-    if s.get("lat") is not None:
-        return f"{s['lat']:.4f}, {s['lon']:.4f}"
+        return s["adres"]           # straat en gemeente uit de adresverrijking van het Locatie-dashboard
+    # LOC-2: een coördinaat zegt Mehdi niets (vandaag is de plek pas na de verrijking van 21:30 bekend)
     return "onbekende plek"
 
 
@@ -442,12 +441,17 @@ def wachten_dag(dag):
     gegevens = haal_wachten(dag)
     if not gegevens:
         return None
+    # een kopie: haal_wachten bewaart zijn antwoord een minuut, en hieronder komen de plekken en ritten erbij (Codex-toets 1)
+    gegevens = json.loads(json.dumps(gegevens))
     for vak in gegevens["vakken"]:
         for w in vak.get("wachten") or []:
-            if w.get("naam") == "locatie-wacht" and not w.get("items"):
+            if w.get("naam") == "locatie-wacht":
+                # LOC-1: ook op een dag met het bord-item "Locatielogboek <dag>" (elke vorige dag) de plekken en ritten
                 li = locatie_items(dag)
                 if li:
-                    w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
+                    items = sorted((w.get("items") or []) + li, key=lambda x: x.get("tijd") or "99")
+                    w.update(items=items, aantal=len(items),
+                             oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
                              kleur="groen" if w.get("kleur") != "rood" else "rood")
             w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)
@@ -476,10 +480,17 @@ def fouten_kort(fouten):
 
 
 def stand_fout(w, dag):
-    """Rood door de hartslag van nu (alleen vandaag) zonder fout in het werkverslag: dan is dit de reden."""
+    """Rood door de hartslag van nu (alleen vandaag) zonder fout in het werkverslag: dan is dit de reden. Is die hartslag
+    van een vorige dag, dan maakt het bord vandaag niet rood (WISPR-3); de tekst blijft, met de dag van de hartslag."""
     st = w.get("status") or {}
     if dag == vandaag().isoformat() and str(st.get("status")) in ("fout", "error"):
-        return "stand van nu: fout" + (": " + str(st["detail"]) if st.get("detail") else "")
+        sinds = ""
+        try:
+            t = datetime.fromisoformat(str(st.get("laatste_ts") or "").replace("Z", "+00:00")).astimezone(BRUSSEL)
+            sinds = f" (sinds {t:%d-%m %H:%M})" if t.date() != vandaag() else ""
+        except ValueError:
+            pass
+        return f"stand van nu{sinds}: fout" + (": " + str(st["detail"]) if st.get("detail") else "")
     return ""
 
 

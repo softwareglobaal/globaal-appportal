@@ -27,6 +27,7 @@ BESTANDEN = (
     "mijnagents-runner/tests/test_bord_export_prive.py",
     "mijnagents-runner/tests/test_bord_lees.py",
     "mijnagents-runner/tests/test_communicatie_bundelaar.py",
+    "mijnagents-runner/tests/test_computer_wachten.py",
     "mijnagents-runner/tests/test_codex_ronde2_bode.py",
     "mijnagents-runner/tests/test_dagbundelaar.py",
     "mijnagents-runner/tests/test_dagbundelaar_vaststelling.py",

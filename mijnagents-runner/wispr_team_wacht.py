@@ -113,6 +113,23 @@ def portaal_lezen():
     return uit
 
 
+def gebruik_per_persoon(c):
+    """Gebruik per persoon van de pc-scripts (klaarzet soort gebruik, dienst Wispr Flow): per gebruiker de melding van
+    de nieuwste gebruiksdag; zonder dag of bij gelijke dag de nieuwste ts. T-0120 WISPR-2: een inhaalronde van de
+    Wispr-wacht werkt het item van een oude dag later bij."""
+    gebruik = {}
+    for r in c.execute("select sleutel, inhoud, ts from klaarzet where soort='gebruik' order by ts"):
+        try:
+            d = json.loads(r[1])
+        except ValueError:
+            continue
+        if d.get("dienst") == "Wispr Flow":
+            k = (d.get("gebruiker") or r[0]).lower()
+            if k not in gebruik or str(d.get("dag") or "") >= str(gebruik[k].get("dag") or ""):
+                gebruik[k] = d
+    return gebruik
+
+
 def kruiscontrole(portaal):
     collegas = organisatie.collegas(alleen_in_dienst=False)
     per_mail = {c["email"].lower(): c for c in collegas if c.get("email")}
@@ -123,16 +140,7 @@ def kruiscontrole(portaal):
     dash = boekhouding._psql("select coalesce(json_agg(json_build_object('firma', firma_id, 'zetels', seats_owned, 'betaalwijze', payment_method, 'notitie', note, 'melding', notice, 'bijgewerkt', updated_at)), '[]'::json) from kosten.software where vendor ~* 'wispr'")
     abo = boekhouding._psql("select coalesce(json_agg(json_build_object('plan', plan, 'firma', firma, 'bedrag', bedrag, 'valuta', valuta, 'ritme', ritme, 'account', account, 'laatste_betaling', laatste_betaling, 'notitie', notitie)), '[]'::json) from uitgaven.abonnement where sleutel ~* 'wispr'")
     visa = boekhouding._psql("select coalesce(json_agg(json_build_object('firma', firma_code, 'datum', datum, 'bedrag', bedrag, 'omschrijving', omschrijving) order by datum), '[]'::json) from kosten.bank_transactie where vendor ~* 'wispr' or omschrijving ~* 'wispr'")
-    # gebruik per persoon van de pc-scripts (klaarzet soort gebruik, dienst Wispr Flow)
-    c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    gebruik = {}
-    for r in c.execute("select sleutel, inhoud, ts from klaarzet where soort='gebruik' order by ts"):
-        try:
-            d = json.loads(r[1])
-        except ValueError:
-            continue
-        if d.get("dienst") == "Wispr Flow":
-            gebruik[(d.get("gebruiker") or r[0]).lower()] = d
+    gebruik = gebruik_per_persoon(sqlite3.connect(f"file:{DB}?mode=ro", uri=True))
     rijen, afwijkingen = [], []
     for l in portaal["leden"]:
         email = l["email"]

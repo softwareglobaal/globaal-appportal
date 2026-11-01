@@ -12,7 +12,9 @@
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
 - W12 (T-0120 DB-8): een Zoom- of Plaud-rij met prive=1 en afdeling onbekend of leeg is ook privé (privegrens.py):
   alleen 'privégesprek, N min'. Tot 01-11-2026 toonde de pagina daar naam en onderwerp;
-- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
+- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd;
+- W20 (WISPR-3): een fout-hartslag van gisteren maakt vandaag niet rood (de stand van nu blijft zichtbaar); een
+  fout-hartslag van vandaag wel.
 - W12 (MAIL-6, T-0120): een mail toont of ze opgevolgd is en waar ze heen ging (Opgeruimd, een sorteermap, de map
   waarin ze gelezen werd); een mailwacht die rondes deed zonder leesprobleem en 0 mails kreeg, zegt 'postvak
   gelezen, 0 nieuwe mails'; met een leesprobleem in het werkverslag blijft het 'draaide, niets binnen'.
@@ -144,6 +146,23 @@ check("W12 postvak gelezen, 0 nieuwe", w["mail-melo"]["oordeel"] == "postvak gel
       and w["mail-melo"]["kleur"] == "oranje", w["mail-melo"]["oordeel"])
 check("W12 leesprobleem: geen bewering", w["mail-info-harc"]["oordeel"] == "draaide, niets binnen", w["mail-info-harc"]["oordeel"])
 check("W12 andere wachten ongewijzigd", w["belwacht"]["oordeel"] == "draaide, niets binnen")
+# W20 (WISPR-3): 01-11-2026 stond de Wispr-wacht rood door de fout-hartslag van de serverwacht van 31-10 22:45.
+from datetime import datetime, timedelta, timezone  # noqa: E402
+nu_utc = datetime.now(timezone.utc)
+vandaag = nu_utc.astimezone(A.BRUSSEL).date()
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+gisteren_ts = datetime.combine(vandaag - timedelta(days=1), datetime.min.time(), timezone.utc).replace(hour=12).isoformat()
+con.execute("INSERT OR REPLACE INTO status(naam,status,taak,detail,ts) VALUES('wispr-wacht','fout','portaal','oud',?)",
+            (gisteren_ts,))
+con.execute("INSERT OR REPLACE INTO status(naam,status,taak,detail,ts) VALUES('youtube-wacht','fout','lezen','nu',?)",
+            (nu_utc.isoformat(),))
+con.commit()
+con.close()
+dv = C.get(f"/api/wachten/dag?dag={vandaag.isoformat()}", headers=K).get_json()
+wv = {x["naam"]: x for v in dv["vakken"] for x in v["wachten"]}
+check("W20 fout-hartslag van gisteren: vandaag niet rood", wv["wispr-wacht"]["kleur"] != "rood"
+      and wv["wispr-wacht"]["status"]["status"] == "fout", wv["wispr-wacht"])
+check("W20 fout-hartslag van vandaag: rood", wv["youtube-wacht"]["kleur"] == "rood", wv["youtube-wacht"])
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

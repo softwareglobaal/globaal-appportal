@@ -7,7 +7,10 @@ De Dagbundelaar ze schrijft (gemaakt met mijnagents-runner/koppelingen/dagvastst
 - D04: niet gepland toont met wie, via welk kanaal en hoe lang;
 - D05: het overzicht toont de tegels van een vastgestelde dag, en "Nog niet vastgesteld" voor een dag zonder bestand;
 - D06: een onbekend getal wordt een vraagteken; een kapotte telling laat de pagina niet vallen;
-- D07: geen gedachtestreepje.
+- D07: geen gedachtestreepje;
+- D30 (WISPR-3): een fout-hartslag van een vorige dag staat als tekst met zijn dag, niet als fout van vandaag;
+- D31 (LOC-1): de Locatiewacht toont haar plekken en ritten ook op een dag met een bord-item;
+- D32 (LOC-2): een plek zonder naam en zonder adres is "onbekende plek", nooit een coördinaat.
 """
 import json
 import os
@@ -88,6 +91,13 @@ check("D08 plek met project", "project HARC 9004, Proefstraat 1" in html, html[-
 check("D08 thuis en rit met km", "<b>Thuis</b>" in html and "rit auto, 36,2 km" in html)
 check("D08 tracker in de auto", "waar de auto stond" in html)
 check("D08 tegel Onderweg op de dag", "72,3 km" in html and "3 plekken" in html)
+# D32 (LOC-2): een plek zonder naam en zonder adres toont geen coördinaten maar "onbekende plek"; met het adres uit de
+# verrijking van het Locatie-dashboard toont ze dat adres.
+naamloos = {"soort": "bezoek", "van": 1792652400, "tot": 1792653600, "minuten": 20, "lat": 50.71234, "lon": 4.61234}
+rij = A.verplaatsingen({"indeling": [naamloos]})
+check("D32 plek zonder naam: geen coördinaten", rij and rij[0]["wat"] == "onbekende plek" and "50.71" not in str(rij), rij)
+check("D32 plek met adres uit de verrijking", A.waar(dict(naamloos, adres="Proeflaan 3, 3999 Proefdorp"))
+      == "Proeflaan 3, 3999 Proefdorp")
 for ext in ("md", "json"):
     shutil.copy(os.path.join(PROEF, f"2026-10-22.{ext}"), os.path.join(MAP, gisteren[:4], f"{gisteren}.{ext}"))
 html = C.get("/", headers=MET).get_data(as_text=True)
@@ -209,6 +219,35 @@ check("D14 tegel bij werkverslagfout toont de fout, niet het item", "kon niet le
 check("D14 dag buiten de vier dagen is 404", C.get("/wachten?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten/whatsapp-wacht?dag=2020-01-01", headers=MET).status_code == 404
       and C.get("/wachten?dag=" + (A.vandaag() + timedelta(days=1)).isoformat(), headers=MET).status_code == 404)
+# D30 (WISPR-3): een fout-hartslag van een vorige dag maakt vandaag niet meer rood (het bord), maar blijft als tekst
+# zichtbaar, met zijn dag erbij.
+OUD = json.loads(json.dumps(WACHTEN))
+OUD["dag"] = A.vandaag().isoformat()
+OUD["vakken"][0]["wachten"][2].update(status={"status": "fout", "detail": "portaal niet gelezen", "laatste": "23:45",
+                                              "laatste_ts": "2026-10-30T22:45:00+00:00"})
+A.haal_wachten = lambda dag: json.loads(json.dumps(OUD))
+html = C.get("/wachten?dag=" + A.vandaag().isoformat(), headers=MET).get_data(as_text=True)
+check("D30 oude fout-hartslag: tekst met zijn dag", "stand van nu (sinds 30-10 23:45): fout: portaal niet gelezen" in html,
+      html[-2500:])
+# D31 (LOC-1): een vorige dag met het bord-item "Locatielogboek" toont ook de plekken en ritten van het Locatie-dashboard.
+MET_ITEM = json.loads(json.dumps(WACHTEN))
+MET_ITEM["dag"] = "2026-10-30"
+MET_ITEM["vakken"][0]["wachten"][2].update(kleur="groen", oordeel="binnen", aantal=1, rondes=1, items=[
+    {"tijd": "21:30", "wie": "locatie", "wat": "Locatielogboek 2026-10-30", "fout": False}])
+LOC30 = dict(LOC, datum="2026-10-30")
+A.haal_wachten = lambda dag: json.loads(json.dumps(MET_ITEM))
+A.haal_locatie = lambda pad: json.loads(json.dumps(LOC30)) if pad.startswith("/api/dagboek/2026-10-30") else None
+html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
+check("D31 vorige dag: bord-item en ritten samen", "Locatielogboek 2026-10-30" in html and "rit auto, 36,2 km" in html
+      and "Thuis" in html and "6</span> items binnen" in html, html[-3000:])
+# Codex-toets 1: haal_wachten geeft een minuut lang hetzelfde (bewaarde) antwoord; twee aanvragen gaven dubbele ritten.
+VAST = json.loads(json.dumps(MET_ITEM))
+A.haal_wachten = lambda dag: VAST
+for _ in range(2):
+    html = C.get("/wachten/locatie-wacht?dag=2026-10-30", headers=MET).get_data(as_text=True)
+check("D31 tweede aanvraag: geen dubbels, bewaard antwoord onveranderd", "6</span> items binnen" in html
+      and len(VAST["vakken"][0]["wachten"][2]["items"]) == 1, html[-1500:])
+A.haal_locatie = lambda pad: None
 A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 check("D14 onbekende wacht 404", C.get("/wachten/geen-wacht?dag=2026-10-31", headers=MET).status_code == 404)
 check("D14 wacht zonder groep 403", C.get("/wachten/sms-wacht", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)

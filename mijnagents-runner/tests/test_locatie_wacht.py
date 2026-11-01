@@ -23,6 +23,10 @@ sys.path.insert(0, HIER)
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import locatie_wacht as L  # noqa: E402
 
+# Nooit de echte datamap van de wacht: de uurcontrole onthoudt daar haar dag (LOC-6), het dagboek zijn stand.
+L.MAP = tempfile.mkdtemp()
+L.STAND = os.path.join(L.MAP, "stand.json")
+
 WERF = (50.7000, 4.6000)
 ELDERS = (50.7300, 4.6400)
 BRUSSEL = ZoneInfo("Europe/Brussels")
@@ -393,6 +397,36 @@ class Bord:
         pass
 
 
+class LogBord(Bord):
+    def __init__(self):
+        super().__init__()
+        self.logs = []
+
+    def log(self, onderwerp, stap, tekst, detail=""):
+        self.logs.append((onderwerp, stap, tekst))
+
+
+def test_de_eerste_geslaagde_controle_van_de_dag_laat_een_bronregel():
+    """LOC-6 (01-11-2026): bij goed nieuws schreef de uurcontrole niets en zei het werkverslag van vandaag "geen
+    ronde". Nu een bronregel bij de eerste geslaagde controle van de dag, niet elk uur. De uren zijn die van de
+    werkwijze (07 tot 22): de cron raakt beide UTC-uren, de klokgrendel in controle() laat 06 en 23 vallen."""
+    echt = {k: getattr(L, k) for k in ("ag", "nu", "haal", "taak_melden", "MAP")}
+    L.ag, L.taak_melden, L.MAP = LogBord(), (lambda *a, **k: None), tempfile.mkdtemp()
+    L.haal = lambda pad: {"bronnen": [{"status": "actief", "label": "Tracker in de auto", "toestand": "geparkeerd"}],
+                          "alarmen": [], "taken": []}
+    try:
+        for d, u in ((5, 6), (5, 7), (5, 8), (5, 22), (5, 23), (6, 7)):
+            L.nu = lambda d=d, u=u: datetime(2026, 10, d, u, 5, tzinfo=BRUSSEL)
+            L.controle()
+        assert [h[0] for h in L.ag.hart] == ["waakt"] * 4, L.ag.hart
+        bron = [x for x in L.ag.logs if x[1] == "bron"]
+        assert [x[0] for x in bron] == ["controle 2026-10-05", "controle 2026-10-06"], L.ag.logs
+        assert "Tracker in de auto: geparkeerd" in bron[0][2], bron
+    finally:
+        for k, v in echt.items():
+            setattr(L, k, v)
+
+
 def test_geparkeerd_geeft_geen_alarm_en_de_telefoon_nooit():
     """4-10-2026: de auto stond de hele dag geparkeerd en elke twee uur kwam 'tracker zwijgt,
     kijk de OwnTracks-app na'."""
@@ -531,6 +565,7 @@ def proefronde(status_dag, droog=False):
         L.main()
         stand = L.lees_stand()
         noden = L.ag.r.noden
+        proefronde.ronde = L.ag.r
     finally:
         for k, v in oud.items():
             setattr(L, k, v)
@@ -551,6 +586,33 @@ def test_zonder_toestelconfiguratie_sluit_de_wacht_geen_dag_af():
     assert any("ATRACK_IMEIS" in n for n in noden), noden
     _, _, stand, _, _ = proefronde("afgesloten")
     assert stand["afgesloten_tot"] == "2026-10-05" and stand["versies"]["2026-10-03"] == "v1", stand
+
+
+def test_de_nood_over_afspraken_zonder_adres_noemt_de_dag_en_het_aantal_apart():
+    """LOC-5 (01-11-2026): de nood stond altijd open, zonder dag. Nu een nood per dag met zulke afspraken; het aantal
+    staat apart in het detail van de ronde, zodat de nood dezelfde blijft als het aantal verandert (Codex-toets 1: het
+    bord vergelijkt noodteksten letterlijk). Een dag zonder zulke afspraak geeft geen nood."""
+    echt = L.vergelijk_agenda
+    teksten = []
+    for aantal in (2, 3):
+        def vergelijk(dag, *a, aantal=aantal, **k):
+            return [], [], ([f"1{i}:00 Proefoverleg" for i in range(aantal)] if dag == "2026-10-04" else []), 0
+        try:
+            L.vergelijk_agenda = vergelijk
+            _, _, _, noden, _ = proefronde("afgesloten")
+        finally:
+            L.vergelijk_agenda = echt
+        blind = [n for n in noden if "zonder adres" in n]
+        assert len(blind) == 1 and "2026-10-04" in blind[0], noden
+        assert f"2026-10-04 ({aantal})" in proefronde.ronde.detail, proefronde.ronde.detail
+        teksten.append(blind[0])
+    assert teksten[0] == teksten[1], teksten
+    try:
+        L.vergelijk_agenda = lambda dag, *a, **k: ([], [], [], 0)
+        _, _, _, noden, _ = proefronde("afgesloten")
+        assert not [n for n in noden if "zonder adres" in n], noden
+    finally:
+        L.vergelijk_agenda = echt
 
 
 def test_een_onbereikbare_tegel_geeft_een_signaal_en_een_foute_hartslag():

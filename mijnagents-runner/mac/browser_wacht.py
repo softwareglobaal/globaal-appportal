@@ -8,7 +8,8 @@ de site (bijvoorbeeld monday.com), nooit het volledige adres, nooit een zoekopdr
 venster laat geen geschiedenis na en telt dus nooit mee.
 
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
-op in het dagbestand. Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
+op in het dagbestand. Safari telt alleen wat op deze Mac bekeken werd, niet wat iCloud van de gsm meebrengt (WEB-3,
+01-11-2026). Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
 import glob
@@ -42,6 +43,9 @@ DAG = DAG or datetime.now(BRUSSEL).date().isoformat()
 # (browser, glob van de databank, query die (epoch-seconden, adres) geeft)
 CHROME_EPOCH = 11644473600      # Chrome: microseconden sinds 1601-01-01
 SAFARI_EPOCH = 978307200        # Safari: seconden sinds 2001-01-01
+# WEB-3: alleen de bezoeken van deze Mac; history_visits.origin 1 komt via iCloud van een ander toestel. Een oudere
+# Safari zonder die kolom kent geen oorsprong: dan telt alles (zonder_oorsprong), nooit "onleesbaar".
+DEZE_MAC = "v.origin = 0"
 BRONNEN = (
     ("Chrome", "Library/Application Support/Google/Chrome/*/History",
      f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
@@ -50,7 +54,8 @@ BRONNEN = (
     ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
      "SELECT v.visit_date / 1000000.0, p.url FROM moz_historyvisits v JOIN moz_places p ON p.id = v.place_id"),
     ("Safari", "Library/Safari/History.db",
-     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item"),
+     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item "
+     f"WHERE {DEZE_MAC}"),
 )
 
 
@@ -78,6 +83,29 @@ def hartslag(status, taak="", detail="", nood=None):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
+def niet_gelezen(onleesbaar):
+    """Waarom geen enkele browser gelezen is, zoals in youtube_wacht.py (YT-2): PermissionError (of de uitkomst
+    "geweigerd" van de helper van YT-1) is een weigering van macOS; een andere fout een onleesbaar bestand."""
+    geweigerd = [b for b, f in onleesbaar.items() if f in ("PermissionError", "geweigerd")]
+    anders = [b for b in onleesbaar if b not in geweigerd]
+    delen = (["geweigerd: " + ", ".join(geweigerd)] if geweigerd else []) + (
+        ["onleesbaar: " + ", ".join(anders)] if anders else [])
+    if not delen:
+        return "Geen browsergeschiedenis gevonden op deze Mac"
+    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+
+
+def fout_in_werkverslag(tekst):
+    """Een mislukte ronde staat ook in het werkverslag: anders zegt de wachtenpagina "geen ronde"."""
+    if DROOG:
+        print("werkverslag fout", tekst)
+        return
+    try:
+        bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "fout", "tekst": tekst}]})
+    except Exception as e:  # noqa: BLE001
+        print("werkverslag mislukt:", e, file=sys.stderr)
+
+
 def site(adres):
     """'https://www.monday.com/boards/1?x=2' -> 'monday.com'; geen web-adres (file:, chrome:, about:) -> None."""
     try:
@@ -88,6 +116,13 @@ def site(adres):
         return None
     h = u.hostname.lower()
     return h[4:] if h.startswith("www.") else h
+
+
+def zonder_oorsprong(c, query):
+    """De vraag zonder de voorwaarde DEZE_MAC als de databank geen kolom history_visits.origin heeft."""
+    if DEZE_MAC in query and "origin" not in {r[1] for r in c.execute("PRAGMA table_info(history_visits)")}:
+        return query.replace(DEZE_MAC, "1")
+    return query
 
 
 def lees_bestand(pad, query, sinds):
@@ -101,7 +136,7 @@ def lees_bestand(pad, query, sinds):
                 shutil.copy2(pad + ext, doel + ext)
         c = sqlite3.connect(f"file:{doel}?mode=ro", uri=True)
         try:
-            return [(t, site(a)) for t, a in c.execute(query) if t and t >= sinds]
+            return [(t, site(a)) for t, a in c.execute(zonder_oorsprong(c, query)) if t and t >= sinds]
         finally:
             c.close()
     finally:
@@ -138,20 +173,27 @@ def main():
                 continue
             gelezen[browser] += 1
             bezoeken += [(browser, t, s) for t, s in rijen]
-    per_dag = tel(bezoeken, dagen)
     nood = []
     if "Safari" in onleesbaar:
         nood.append({"tekst": "Safari is niet te lezen: geef Python Full Disk Access (System Settings, Privacy & Security)",
                      "wie": "mehdi"})
     if not gelezen:
-        nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
+        # WEB-2 (01-11-2026): niets gelezen is onbekend, nooit 0 bezoeken. Geen item klaarzetten: De Dagbundelaar zou de
+        # nullen overnemen (dagbundelaar.py, per_dag_uit) en het Dagboek "0 bezoeken" tonen.
+        tekst = niet_gelezen(onleesbaar)
+        fout_in_werkverslag(tekst)
+        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
+                 nood=nood + [{"tekst": tekst, "wie": "claude-code"}])
+        print(tekst, file=sys.stderr)
+        return 1
+    per_dag = tel(bezoeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]
     titel = f"Websites {DAG}: {v['bezoeken']} bezoeken op {v['sites']} sites"
     if DROOG:
         print(json.dumps(inhoud, ensure_ascii=False, indent=1))
-        return
+        return 0
     uit = bord("/api/klaarzet", {"items": [{"van": NAAM, "voor": "mehdi", "soort": "websites", "sleutel": DAG,
                                             "titel": titel, "uniek": f"websites:{DAG}", "inhoud": inhoud}]})
     bord("/api/logboek", {"regels": [
@@ -160,10 +202,11 @@ def main():
                   + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")},
         {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf",
          "tekst": f"{titel}; {DAGEN} dagen klaargezet ({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)"}]})
-    hartslag("klaar" if gelezen else "fout", taak=f"websites {DAG} klaargezet",
-             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen) or 'geen'}", nood=nood)
+    hartslag("klaar", taak=f"websites {DAG} klaargezet",
+             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen)}", nood=nood)
     print(titel)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

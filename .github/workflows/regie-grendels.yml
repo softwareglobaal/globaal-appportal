@@ -56,6 +56,8 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_dagvaststelling.py
       - run: python3 mijnagents-runner/tests/test_privegrens.py
       - run: python3 mijnagents-runner/tests/test_eigen_werk_gezondheid.py
+      # T-0120 (01-11-2026): de wachten van de laptop (YouTube, websites, Wispr), met verzonnen databanken
+      - run: python3 mijnagents-runner/tests/test_computer_wachten.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
       - run: python3 mijnagents-runner/tests/test_weekoverzicht.py
       - run: python3 mijnagents-runner/tests/test_keten.py

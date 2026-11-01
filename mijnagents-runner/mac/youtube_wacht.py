@@ -46,6 +46,9 @@ DAG = DAG or datetime.now(BRUSSEL).date().isoformat()
 
 CHROME_EPOCH = 11644473600      # Chrome: microseconden sinds 1601-01-01
 SAFARI_EPOCH = 978307200        # Safari: seconden sinds 2001-01-01
+# WEB-3: alleen de bezoeken van deze Mac; history_visits.origin 1 komt via iCloud van een ander toestel. Een oudere
+# Safari zonder die kolom kent geen oorsprong: dan telt alles (zonder_oorsprong), nooit "onleesbaar".
+DEZE_MAC = "v.origin = 0"
 # (browser, glob van de databank, query die (epoch-seconden, adres, titel, seconden open of NULL) geeft)
 BRONNEN = (
     ("Chrome", "Library/Application Support/Google/Chrome/*/History",
@@ -59,7 +62,7 @@ BRONNEN = (
      "JOIN moz_places p ON p.id = v.place_id WHERE p.url LIKE '%youtu%'"),
     ("Safari", "Library/Safari/History.db",
      f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url, v.title, NULL FROM history_visits v "
-     "JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%'"),
+     f"JOIN history_items i ON i.id = v.history_item WHERE i.url LIKE '%youtu%' AND {DEZE_MAC}"),
 )
 
 
@@ -85,6 +88,30 @@ def hartslag(status, taak="", detail="", nood=None):
         bord("/agent-status", {"naam": NAAM, "status": status, "taak": taak, "detail": detail, "nood": nood or []})
     except Exception as e:  # noqa: BLE001
         print("hartslag mislukt:", e, file=sys.stderr)
+
+
+def niet_gelezen(onleesbaar):
+    """Waarom geen enkele browser gelezen is (YT-2, 01-11-2026: onder launchd weigerde macOS Chrome en Firefox, en de
+    melding zei "niet gevonden"). PermissionError (of de uitkomst "geweigerd" van de helper van YT-1) is een weigering van
+    macOS; een andere fout een onleesbaar bestand."""
+    geweigerd = [b for b, f in onleesbaar.items() if f in ("PermissionError", "geweigerd")]
+    anders = [b for b in onleesbaar if b not in geweigerd]
+    delen = (["geweigerd: " + ", ".join(geweigerd)] if geweigerd else []) + (
+        ["onleesbaar: " + ", ".join(anders)] if anders else [])
+    if not delen:
+        return "Geen browsergeschiedenis gevonden op deze Mac"
+    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+
+
+def fout_in_werkverslag(tekst):
+    """Een mislukte ronde staat ook in het werkverslag: anders zegt de wachtenpagina "geen ronde" (YT-2)."""
+    if DROOG:
+        print("werkverslag fout", tekst)
+        return
+    try:
+        bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "fout", "tekst": tekst}]})
+    except Exception as e:  # noqa: BLE001
+        print("werkverslag mislukt:", e, file=sys.stderr)
 
 
 def video(adres):
@@ -116,6 +143,13 @@ def titel_schoon(t):
     return re.sub(r"\s+", " ", t)[:120] or "zonder titel"
 
 
+def zonder_oorsprong(c, query):
+    """De vraag zonder de voorwaarde DEZE_MAC als de databank geen kolom history_visits.origin heeft."""
+    if DEZE_MAC in query and "origin" not in {r[1] for r in c.execute("PRAGMA table_info(history_visits)")}:
+        return query.replace(DEZE_MAC, "1")
+    return query
+
+
 def lees_bestand(pad, query, sinds):
     """(epoch, video, titel, seconden) uit een kopie van de databank (de browser houdt hem open en vergrendeld)."""
     tmp = tempfile.mkdtemp(prefix="youtube-")
@@ -128,7 +162,7 @@ def lees_bestand(pad, query, sinds):
         c = sqlite3.connect(f"file:{doel}?mode=ro", uri=True)
         try:
             uit = []
-            for t, a, titel, sec in c.execute(query):
+            for t, a, titel, sec in c.execute(zonder_oorsprong(c, query)):
                 vid = video(a)
                 if t and t >= sinds and vid:
                     uit.append((t, vid, titel_schoon(titel), sec))
@@ -175,9 +209,11 @@ def main():
             gelezen[browser] += 1
             bekeken += [(browser,) + r for r in rijen]
     if not gelezen:
-        hartslag("fout", taak="geen browsergeschiedenis gevonden",
-                 nood=[{"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"}])
-        print("geen browsergeschiedenis gevonden", file=sys.stderr)
+        tekst = niet_gelezen(onleesbaar)
+        fout_in_werkverslag(tekst)
+        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
+                 nood=[{"tekst": tekst, "wie": "claude-code"}])
+        print(tekst, file=sys.stderr)
         return 1
     per_dag = tel(bekeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"), "gebruiker": GEBRUIKER,
