@@ -112,16 +112,17 @@ def test_fathom3_privé_archief_bewaart_geen_deellink():
     assert "deel7163" in uit[7163], "een werkgesprek houdt de deellink in het archief"
     sys.path.insert(0, os.path.dirname(HIER))
     import fathom_haal_alles as H  # noqa: PLC0415
-    for rid, oud_pad in ((7164, ""), (7165, "werk")):
-        map_ = tempfile.mkdtemp(prefix="fathom-map-")
-        if oud_pad:
+    for rid, oud, deellink in ((7164, None, False), (7165, {"prive": False, "afdeling": "regie"}, True),
+                               (7166, {"prive": True, "afdeling": "regie"}, False)):
+        map_, oud_pad = tempfile.mkdtemp(prefix="fathom-map-"), ""
+        if oud:
             oud_pad = tempfile.mkdtemp(prefix="fathom-oud-")
             with open(os.path.join(oud_pad, "gesprek.json"), "w", encoding="utf-8") as f:
-                json.dump({"recording_id": rid, "herkenning": {"prive": False, "afdeling": "regie"}}, f)
+                json.dump({"recording_id": rid, "herkenning": oud}, f)
         H.bewaar(dict(gesprek(rid, "2026-10-22T08:00:00Z", "2026-10-22T08:20:00Z"), share_url=f"https://fathom.video/share/deel{rid}"),
                  map_, oud_pad)
         alles = "".join(open(os.path.join(map_, n), "rb").read().decode("utf-8", "replace") for n in os.listdir(map_))
-        assert (f"deel{rid}" in alles) == bool(oud_pad), (rid, alles[:600])
+        assert (f"deel{rid}" in alles) == deellink, (rid, alles[:600])
 
 
 def test_fathom1_aanvulvraag_vraagt_samenvatting_en_actiepunten_zonder_transcript():
