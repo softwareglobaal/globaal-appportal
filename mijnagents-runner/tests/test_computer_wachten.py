@@ -100,6 +100,8 @@ check("C01 YouTube: melding noemt geweigerd en onleesbaar",
 log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
 check("C01 YouTube: fout in het werkverslag", any(r["stap"] == "fout" and "geweigerd: Chrome" in r["tekst"] for r in log), log)
 check("C01 YouTube: niets klaargezet", not nep.naar("/api/klaarzet"), nep.oproepen)
+check("C01 ook de uitkomst geweigerd van de helper (YT-1)", "geweigerd: Chrome" in Y.niet_gelezen({"Chrome": "geweigerd"})
+      and "geweigerd: Safari" in laad("browser_wacht").niet_gelezen({"Safari": "geweigerd"}))
 rc, nep = ronde(laad("youtube_wacht"), tempfile.mkdtemp())
 st = nep.naar("/agent-status")[-1]
 check("C01 YouTube: zonder bestand niet gevonden", rc == 1 and st["nood"][0]["tekst"] == "Geen browsergeschiedenis gevonden op deze Mac"

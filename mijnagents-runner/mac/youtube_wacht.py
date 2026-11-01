@@ -92,8 +92,9 @@ def hartslag(status, taak="", detail="", nood=None):
 
 def niet_gelezen(onleesbaar):
     """Waarom geen enkele browser gelezen is (YT-2, 01-11-2026: onder launchd weigerde macOS Chrome en Firefox, en de
-    melding zei "niet gevonden"). PermissionError is een weigering van macOS; een andere fout een onleesbaar bestand."""
-    geweigerd = [b for b, f in onleesbaar.items() if f == "PermissionError"]
+    melding zei "niet gevonden"). PermissionError (of de uitkomst "geweigerd" van de helper van YT-1) is een weigering van
+    macOS; een andere fout een onleesbaar bestand."""
+    geweigerd = [b for b, f in onleesbaar.items() if f in ("PermissionError", "geweigerd")]
     anders = [b for b in onleesbaar if b not in geweigerd]
     delen = (["geweigerd: " + ", ".join(geweigerd)] if geweigerd else []) + (
         ["onleesbaar: " + ", ".join(anders)] if anders else [])
