@@ -1,0 +1,9 @@
+# Planning van de foto-indeling op de VM (globaal), versie 1.0 (01-11-2026, T-0120 FOTO-4).
+#
+# De Fotowacht op de Mac leest elke avond om 21:15 (Brussel) en zet per dag de foto-metadata op het bord. Daarna deelt
+# koppelingen/fotoindeling.py de foto's in (werf, kandidaat, mensen, privé, scherm). De VM draait in UTC en cron kent geen
+# eigen tijdzone: daarom staan de uren voor zomer (UTC+2) en winter (UTC+1) er allebei, zoals in planning/locatie.cron.
+# De indeling is idempotent: een ronde zonder verandering schrijft niets op het bord.
+# Op de VM zetten: mijnagents-runner/planning/foto_cron_zetten.py (vervangt alleen het blok tussen de merktekens).
+40 19,20,21,22 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/koppelingen/fotoindeling.py >> /home/ubuntu/agents/fotoindeling.log 2>&1
+40 5,6 * * * /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/koppelingen/fotoindeling.py >> /home/ubuntu/agents/fotoindeling.log 2>&1
