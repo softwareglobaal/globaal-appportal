@@ -78,6 +78,29 @@ def hartslag(status, taak="", detail="", nood=None):
         print("hartslag mislukt:", e, file=sys.stderr)
 
 
+def niet_gelezen(onleesbaar):
+    """Waarom geen enkele browser gelezen is, zoals in youtube_wacht.py (YT-2): PermissionError is een weigering van
+    macOS; een andere fout een onleesbaar bestand."""
+    geweigerd = [b for b, f in onleesbaar.items() if f == "PermissionError"]
+    anders = [b for b in onleesbaar if b not in geweigerd]
+    delen = (["geweigerd: " + ", ".join(geweigerd)] if geweigerd else []) + (
+        ["onleesbaar: " + ", ".join(anders)] if anders else [])
+    if not delen:
+        return "Geen browsergeschiedenis gevonden op deze Mac"
+    return "Browsergeschiedenis niet te lezen op deze Mac (" + "; ".join(delen) + ")"
+
+
+def fout_in_werkverslag(tekst):
+    """Een mislukte ronde staat ook in het werkverslag: anders zegt de wachtenpagina "geen ronde"."""
+    if DROOG:
+        print("werkverslag fout", tekst)
+        return
+    try:
+        bord("/api/logboek", {"regels": [{"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "fout", "tekst": tekst}]})
+    except Exception as e:  # noqa: BLE001
+        print("werkverslag mislukt:", e, file=sys.stderr)
+
+
 def site(adres):
     """'https://www.monday.com/boards/1?x=2' -> 'monday.com'; geen web-adres (file:, chrome:, about:) -> None."""
     try:
@@ -138,20 +161,27 @@ def main():
                 continue
             gelezen[browser] += 1
             bezoeken += [(browser, t, s) for t, s in rijen]
-    per_dag = tel(bezoeken, dagen)
     nood = []
     if "Safari" in onleesbaar:
         nood.append({"tekst": "Safari is niet te lezen: geef Python Full Disk Access (System Settings, Privacy & Security)",
                      "wie": "mehdi"})
     if not gelezen:
-        nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
+        # WEB-2 (01-11-2026): niets gelezen is onbekend, nooit 0 bezoeken. Geen item klaarzetten: De Dagbundelaar zou de
+        # nullen overnemen (dagbundelaar.py, per_dag_uit) en het Dagboek "0 bezoeken" tonen.
+        tekst = niet_gelezen(onleesbaar)
+        fout_in_werkverslag(tekst)
+        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
+                 nood=nood + [{"tekst": tekst, "wie": "claude-code"}])
+        print(tekst, file=sys.stderr)
+        return 1
+    per_dag = tel(bezoeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]
     titel = f"Websites {DAG}: {v['bezoeken']} bezoeken op {v['sites']} sites"
     if DROOG:
         print(json.dumps(inhoud, ensure_ascii=False, indent=1))
-        return
+        return 0
     uit = bord("/api/klaarzet", {"items": [{"van": NAAM, "voor": "mehdi", "soort": "websites", "sleutel": DAG,
                                             "titel": titel, "uniek": f"websites:{DAG}", "inhoud": inhoud}]})
     bord("/api/logboek", {"regels": [
@@ -160,10 +190,11 @@ def main():
                   + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")},
         {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "schrijf",
          "tekst": f"{titel}; {DAGEN} dagen klaargezet ({uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt)"}]})
-    hartslag("klaar" if gelezen else "fout", taak=f"websites {DAG} klaargezet",
-             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen) or 'geen'}", nood=nood)
+    hartslag("klaar", taak=f"websites {DAG} klaargezet",
+             detail=f"privé; {v['bezoeken']} bezoeken vandaag; browsers: {', '.join(gelezen)}", nood=nood)
     print(titel)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -2,7 +2,9 @@
 Wispr-wacht, die op de laptop draaien (mac/youtube_wacht.py, mac/browser_wacht.py, mac/wispr_wacht.py).
 
 - C01 (YT-2): weigert macOS de browsergeschiedenis, dan noemt de melding "geweigerd" met de browser en staat de ronde
-  als fout in het werkverslag; een kapot bestand is "onleesbaar"; zonder enig bestand blijft het "niet gevonden".
+  als fout in het werkverslag; een kapot bestand is "onleesbaar"; zonder enig bestand blijft het "niet gevonden";
+- C02 (WEB-2): leest De Websitewacht geen enkele browser, dan zet ze niets klaar (onbekend is nooit 0 bezoeken): alleen
+  een foute hartslag en een foutregel in het werkverslag.
 
 Verzonnen databanken in een tijdelijke map; geen netwerk, geen bord, geen echte geschiedenis.
 Draaien: python3 mijnagents-runner/tests/test_computer_wachten.py
@@ -92,6 +94,19 @@ rc, nep = ronde(laad("youtube_wacht"), tempfile.mkdtemp())
 st = nep.naar("/agent-status")[-1]
 check("C01 YouTube: zonder bestand niet gevonden", rc == 1 and st["nood"][0]["tekst"] == "Geen browsergeschiedenis gevonden op deze Mac"
       and any(r["stap"] == "fout" for p in nep.naar("/api/logboek") for r in p["regels"]), nep.oproepen)
+
+# C02 (WEB-2): zonder gelezen browser zette de Websitewacht 14 dagen met 0 bezoeken klaar; De Dagbundelaar nam die over.
+for naam, thuis in (("lege map", tempfile.mkdtemp()), ("geweigerd", tempfile.mkdtemp())):
+    B = laad("browser_wacht")
+    if naam == "geweigerd":
+        geweigerd_bestand(B, thuis, "Library/Application Support/Google/Chrome/Default/History")
+    rc, nep = ronde(B, thuis)
+    st = nep.naar("/agent-status")[-1]
+    log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+    check(f"C02 websites ({naam}): geen klaarzet", not nep.naar("/api/klaarzet"), nep.naar("/api/klaarzet"))
+    check(f"C02 websites ({naam}): hartslag fout met de reden", rc == 1 and st["status"] == "fout"
+          and any(("geweigerd: Chrome" if naam == "geweigerd" else "Geen browsergeschiedenis gevonden") in n["tekst"] for n in st["nood"]), st)
+    check(f"C02 websites ({naam}): fout in het werkverslag", [r["stap"] for r in log] == ["fout"], log)
 
 print("wachten van de computer:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
