@@ -480,6 +480,107 @@ def test_nep_claude_code_krijgt_geen_api_sleutel_en_geen_gereedschap():
     assert GA.weekbenutting(LIMIET)[0] == 0.35, "de meting van het abonnement is wat het budget leest"
 
 
+
+# ------------------------------------------------------------------------------------- de proef (X5), droog ---
+import hashlib  # noqa: E402
+import io  # noqa: E402
+import contextlib  # noqa: E402
+
+import gespreksanalist_proef as PR  # noqa: E402
+
+
+class GeenBord:
+    """De proef raakt het bord niet: elke oproep van de agent is een fout."""
+
+    def __getattr__(self, naam):
+        raise AssertionError(f"de proef riep het bord aan: {naam}")
+
+
+def _proefdata():
+    basis = os.path.join(THUIS, "proefdata")
+    fathom, plaud, zoom = (os.path.join(basis, n) for n in ("fathom-data", "plaud-invoer", "zoom-data"))
+    rijen = []
+    for dag, sleutel, samenvatting, punten in (("06", "f1", SAMENVATTING, None), ("27", "f2", SAMENVATTING, ACTIEPUNTEN),
+                                               ("08", "f3", None, ACTIEPUNTEN), ("14", "f4", SAMENVATTING, ACTIEPUNTEN)):
+        map_ = os.path.join(fathom, f"2026-10-{dag} 1000 Proefpersoon Zeta {sleutel}")
+        _schrijf(os.path.join(map_, "transcript.json"), FATHOM_TRANSCRIPT)
+        _schrijf(os.path.join(map_, "gesprek.json"), {"recording_id": sleutel, "archivaris": {"label": "HA project",
+                                                                                             "zekerheid": "hoog", "versie": 2}})
+        if samenvatting:
+            _schrijf(os.path.join(map_, "samenvatting.md"), samenvatting)
+        if punten:
+            _schrijf(os.path.join(map_, "actiepunten.md"), punten)
+        rijen.append({"datum": f"2026-10-{dag}", "start": "10:00", "uniek": f"fathom:{sleutel}", "archief": map_,
+                      "prive": 1 if sleutel == "f4" else 0, "minuten": 25})
+    for dag, sleutel in (("03", "p1"), ("29", "p2")):
+        naam = f"2026-10-{dag} 1400 Proefpersoon Zeta"
+        _schrijf(os.path.join(plaud, naam, "transcript.json"), PLAUD_TRANSCRIPT)
+        rijen.append({"bron": "plaud", "datum": f"2026-10-{dag}", "start": "14:00", "uniek": f"plaud:{sleutel}",
+                      "archief": f"Data uit Mehdi/Plaud/{naam}/transcript.md", "minuten": 18})
+    naam = "2026-10-17 1400 Zoom Proefonderwerp Omega [dddd4444]"
+    _schrijf(os.path.join(zoom, naam, "transcript.json"), [{"speaker": {"display_name": "Proefpersoon Zeta"},
+                                                            "text": "Privé, nooit lezen.", "timestamp": "00:00:01"}])
+    _schrijf(os.path.join(zoom, naam, "zoom.json"), {"uuid": "z1", "prive": True, "minuten": 41,
+                                                     "start_brussel": "2026-10-17T14:00:00+02:00"})
+    return basis, fathom, plaud, zoom, rijen
+
+
+def _vingerafdruk(map_):
+    uit = {}
+    for wortel, _, namen in os.walk(map_):
+        for n in namen:
+            p = os.path.join(wortel, n)
+            uit[p] = hashlib.sha256(open(p, "rb").read()).hexdigest()
+    return uit
+
+
+def _proef(model_aan, vraag):
+    basis, fathom, plaud, zoom, rijen = _proefdata()
+    uitvoer = os.path.join(basis, "gespreksanalist")
+    voor = _vingerafdruk(basis)
+    with vervangen((AR, "db", _db(rijen)), (AR, "afspraken", lambda van, tot: []), (AR, "ag", GeenBord()),
+                   (AR.projectadressen, "CACHE", os.path.join(basis, "geen-cache.json")),
+                   (AR.projectadressen, "index", _geen_model), (GA, "MODEL_AAN", model_aan), (GA, "UITVOER", uitvoer),
+                   (GA, "PLAUD_INVOER", plaud), (GA, "ZOOM_DATA", zoom), (CA, "LIMIET_BESTAND", LIMIET),
+                   (CA, "vraag", vraag)):
+        if os.path.exists(LIMIET):
+            os.remove(LIMIET)
+        pad, u = PR.proef("2026-10", vraag, nu=AR.datetime(2026, 11, 2, 3, 0).astimezone())
+        scherm = io.StringIO()
+        with contextlib.redirect_stdout(scherm), vervangen((sys, "argv", ["proef", "--maand", "2026-10"])):
+            PR.main()
+    na = _vingerafdruk(basis)
+    nieuw = sorted(set(na) - set(voor))
+    gewijzigd = [p for p in voor if na.get(p) != voor[p] and "/gespreksanalist/proef/" not in p]
+    return pad, u, nieuw, gewijzigd, scherm.getvalue()
+
+
+def test_proef_neemt_zes_gesprekken_verspreid_en_schrijft_alleen_het_proefbestand():
+    vraag = NepVraag()
+    pad, u, nieuw, gewijzigd, scherm = _proef(True, vraag)
+    rollen = [(g["rol"], g["uniek"], g["toestand"]) for g in u["gesprekken"]]
+    assert rollen == [("fathom zonder actiepunt", "fathom:f1", "fathom"), ("fathom met actiepunten", "fathom:f2", "fathom"),
+                      ("plaud", "plaud:p1", "model"), ("plaud", "plaud:p2", "model"),
+                      ("zoom-tekst", "zoom:meeting:z1", "privé"), ("privé", "fathom:f4", "privé")], rollen
+    assert u["gekozen"] == 6 and u["tekort"] == [] and u["zonder_actiepunt"] and u["prive_alleen_regel"], u
+    assert u["actiepunten"] == 4 and u["weggegooid"] == 5 and u["letterlijk_procent"] == 44, u
+    assert u["tokens"] == 2468 and len(vraag.vragen) == 4 and u["weekvenster_na"] == 0.40, "twee proeven: 4 vragen"
+    assert os.stat(pad).st_mode & 0o777 == 0o600 and os.path.dirname(pad).endswith("gespreksanalist/proef"), pad
+    assert len([p for p in nieuw if "/gespreksanalist/" in p]) == 2 and not gewijzigd, (nieuw, gewijzigd)
+    assert all(p.endswith(".json") and "/proef/" in p for p in nieuw if "/gespreksanalist/" in p), nieuw
+    assert "Zeta" not in scherm and "Proefstraat" not in scherm and "proefbestand:" in scherm, scherm
+    d = json.load(open(pad, encoding="utf-8"))
+    tekst = {g["uniek"]: g for g in d["gesprekken"]}
+    assert tekst["zoom:meeting:z1"]["record"]["regel"] == "privégesprek, 41 min"
+    assert tekst["fathom:f4"]["record"]["regel"] == "privégesprek, 25 min" and "samenvatting" not in tekst["fathom:f4"]["record"]
+
+
+def test_proef_met_het_model_uit_vraagt_niets_en_noemt_het():
+    pad, u, nieuw, gewijzigd, scherm = _proef(False, _geen_model)
+    assert [g["toestand"] for g in u["gesprekken"] if g["bron"] == "plaud"] == ["model staat uit"] * 2, u["gesprekken"]
+    assert u["model_aan"] is False and u["tokens"] == 0 and not gewijzigd
+
+
 if __name__ == "__main__":
     goed = fout = 0
     for naam, f in list(globals().items()):

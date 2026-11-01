@@ -23,6 +23,8 @@ REPO = os.path.dirname(os.path.dirname(HIER))
 
 # Testbestanden uit regie-zoom en zoom-accountscan, plus deze grendel zelf.
 BESTANDEN = (
+    "mijnagents-runner/gespreksanalist.py",
+    "mijnagents-runner/gespreksanalist_proef.py",
     "mijnagents-runner/tests/test_archivaris_actiepunten.py",
     "mijnagents-runner/tests/test_bode_regie.py",
     "mijnagents-runner/tests/test_bord_lees.py",
