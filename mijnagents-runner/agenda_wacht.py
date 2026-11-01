@@ -6966,6 +6966,13 @@ def zonder_rit_indelen(rregels):
     return zonder_rit
 
 
+def titel_uniek(reden, dag):
+    """De sleutel van het titelsignaal voor een reden op een dag. Het begin van de reden blijft leesbaar; een korte hash
+    van de hele reden houdt twee redenen met hetzelfde begin uit elkaar (T-0120 AG-3). Tot 01-11-2026 gaven
+    'geen firmacode, wellicht [A]' en '[B]' dezelfde sleutel, en overschreef het tweede signaal het eerste op het bord."""
+    return f"agenda-titel-{reden[:20]}-{hashlib.sha256(reden.encode()).hexdigest()[:8]}:{dag}"
+
+
 WEEKCONSOLIDATIE_MAP = os.path.expanduser("~/appportal/mijnagents-data/export/Agendawacht/weekconsolidatie")
 WEEKNOOD = {"tekst": "Weekoverzicht van de Agendawacht ontbreekt: de weekconsolidatie liep niet goed. Start een "
                      "Claude-sessie om ze te herstellen en opnieuw te draaien.", "wie": "mehdi"}
@@ -8099,7 +8106,7 @@ def _ronde(rd):
         titel_signalen = []
         for reden, rij in sorted(titel_fouten.items()):
             titel_signalen.append({"voor": "mehdi", "soort": "signaal", "sleutel": vandaag,
-                                   "titel": f"Titels: {reden}", "uniek": f"agenda-titel-{reden[:20]}:{vandaag}",
+                                   "titel": f"Titels: {reden}", "uniek": titel_uniek(reden, vandaag),
                                    "inhoud": "\n".join("- " + x for x in rij[:40])})
             noden.append({"tekst": f"Afspraken met een titel die niet klopt: {reden}", "wie": "mehdi"})
         if titel_signalen:
