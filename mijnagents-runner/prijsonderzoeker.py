@@ -13,8 +13,11 @@ aanbod zonder gelezen pagina, link, prijs of datum komt er nooit in.
 
 Leest het web, verandert niets: geen aankoop, geen bod, geen contact met een verkoper, geen account.
 --droog: zegt welke vragen klaarstaan en roept het model niet aan.
-Met de hand op de VM: ~/agents/.venv/bin/python prijsonderzoeker.py --vraag "..." (zoals De Regisseur; de gewone
-python3 heeft de anthropic-bibliotheek niet, 01-11-2026).
+Met de hand op de VM: ~/agents/.venv/bin/python prijsonderzoeker.py --vraag "..." (zoals De Regisseur; die python
+heeft pypdf voor handleidingen in PDF).
+
+Werkt met Mehdi's Claude-abonnement via claude -p, nooit met de API (overleg 14, 01-11-2026): geen API-kost. Het token
+staat in ~/.config/prijsonderzoeker/claude-token (rechten 600); zetten met scripts/claude-abonnement-naar-vm.sh.
 """
 import argparse
 import hashlib
@@ -27,7 +30,6 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 sys.path.insert(0, HIER)
 import bord  # noqa: E402
-import sleutelbron  # noqa: E402  de Anthropic-sleutel alleen uit ~/appportal/.env (T-0064)
 from aankoop import aanbod as A  # noqa: E402
 from aankoop import koersen as K  # noqa: E402
 from aankoop import onderzoek as O  # noqa: E402
@@ -38,7 +40,6 @@ NAAM = "prijsonderzoeker"
 ag = bord.Agent(NAAM)
 MAX_VRAGEN = 2
 RONDE_SECONDEN = 480            # binnen de 600 s die De Regisseur op een ronde wacht
-MAX_DOLLAR = 2.0                # Mehdi gaf zijn ja bij ongeveer 2 dollar per vraag; meer is een nood (overleg 9, K5)
 MIN_SECONDEN_PER_VRAAG = 150    # minder tijd over: de vraag wacht op de volgende ronde
 # Niet 'verslag' of 'signaal': die stuurt De Bode vanzelf door. Het antwoord komt via De Regisseur (overleg X2).
 SOORT = "prijsverslag"
@@ -55,11 +56,10 @@ def laad_env(pad):
         pass
 
 
-# Eerst ~/appportal/.env, zoals De Archivaris: de sleutel in ~/agents/.env gaf op 30-10-2026 een 401 (ongeldig),
-# die in ~/appportal/.env werkt. setdefault: het eerste bestand dat een waarde heeft, wint.
+# Voor het bord, zoals de andere agents. Een API-sleutel daarin bereikt claude -p nooit: onderzoek.omgeving() geeft
+# het subproces alleen een witte lijst en het abonnementstoken (overleg 14, K1).
 laad_env("~/appportal/.env")
 laad_env("~/agents/.env")
-sleutelbron.zet_anthropic()                      # ANTHROPIC_API_KEY alleen uit ~/appportal/.env (T-0064)
 
 
 def open_vragen():
@@ -92,13 +92,16 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     uit = O.onderzoek(vraag, r.werkwijze, vandaag.isoformat(), vaste_eisen, deadline)
     geslaagd, mislukt = uit.get("leesbeurten", (len(uit["gelezen"]), 0))
     ag.log("prijsvraag", "bron", f"vraag {va}: {uit['zoekopdrachten']} zoekopdrachten, {geslaagd} pagina's gelezen en "
-                                 f"{mislukt} niet leesbaar, {uit['tokens']} tokens, ongeveer {uit.get('kosten')} dollar, "
-                                 f"model {uit['model']}, einde {uit['stop']}", uit.get("tellers"))
+                                 f"{mislukt} niet leesbaar, {uit['tokens']} tokens via het abonnement (bron "
+                                 f"{uit.get('bron')}), model {uit['model']}, {uit.get('beurten')} beurten, einde {uit['stop']}",
+           uit.get("tellers"))
     if uit["stop"] == "plafond":
-        r.nood("Prijsvraag gestopt op het plafond van tokens of tijd", wie="claude-code")
-    if (uit.get("kosten") or 0) > MAX_DOLLAR:
-        r.nood(f"Prijsvraag kostte ongeveer {uit['kosten']} dollar, meer dan de {MAX_DOLLAR:.0f} dollar waar Mehdi ja op "
-               "zei", wie="claude-code")
+        r.nood(f"Prijsvraag gestopt op een grens ({uit.get('reden')})", wie="claude-code")
+    elif uit["stop"] == "limiet":
+        r.nood("Prijsvraag gestopt: limiet van het Claude-abonnement bereikt, niets via de API", wie="claude-code")
+    elif uit["stop"] == "fout":
+        ag.log("prijsvraag", "fout", f"vraag {va}: claude -p eindigde met een fout", uit.get("fout"))
+        r.nood("Prijsvraag: claude -p eindigde met een fout", wie="claude-code")
     g = uit["gegevens"]
     if g is None:
         ag.log("prijsvraag", "fout", f"vraag {va}: het model gaf geen leesbare gegevens", uit["tekst"][:3000])
@@ -118,8 +121,7 @@ def een_vraag(r, vraag, koersdatum, koersen, vandaag, deadline):
     opgenomen = [x["url"] for x in res["goed"] + res["niet_compatibel"]]
     gezien = O.alleen_gezien(g.get("niet_nagekeken") if isinstance(g.get("niet_nagekeken"), list) else [],
                              uit.get("zoekresultaten") or {}, opgenomen)
-    tekst = V.maak(vraag, g, res, koersdatum, vandaag.isoformat(), gezien,
-                   {"tokens": uit["tokens"], "kosten": uit.get("kosten")})
+    tekst = V.maak(vraag, g, res, koersdatum, vandaag.isoformat(), gezien, {"tokens": uit["tokens"]})
     zet_klaar(vraag, V.titel(g, res), tekst, vandaag)
     ag.log("prijsvraag", "beslissing",
            f"vraag {va}: {len(res['goed'])} aanbiedingen in het verslag, {len(res['niet_compatibel'])} niet compatibel, "
@@ -157,7 +159,12 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
         tekst = str(v.get("inhoud") or v.get("titel")).strip()
         try:
             aanbod += een_vraag(r, tekst, koersdatum, koersen, vandaag, deadline)
-        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug (kosten)
+        except O.GeenAbonnement as e:
+            # Nooit terug naar de API (overleg 14, K1): de vraag stopt en wacht op een werkend token.
+            ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: geen abonnement: {str(e)[:300]}")
+            r.nood(f"Prijsvraag niet gedaan, niets via de API: het Claude-abonnement werkt niet op de VM ({str(e)[:160]})",
+                   wie="claude-code")
+        except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug
             ag.log("prijsvraag", "fout", f"vraag {vingerafdruk(tekst, vandaag)}: {type(e).__name__}: {str(e)[:300]}")
             r.nood("Prijsvraag mislukt bij het zoeken", wie="claude-code")
         gedaan += 1
@@ -171,7 +178,13 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="De Prijsonderzoeker")
     p.add_argument("--vraag", help="een prijsvraag met de hand, zonder het bord")
     p.add_argument("--droog", action="store_true", help="niet zoeken; zeggen wat klaarstaat")
+    p.add_argument("--proef-abonnement", action="store_true",
+                   help="alleen nagaan of het Claude-abonnement op deze machine werkt (geen ronde, geen bord)")
     a = p.parse_args()
+    if a.proef_abonnement:
+        gelukt, melding = O.proef_abonnement()
+        print(melding)
+        sys.exit(0 if gelukt else 1)
     begin = time.monotonic()
     with ag.ronde("prijsvraag" if a.vraag else "prijsvragen afwerken") as r:
         werk(r, a.vraag, a.droog, begin)

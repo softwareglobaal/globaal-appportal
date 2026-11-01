@@ -5,7 +5,11 @@ voorbeeld.com-links; geen echte bestellingen of personen.
 
 Draaien: python3 mijnagents-runner/tests/test_aankoop_prijs.py
 """
+import json
+import os
+import subprocess
 import sys
+import tempfile
 import time
 from datetime import date
 from pathlib import Path
@@ -338,17 +342,7 @@ check("www, http en fragment tellen niet", O.schoon_url("http://WWW.Winkel.voorb
       == "https://winkel.voorbeeld.com/x1")
 check("de query telt wel (product-id)", O.schoon_url("https://w.voorbeeld.com/p?id=1") != O.schoon_url("https://w.voorbeeld.com/p?id=2"))
 PAGINA_X1 = pagina("X1 499,00 euro, gratis verzending. Netspanning 127 V, 60 Hz. ![X1](https://cdn.voorbeeld.com/x1.jpg)")
-BLOKKEN = [
-    {"type": "server_tool_use", "name": "web_search", "input": {"query": "vloerwasser x1"}},
-    {"type": "web_search_tool_result", "content": [{"type": "web_search_result", "url": "https://zoek.voorbeeld.com/a"}]},
-    {"type": "server_tool_use", "name": "web_fetch", "input": {"url": "https://winkel.voorbeeld.com/x1"}},
-    {"type": "web_fetch_tool_result", "content": {"type": "web_fetch_result", "url": "https://winkel.voorbeeld.com/x1",
-                                                  "content": {"type": "document", "source": {"type": "text", "data": PAGINA_X1}}}},
-    {"type": "web_fetch_tool_result", "content": {"type": "web_fetch_tool_error", "error_code": "url_not_accessible"}},
-]
-gelezen = O.gelezen_paginas(BLOKKEN)
-check("alleen een geslaagde web_fetch telt als gelezen", set(gelezen) == {"https://winkel.voorbeeld.com/x1"}, str(gelezen))
-check("met de tekst van de pagina", "X1 499,00 euro" in gelezen["https://winkel.voorbeeld.com/x1"])
+gelezen = {"https://winkel.voorbeeld.com/x1": PAGINA_X1}
 goed, weg = O.alleen_gelezen([aanbod(), aanbod(url="https://zoek.voorbeeld.com/a"), aanbod(url="https://verzonnen.voorbeeld.com/z")], gelezen)
 check("een link uit een zoekresultaat alleen gaat er niet in", len(goed) == 1 and len(weg) == 2
       and all(w["redenen"] == ["pagina niet gelezen in deze ronde"] for w in weg))
@@ -360,25 +354,73 @@ check("JSON uit een ```json-blok", O.json_uit('Uitleg\n```json\n{"eisen": []}\n`
 check("het laatste blok telt", O.json_uit('```json\n{"a": 1}\n```\n```json\n{"a": 2}\n```') == {"a": 2})
 check("geen JSON geeft None", O.json_uit("ik vond niets") is None)
 
+print("Via het Claude-abonnement, nooit via de API (overleg 14)")
+FIXTURE = [json.loads(r) for r in open(Path(__file__).parent / "fixtures" / "claude_stream_proef.jsonl", encoding="utf-8")]
+INIT = next(d for d in FIXTURE if d.get("subtype") == "init")
+EINDE = FIXTURE[-1]
+st = O._Stand()
+redenen = [O.verwerk_regel(st, d) for d in FIXTURE]
+check("de gemeten stream van claude -p wordt gelezen (overleg 14, X3)", redenen[-1] == "einde"
+      and [r for r in redenen[:-1] if r] == ["extra_aan"] and st.bron == "none" and st.extra_verbruik == "allowed"
+      and st.gezocht == 1 and st.zoekvragen == 2 and st.einde is EINDE
+      and len(st.zoek) >= 5, str((st.bron, st.gezocht, st.zoek))[:300])
+check("de zoekresultaten dragen de titel uit de lijst Links", st.zoek.get(
+      "https://robocleaners.com/nl/tags/mova-v70-ultra-complete-x-transparent-black") == "mova v70 ultra complete x transparent black",
+      str(st.zoek)[:200])
 
-class NepAntwoord:
-    def __init__(self, inhoud, stop, tokens=(1000, 200)):
-        self.content, self.stop_reason = inhoud, stop
-        self.usage = {"input_tokens": tokens[0], "output_tokens": tokens[1]}
+NEP = r'''import json, os, subprocess, sys, time
+spec = json.load(open("nep.json" if os.path.exists("nep.json") else os.path.join(os.path.dirname(sys.argv[0]), "nep.json")))
+args = sys.argv[1:]
+if args[:2] == ["auth", "status"]:
+    # Geen modelaanvraag: alleen het account (Codex controle 16); centrale instellingen komen in de configuratiemap.
+    if spec.get("centraal"):
+        json.dump(spec["centraal"], open(os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "remote-settings.json"), "w"))
+    print(json.dumps(spec.get("auth", {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty",
+                                       "subscriptionType": "max"})))
+    sys.exit(0)
+json.dump(args, open("args.json", "w"))
+json.dump(dict(os.environ), open("env.json", "w"))
+open("invoer.txt", "w").write("" if spec.get("lees_niet") else sys.stdin.read())
+if "--mcp-config" in args:
+    log = json.loads(args[args.index("--mcp-config") + 1])["mcpServers"]["lees"]["env"]["LEES_LOG"]
+    with open(log, "a") as f:
+        for r in spec.get("lees", []):
+            f.write(json.dumps(r) + "\n")
+if spec.get("kind"):
+    open("kind.pid", "w").write(str(subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"]).pid))
+for r in spec.get("regels", []):
+    print(json.dumps(r), flush=True)
+time.sleep(spec.get("slaap", 0))
+'''
+NEPMAP = tempfile.mkdtemp(prefix="nepclaude-")
+O.CLAUDE = os.path.join(NEPMAP, "claude")
+with open(O.CLAUDE, "w") as f:
+    f.write(f"#!{sys.executable}\n" + NEP)
+os.chmod(O.CLAUDE, 0o700)
 
 
-class NepClient:
-    """Bootst de Messages-API na; bewaart een kopie van elke vraag."""
-    def __init__(self, antwoorden):
-        self.antwoorden, self.vragen = list(antwoorden), []
-        self.messages = self
-        self.beta = self                # client.beta.messages.create, voor het takenbudget (overleg 9, X3)
+def nep_vraag(spec, vraag="Vloerwasser X1 voor Suriname", werkwijze="WERKWIJZE", eisen=("netfrequentie 60 Hz",), **kw):
+    """onderzoek() met een nagebootste claude; geeft (uitkomst of fout, args, env, invoer, map)."""
+    m = tempfile.mkdtemp(prefix="nepvraag-")
+    json.dump(spec, open(os.path.join(m, "nep.json"), "w"))
+    try:
+        uit = O.onderzoek(vraag, werkwijze, "2026-10-30", list(eisen), token=kw.pop("token", "sk-ant-oat01-nep"), werkmap=m, **kw)
+    except O.GeenAbonnement as e:
+        uit = e
 
-    def create(self, **kw):
-        kw = dict(kw, messages=[dict(m, content=list(m["content"]) if isinstance(m["content"], list) else m["content"])
-                                for m in kw["messages"]])
-        self.vragen.append(kw)
-        return self.antwoorden.pop(0)
+    def lees(n):
+        p = os.path.join(m, n)
+        return (json.load(open(p)) if n.endswith(".json") else open(p).read()) if os.path.exists(p) else None
+    return uit, lees("args.json"), lees("env.json"), lees("invoer.txt"), m
+
+
+def assistent(*blokken):
+    return {"type": "assistant", "message": {"content": list(blokken)}}
+
+
+def zoekuit(*items):
+    return {"type": "user", "message": {"content": []}, "tool_use_result": {"query": "x1", "results": [
+        {"tool_use_id": "srvtoolu_nep", "content": [{"title": t, "url": u} for t, u in items]}]}}
 
 
 JSON = ('```json\n{"vraag_kort": "vloerwasser X1 voor Suriname", "eisen": [], '
@@ -389,26 +431,58 @@ JSON = ('```json\n{"vraag_kort": "vloerwasser X1 voor Suriname", "eisen": [], '
         '"waarom": "60 Hz-versie, officiele dealer."}, '
         '{"titel": "X1 verzonnen", "url": "https://verzonnen.voorbeeld.com/z", "soort": "nieuw", "prijs": 10, "munt": "EUR", '
         '"land": "BE", "verzending": 0}], "advies": "Koop X1 verzonnen, die is het goedkoopst."}\n```')
-STUK1 = BLOKKEN[:2]
-STUK2 = BLOKKEN[2:4]
-nep = NepClient([NepAntwoord(STUK1, "pause_turn"), NepAntwoord(STUK2, "pause_turn"),
-                 NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1 voor Suriname", "WERKWIJZE", "2026-10-30", ["netfrequentie 60 Hz"], client=nep)
-check("na twee pauzes gaat de hele beurt mee, niet alleen het laatste stuk (Codex X8)",
-      len(nep.vragen) == 3 and nep.vragen[2]["messages"][-1]["content"] == STUK1 + STUK2, str([len(v["messages"]) for v in nep.vragen]))
-check("de plafonds tellen over alle beurten (Codex X7)",
-      [t["max_uses"] for t in nep.vragen[0]["tools"]] == [O.MAX_ZOEKEN, O.MAX_LEZEN]
-      and [t["max_uses"] for t in nep.vragen[2]["tools"]] == [O.MAX_ZOEKEN - 1, O.MAX_LEZEN - 1])
-check("de werkwijze gaat mee, maar geen naam, collega's of lessen (Codex X4)", "WERKWIJZE" in nep.vragen[0]["system"]
-      and "Mehdi" not in nep.vragen[0]["system"] and "collega" not in nep.vragen[0]["system"].lower())
-nep2 = NepClient([NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-O.onderzoek("v", "Wat Mehdi beslist: de aankoop. Mehdi Chegini kiest.", "2026-10-30", client=nep2)
-check("ook een naam in de werkwijze gaat niet naar buiten (Codex X4, ronde 2)", "Mehdi" not in nep2.vragen[0]["system"]
-      and "Chegini" not in nep2.vragen[0]["system"] and "Wat de opdrachtgever beslist" in nep2.vragen[0]["system"])
-check("de vaste eisen staan in de vraag aan het model", "VASTE EISEN" in nep.vragen[0]["messages"][0]["content"]
-      and "netfrequentie 60 Hz" in nep.vragen[0]["messages"][0]["content"])
-check("gegevens, gelezen pagina's en tellers terug", uit["gegevens"]["vraag_kort"] == "vloerwasser X1 voor Suriname"
-      and set(uit["gelezen"]) == {"https://winkel.voorbeeld.com/x1"} and uit["zoekopdrachten"] == 1 and uit["tokens"] == 3600)
+ZOEKUIT = zoekuit(("X1 tweedehands 380 euro", "https://markt.voorbeeld.com/a"), ("X1 kopen", "https://media.voorbeeld.com/x1"))
+GEWOON = {"regels": [INIT, assistent({"type": "tool_use", "name": O.ZOEK, "input": {"query": "x1"}}), ZOEKUIT,
+                     assistent({"type": "tool_use", "name": O.LEES, "input": {"url": "https://winkel.voorbeeld.com/x1"}}),
+                     assistent({"type": "text", "text": JSON}), dict(EINDE, result=JSON)],
+          "lees": [{"url": "https://winkel.voorbeeld.com/x1", "eind_url": "https://www.winkel.voorbeeld.com/x1/", "ok": True,
+                    "tekst": PAGINA_X1, "fout": ""},
+                   {"url": "https://kapot.voorbeeld.com/p", "eind_url": "https://kapot.voorbeeld.com/p", "ok": False,
+                    "tekst": "", "fout": "HTTP 403"}]}
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-api03-nep-mag-nooit-mee"
+os.environ["SALES_ANTHROPIC_API_KEY"] = "sk-ant-api03-nep-ook-niet"
+os.environ["ANTHROPIC_BASE_URL"] = "https://api.voorbeeld.com"
+uit, args, env, invoer, m_gewoon = nep_vraag(GEWOON)
+check("geen enkele API-sleutel in de omgeving van claude -p, ook als de runner er een heeft (K1, K6)",
+      env is not None and not any("ANTHROPIC" in k or "API_KEY" in k for k in env)
+      and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat01-nep", str(sorted(env or {})))
+check("de omgeving is de witte lijst plus het token", env is not None
+      # LC_CTYPE en __CF_* zet de nagebootste python of macOS zelf in het kindproces
+      and set(k for k in env if not k.startswith("__") and k != "LC_CTYPE") <= set(O.OMGEVING) | {
+          "CLAUDE_CODE_OAUTH_TOKEN", "DISABLE_AUTOUPDATER", "CLAUDE_CONFIG_DIR"},
+      str(sorted(env or {})))
+check("alleen WebSearch en de eigen leestool, in restricted-modus en nooit --bare (X1, K2)", args is not None
+      and "--restricted" in args and args[args.index("--tools") + 1] == "WebSearch"
+      and args[args.index("--allowedTools") + 1] == "WebSearch,mcp__lees__lees_pagina" and "--strict-mcp-config" in args
+      and "--bare" not in args and "WebFetch" not in " ".join(args) and "--no-session-persistence" in args, str(args)[:400])
+haak = json.loads(args[args.index("--settings") + 1])["hooks"]["PreToolUse"][0]
+check("de zoekgrens zit als hook op WebSearch, met de grens van 6 (A3)", haak["matcher"] == "WebSearch"
+      and "zoekgrens.py" in haak["hooks"][0]["command"] and haak["hooks"][0]["command"].endswith(" 6"))
+check("het model is de alias opus en de vraag gaat via stdin, niet als argument", args[args.index("--model") + 1] == "opus"
+      and "Vloerwasser X1 voor Suriname" in invoer and not any("Vloerwasser" in a for a in args))
+systeem = open(args[args.index("--system-prompt-file") + 1], encoding="utf-8").read()
+check("de systeemtekst staat in een bestand in de werkmap, niet op de opdrachtregel",
+      args[args.index("--system-prompt-file") + 1] == os.path.join(m_gewoon, "systeem.txt") and "--system-prompt" not in args)
+check("de werkwijze gaat mee, maar geen naam, collega's of lessen (Codex X4)", "WERKWIJZE" in systeem
+      and "Mehdi" not in systeem and "collega" not in systeem.lower())
+check("de vaste eisen staan in de vraag aan het model", "VASTE EISEN" in invoer and "netfrequentie 60 Hz" in invoer
+      and "lees_pagina" in invoer)
+_, args2, _, _, _ = nep_vraag(GEWOON, werkwijze="Wat Mehdi beslist: de aankoop. Mehdi Chegini kiest.")
+s2 = open(args2[args2.index("--system-prompt-file") + 1], encoding="utf-8").read()
+check("ook een naam in de werkwijze gaat niet naar buiten (Codex X4, ronde 2)", "Mehdi" not in s2 and "Chegini" not in s2
+      and "Wat de opdrachtgever beslist" in s2)
+check("gegevens, gelezen pagina's en tellers terug", isinstance(uit, dict) and uit["gegevens"]["vraag_kort"] ==
+      "vloerwasser X1 voor Suriname" and set(uit["gelezen"]) == {"https://winkel.voorbeeld.com/x1"}
+      and uit["zoekopdrachten"] == 1 and uit["leesbeurten"] == (1, 1) and uit["stop"] == "klaar" and uit["bron"] == "none",
+      str({k: uit[k] for k in ("stop", "leesbeurten", "zoekopdrachten")}) if isinstance(uit, dict) else str(uit))
+check("het leeslog is de gelezen tekst, ook onder de eind-url (X2)", uit["gelezen"]["https://winkel.voorbeeld.com/x1"] == PAGINA_X1)
+_, _, env_c, _, m_c = nep_vraag(GEWOON)
+check("claude krijgt een eigen lege configuratiemap, niets uit ~/.claude (Codex 15, punt 1)",
+      env_c["CLAUDE_CONFIG_DIR"] == os.path.join(m_c, "claude-config") and os.path.isdir(env_c["CLAUDE_CONFIG_DIR"]))
+gebruik = EINDE["usage"]
+check("de tellers komen uit de eindregel, zonder dollar", uit["tokens"] == gebruik["input_tokens"] + gebruik["output_tokens"]
+      + gebruik["cache_creation_input_tokens"] + gebruik["cache_read_input_tokens"] and "kosten" not in uit
+      and set(uit["tellers"][0]) == {"input", "output", "cache_schrijven", "cache_lezen", "zoek", "lees"})
 goed, weg = O.alleen_gelezen(uit["gegevens"]["aanbiedingen"], uit["gelezen"])
 for a in goed:
     a["gezien_op"] = "2026-10-30"
@@ -437,25 +511,260 @@ tekst = V.maak("v", {"vervolgvraag": "Is het voor privé of voor een firma?"}, r
 check("de reserve en de vervolgvraag staan bovenaan", "**Reserve:**" in tekst.split("## Aanbiedingen")[0]
       and "**Vraag aan jou:** Is het voor privé of voor een firma?" in tekst)
 
-print("Takenbudget, verbruik en gezien-niet-nagekeken (overleg 9, X3, X4)")
-check("het takenbudget gaat mee als advies, met de beta", nep.vragen[0]["output_config"].get("task_budget") ==
-      {"type": "tokens", "total": O.TAAK_BUDGET} and nep.vragen[0].get("betas") == [O.BETA_BUDGET] and O.TAAK_BUDGET == 250000)
-check("de paginagrens is 10.000 tokens met 6 zoek- en 6 leesbeurten (G2, G5)",
-      (O.MAX_PAGINA_TOKENS, O.MAX_ZOEKEN, O.MAX_LEZEN) == (10000, 6, 6))
-check("de tellers per aanvraag komen terug", len(uit["tellers"]) == 3 and uit["tellers"][0]["input"] == 1000
-      and set(uit["tellers"][0]) == {"input", "output", "cache_schrijven", "cache_lezen", "zoek", "lees"})
-check("de kost in dollar uit input en output (Opus 5.5: 4 en 20 per miljoen)", uit["kosten"] == round((3000 * 4 + 600 * 20) / 1e6, 2)
-      and O.kosten([{"input": 400000, "output": 5000}], "claude-opus-5-5") == 1.7
-      and O.kosten([{"input": 400000, "output": 5000, "zoek": 6}], "claude-opus-5-5") == 1.76)
-check("geslaagde en mislukte leesbeurten apart", O.leesbeurten(BLOKKEN) == (1, 1))
-ZOEK = [{"type": "web_search_tool_result", "content": [
-            {"type": "web_search_result", "url": "https://markt.voorbeeld.com/a", "title": "X1 tweedehands 380 euro"},
-            {"type": "web_search_result", "url": "https://media.voorbeeld.com/x1", "title": "X1 kopen"}]},
-        {"type": "text", "text": "Gezien", "citations": [{"type": "web_search_result_location", "url": "https://media.voorbeeld.com/x1",
-                                                           "cited_text": "X1 Complete nu voor 949,00 euro"}]}]
-zoek = O.zoekresultaten(ZOEK)
-check("zoekresultaten met titel en geciteerde tekst", set(zoek) == {"https://markt.voorbeeld.com/a", "https://media.voorbeeld.com/x1"}
-      and "949,00" in zoek["https://media.voorbeeld.com/x1"])
+print("Grendels: geen API, geen betaald extra verbruik, grenzen (overleg 14, X1, X4, X6, K3, K4)")
+SLAAP = {"regels": [], "slaap": 30}
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[dict(INIT, apiKeySource="ANTHROPIC_API_KEY")]))
+check("een andere bron dan het abonnement stopt meteen, zonder terugval (K1)", isinstance(uit, O.GeenAbonnement)
+      and "ANTHROPIC_API_KEY" in str(uit) and time.monotonic() - begin < 10, f"{uit!r} {time.monotonic() - begin:.1f}s")
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, {"type": "rate_limit_event", "rate_limit_info": {
+    "status": "allowed", "isUsingOverage": True}}]))
+check("extra betaald verbruik bovenop het abonnement stopt meteen", isinstance(uit, O.GeenAbonnement) and "betaald" in str(uit))
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, assistent({"type": "text", "text": "Not logged in · Please run /login"}),
+                                        dict(EINDE, is_error=True, result="Not logged in · Please run /login")]})
+check("een token dat niet werkt is geen abonnement (gemeten 01-11: init zegt dan ook 'none')", isinstance(uit, O.GeenAbonnement)
+      and "token" in str(uit))
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}},
+                                        dict(EINDE, is_error=True, result="You've hit your limit · resets 5pm")]})
+check("de limiet van het abonnement wordt stop 'limiet', geen API (G4)", isinstance(uit, dict) and uit["stop"] == "limiet"
+      and "limit" in uit["fout"], str(uit)[:200])
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, is_error=True, result="Iets anders liep mis")]})
+check("een andere fout wordt stop 'fout'", isinstance(uit, dict) and uit["stop"] == "fout")
+uit, _, _, _, _ = nep_vraag({"regels": [INIT]})
+check("zonder eindregel geen 'klaar'", isinstance(uit, dict) and uit["stop"] == "fout")
+begin = time.monotonic()
+uit, _, _, _, m = nep_vraag({"regels": [INIT], "slaap": 60, "kind": True}, deadline=time.monotonic() + 3)
+duur = time.monotonic() - begin
+kind = int(open(os.path.join(m, "kind.pid")).read())
+time.sleep(0.3)
+try:
+    os.kill(kind, 0)
+    kind_leeft = True
+except OSError:
+    kind_leeft = False
+check("de deadline van de ronde stopt claude en zijn leestool samen (X4)", isinstance(uit, dict) and uit["stop"] == "plafond"
+      and uit["reden"] == "tijd" and duur < 15 and not kind_leeft, f"{uit!r:.200} {duur:.1f}s kind {kind_leeft}")
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, result=JSON)], "slaap": 60}, deadline=time.monotonic() + 40)
+check("na de eindregel wacht de runner niet op een stdout die open blijft (Codex 15, punt 4)", isinstance(uit, dict)
+      and uit["stop"] == "klaar" and time.monotonic() - begin < 15, f"{time.monotonic() - begin:.1f}s")
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag({"regels": [], "slaap": 60, "lees_niet": True}, vraag="w" * 2_000_000,
+                            deadline=time.monotonic() + 3)
+check("een kind dat de vraag niet leest, houdt de deadline niet tegen (Codex 15, punt 4)", isinstance(uit, dict)
+      and uit["reden"] == "tijd" and time.monotonic() - begin < 15, f"{uit!r:.120} {time.monotonic() - begin:.1f}s")
+vol = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "disabled",
+       "unifiedWindows": {"five_hour": {"utilization": 0.93, "status": "allowed"}}}}
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, vol]))
+check("boven 90 procent van een limiet stopt de vraag, voor er betaald extra verbruik kan komen (Codex 15, punt 1)",
+      isinstance(uit, dict) and uit["stop"] == "limiet" and uit["reden"] == "vol" and uit["extra_verbruik"] == "disabled"
+      and time.monotonic() - begin < 10)
+aan = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "allowed",
+       "unifiedWindows": {"five_hour": {"utilization": 0.2, "status": "allowed"}}}}
+begin = time.monotonic()
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, aan]))
+check("staan Usage credits aan, dan stopt de vraag meteen: een volgende aanvraag kan geld kosten (Codex 16, punt 2)",
+      isinstance(uit, O.GeenAbonnement) and "Usage credits" in str(uit) and time.monotonic() - begin < 10, str(uit))
+for naam, spec_extra, woord in (("Team-account", {"auth": {"loggedIn": True, "apiProvider": "firstParty", "subscriptionType": "team"}},
+                                 "persoonlijk"),
+                                ("onbekend abonnement", {"auth": {"loggedIn": True, "apiProvider": "firstParty"}}, "persoonlijk"),
+                                ("niet aangemeld", {"auth": {"loggedIn": False, "apiProvider": "firstParty"}}, "niet aanvaard"),
+                                ("andere aanbieder", {"auth": {"loggedIn": True, "apiProvider": "bedrock", "subscriptionType": "max"}},
+                                 "niet aanvaard"),
+                                ("centrale instellingen", {"centraal": {"env": {"ANTHROPIC_AUTH_TOKEN": "x"}}}, "centrale")):
+    uit, args, _, _, _ = nep_vraag(dict(GEWOON, **spec_extra))
+    check(f"{naam}: claude -p start niet, er gaat geen aanvraag naar het model (Codex 16, punt 1)",
+          isinstance(uit, O.GeenAbonnement) and woord in str(uit) and args is None, str(uit))
+beheer = tempfile.mkdtemp(prefix="beheer-")
+open(os.path.join(beheer, "managed-settings.json"), "w").write("{}")
+oud_beheerd, O.BEHEERD = O.BEHEERD, (beheer,)
+uit, args, _, _, _ = nep_vraag(GEWOON)
+O.BEHEERD = oud_beheerd
+check("met beheerde instellingen op de machine start claude niet (Codex 15, punt 1)", isinstance(uit, O.GeenAbonnement)
+      and "beheerde instellingen" in str(uit) and args is None)
+zeven = [zoekuit((f"r{i}", f"https://z.voorbeeld.com/{i}")) for i in range(O.MAX_ZOEKEN + 1)]
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + zeven))
+check("weigert de hook niet, dan stopt de runner bij de zevende zoekopdracht (K3)", isinstance(uit, dict)
+      and uit["stop"] == "plafond" and uit["reden"] == "zoeken" and uit["zoekopdrachten"] == O.MAX_ZOEKEN + 1)
+uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + [assistent({"type": "text", "text": "."})] * (O.MAX_BEURTEN + 1)))
+check("meer dan MAX_BEURTEN beurten stopt de runner (K4)", isinstance(uit, dict) and uit["reden"] == "beurten")
+check("de grenzen: 6 zoek, 6 lees, 10.000 tokens per pagina (G2, G5)", (O.MAX_ZOEKEN, O.MAX_LEZEN, O.MAX_PAGINA_TOKENS) == (6, 6, 10000))
+oud_bestand = O.TOKEN_BESTAND
+O.TOKEN_BESTAND = os.path.join(NEPMAP, "bestaat-niet")
+uit, args, _, _, _ = nep_vraag(GEWOON, token=None)
+check("zonder token start claude niet (K6)", isinstance(uit, O.GeenAbonnement) and args is None)
+O.TOKEN_BESTAND = oud_bestand
+tok = os.path.join(NEPMAP, "claude-token")
+with open(tok, "w") as f:
+    f.write("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-abc_DEF-123\n")
+os.chmod(tok, 0o644)
+try:
+    O.lees_token(tok)
+    open_leesbaar = False
+except O.GeenAbonnement:
+    open_leesbaar = True
+os.chmod(tok, 0o600)
+check("het token komt uit een eigen bestand met rechten 600 (X8, K8)", open_leesbaar and O.lees_token(tok) == "sk-ant-oat01-abc_DEF-123")
+with open(tok, "w") as f:
+    f.write("ANTHROPIC_API_KEY=sk-ant-api03-nep\n")
+try:
+    O.lees_token(tok)
+    api_aanvaard = True
+except O.GeenAbonnement:
+    api_aanvaard = False
+check("een API-sleutel in dat bestand telt nooit als token", not api_aanvaard)
+json.dump({"regels": [INIT, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("zonder limietmelding zegt de proef nooit 'werkt' (Codex controle 17, punt 3)", not gelukt and "Usage credits" in melding,
+      melding)
+uit_meld = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
+            "overageStatus": "disabled", "unifiedWindows": {"five_hour": {"utilization": 0.1, "status": "allowed"}}}}
+json.dump({"regels": [INIT, uit_meld, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("de abonnementsproef zegt 'werkt' bij bron none, extra verbruik uit en een gewoon einde (X7)",
+      gelukt and "werkt via het abonnement max" in melding and "disabled" in melding, melding)
+json.dump({"regels": [INIT, aan, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("de abonnementsproef faalt zolang Usage credits aanstaan, met wat Mehdi moet doen", not gelukt
+      and "Settings > Usage" in melding, melding)
+json.dump({"regels": [INIT], "auth": {"loggedIn": True, "apiProvider": "firstParty", "subscriptionType": "enterprise"}},
+          open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("de abonnementsproef weigert een Enterprise-account voor elke modelaanvraag", not gelukt and "persoonlijk" in melding)
+json.dump({"regels": [dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), dict(EINDE, result="ok")]},
+          open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("de abonnementsproef faalt als Claude Code een API-sleutel gebruikt", not gelukt and "ANTHROPIC_API_KEY" in melding)
+json.dump({"regels": [INIT, dict(EINDE, is_error=True, result="Invalid token sk-ant-oat01-geheim-123")]},
+          open(os.path.join(NEPMAP, "nep.json"), "w"))
+gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
+check("een fout toont nooit het token", not gelukt and "geheim" not in melding and "Invalid token" in melding, melding)
+O.TOKEN_BESTAND = os.path.join(NEPMAP, "bestaat-niet")
+gelukt, melding = O.proef_abonnement()
+check("zonder tokenbestand faalt de proef met uitleg", not gelukt and "geen abonnementstoken" in melding)
+O.TOKEN_BESTAND = oud_bestand
+for k in ("ANTHROPIC_API_KEY", "SALES_ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"):
+    os.environ.pop(k, None)
+broncode = open(Path(O.__file__), encoding="utf-8").read()
+check("onderzoek.py kent de API-bibliotheek niet meer", "import anthropic" not in broncode and "from anthropic" not in broncode)
+
+print("Zoekgrens (hook) en leestool (MCP)")
+from aankoop import leesserver as L  # noqa: E402
+from aankoop import zoekgrens as Z  # noqa: E402
+teller = os.path.join(NEPMAP, "teller")
+uitslagen = [Z.tel(teller, 6) for _ in range(7)]
+check("de hook laat zes zoekopdrachten door en weigert de zevende", uitslagen[:6] == [None] * 6
+      and uitslagen[6]["hookSpecificOutput"]["permissionDecision"] == "deny")
+for url in ("http://127.0.0.1:3022/api", "http://localhost/", "http://169.254.169.254/latest", "http://10.0.0.5/",
+            "http://[::1]/", "ftp://winkel.voorbeeld.com/", "https://example.com:8443/", "file:///etc/passwd"):
+    try:
+        L.openbaar(url)
+        doorgelaten = True
+    except L.Geweigerd:
+        doorgelaten = False
+    check(f"de leestool weigert {url} (X2)", not doorgelaten)
+try:
+    L._Doorverwijzing().redirect_request(None, None, 302, "Found", {}, "http://127.0.0.1:3022/api/agent")
+    omweg = True
+except L.Geweigerd:
+    omweg = False
+check("ook een doorverwijzing naar de VM zelf wordt geweigerd (X2)", not omweg)
+
+
+class NepAntwoordSock:
+    def __init__(self, adres):
+        self.fp = type("fp", (), {"raw": type("raw", (), {"_sock": type("s", (), {"getpeername": lambda s: (adres, 443)})()})()})()
+
+
+def verbonden(adres):
+    try:
+        L.verbonden_openbaar(NepAntwoordSock(adres))
+        return True
+    except L.Geweigerd:
+        return False
+
+
+check("na het verbinden telt het echte adres: 127.0.0.1 of de Docker-bridge nooit, ook na DNS-rebinding",
+      not verbonden("127.0.0.1") and not verbonden("172.17.0.1") and not verbonden("::ffff:127.0.0.1")
+      and verbonden("172.66.147.243"))
+try:
+    L.verbonden_openbaar(object())
+    onbekend_door = True
+except L.Geweigerd:
+    onbekend_door = False
+check("een onbekend verbonden adres telt niet", not onbekend_door)
+HTML = ("<html><head><title>X1</title><script>var geheim=1;</script>"
+        "<meta property='og:image' content='/img/x1.jpg'><meta name='description' content='X1 vloerwasser'></head><body>"
+        "<script type='application/ld+json'>{\"offers\": {\"price\": 499, \"priceCurrency\": \"EUR\"}}</script>"
+        "<h1>Vloerwasser X1</h1><p>Nu&nbsp;499,00&nbsp;euro</p><table><tr><td>Netspanning</td><td>127 V, 60 Hz</td></tr></table>"
+        "<style>.x{}</style><img src='https://cdn.voorbeeld.com/x1b.jpg'></body></html>")
+leeslog = os.path.join(NEPMAP, "gelezen.jsonl")
+nep_haal = lambda url: ("https://www.winkel.voorbeeld.com/x1", "text/html; charset=utf-8", HTML.encode())
+tekst, gelukt = L.lees("https://winkel.voorbeeld.com/x1", leeslog, nep_haal)
+check("de leestool maakt tekst van de pagina, met productgegevens en foto's, zonder scripts", gelukt
+      and "Nu 499,00 euro" in tekst and "Netspanning | 127 V, 60 Hz" in tekst and '"price": 499' in tekst
+      and "https://www.winkel.voorbeeld.com/img/x1.jpg" in tekst and "https://cdn.voorbeeld.com/x1b.jpg" in tekst
+      and "geheim" not in tekst and ".x{}" not in tekst, tekst)
+regel = json.loads(open(leeslog).read().splitlines()[0])
+check("het model krijgt precies de tekst die in het leeslog staat (X2)", tekst == f"URL: {regel['eind_url']}\n\n{regel['tekst']}")
+gl, lb = O.gelezen_uit(leeslog)
+check("het leeslog geeft gelezen onder de eind-url", set(gl) == {"https://winkel.voorbeeld.com/x1"} and lb == (1, 0))
+log3 = os.path.join(NEPMAP, "omweg.jsonl")
+with open(log3, "w") as f:
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x1", "eind_url": "https://w.voorbeeld.com/categorie", "ok": True,
+                        "tekst": "Andere X 99 euro"}) + "\n")
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x2", "eind_url": "https://w.voorbeeld.com/x2", "ok": True,
+                        "tekst": "X2 nu 500 euro"}) + "\n")
+    f.write(json.dumps({"url": "https://w.voorbeeld.com/x2", "eind_url": "https://w.voorbeeld.com/x2", "ok": True,
+                        "tekst": "X2 uitverkocht, gratis verzending"}) + "\n")
+gl3, _ = O.gelezen_uit(log3)
+check("tekst na een doorverwijzing hoort bij de eindpagina, niet bij de gevraagde (Codex 15, punt 3)",
+      "https://w.voorbeeld.com/x1" not in gl3 and gl3["https://w.voorbeeld.com/categorie"] == "Andere X 99 euro")
+check("twee lezingen van dezelfde pagina worden niet aan elkaar geplakt: de laatste telt (Codex 15, punt 3)",
+      gl3["https://w.voorbeeld.com/x2"] == "X2 uitverkocht, gratis verzending")
+for host in ("localhost", "127.0.0.1"):
+    try:
+        L._vast_verbinden((host, 80), 2)
+        vast_door = True
+    except L.Geweigerd:
+        vast_door = False
+    check(f"de verbinding zelf gaat nooit naar {host}, ook na een DNS-wissel (Codex 15, punt 2)", not vast_door)
+check("de leestool verbindt via de vaste verbinders", isinstance(L._VasteHTTPS("voorbeeld.com"), L.http.client.HTTPSConnection)
+      and L._VasteHTTPS("voorbeeld.com")._create_connection is L._vast_verbinden
+      and L._VasteHTTP("voorbeeld.com")._create_connection is L._vast_verbinden)
+
+
+def kapot(url):
+    raise L.Geweigerd("geen openbaar adres")
+
+
+for _ in range(L.MAX_LEZEN - 1):
+    L.lees("http://127.0.0.1/", leeslog, kapot)
+tekst, gelukt = L.lees("https://winkel.voorbeeld.com/x2", leeslog, nep_haal)
+check("na zes lezingen, ook mislukte, is de leesgrens bereikt", not gelukt and "Leesgrens" in tekst
+      and O.gelezen_uit(leeslog)[1] == (1, L.MAX_LEZEN - 1))
+lang = ("<p>" + "woord " * 20000 + "</p>").encode()
+log2 = os.path.join(NEPMAP, "lang.jsonl")
+tekst, _ = L.lees("https://winkel.voorbeeld.com/lang", log2, lambda u: (u, "text/html", lang))
+check("een lange pagina wordt afgekapt op ongeveer 10.000 tokens", len(json.loads(open(log2).read())["tekst"]) <= L.MAX_TEKENS + 20
+      and tekst.endswith("[afgekapt]"))
+a = L.antwoord({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}, leeslog)
+check("de MCP-server antwoordt op initialize met dezelfde protocolversie", a["result"]["protocolVersion"] == "2025-06-18")
+check("een melding zonder id krijgt geen antwoord", L.antwoord({"jsonrpc": "2.0", "method": "notifications/initialized"}, leeslog) is None)
+a = L.antwoord({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, leeslog)
+check("de MCP-server biedt alleen lees_pagina", [t["name"] for t in a["result"]["tools"]] == ["lees_pagina"])
+a = L.antwoord({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "schrijf", "arguments": {}}}, leeslog)
+check("een andere tool bestaat niet", "error" in a)
+proc = subprocess.run([sys.executable, str(Path(L.__file__))], input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+                      + "\n", capture_output=True, text=True, timeout=20, env=dict(os.environ, LEES_LOG=os.path.join(NEPMAP, "x.jsonl")))
+check("de leestool draait als los proces over stdin en stdout", json.loads(proc.stdout)["result"]["tools"][0]["name"] == "lees_pagina",
+      proc.stderr[-300:])
+
+print("Gezien, niet nagekeken: alleen een prijs uit de titel (overleg 9, X4; overleg 14, A3)")
+zoek = {**O.zoekresultaten_uit(ZOEKUIT["tool_use_result"])}
+check("zoekresultaten met titel", zoek == {"https://markt.voorbeeld.com/a": "X1 tweedehands 380 euro",
+                                           "https://media.voorbeeld.com/x1": "X1 kopen"}, str(zoek))
 gz = O.alleen_gezien([
     {"titel": "X1 markt", "url": "https://markt.voorbeeld.com/a", "prijs": 380, "citaat": "X1 tweedehands 380 euro", "reden": "niet leesbaar"},
     {"titel": "X1 media", "url": "https://media.voorbeeld.com/x1", "prijs": 949, "citaat": "nu voor 949,00 euro"},
@@ -463,10 +772,9 @@ gz = O.alleen_gezien([
     {"titel": "X1 andere prijs", "url": "https://markt.voorbeeld.com/a", "prijs": 300, "citaat": "X1 tweedehands 380 euro"},
     {"titel": "X1 al gelezen", "url": "https://winkel.voorbeeld.com/x1", "prijs": 499}], {**zoek, "https://winkel.voorbeeld.com/x1": "X1"},
     ["https://winkel.voorbeeld.com/x1"])
-check("alleen urls uit een zoekresultaat van deze ronde, een keer, niet als ze al gelezen in het verslag staan",
-      [x["url"] for x in gz] == ["https://markt.voorbeeld.com/a", "https://media.voorbeeld.com/x1"], str(gz))
-check("de prijs komt uit het citaat van hetzelfde zoekresultaat", [x["prijs"] for x in gz] == [380, 949])
-check("een prijs die niet in het citaat staat: de rij valt weg (X4: url en prijs uit hetzelfde zoekresultaat)", O.alleen_gezien(
+check("alleen urls uit een zoekresultaat van deze ronde, een keer, met een prijs uit de titel",
+      [(x["url"], x["prijs"]) for x in gz] == [("https://markt.voorbeeld.com/a", 380)], str(gz))
+check("een prijs die niet in het zoekresultaat staat: de rij valt weg", O.alleen_gezien(
       [{"titel": "X1", "url": "https://markt.voorbeeld.com/a", "prijs": 250, "citaat": "X1 tweedehands 380 euro"}], zoek) == [])
 zoek_v = {"https://w.voorbeeld.com/x": "X1 Complete. Shipping 19 euro. Price 949 USD"}
 check("een verzendkost is geen productprijs (Codex controle 10)", O.alleen_gezien(
@@ -480,54 +788,12 @@ check("de munt moet in het citaat staan", O.alleen_gezien(
       and len(O.alleen_gezien([{"titel": "X1", "url": "https://w.voorbeeld.com/x", "prijs": 949, "munt": "USD",
                                 "citaat": "Price 949 USD"}], zoek_v)) == 1)
 r = A.verwerk([], VANDAAG, KOERSEN)
-tekst = V.maak("v", {}, r, "2026-10-30", "2026-10-30", gz, {"tokens": 401000, "kosten": 1.7})
+tekst = V.maak("v", {}, r, "2026-10-30", "2026-10-30", gz, {"tokens": 401000})
 check("gezien-niet-nagekeken staat apart met klikbare link en is nooit de aanbeveling",
       tekst.startswith("**Geen aanbeveling:**") and "## Gezien, niet nagekeken (nooit aanbevolen)" in tekst
       and "- [X1 markt](https://markt.voorbeeld.com/a): 380 EUR volgens het zoekresultaat; niet leesbaar" in tekst, tekst)
-check("het verbruik staat in de controleregel", "Verbruik: 401000 tokens, ongeveer 1.7 dollar." in tekst)
-
-print("Plafonds en reservemodel")
-nep = NepClient([NepAntwoord(STUK1, "pause_turn", (O.MAX_TOKENS + 1, 100)), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
-check("elke gelezen pagina heeft een grens in tokens (proef 30-10-2026: 4,27 miljoen tokens)",
-      [t.get("max_content_tokens") for t in nep.vragen[0]["tools"] if t["name"] == "web_fetch"] == [O.MAX_PAGINA_TOKENS]
-      and O.MAX_ZOEKEN <= 6 and O.MAX_LEZEN <= 6)
-check("het verbruik per beurt komt terug, voor het werkverslag", uit["beurten"] == [O.MAX_TOKENS + 101, 1200], str(uit["beurten"]))
-check("boven het tokenplafond nog een afrondbeurt zonder gereedschap (Codex X7, ronde 2)", len(nep.vragen) == 2
-      and nep.vragen[1]["tool_choice"] == {"type": "none"} and uit["stop"] == "plafond" and uit["gegevens"] is not None)
-nep = NepClient([NepAntwoord(STUK1, "pause_turn", (200000, 100)),
-                 NepAntwoord(STUK2 + [{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
-check("een pagina gelezen in de afrondbeurt blijft gelezen (Codex X13, ronde 3)", "https://winkel.voorbeeld.com/x1" in uit["gelezen"])
-check("de afrondbeurt hervat de open beurt zonder extra bericht (Codex X13, ronde 3)",
-      [m["role"] for m in nep.vragen[1]["messages"]] == ["user", "assistant"])
-O.MAX_ZOEKEN, oud_zoeken = 1, O.MAX_ZOEKEN
-nep = NepClient([NepAntwoord(STUK1, "pause_turn"), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
-check("een opgebruikte zoektool krijgt geen nieuwe zoekbeurt", nep.vragen[1].get("tool_choice") == {"type": "none"})
-O.MAX_ZOEKEN = oud_zoeken
-nep = NepClient([NepAntwoord(STUK1, "pause_turn"), NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", deadline=time.monotonic() + 10, client=nep)
-check("vlak voor de deadline van de ronde geen nieuwe beurt (Codex X6)", len(nep.vragen) == 1 and uit["stop"] == "plafond")
-check("de wachttijd van een beurt blijft binnen de deadline", nep.vragen[0]["timeout"] <= 15.0)
-
-
-class NotFoundError(Exception):
-    pass
-
-
-class NepOnbekendModel(NepClient):
-    def create(self, **kw):
-        if kw["model"] == O.MODEL:
-            self.vragen.append(kw)
-            raise NotFoundError("model niet gevonden")
-        return NepClient.create(self, **kw)
-
-
-nep = NepOnbekendModel([NepAntwoord([{"type": "text", "text": JSON}], "end_turn")])
-uit = O.onderzoek("Vloerwasser X1", "w", "2026-10-30", client=nep)
-check("een onbekende modelnaam valt terug op het model van De Ontwikkelaar (K5)", uit["model"] == O.RESERVE_MODEL
-      and nep.vragen[-1]["model"] == O.RESERVE_MODEL and uit["gegevens"] is not None)
+check("het verbruik staat in de controleregel, zonder dollar", "Verbruik: 401000 tokens via het Claude-abonnement, geen API-kost."
+      in tekst and "dollar" not in tekst)
 
 print("Alleen de productvraag naar de AI (overleg X4 en K6, Codex X3)")
 check("een gewone productvraag gaat door", P.gevonden(
@@ -569,11 +835,24 @@ class NepRonde:
 
 
 GEHEIM = "Proefvraag-zeven-zeven"
-PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
-                                  "tokens": 600000, "kosten": 2.4, "tellers": [], "leesbeurten": (0, 0),
-                                  "zoekopdrachten": 0, "stop": "end_turn", "model": "m"}
+
+
+def geen_abonnement(*a, **k):
+    raise PO.O.GeenAbonnement("geen abonnementstoken in ~/.config/prijsonderzoeker/claude-token")
+
+
+PO.O.onderzoek = geen_abonnement
 PO.werk(NepRonde(), "vloerwasser X1")
-check("meer dan 2 dollar voor een vraag wordt een nood (overleg 9, K5)", any("2.4 dollar" in n for n in noden), str(noden))
+check("zonder werkend abonnement een nood met de reden, en niets via de API (overleg 14, K1)",
+      any("Claude-abonnement werkt niet" in n and "niets via de API" in n and "geen abonnementstoken" in n for n in noden),
+      str(noden))
+noden.clear()
+PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
+                                  "tokens": 600000, "tellers": [], "leesbeurten": (0, 0), "zoekopdrachten": 0,
+                                  "stop": "limiet", "model": "m", "fout": "You've hit your limit"}
+PO.werk(NepRonde(), "vloerwasser X1")
+check("de limiet van het abonnement wordt een nood (G4)", any("limiet van het Claude-abonnement" in n for n in noden), str(noden))
+check("geen dollargrens meer in de runner", not hasattr(PO, "MAX_DOLLAR"))
 PO.O.onderzoek = lambda *a, **k: {"gegevens": None, "gelezen": {}, "tekst": "", "tokens": 10, "zoekopdrachten": 0,
                                   "stop": "end_turn", "model": "m"}
 PO.werk(NepRonde(), f"vloerwasser {GEHEIM}")
@@ -590,8 +869,8 @@ PO.werk(r, None, False, begin=time.monotonic() - PO.RONDE_SECONDEN)
 check("zonder tijd over blijft een klaargezette vraag staan (Codex X6)", opgepakt == [] and "2 wachten" in r.detail, r.detail)
 
 bron = open(Path(PO.__file__), encoding="utf-8").read()
-check("de sleutel komt eerst uit ~/appportal/.env, de werkende bron (30-10-2026)",
-      bron.index('laad_env("~/appportal/.env")') < bron.index('laad_env("~/agents/.env")'))
+check("de runner zet geen API-sleutel klaar voor de prijsvraag (overleg 14)", "sleutelbron" not in bron
+      and "zet_anthropic" not in bron and "anthropic" not in bron.lower().replace("claude-abonnement", ""))
 
 print("Koersen van de ECB")
 XML = """<gesmes:Envelope><Cube><Cube time='2026-10-30'>
