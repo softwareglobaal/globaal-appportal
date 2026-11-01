@@ -1,0 +1,6 @@
+**Besluit: nee, nog niet live.** A nee; B ja; C ja; D ja; X1 nee; X5 nee; G3 ja; K3 ja; K5 ja voor de toegevoegde tests. De echte VM-proef volgt nog.
+
+1. **Hoog, A:** [aanbod.py:742](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:742) zet een bevestigd eigen eis vóór de prijs. Als Vanden Borre levering bevestigt en RoboCleaners die eis niet beoordeelt, wordt €1.399 aanbevolen boven €961,50. Een alleen lezende codeproef bevestigt dit.
+2. **Hoog, X1/X5:** De echte vervolgvraag noemt `MOVA-RC-V70ULC-WHT` zonder label. [aanbod.py:83](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:83) herkent alleen een code ná een label; de [test:245](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/tests/test_aankoop_prijs.py:245) gebruikt zo’n label. Bij het eerder gemeten ontbrekende modeloordeel kan daardoor een goedkopere BLK-variant worden aanbevolen. Ook dit is met een alleen lezende codeproef bevestigd.
+
+Open: herstel beide punten vóór de VM-ronde. Gewijzigd en gepusht: niets.

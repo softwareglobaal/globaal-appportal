@@ -247,7 +247,8 @@ check("de modelcode uit de vraag wordt een vaste eis", A.eisen_uit_vraag(
       ["netfrequentie 60 Hz", "modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een robotstofzuiger") == [])
 check("ook een modelcode zonder het woord modelcode wordt een vaste eis (Codex controle 36, punt 2)",
       A.eisen_uit_vraag("MOVA V70 Ultra Complete MOVA-RC-V70ULC-WHT, levering tegen half november") ==
-      ["modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V") == ["netspanning 220 V"],
+      ["modelcode MOVA-RC-V70ULC-WHT"] and A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V") == ["netspanning 220 V"]
+      and A.eisen_uit_vraag("toestel AB-12C") == ["modelcode AB-12C"],
       str(A.eisen_uit_vraag("een e-mail over de WD-40 voor 220 V")))
 check("een eis over de koper hoort niet in eisen (overleg 35, B)", "niet de koper" in O.VORM
       and "dezelfde EAN-code" in O.VORM)

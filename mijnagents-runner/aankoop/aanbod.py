@@ -129,7 +129,7 @@ def eisen_uit_vraag(vraag):
         eisen.append(EIS_V.format(v))
     codes = MODELCODE_IN_VRAAG.findall(vraag or "") + MODELCODE_ZONDER_LABEL.findall(vraag or "")
     for code in dict.fromkeys(c for c in codes if any(t.isdigit() for t in c) and any(t.isalpha() for t in c)
-                              and sum(t.isalnum() for t in c) >= 6):
+                              and sum(t.isalnum() for t in c) >= 5):
         eisen.append(EIS_MODEL.format(code))
     return eisen
 
