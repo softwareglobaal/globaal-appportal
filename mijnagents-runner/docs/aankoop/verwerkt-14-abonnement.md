@@ -153,3 +153,16 @@ Tests: 250 prijstests groen.
 Punt 3 van controle 22 was opgelost. Nieuw en hersteld: ook bij `plafond` (tijd, beurten, zoekgrens) komt er geen verslag,
 ook niet met leesbare JSON; alleen een vraag met stop `klaar` (die bron en limietmelding bewees) geeft een verslag. Elke
 andere stop laat de bordvraag staan. Tests: 251 prijstests groen.
+
+## Overleg 25 (Mehdi: "moet werken en mag geen geld kosten")
+
+Kernoorzaak (X1, K1, 3-0): ik bouwde grendels voor de eerste echte proef. Een daarvan, de weigering bij
+`overageStatus: "allowed"`, steunde op een onbewezen uitleg en blokkeerde de agent.
+Besluit (K2, 2-1): vereenvoudigen, niet opnieuw beginnen. Mehdi hoeft niets (K3, 2-1); Usage credits uitzetten mag als
+extra zekerheid. Gebouwd:
+- vervallen: de weigering bij `overageStatus: "allowed"`, de proefpoort met merkteken (overleg 19), en de eis dat een
+  vraag een limietmelding toont voor ze "klaar" is;
+- blijft: stop bij `isUsingOverage`, boven 90 procent, bij een andere bron dan het abonnement, en de witte-lijstomgeving;
+- nieuw: de gemeten vensters gaan naar `~/.config/prijsonderzoeker/limiet.json` (600); lag de vorige meting boven 90
+  procent en is dat venster nog niet herstart, dan start een vraag niet.
+Lessen: `lessen-nieuwe-agent.md`. Werkwijze 1.3. Tests: 249 prijstests groen.

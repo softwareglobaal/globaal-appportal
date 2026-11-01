@@ -361,7 +361,7 @@ EINDE = FIXTURE[-1]
 st = O._Stand()
 redenen = [O.verwerk_regel(st, d) for d in FIXTURE]
 check("de gemeten stream van claude -p wordt gelezen (overleg 14, X3)", redenen[-1] == "einde"
-      and [r for r in redenen[:-1] if r] == ["extra_aan"] and st.bron == "none" and st.extra_verbruik == "allowed"
+      and [r for r in redenen[:-1] if r] == [] and st.bron == "none" and st.extra_verbruik == "allowed"
       and st.gezocht == 1 and st.zoekvragen == 2 and st.einde is EINDE
       and len(st.zoek) >= 5, str((st.bron, st.gezocht, st.zoek))[:300])
 check("de zoekresultaten dragen de titel uit de lijst Links", st.zoek.get(
@@ -400,15 +400,7 @@ O.CLAUDE = os.path.join(NEPMAP, "claude")
 with open(O.CLAUDE, "w") as f:
     f.write(f"#!{sys.executable}\n" + NEP)
 os.chmod(O.CLAUDE, 0o700)
-O.MERK_BESTAND = os.path.join(NEPMAP, "abonnement-bewezen.json")
-
-
-def merk_voor(token, vensters=("five_hour",)):
-    with open(O.MERK_BESTAND, "w") as f:
-        json.dump({"token": O.vingerafdruk_token(token), "vensters": list(vensters)}, f)
-
-
-merk_voor("sk-ant-oat01-nep")
+O.LIMIET_BESTAND = os.path.join(NEPMAP, "limiet.json")
 
 
 def nep_vraag(spec, vraag="Vloerwasser X1 voor Suriname", werkwijze="WERKWIJZE", eisen=("netfrequentie 60 Hz",), **kw):
@@ -548,8 +540,8 @@ check("een andere fout wordt stop 'fout'", isinstance(uit, dict) and uit["stop"]
 uit, _, _, _, _ = nep_vraag({"regels": [INIT]})
 check("zonder eindregel geen 'klaar'", isinstance(uit, dict) and uit["stop"] == "fout")
 uit, _, _, _, _ = nep_vraag({"regels": [INIT, dict(EINDE, result=JSON)]})
-check("een vraag zonder limietmelding van het abonnement is nooit 'klaar' (overleg 19, K2; Codex 20, punt 2)",
-      isinstance(uit, O.GeenAbonnement) and "limietmelding" in str(uit), str(uit)[:200])
+check("een vraag zonder limietmelding blokkeert niet meer (overleg 25: alleen stoppen op een gemeten signaal)",
+      isinstance(uit, dict) and uit["stop"] == "klaar", str(uit)[:200])
 uit, _, _, _, _ = nep_vraag({"regels": [ABO, dict(EINDE, result=JSON)]})
 check("een vraag zonder startbericht bewijst de bron niet (Codex 20, punt 1)", isinstance(uit, O.GeenAbonnement)
       and "startbericht" in str(uit), str(uit)[:200])
@@ -585,10 +577,10 @@ check("boven 90 procent van een limiet stopt de vraag, voor er betaald extra ver
       and time.monotonic() - begin < 10)
 aan = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False, "overageStatus": "allowed",
        "unifiedWindows": {"five_hour": {"utilization": 0.2, "status": "allowed"}}}}
-begin = time.monotonic()
-uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT, aan]))
-check("staan Usage credits aan, dan stopt de vraag meteen: een volgende aanvraag kan geld kosten (Codex 16, punt 2)",
-      isinstance(uit, O.GeenAbonnement) and "Usage credits" in str(uit) and time.monotonic() - begin < 10, str(uit))
+uit, _, _, _, _ = nep_vraag(dict(GEWOON, regels=[INIT, aan] + GEWOON["regels"][2:]))
+check("overageStatus 'allowed' blokkeert niet meer, het wordt alleen bewaard (overleg 25, X1 en K2)",
+      isinstance(uit, dict) and uit["stop"] == "klaar" and uit["extra_verbruik"] == "allowed", str(uit)[:200])
+os.remove(O.LIMIET_BESTAND)
 OAUTH = {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"}
 for naam, spec_extra, woord in (("Team-account", {"auth": dict(OAUTH, subscriptionType="team")}, "persoonlijk"),
                                 ("API-sleutel volgens auth status", {"auth": dict(OAUTH, authMethod="api_key")}, "niet aanvaard"),
@@ -623,14 +615,19 @@ check("weigert de hook niet, dan stopt de runner bij de zevende zoekopdracht (K3
 uit, _, _, _, _ = nep_vraag(dict(SLAAP, regels=[INIT] + [assistent({"type": "text", "text": "."})] * (O.MAX_BEURTEN + 1)))
 check("meer dan MAX_BEURTEN beurten stopt de runner (K4)", isinstance(uit, dict) and uit["reden"] == "beurten")
 check("de grenzen: 6 zoek, 6 lees, 10.000 tokens per pagina (G2, G5)", (O.MAX_ZOEKEN, O.MAX_LEZEN, O.MAX_PAGINA_TOKENS) == (6, 6, 10000))
-merk_voor("sk-ant-oat01-ander")
+uit, _, _, _, _ = nep_vraag(GEWOON)
+bewaard = json.load(open(O.LIMIET_BESTAND))
+check("de gemeten vensters worden bewaard voor de volgende vraag, rechten 600 (overleg 25, K2)",
+      bewaard["vensters"]["five_hour"]["utilization"] == 0.1 and os.stat(O.LIMIET_BESTAND).st_mode & 0o077 == 0)
+with open(O.LIMIET_BESTAND, "w") as f:
+    json.dump({"vensters": {"five_hour": {"utilization": 0.95, "resetsAt": time.time() + 3600}}}, f)
 uit, args, _, _, _ = nep_vraag(GEWOON)
-check("zonder geslaagde abonnementsproef voor dit token start claude niet (overleg 19)", isinstance(uit, O.GeenAbonnement)
-      and "abonnementsproef" in str(uit) and args is None, str(uit))
-os.remove(O.MERK_BESTAND)
+check("lag de vorige meting boven 90 procent en is het venster nog niet herstart, dan start er niets (overleg 25, K2)",
+      isinstance(uit, dict) and uit["stop"] == "limiet" and uit["reden"] == "vol_vooraf" and args is None, str(uit)[:200])
+with open(O.LIMIET_BESTAND, "w") as f:
+    json.dump({"vensters": {"five_hour": {"utilization": 0.95, "resetsAt": time.time() - 60}}}, f)
 uit, args, _, _, _ = nep_vraag(GEWOON)
-check("zonder merkteken ook niet", isinstance(uit, O.GeenAbonnement) and args is None)
-merk_voor("sk-ant-oat01-nep")
+check("na de herstart van het venster mag het weer", isinstance(uit, dict) and uit["stop"] == "klaar" and args is not None)
 oud_bestand = O.TOKEN_BESTAND
 O.TOKEN_BESTAND = os.path.join(NEPMAP, "bestaat-niet")
 uit, args, _, _, _ = nep_vraag(GEWOON, token=None)
@@ -655,30 +652,15 @@ try:
 except O.GeenAbonnement:
     api_aanvaard = False
 check("een API-sleutel in dat bestand telt nooit als token", not api_aanvaard)
-json.dump({"regels": [INIT, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
-gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
-check("zonder limietmelding zegt de proef nooit 'werkt' (Codex controle 17, punt 3)", not gelukt and "Usage credits" in melding,
-      melding)
 uit_meld = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
             "overageStatus": "disabled", "unifiedWindows": {"five_hour": {"utilization": 0.1, "status": "allowed"}}}}
 json.dump({"regels": [INIT, uit_meld, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef zegt 'werkt' bij bron none, extra verbruik uit en een gewoon einde (X7)",
       gelukt and "werkt via het abonnement oauth_token" in melding and "disabled" in melding, melding)
-check("een geslaagde proef schrijft het merkteken voor dit token, rechten 600 (overleg 19)", O.bewezen("sk-ant-oat01-nep")
-      and not O.bewezen("sk-ant-oat01-ander") and os.stat(O.MERK_BESTAND).st_mode & 0o077 == 0)
-os.remove(O.MERK_BESTAND)
-zonder_venster = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False,
-                  "overageStatus": "disabled"}}
-json.dump({"regels": [INIT, zonder_venster, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
-gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
-check("zonder abonnementsvensters slaagt de proef niet en komt er geen merkteken", not gelukt and "persoonlijk" in melding
-      and not os.path.exists(O.MERK_BESTAND), melding)
-merk_voor("sk-ant-oat01-nep")
 json.dump({"regels": [INIT, aan, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
-check("de abonnementsproef faalt zolang Usage credits aanstaan, met wat Mehdi moet doen", not gelukt
-      and "Settings > Usage" in melding, melding)
+check("de proef slaagt ook bij overageStatus 'allowed' en meldt het (overleg 25)", gelukt and "allowed" in melding, melding)
 json.dump({"regels": [INIT], "auth": {"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty",
                                       "subscriptionType": "enterprise"}},
           open(os.path.join(NEPMAP, "nep.json"), "w"))
@@ -688,12 +670,9 @@ json.dump({"regels": [dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), dict(EINDE, 
           open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
 check("de abonnementsproef faalt als Claude Code een API-sleutel gebruikt", not gelukt and "ANTHROPIC_API_KEY" in melding)
-os.remove(O.MERK_BESTAND)
 json.dump({"regels": [ABO, dict(EINDE, result="ok")]}, open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
-check("een proef zonder startbericht slaagt niet en schrijft geen merkteken (Codex 20, punt 1)", not gelukt
-      and "startbericht" in melding and not os.path.exists(O.MERK_BESTAND), melding)
-merk_voor("sk-ant-oat01-nep")
+check("een proef zonder startbericht slaagt niet (Codex 20, punt 1)", not gelukt and "startbericht" in melding, melding)
 json.dump({"regels": [INIT, dict(EINDE, is_error=True, result="Invalid token sk-ant-oat01-geheim-123")]},
           open(os.path.join(NEPMAP, "nep.json"), "w"))
 gelukt, melding = O.proef_abonnement(token="sk-ant-oat01-nep")
