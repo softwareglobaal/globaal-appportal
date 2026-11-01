@@ -954,7 +954,7 @@ def _lees_mail(dagen):
             return None
         if len(deel) >= PLAFOND:
             mis(waar, "te veel berichten", f"{naam(m)}: meer dan {PLAFOND} berichten")
-        return deel
+        return [dict(k, map_=m) for k in deel]       # MAIL-4: de map hoort bij de reservesleutel (een uid per map)
 
     for adres in postvakken + afzenders:
         u = verzonden.setdefault(adres, {"berichten": [], "onvolledig": []})
@@ -1067,11 +1067,15 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
     vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
     zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
-    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel uit uniek
-    gezien_door_wachten = [x for x in bord.db_lees(
-        "SELECT uniek, postvak, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ?", (eerste, laatste))
-        if V.mail_sleutel(x["postvak"], x)]
-    soorten = {V.mail_sleutel(x["postvak"], x): x["soort"] for x in gezien_door_wachten}
+    # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel uit uniek en map
+    gezien_door_wachten = []
+    for x in bord.db_lees("SELECT uniek, postvak, map, message_id, datum, soort FROM mailbericht WHERE dag BETWEEN ? AND ?",
+                          (eerste, laatste)):
+        kop = {"datum": x["datum"], "message_id": x.get("message_id") or "", "uniek": x.get("uniek") or "",
+               "map_": x.get("map") or ""}
+        if V.mail_sleutel(x["postvak"], kop):
+            gezien_door_wachten.append((x["postvak"], kop, x.get("soort")))
+    soorten = {V.mail_sleutel(pv, kop): soort for pv, kop, soort in gezien_door_wachten}
     statussen = {x["naam"]: x for x in bord.db_lees(
         "SELECT naam, status, taak, ts FROM status WHERE naam IN (%s)" % ", ".join("?" * len(KANAALWACHTEN)),
         tuple(KANAALWACHTEN.values()))}
@@ -1092,9 +1096,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         # Wat de mailwachten al zagen en daarna naar een map buiten hun leeslijst sorteerden (Opgeruimd, Nieuwsbrieven),
         # staat niet meer in de gelezen mappen: die berichten tellen mee, ontdubbeld per Message-ID in mail_telling.
         # Ze voegen alleen toe; een onleesbare map blijft onvolledig (E4).
-        for x in gezien_door_wachten:
-            ontvangen.setdefault(x["postvak"], {"berichten": [], "onvolledig": []})["berichten"].append(
-                {"datum": x["datum"], "message_id": x.get("message_id") or "", "uniek": x.get("uniek") or ""})
+        for pv, kop, _ in gezien_door_wachten:
+            ontvangen.setdefault(pv, {"berichten": [], "onvolledig": []})["berichten"].append(dict(kop))
     except Exception as e:  # noqa: BLE001
         ontvangen = verzonden = None
         prive_postvakken, mailfout = set(), f"{type(e).__name__}"

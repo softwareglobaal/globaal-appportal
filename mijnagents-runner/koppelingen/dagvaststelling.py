@@ -347,8 +347,9 @@ def _berichten(g):
 def mail_sleutel(postvak, k):
     """MAIL-4 (T-0120): de vaste sleutel van een bericht, gelijk voor een kop uit de postbus en een rij uit mailbericht. De
     Message-ID; anders de sleutel van de wacht uit uniek (postvak:Message-ID of postvak:uid, zo sinds 26-09-2026; de
-    kolom message_id bestaat pas sinds 19-10-2026 en een oudere rij wordt niet aangevuld); anders postvak plus uid (een uid
-    is alleen uniek binnen een postvak). None: geen sleutel."""
+    kolom message_id bestaat pas sinds 19-10-2026 en een oudere rij wordt niet aangevuld); anders de uid van de kop. Een
+    uid is alleen uniek binnen een map van een postvak: de sleutel draagt dan ook de map (k['map_'], de map waarin de
+    wacht of de dagvaststelling het las; Codex-toets 1). None: geen sleutel."""
     mid = (k.get("message_id") or "").strip()
     if mid:
         return mid
@@ -361,7 +362,7 @@ def mail_sleutel(postvak, k):
         rest = str(k["uid"])
     else:
         return None
-    return f"{postvak}:{rest}" if rest else None
+    return f"{postvak}:{k.get('map_') or ''}:{rest}" if rest else None
 
 
 def mail_telling(dag, ontvangen, verzonden, soorten=None):
