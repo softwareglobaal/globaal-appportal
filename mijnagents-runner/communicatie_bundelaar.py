@@ -32,6 +32,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HIER, "koppelingen"))
 import bord  # noqa: E402
 import organisatie  # noqa: E402
+import privegrens  # noqa: E402
 
 NAAM = "communicatie-bundelaar"
 ag = bord.Agent(NAAM)
@@ -70,8 +71,10 @@ def kanaal(uniek):
 
 
 def is_prive(rij):
-    """De regel van De Regisseur (RZ3-01): de kolom prive, of afdeling prive of privé."""
-    return bool(rij.get("prive")) or str(rij.get("afdeling") or "").strip().casefold() in ("prive", "privé")
+    """De regel van De Regisseur (RZ3-01): de kolom prive, of afdeling prive of privé; een rij van een Mac-kanaal
+    (WhatsApp, telefoon, sms, Xelion, uit het voorvoegsel van uniek) is altijd privé, zoals bij De Dagbundelaar. De regel
+    staat op één plek, in koppelingen/privegrens.py (T-0120 VOL-2)."""
+    return privegrens.is_prive(rij)
 
 
 def namen(personen):

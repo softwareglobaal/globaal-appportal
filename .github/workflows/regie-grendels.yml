@@ -45,6 +45,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_geen_echte_namen.py
       - run: pip install -r mijnagents/requirements.txt
       - run: python3 mijnagents-runner/tests/test_bord_lees.py
+      - run: python3 mijnagents-runner/tests/test_bord_export_prive.py
       - run: python3 mijnagents-runner/tests/test_zoom_wacht.py
       - run: python3 mijnagents-runner/tests/test_zoom_account.py
       - run: python3 mijnagents-runner/tests/test_zoom_archief_bouwstenen.py
@@ -53,6 +54,7 @@ jobs:
       - run: python3 mijnagents-runner/tests/test_dagbundelaar.py
       - run: python3 mijnagents-runner/tests/test_communicatie_bundelaar.py
       - run: python3 mijnagents-runner/tests/test_dagvaststelling.py
+      - run: python3 mijnagents-runner/tests/test_privegrens.py
       - run: python3 mijnagents-runner/tests/test_eigen_werk_gezondheid.py
       - run: python3 mijnagents-runner/tests/test_dagbundelaar_vaststelling.py
       - run: python3 mijnagents-runner/tests/test_weekoverzicht.py

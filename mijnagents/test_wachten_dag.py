@@ -10,6 +10,8 @@
 - W08: wat op een andere dag binnenkwam, telt niet mee;
 - W11: een gesprek met afdeling prive (RZ3-01) toont alleen 'privégesprek, N min', zonder naam of onderwerp;
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
+- W12 (T-0120 DB-8): een Zoom- of Plaud-rij met prive=1 en afdeling onbekend of leeg is ook privé (privegrens.py):
+  alleen 'privégesprek, N min'. Tot 01-11-2026 toonde de pagina daar naam en onderwerp;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
@@ -65,6 +67,11 @@ con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('
             "'2026-10-31 99:99: geen tijd','','fotos:2026-10-31:23:PROEF','2026-10-31T20:17:00+00:00')")
 con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
             "VALUES('fathom:9','2026-10-31','19:40',10,'Geheim Persoon','Geheim onderwerp','prive',1,'fathom','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+            "VALUES('zoom:meeting:w12','2026-10-29','16:00',25,'Verborgen Persoon','Verborgen onderwerp','onbekend',1,"
+            "'zoom','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,prive,bron,ts) "
+            "VALUES('plaud:w12','2026-10-29','17:00',8,'Verborgen Persoon','Verborgen onderwerp',1,'plaud','x')")
 con.commit()
 con.close()
 
@@ -104,6 +111,13 @@ fa = w["fathom-wacht"]
 check("W11 privégesprek zonder naam of onderwerp", fa["aantal"] == 1 and fa["items"][0]["wie"] == "privégesprek"
       and fa["items"][0]["wat"] == "10 min" and "Geheim" not in str(fa["items"]), fa["items"])
 check("W11 whatsapp prive=1 zonder afdeling houdt de naam", wa["items"][0]["wie"] == "Sara")
+d29 = C.get("/api/wachten/dag?dag=2026-10-29", headers=K).get_json()
+w29 = {x["naam"]: x for v in d29["vakken"] for x in v["wachten"]}
+for wacht in ("zoom-wacht", "plaud-wacht"):
+    it = w29[wacht]["items"]
+    check(f"W12 {wacht}: prive=1 zonder afdeling privé is een privégesprek",
+          len(it) == 1 and it[0]["wie"] == "privégesprek" and it[0]["wat"].endswith(" min")
+          and "Verborgen" not in str(it), it)
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
 
 print("klaar" if not fout else f"{fout} fout(en)")
