@@ -223,11 +223,20 @@ def main():
     vandaag = datetime.now().astimezone().strftime("%Y-%m-%d")
     tot = tot or vandaag
     van = van or (datetime.fromisoformat(tot) - timedelta(days=3)).strftime("%Y-%m-%d")
-    ag.hartslag("actief", taak=f"gesprekken labelen {van} tot {tot}")
-    nood = []
+    # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de Correcties van Mehdi, of geen ronde; en wat ik
+    # las (N4), de lessen (N13) en de collega's (N14). Tot dan las ik streng, maar buiten de ronde, zonder kennis.
     try:
-        ww = ag.werkwijze() or ""
-        corr = correcties(ww)
+        with ag.ronde(f"gesprekken labelen {van} tot {tot}") as r:
+            _ronde(r, van, tot, vandaag)
+    except bord.RondeGestopt as e:
+        print(f"ronde gestopt: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _ronde(r, van, tot, vandaag):
+    try:
+        corr = correcties(r.werkwijze)
         regels_mehdi = [f"{d} {u} {n} = {l}" + (f" ({r})" if r else "") for (d, u), (l, r, n) in corr.items()]
         lijst = afspraken(van, tot)
         projecten = projectadressen.index()
@@ -284,15 +293,12 @@ def main():
         ag.log(f"{van} tot {tot}", "schrijf", f"{gelabeld} gesprekken gelabeld, {overgeslagen} al gelabeld of zonder archief, {len(twijfel)} twijfel; weekoverzicht {n_week} rijen; {tokens} tokens",
                "\n".join(f"{k}: {v}" for k, v in tel.most_common()))
         if not os.environ.get("ANTHROPIC_API_KEY"):
-            nood.append({"tekst": "Geen ANTHROPIC_API_KEY in de omgeving: ik kan niet labelen", "wie": "claude-code"})
-        ag.log_verstuur()
-        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=f"{gelabeld} gelabeld, {len(twijfel)} twijfel ({van} tot {tot})", nood=nood)
-    except Exception as e:  # noqa: BLE001
+            r.nood("Geen ANTHROPIC_API_KEY in de omgeving: ik kan niet labelen", wie="claude-code")
+        r.detail = f"{gelabeld} gelabeld, {len(twijfel)} twijfel ({van} tot {tot})"
+    except Exception as e:  # noqa: BLE001  de ronde zet de fouthartslag en houdt de open noden open
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
         raise
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

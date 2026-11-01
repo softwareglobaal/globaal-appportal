@@ -360,17 +360,28 @@ def sleutel_nood(gesprekken):
 
 
 def main():
-    ag.hartslag("actief", taak="Fathom ophalen")
-    afgesloten = False
+    if not fathom.beschikbaar():
+        ag.hartslag("actief", taak="Fathom ophalen")
+        ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
+        # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en kon
+        # het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder een
+        # fout op en eindigt zo ook niet op 0.
+        return 1
+    # De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze met de personentabel, of geen ronde; en wat ik las
+    # (N4), de lessen (N13) en de collega's (N14). Een fout of een stopsignaal (SIGTERM als SystemExit, Ctrl-C) zet de
+    # ronde zelf op fout, en wat al open stond blijft open (N11, J1, K3); de eigen fouthartslagen van voordien zijn weg.
     try:
-        if not fathom.beschikbaar():
-            ag.hartslag("fout", taak="geen Fathom-sleutel", detail="FATHOM_API_KEYS ontbreekt")
-            afgesloten = True
-            # RZ2-02: een ronde die Fathom niet kon lezen, eindigt niet op 0. Met exit 0 schreef keten.py 'geslaagd' en kon
-            # het ochtendbericht voor 10:30 vertrekken zonder Fathom-lezing. Een sleutel die faalt, gooit hieronder een
-            # fout op en eindigt zo ook niet op 0.
-            return 1
-        werkwijze = ag.werkwijze()
+        with ag.ronde("Fathom ophalen") as r:
+            _ronde(r)
+    except bord.RondeGestopt as e:
+        print(f"ronde gestopt: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _ronde(r):
+    try:
+        werkwijze = r.werkwijze
         personen = personen_uit_werkwijze(werkwijze)
         begin = nu_utc() - timedelta(days=DAGEN)
         sinds = begin.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -476,30 +487,22 @@ def main():
         ag.log("Fathom", "bron", f"{len(gesprekken)} gesprekken sinds {sinds[:10]} van {len(fathom.sleutels())} sleutel(s); {nieuw_archief} nieuw in het archief; {prive_n} privé; {len(personen)} personen in de tabel",
                "\n".join(f"{r['datum']} {r['start']} (privé)" if r["prive"] else f"{r['datum']} {r['start']} {r['personen'][:40]} | {r['afdeling']} | {r['thema'][:50]}" for r in rijen))
         ag.log("Fathom", "schrijf", f"gesprekkentabel bijgewerkt ({len(rijen)} rijen); klaargezet: {uit.get('nieuw', 0)} nieuw, {uit.get('bestaand', 0)} al bekend; logboek voor {len(geschreven)} dag(en)")
-        ag.log_verstuur()
         sleutel = sleutel_nood(gesprekken)
         nood = list(dropbox_prive.nood(wat="het Fathom-archief"))
         if any(len(p["mails"]) == 0 and "aan te vullen" in p.get("mails", []) for p in personen) or len([p for p in personen if p["mails"]]) < 6:
             nood.append({"tekst": "De tabel Betrokken personen mist e-mailadressen van collega's (dashboard van Mehdi)", "wie": "mehdi"})
-        detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
+        r.detail = f"laatste ronde: {len(gesprekken)} gesprekken, {nieuw_archief} nieuw, {prive_n} privé"
         if sleutel is None:
-            # BAS-04: de vorige stand is onbekend. Zonder lijst sluit en opent het bord niets (zoals bord.noden_bij_breuk);
-            # wat deze ronde vond, staat in het detail tot de volgende ronde van de keten.
-            detail += "; noden niet bijgewerkt, open noden onbekend" + "".join(f"; {n['tekst']}" for n in nood)
-        ag.hartslag("waakt", taak="wacht op nieuwe gesprekken", detail=detail, nood=None if sleutel is None else sleutel + nood)
-        afgesloten = True
-        return 0
-    except Exception as e:  # noqa: BLE001
+            # BAS-04: de vorige stand van de sleutelnood is onbekend. Dan sluit het bord niets (nood_sluiten false): wat
+            # deze ronde vond komt erbij, wat open stond blijft open, ook de sleutelnood (overleg 12, X6). Tot 01-11-2026
+            # ging er dan geen lijst mee en stond wat de ronde vond alleen in het detail.
+            r.noden_onbekend = True
+            r.detail += "; open noden onbekend: het bord sluit niets"
+        for n in (sleutel or []) + nood:
+            r.nood(n["tekst"], wie=n["wie"])
+    except Exception as e:  # noqa: BLE001  de ronde zet de fouthartslag en houdt de open noden open
         ag.log("", "fout", f"{type(e).__name__}: {str(e)[:300]}")
-        ag.log_verstuur()
-        ag.hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:120]}")
-        afgesloten = True
         raise
-    finally:
-        if not afgesloten:
-            # SIGTERM (time-out), Ctrl-C of iets anders dat geen Exception is: nooit blijven hangen op actief (N11).
-            # Zonder noodlijst, zodat wat al open stond open blijft: deze ronde kon het niet meer nakijken.
-            ag.hartslag("fout", taak="ronde afgebroken", detail="ronde afgebroken voor het einde (time-out of stopsignaal)")
 
 
 def hoofd_van(herk):

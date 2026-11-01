@@ -34,8 +34,10 @@ import pipedrive  # noqa: E402
 import nummerlezer  # noqa: E402
 import bronnen as bronnen_mod  # noqa: E402
 import herhaalbaar as hh  # noqa: E402
+import bord  # noqa: E402  de gedeelde ronde (N12) en de strenge leesweg van de werkwijze (NA09)
 
 NAAM = "contracten-agent"
+ag = bord.Agent(NAAM)
 FIRMA = "harchitects"
 STARTFASE = int(os.environ.get("CONTRACTEN_AGENT_FASE", "34"))       # Gegevens ontvangen
 PIJPLIJN = int(os.environ.get("CONTRACTEN_AGENT_PIJPLIJN", "1"))     # B2C: H-Architects prospecties
@@ -594,28 +596,13 @@ def veldenschema_voor(soort):
 
 
 def werkwijze_van_bord():
-    """Het volledige proces zoals Mehdi het op het agentbord bewerkt. Leeg als
-    het bord niets heeft; dan geldt alleen de Werkinstructie."""
-    req = urllib.request.Request(f"{PLATFORM}/api/agent/{NAAM}/werkwijze",
-                                 headers={"X-Agents-Token": TOKEN})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return (json.load(r).get("werkwijze") or "").strip()
-    except Exception as e:  # noqa: BLE001
-        print("werkwijze ophalen mislukt:", e, file=sys.stderr)
-        return ""
-
-
-def kennis_melden(tekst, bron):
-    """Meldt aan het bord welke instructie ik deze ronde als regelboek las."""
-    req = urllib.request.Request(f"{PLATFORM}/api/agent/{NAAM}/kennis",
-                                 data=json.dumps({"kennis": tekst, "bron": bron}).encode(),
-                                 headers={"Content-Type": "application/json", "X-Agents-Token": TOKEN},
-                                 method="POST")
-    try:
-        urllib.request.urlopen(req, timeout=20)
-    except Exception as e:  # noqa: BLE001
-        print("kennis melden mislukt:", e, file=sys.stderr)
+    """Het volledige proces zoals Mehdi het op het agentbord bewerkt, voor wie het buiten de ronde nodig heeft
+    (goudstandaard.py). Onbekend of leeg geeft RondeGestopt, nooit een lege tekst (NA09-rest, 01-11-2026): tot dan
+    werd elke leesfout "" en werkte ik door met alleen de Werkinstructie."""
+    tekst = ag.werkwijze_lezen()
+    if not tekst.strip():
+        raise bord.RondeGestopt("Werkwijze leeg op het bord")
+    return tekst.strip()
 
 
 WERKWIJZE = ""
@@ -1050,21 +1037,33 @@ def main():
         hartslag("waakt", taak="vorige ronde loopt nog", detail=str(e)[:150])
         return
     try:
-        _main_binnen_slot()
+        return _main_binnen_slot()
     finally:
         slot.__exit__(None, None, None)
 
 
 def _main_binnen_slot():
-    hartslag("actief", taak="ronde gestart", detail="Pipedrive fase Gegevens ontvangen nakijken")
+    """De gedeelde ronde (N12, NA09-rest 01-11-2026): de werkwijze van het bord, of geen ronde. Tot dan las ik ze met
+    eigen code, werd elke leesfout een lege tekst en werkte ik door met alleen de Werkinstructie. De ronde meldt ook
+    wat ik las (N4), de lessen (N13) en de collega's (N14), en zet de eindhartslag."""
+    try:
+        with ag.ronde("dossiers in fase Gegevens ontvangen nakijken") as r:
+            _ronde(r)
+    except bord.RondeGestopt as e:
+        print(f"ronde gestopt: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _ronde(r):
+    global WERKWIJZE
+    WERKWIJZE = r.werkwijze.strip()
     try:
         werk = mcp.call("dashboard_document", sleutel="werkinstructie")
         werkinstructie = werk.get("markdown", "") if isinstance(werk, dict) else str(werk)
         versie = werk.get("versie", "") if isinstance(werk, dict) else ""
-        global WERKWIJZE
-        WERKWIJZE = werkwijze_van_bord()
-        # Wat ik weet, op het bord: de letterlijke Werkinstructie van deze ronde.
-        kennis_melden(werkinstructie, f"contracten.globaal.be, tabblad Werkinstructie AI {versie}".strip())
+        # Wat ik weet, op het bord: de letterlijke Werkinstructie van deze ronde, naast de werkwijze.
+        r.bron(f"contracten.globaal.be, tabblad Werkinstructie AI {versie}".strip(), werkinstructie)
         deals = deals_in_startfase()
         if ALLEEN:
             deals = [d for d in deals if int(d["id"]) == ALLEEN] or [pipedrive.get(FIRMA, f"/deals/{ALLEEN}")]
@@ -1082,18 +1081,15 @@ def _main_binnen_slot():
             proeven += 1 if uit.get("proef") else 0
             if not DROOG:
                 bewaar_staat(staat)
-        nood = []
         if bronnen_mod.dropbox_beschikbaar() and not bronnen_mod.team_namespace():
-            nood.append({"tekst": "Dropbox: geen team-namespace (account_info.read ontbreekt op het stack-token en DROPBOX_PATH_ROOT_NS is leeg); de salesmap is onleesbaar", "wie": "mehdi"})
-        hartslag("waakt", taak="wacht op nieuwe dossiers", nood=nood,
-                 detail=f"laatste ronde: {len(deals)} in fase, {gedaan} verwerkt, {proeven} proef/proeven, {overgeslagen} recent al gedaan")
+            r.nood("Dropbox: geen team-namespace (account_info.read ontbreekt op het stack-token en DROPBOX_PATH_ROOT_NS is leeg); de salesmap is onleesbaar", wie="mehdi")
+        r.detail = f"laatste ronde: {len(deals)} in fase, {gedaan} verwerkt, {proeven} proef/proeven, {overgeslagen} recent al gedaan"
         print(f"klaar: {gedaan} verwerkt, {proeven} proeven, {overgeslagen} overgeslagen")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001  de ronde zet de fouthartslag en houdt de open noden open
         log("", "fout", f"ronde mislukt: {type(e).__name__}: {str(e)[:300]}")
         log_verstuur()
-        hartslag("fout", taak="ronde mislukt", detail=f"{type(e).__name__}: {str(e)[:150]}")
         raise
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
