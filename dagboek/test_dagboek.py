@@ -138,6 +138,8 @@ r = C.get("/bronnen?dag=2026-10-22", headers=MET)
 html = r.get_data(as_text=True)
 check("D12 bronnen: alle vijftien met de stand van de dag", r.status_code == 200 and html.count("<tr><td><b>") == 15
       and "2 gesprekken, 0 chats" in html and "2 oproepen" in html and " km, " in html, html[-1500:])
+check("D12 bronnen: Zoom 3 keer per dag (T-0120 WACHT-7)", "3 keer per dag (08:00, 14:00 en 00:30 Brussel" in html
+      and "2 keer per dag" not in html, html[html.find("Zoom-account"):][:200])
 check("D12 bronnen zonder groep 403", C.get("/bronnen", headers={"X-authentik-groups": "x"}).status_code == 403)
 check("D12 overzicht wijst naar bronnen", "alle bronnen" in C.get("/", headers=MET).get_data(as_text=True))
 check("D07 geen gedachtestreepje (bronnen)", "—" not in html and "–" not in html)

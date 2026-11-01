@@ -12,6 +12,8 @@
   prive=1 zonder afdeling (WhatsApp van de Mac) houdt naam en aantal;
 - W12 (T-0120 DB-8): een Zoom- of Plaud-rij met prive=1 en afdeling onbekend of leeg is ook privé (privegrens.py):
   alleen 'privégesprek, N min'. Tot 01-11-2026 toonde de pagina daar naam en onderwerp;
+- W12 (T-0120 WACHT-2): De Zoomwacht is helemaal gelezen als haar dagregel volledig, definitief en met elke bron ok is;
+  vandaag toont niets;
 - W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd;
 - W20 (WISPR-3): een fout-hartslag van gisteren maakt vandaag niet rood (de stand van nu blijft zichtbaar); een
   fout-hartslag van vandaag wel.
@@ -163,6 +165,43 @@ wv = {x["naam"]: x for v in dv["vakken"] for x in v["wachten"]}
 check("W20 fout-hartslag van gisteren: vandaag niet rood", wv["wispr-wacht"]["kleur"] != "rood"
       and wv["wispr-wacht"]["status"]["status"] == "fout", wv["wispr-wacht"])
 check("W20 fout-hartslag van vandaag: rood", wv["youtube-wacht"]["kleur"] == "rood", wv["youtube-wacht"])
+# W12 (T-0120 WACHT-2): De Zoomwacht schrijft geen dekkingsrij; haar dekking staat in de dagregel zoom:dag:<dag>.
+import json as _json  # noqa: E402
+from datetime import datetime as _dt  # noqa: E402
+from zoneinfo import ZoneInfo as _Zone  # noqa: E402
+
+
+def _dagregel(dag, telling, stand, bronnen):
+    return ("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('zoom-wacht','mehdi','zoom',?,?,?,?)",
+            (f"Zoom {dag}", _json.dumps({"datum": dag, "telling": telling, "stand": stand, "bronnen": bronnen,
+                                          "gesprekken": 3}), f"zoom:dag:{dag}", f"{dag}T22:00:00+00:00"))
+
+ok = {b: "ok" for b in ("rapport", "vaste vergaderruimte", "gepland", "opnames", "laatste sessie", "fathom-archief",
+                        "fathom-api", "chat")}
+vandaag = _dt.now(_Zone("Europe/Brussels")).date().isoformat()
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for sql, args in (_dagregel("2026-10-27", "volledig", "definitief", ok),
+                  _dagregel("2026-10-28", "volledig", "voorlopig: Fathom levert nog", ok),
+                  _dagregel("2026-10-29", "volledig", "definitief", dict(ok, chat="fout: HTTP 500")),
+                  _dagregel("2026-10-25", "volledig", "definitief", {"rapport": "ok"}),
+                  _dagregel(vandaag, "volledig", "definitief", ok)):
+    con.execute(sql, args)
+con.commit()
+con.close()
+
+
+def _zoom(dag):
+    d = C.get(f"/api/wachten/dag?dag={dag}", headers=K).get_json()
+    return {x["naam"]: x for v in d["vakken"] for x in v["wachten"]}["zoom-wacht"]
+
+
+check("W12 zoom: dagregel volledig, definitief, elke bron ok geeft helemaal gelezen", _zoom("2026-10-27")["gedekt"] is True)
+check("W12 zoom: een voorlopige dagregel geeft nog niet helemaal gelezen", _zoom("2026-10-28")["gedekt"] is False)
+check("W12 zoom: een bron niet ok geeft nog niet helemaal gelezen", _zoom("2026-10-29")["gedekt"] is False)
+check("W12 zoom: een ontbrekende bron is niet gelezen", _zoom("2026-10-25")["gedekt"] is False)
+check("W12 zoom: een dag zonder dagregel is nog niet helemaal gelezen", _zoom("2026-10-26")["gedekt"] is False)
+check("W12 zoom: vandaag toont niets", _zoom(vandaag)["gedekt"] is None)
+check("W12 whatsapp houdt zijn dekkingsrij", w["whatsapp-wacht"]["gedekt"] is True)
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
