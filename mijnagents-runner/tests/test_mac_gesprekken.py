@@ -659,6 +659,38 @@ def test_wa2_ronde_schrijft_berichten_maar_geen_dekking_voor_de_oproepgeschieden
     assert gedekt == DAG and "pas vanaf" not in r.detail, r.detail
 
 
+def test_wa2_zonder_oproep_zegt_werkverslag_en_droog_onbekend():
+    """WA-2, Codex-toets 1: zonder een enkele oproep in de kopie noemen werkverslag, hartslag en --droog de oproepen van
+    zo'n dag niet gekend, nooit '0 oproepen'; de berichten staan er wel."""
+    def zonder_oproepen(map_):
+        pad = whatsapp_wereld(map_)
+        con = sqlite3.connect(pad)
+        con.execute("DELETE FROM ZWACDCALLEVENT")
+        con.commit()
+        con.close()
+        return pad
+    r, b, gedekt, gemeld = _draai(WA, zonder_oproepen, "whatsapp")
+    assert gedekt is None and not any(u.startswith(("dekking:", "whatsapp-oproep:")) for u in b.tabel), sorted(b.tabel)
+    # 'niet gekend', niet 'onbekend': dat woord staat als persoon in de rijen en valt onder het masker
+    assert "geen oproep op de Mac: oproepen niet gekend" in r.detail and "0 oproepen" not in gemeld, gemeld
+    assert gemeld.count("oproepen niet gekend") == 4 and "berichten" in gemeld, gemeld
+    with tempfile.TemporaryDirectory() as map_:
+        oud = M.KOPIE
+        M.KOPIE = Path(map_)
+        try:
+            os.makedirs(os.path.join(map_, "whatsapp"))
+            zonder_oproepen(os.path.join(map_, "whatsapp"))
+            os.rename(os.path.join(map_, "whatsapp", "wa.sqlite"), os.path.join(map_, "whatsapp", "gesprekken.sqlite"))
+            uit = io.StringIO()
+            with redirect_stdout(uit):
+                assert WA.droog() == 0
+        finally:
+            M.KOPIE = oud
+    regels = uit.getvalue().splitlines()
+    assert regels and all("oproepen niet gekend" in x and "0 oproepen" not in x and "niet gedekt" in x
+                          for x in regels), regels
+
+
 def test_wa1_inhaal_vanaf_een_dag():
     """WA-1: --inhaal-vanaf 2026-10-01 (of --vanaf) laat De WhatsApp-wacht eenmalig vanaf 01-10 lezen: werk() krijgt
     30-09 als laatste gedekte dag, dus 32 dagen op 01-11, en de stand op de Mac zakt niet. --droog leest dan ook vanaf
