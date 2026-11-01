@@ -90,8 +90,25 @@ met_rondesloten() {
 
 stempel() {
     # waaraan het proefbewijs hoort: de cdhash van de helper en de commit van de code. TEL-7 (T-0067): -dv toont geen
-    # CDHash, pas -dvvv; ^CDHash= laat de regels CandidateCDHash staan
-    print "$("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' | cut -d= -f2) $(git -C "$WERK" rev-parse HEAD)"
+    # CDHash, pas -dvvv; ^CDHash= laat de regels CandidateCDHash staan. Zonder cdhash faalt stempel (Codex 01-11)
+    local h
+    h=$("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' | cut -d= -f2) || true
+    [[ $h =~ '^[0-9a-f]{8,64}$' ]] || { print -u2 "Geen CDHash voor $HELPER: geen proefbewijs"; return 1; }
+    print "$h $(git -C "$WERK" rev-parse HEAD)"
+}
+
+proef_schrijf() {
+    # een proefbewijs alleen met een cdhash; lukt stempel niet, dan staat er geen (leeg) bewijs
+    local s
+    s=$(stempel) || { rm -f "$1"; return 1; }
+    print -r -- "$s" > "$1"
+}
+
+proef_geldig() {
+    # hoort het proefbewijs bij precies deze helper en code? Zonder cdhash nooit
+    local s
+    s=$(stempel) || return 1
+    [[ -f "$1" && "$(cat "$1")" == "$s" ]]
 }
 
 bewaar_vorige() {
@@ -156,7 +173,7 @@ try:
 except M.MacFout as e:
     sys.exit(f'proef mislukt: {e.nood}')
 " "$WERK/mijnagents-runner"
-        stempel > "$PROEF"
+        proef_schrijf "$PROEF"
         print "Proef WhatsApp en telefoon geslaagd."
         if "$PY" -I -c "
 import sys
@@ -170,7 +187,7 @@ try:
 except M.MacFout as e:
     sys.exit(f'proef sms mislukt: {e.nood}')
 " "$WERK/mijnagents-runner"; then
-            stempel > "$PROEF_SMS"
+            proef_schrijf "$PROEF_SMS"
             print "Proef sms geslaagd."
         else
             print -u2 "De Sms-wacht blijft uit; WhatsApp en telefoon kunnen wel aan."
@@ -190,7 +207,7 @@ if not gelezen:
     sys.exit('proef browser mislukt: geen enkele browser gelezen')
 " "$WERK/mijnagents-runner" && "$PY" -I "$WERK/mijnagents-runner/mac/browser_wacht.py" --droog --dagen 2 >/dev/null &&
             "$PY" -I "$WERK/mijnagents-runner/mac/youtube_wacht.py" --droog --dagen 2 >/dev/null; then
-            stempel > "$PROEF_BROWSER"
+            proef_schrijf "$PROEF_BROWSER"
             print "Proef browser geslaagd (De Websitewacht en De YouTube-wacht droog)."
         else
             print -u2 "De Websitewacht en De YouTube-wacht blijven uit; de andere wachten kunnen wel aan."
@@ -198,17 +215,17 @@ if not gelezen:
         print "Lees het werkverslag op het bord na en zet de wachten dan aan met: $0 aan"
         exit 0 ;;
     aan)
-        [[ -f "$PROEF" && "$(cat "$PROEF")" == "$(stempel)" ]] ||
+        proef_geldig "$PROEF" ||
             { print -u2 "Geen geslaagde proef voor deze helper en deze code: eerst $0 proef"; exit 1; }
         for l in be.globaal.mijnagents.whatsapp-wacht be.globaal.mijnagents.belwacht; do laad $l; done
         print "De WhatsApp-wacht en De Belwacht staan aan (elk uur)."
-        if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" && -f "$AGENTS/be.globaal.mijnagents.sms-wacht.plist" ]]; then
+        if proef_geldig "$PROEF_SMS" && [[ -f "$AGENTS/be.globaal.mijnagents.sms-wacht.plist" ]]; then
             laad be.globaal.mijnagents.sms-wacht
             print "De Sms-wacht staat aan (elk uur)."
         else
             print "De Sms-wacht blijft uit: geen geslaagde sms-proef voor deze versie."
         fi
-        if [[ -f "$PROEF_BROWSER" && "$(cat "$PROEF_BROWSER")" == "$(stempel)" ]]; then
+        if proef_geldig "$PROEF_BROWSER"; then
             for l in $LOSSE_WACHTEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done
             print "De Websitewacht en De YouTube-wacht staan aan (elk uur)."
         else
@@ -237,11 +254,11 @@ if not gelezen:
     controleer)
         print "code: $(git -C "$WERK" rev-parse HEAD 2>/dev/null || print ontbreekt)"
         print "helper: $("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' || print ontbreekt)"
-        if [[ -f "$PROEF" && "$(cat "$PROEF")" == "$(stempel)" ]]; then print "proef: geslaagd voor deze versie"
+        if proef_geldig "$PROEF"; then print "proef: geslaagd voor deze versie"
         else print "proef: ontbreekt of hoort bij een andere versie"; fi
-        if [[ -f "$PROEF_SMS" && "$(cat "$PROEF_SMS")" == "$(stempel)" ]]; then print "proef sms: geslaagd voor deze versie"
+        if proef_geldig "$PROEF_SMS"; then print "proef sms: geslaagd voor deze versie"
         else print "proef sms: ontbreekt of hoort bij een andere versie"; fi
-        if [[ -f "$PROEF_BROWSER" && "$(cat "$PROEF_BROWSER")" == "$(stempel)" ]]; then
+        if proef_geldig "$PROEF_BROWSER"; then
             print "proef browser: geslaagd voor deze versie"
         else print "proef browser: ontbreekt of hoort bij een andere versie"; fi
         for l in $ALLE; do
@@ -285,8 +302,11 @@ fi
 # 3. De LaunchAgents; de helpertaken laden (ze lopen alleen op vraag).
 mkdir -p "$LOGS" "$AGENTS"
 for l in $ALLE; do
-    # een versie van voor de Sms-wacht (REF of terug) heeft haar plists niet
-    if [[ -f "$WERK/mijnagents-runner/mac/$l.plist" ]]; then cp "$WERK/mijnagents-runner/mac/$l.plist" "$AGENTS/$l.plist"
+    # een versie van voor de Sms-wacht (REF of terug) heeft haar plists niet. Codex 01-11: geen vaste gebruikersmap,
+    # @THUIS@ in een plist wordt de thuismap van deze Mac
+    if [[ -f "$WERK/mijnagents-runner/mac/$l.plist" ]]; then
+        inhoud=$(<"$WERK/mijnagents-runner/mac/$l.plist")
+        print -r -- "${inhoud//@THUIS@/$HOME}" > "$AGENTS/$l.plist"
     else rm -f "$AGENTS/$l.plist"; fi
 done
 for l in $HELPERTAKEN; do if [[ -f "$AGENTS/$l.plist" ]]; then laad $l; fi; done

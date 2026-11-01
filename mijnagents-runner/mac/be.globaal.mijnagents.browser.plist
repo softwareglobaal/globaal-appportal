@@ -9,10 +9,10 @@
   <key>ProgramArguments</key><array>
     <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/python3</string>
     <string>-I</string>
-    <string>/Users/mehdichegini/Library/Application Support/mijnagents/repo/mijnagents-runner/mac/browser_wacht.py</string>
+    <string>@THUIS@/Library/Application Support/mijnagents/repo/mijnagents-runner/mac/browser_wacht.py</string>
   </array>
   <key>StartCalendarInterval</key><dict><key>Minute</key><integer>40</integer></dict>
   <key>ProcessType</key><string>Background</string>
-  <key>StandardOutPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
-  <key>StandardErrorPath</key><string>/Users/mehdichegini/Library/Logs/mijnagents/browser_wacht.log</string>
+  <key>StandardOutPath</key><string>@THUIS@/Library/Logs/mijnagents/browser_wacht.log</string>
+  <key>StandardErrorPath</key><string>@THUIS@/Library/Logs/mijnagents/browser_wacht.log</string>
 </dict></plist>

@@ -354,6 +354,8 @@ def test_tel1_inhaal_vanaf_een_dag():
     assert M.inhaal_grens("2026-10-31", None) == "2026-10-31" and M.inhaal_grens(None, "2026-10-01") == "2026-09-30"
     assert M.inhaal_grens("2026-09-15", "2026-10-01") == "2026-09-15"     # nooit minder dan de stand al las
     assert M.inhaal_vanaf("2026-10-01", nu) == "2026-10-01"
+    # Codex 01-11: precies de oudste toegestane dag (zestig dagen met vandaag erbij) mag, een dag eerder niet
+    assert M.inhaal_vanaf("2026-09-03", nu) == "2026-09-03" and len(M.dagen(nu, M.inhaal_grens(None, "2026-09-03"))) == 60
     for slecht in ("2026-13-01", "gisteren", "2026-09-02", "2026-11-02"):
         try:
             M.inhaal_vanaf(slecht, nu)
@@ -1237,12 +1239,15 @@ def test_vol11_tel9_helper_leest_het_adresboek_van_contacts():
             return
         thuis = os.path.join(map_, "thuis")
         _bron_wa(thuis, met_wal=False).close()
-        _oproepen(thuis, ["0470000001", "+32 470 00 00 05", "+32470000006", "+32470000007", "+32470000008"])
+        _oproepen(thuis, ["0470000001", "+32 470 00 00 05", "+32470000006", "+32470000007", "+32470000008",
+                          "+31470000009"])
         boek = Path(thuis, "Library/Application Support/AddressBook")
         _adresboek(boek / "AddressBook-v22.abcddb", [
             (1, "Lies", "Proef", None, "GEHEIME NOTITIE", ["0470/00.00.05"]),
             (2, "Ver", "Weg Proef", None, None, ["+32470000099"]),
-            (3, "Andere Naam", "Proef", None, None, ["+32 470 00 00 01"])])
+            (3, "Andere Naam", "Proef", None, None, ["+32 470 00 00 01"]),
+            # Codex 01-11: dezelfde laatste negen cijfers in een ander land is een ander nummer
+            (4, "Verkeerd Land", "Proef", None, None, ["+32 470 00 00 09"])])
         _adresboek(boek / "Sources" / "0A1B2C3D-0000-4000-8000-00000000AAAA" / "AddressBook-v22.abcddb", [
             (1, None, None, "Proef Firma BV", None, ["0032 470 00 00 06"]),
             (2, "Nbsp", "Proef", None, None, ["0470\u00a000\u00a000\u00a008"])])
@@ -1252,11 +1257,12 @@ def test_vol11_tel9_helper_leest_het_adresboek_van_contacts():
         assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "ok"}, status
         assert set(status["bronnen"].values()) == {"ok"}, status
         ruw = uit.read_bytes()
-        for geheim in (b"GEHEIME NOTITIE", b"Weg Proef", b"Andere Naam", b"Bijnaam", b"Mobile", b"470000099"):
+        for geheim in (b"GEHEIME NOTITIE", b"Weg Proef", b"Andere Naam", b"Bijnaam", b"Mobile", b"470000099",
+                       b"Verkeerd Land", b"32 470 00 00 09"):
             assert geheim not in ruw, geheim
         rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
         namen = [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])]
-        assert namen == ["Kees Proef", "Lies Proef", "Proef Firma BV", "+32470000007", "Nbsp Proef"], namen
+        assert namen == ["Kees Proef", "Lies Proef", "Proef Firma BV", "+32470000007", "Nbsp Proef", "+31470000009"], namen
         con = sqlite3.connect(uit)
         tabellen = {r[0]: [k[1] for k in con.execute(f"PRAGMA table_info({r[0]})")]
                     for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
@@ -1312,6 +1318,30 @@ def test_vol11_tel9_adresboek_ontbreekt_of_ander_schema():
         # zoals De Belwacht de status leest: geen weigering, geen fout
         bronnen = status["bronnen"]
         assert status["uitkomst"] == "ok" and "geweigerd" not in bronnen.values()
+        # Codex 01-11: drie vergrendelde bronnen houden de set niet op (hoogstens 2 s per databank, ver onder de 120 s
+        # van de runner); de namen komen dan uit WhatsApp
+        os.unlink(boek / "AddressBook-v22.abcddb")
+        sloten = []
+        for i in range(3):
+            pad = boek / "Sources" / f"0A1B2C3D-0000-4000-8000-00000000000{i}" / "AddressBook-v22.abcddb"
+            _adresboek(pad, [(1, "Lies", "Proef", None, None, ["+32470000005"])])
+            con = sqlite3.connect(pad, timeout=0)
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA locking_mode=EXCLUSIVE")
+            con.execute("UPDATE ZABCDRECORD SET ZNOTE = 'x'")
+            con.commit()
+            sloten.append(con)
+        try:
+            t0 = time.time()
+            status, uit, _ = _vraag(helper, thuis, "telefoon", "e" * 32)
+            duur = time.time() - t0
+        finally:
+            for con in sloten:
+                con.close()
+        assert status["uitkomst"] == "ok" and status["extra"] == {"adresboek": "fout"}, status
+        assert duur < 20, duur
+        rijen, _ = M.telefoon_rijen(uit, M.dagen(datetime.now(timezone.utc)))
+        assert sorted(r["personen"] for r in rijen) == ["+32470000005", "Kees Proef"], rijen
 
 
 def _chrome(pad, bezoeken, wal=False, slot=False):
@@ -1436,7 +1466,11 @@ def test_vol11_site_en_video_zoals_de_wachten():
                 "https://music.youtube.com/watch?v=abcdefgh8", "https://www.youtube.com/live/abcdefgh7?si=1",
                 "https://www.youtube.com/results?search_query=geheim", "https://www.youtube.com/",
                 "https://monday.com/watch?v=abcdefgh", "https://www.youtube.com/watch?v=kort",
-                "HTTPS://WWW.YOUTUBE.COM/watch?v=AbCdEfGh12", "https://youtu.be//dQw4w9WgXcQ/", "https://www.youtube.com/watch"]
+                "HTTPS://WWW.YOUTUBE.COM/watch?v=AbCdEfGh12", "https://youtu.be//dQw4w9WgXcQ/", "https://www.youtube.com/watch",
+                # Codex 01-11: een gecodeerde letter, een gecodeerde sleutel, een lege v eerst, een ongeldige %
+                "https://www.youtube.com/watch?v=%61bcdef123", "https://www.youtube.com/watch?%76=abcdefgh5",
+                "https://www.youtube.com/watch?v=&v=abcdefgh4", "https://www.youtube.com/watch?v=abc%zzdefgh",
+                "https://www.youtube.com/watch?v=" + "a" * 40]
     with tempfile.TemporaryDirectory() as map_:
         map_ = os.path.realpath(map_)
         helper = _bouw_helper(map_)
@@ -1519,6 +1553,18 @@ def test_vol11_yt1_web1_wachten_lezen_de_kopie():
                 assert mod.main(geen) == 1
             assert not post and hart[-1] == ("fout", [{"tekst": "MacGesprekkenKopie heeft geen volledige schijftoegang",
                                                       "wie": "mehdi"}]), hart[-1]
+            # Codex 01-11: geen enkele browser gelezen is onbekend, nooit 0: geen telling klaargezet, wel een fout
+            def leeg(_kanaal):
+                pad = Path(map_, "kopie.sqlite")
+                con = sqlite3.connect(pad)
+                con.executescript("CREATE TABLE BEZOEK (browser, tijd, site, video, titel, duur);"
+                                  "CREATE TABLE BRON (browser, uitkomst); INSERT INTO BRON VALUES('Chrome', 'fout');")
+                con.close()
+                return pad, datetime.now(timezone.utc)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                assert mod.main(leeg) == 1
+            assert not post and hart[-1][0] == "fout" and any("Geen browsergeschiedenis" in n["tekst"]
+                                                             for n in hart[-1][1]), hart[-1]
     assert M.HELPER["browser"] == "be.globaal.mijnagents.kopie-browser"
 
 
@@ -1581,6 +1627,8 @@ def test_r6_drie_uitrollen_en_terug():
             (mac / "kopie" / "macgesprekken_kopie.c").write_text(f"helper {helper}\n")
             for l in ("kopie-whatsapp", "kopie-telefoon", "whatsapp-wacht", "belwacht", "kopie-browser", "browser"):
                 (mac / f"be.globaal.mijnagents.{l}.plist").write_text(f"{l} versie {versie}\n")
+            # Codex 01-11: een plist zonder vaste gebruikersmap; de uitrol zet de thuismap van deze Mac in de plaats
+            (mac / "be.globaal.mijnagents.youtube.plist").write_text(f"youtube versie {versie} @THUIS@/Library/x\n")
             git("add", "-A")
             git("commit", "-q", "-m", f"v{versie}")
             shas.append(git("rev-parse", "HEAD"))
@@ -1588,7 +1636,8 @@ def test_r6_drie_uitrollen_en_terug():
         script = RUNNER / "mac" / "uitrol_mac_gesprekken.sh"
         basis, agents = m / "basis", m / "agents"
         omgeving = {**os.environ, "REPO": str(repo), "BASIS": str(basis), "AGENTS": str(agents), "LOGS": str(m / "logs"),
-                    "LAUNCHCTL": str(stub / "launchctl"), "CODESIGN": str(stub / "codesign"), "CC": str(stub / "cc")}
+                    "LAUNCHCTL": str(stub / "launchctl"), "CODESIGN": str(stub / "codesign"), "CC": str(stub / "cc"),
+                    "HOME": str(m / "ander thuis")}
 
         def uitrol(*args, ref=None, ok=True):
             r = subprocess.run(["zsh", str(script), *args], env={**omgeving, **({"REF": ref} if ref else {})},
@@ -1610,6 +1659,8 @@ def test_r6_drie_uitrollen_en_terug():
             assert any(r.startswith("bootstrap") and "kopie-browser.plist" in r for r in regels), regels
             assert not any(r.startswith("bootstrap") and "mijnagents.browser.plist" in r for r in regels), regels
             assert any(r.startswith("bootout") and r.endswith("be.globaal.mijnagents.youtube") for r in regels), regels
+            assert (agents / "be.globaal.mijnagents.youtube.plist").read_text() == \
+                f"youtube versie {i + 1} {m / 'ander thuis'}/Library/x\n"
             assert ("NIEUWE HELPER" in uit) == (i < 2), uit
         vorige = basis / "mac-gesprekken" / "vorige"
         assert (vorige / "COMMIT").read_text().strip() == shas[1]
@@ -1667,6 +1718,17 @@ def test_r6_drie_uitrollen_en_terug():
                                  capture_output=True, text=True, check=True).stdout
         # TEL-7 (T-0067): het proefbewijs begint met de cdhash van precies deze helper, nooit leeg
         assert re.fullmatch(r"[0-9a-f]{8} [0-9a-f]{40}\n", stempel), stempel
+        # Codex 01-11: zonder cdhash geen proefbewijs, en een leeg bewijs is nooit geldig
+        (stub / "geen-codesign").write_text("#!/bin/sh\nexit 0\n")
+        (stub / "geen-codesign").chmod(0o755)
+        functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_schrijf()/,/^}}/p;/^proef_geldig()/,/^}}/p' "
+                    f"'{script}'); HELPER='{helper}' WERK='{werk}' CODESIGN='{stub / 'geen-codesign'}'; ")
+        leeg_bewijs = m / "PROEF_LEEG"
+        r = subprocess.run(["zsh", "-c", functies + f"proef_schrijf '{leeg_bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0 and not leeg_bewijs.exists() and "Geen CDHash" in r.stderr, (r.returncode, r.stderr)
+        leeg_bewijs.write_text("")
+        r = subprocess.run(["zsh", "-c", functies + f"proef_geldig '{leeg_bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0, r.stderr
         assert re.search(r"helper: CDHash=[0-9a-f]{8}\n", uitrol("controleer")), uitrol("controleer")
         (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
         uitrol("aan")
@@ -1674,7 +1736,9 @@ def test_r6_drie_uitrollen_en_terug():
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
         (basis / "mac-gesprekken" / "PROEF_BROWSER").write_text(stempel)
         assert "Websitewacht en De YouTube-wacht staan aan" in uitrol("aan")
-        assert log.read_text().splitlines()[-1].endswith("be.globaal.mijnagents.browser.plist"), log.read_text()
+        laatste = [r for r in log.read_text().splitlines() if r.startswith("bootstrap")][-2:]
+        assert laatste[0].endswith("be.globaal.mijnagents.browser.plist") and \
+            laatste[1].endswith("be.globaal.mijnagents.youtube.plist"), laatste
 
 
 if __name__ == "__main__":

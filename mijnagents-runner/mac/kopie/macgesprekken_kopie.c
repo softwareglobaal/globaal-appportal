@@ -42,6 +42,14 @@
 #define WA "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/"
 #define NORM(x) "substr(replace(replace(replace(replace(replace(replace(" x \
     ", '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), -9)"
+/* TEL-9 (Codex 01-11): voor Contacts het volle internationale nummer, niet de laatste negen cijfers: anders kan een
+   contact met hetzelfde nummer in een ander land meekomen. Zoals mac_gesprekken.nummer_sleutel: 00 vooraan weg, een 0
+   vooraan wordt 32; zonder landnummer (hoogstens negen cijfers) ook 32. */
+#define CIJFERS(x) "replace(replace(replace(replace(replace(replace(replace(replace(" x \
+    ", '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '/', ''), char(160), '')"
+#define INTL(x) "(CASE WHEN " CIJFERS(x) " LIKE '00%%' THEN substr(" CIJFERS(x) ", 3) WHEN " CIJFERS(x) \
+    " LIKE '0%%' THEN '32' || substr(" CIJFERS(x) ", 2) WHEN length(" CIJFERS(x) ") <= 9 THEN '32' || " \
+    CIJFERS(x) " ELSE " CIJFERS(x) " END)"
 
 typedef struct {
     const char *schema;   /* naam van de bron in de vragen */
@@ -119,6 +127,8 @@ static const char TELEFOON_VRAGEN[] =
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
     "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
+    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("ZADDRESS") " AS n FROM main.ZCALLRECORD "
+    "  WHERE length(ZADDRESS) >= 6;"
     "CREATE TABLE ANDERE_APPS AS SELECT ZDATE FROM oproepen.ZCALLRECORD WHERE ZDATE >= %.0f "
     "  AND COALESCE(ZSERVICE_PROVIDER, '') NOT IN ('com.apple.Telephony', 'com.apple.FaceTime');"
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(ZDATE) FROM oproepen.ZCALLRECORD "
@@ -143,13 +153,15 @@ static const char SMS_VRAGEN[] =
     "CREATE TABLE ZWAADDRESSBOOKCONTACT AS SELECT Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER "
     "  FROM contacten.ZWAADDRESSBOOKCONTACT WHERE COALESCE(ZFULLNAME, '') != '' "
     "  AND " NORM("ZPHONENUMBER") " IN (SELECT n FROM temp.nummers);"
+    "CREATE TEMP TABLE volnummers AS SELECT DISTINCT " INTL("adres") " AS n FROM main.DEELNEMER "
+    "  WHERE length(adres) >= 6 AND instr(adres, '@') = 0;"
     "CREATE TABLE META AS SELECT 'nieuwste' AS sleutel, (SELECT MAX(" SMS_TIJD ") FROM berichten.message m "
     "  WHERE COALESCE(m.item_type, 0) = 0) AS waarde;";
 
 /* TEL-9: het adresboek van Contacts op de Mac (dat van de iPhone, via iCloud): alleen naam en nummer, alleen bij een
-   nummer van het venster (temp.nummers) dat WhatsApp nog niet bij naam kent. Dezelfde tabel en kolommen als de
-   contacten van WhatsApp; Z_PK ligt boven die van WhatsApp (:pk), zodat mac_gesprekken.Adresboek eerst WhatsApp en dan
-   het oudste contact neemt. Een naam is voornaam en familienaam, anders de firma van de kaart. */
+   nummer van het venster (temp.volnummers, het volle nummer) dat WhatsApp nog niet bij naam kent. Dezelfde tabel en
+   kolommen als de contacten van WhatsApp; Z_PK ligt boven die van WhatsApp (:pk), zodat mac_gesprekken.Adresboek eerst
+   WhatsApp en dan het oudste contact neemt. Een naam is voornaam en familienaam, anders de firma van de kaart. */
 #define CNORM(x) NORM("replace(replace(" x ", '/', ''), char(160), '')")
 static const char ADRESBOEK_VRAAG[] =
     "INSERT INTO main.ZWAADDRESSBOOKCONTACT (Z_PK, ZFULLNAME, ZWHATSAPPID, ZLID, ZPHONENUMBER) "
@@ -157,7 +169,7 @@ static const char ADRESBOEK_VRAAG[] =
     "  COALESCE(NULLIF(trim(COALESCE(r.ZFIRSTNAME, '') || ' ' || COALESCE(r.ZLASTNAME, '')), ''), "
     "  NULLIF(trim(r.ZORGANIZATION), '')) AS naam "
     "  FROM extra.ZABCDPHONENUMBER p JOIN extra.ZABCDRECORD r ON r.Z_PK = p.ZOWNER) "
-    "WHERE naam IS NOT NULL AND " CNORM("nummer") " IN (SELECT n FROM temp.nummers) "
+    "WHERE naam IS NOT NULL AND " INTL("nummer") " IN (SELECT n FROM temp.volnummers) "
     "  AND " CNORM("nummer") " NOT IN (SELECT " NORM("ZPHONENUMBER") " FROM main.ZWAADDRESSBOOKCONTACT "
     "  WHERE ZPHONENUMBER IS NOT NULL) ORDER BY pk";
 
@@ -461,6 +473,27 @@ static void sql_site(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
     else sqlite3_result_null(ctx);
 }
 
+/* %XX en + zoals urllib.parse.unquote_plus (een ongeldige % blijft staan), in uit (met afsluitende 0). Geeft de
+   lengte, of 0 als het niet past. */
+static int hexwaarde(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+static size_t ontcijfer(const char *p, size_t n, char *uit, size_t ruimte) {
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (m + 1 >= ruimte) return 0;
+        if (p[i] == '%' && i + 2 < n && hexwaarde(p[i + 1]) >= 0 && hexwaarde(p[i + 2]) >= 0) {
+            uit[m++] = (char)(hexwaarde(p[i + 1]) * 16 + hexwaarde(p[i + 2]));
+            i += 2;
+        } else {
+            uit[m++] = p[i] == '+' ? ' ' : p[i];
+        }
+    }
+    uit[m] = 0;
+    return m;
+}
+
 static int is_video_id(const char *p, size_t n) {
     if (n < 6 || n > 20) return 0;
     for (size_t i = 0; i < n; i++)
@@ -485,6 +518,7 @@ static void sql_video(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
     pad += strcspn(pad, "/?#");
     size_t padlang = strcspn(pad, "?#");
     const char *id = NULL;
+    char waarde[32];
     size_t n = 0;
     if (strcmp(h, "youtu.be") == 0) {
         const char *q = pad;
@@ -493,12 +527,15 @@ static void sql_video(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
         while (id + n < pad + padlang && id[n] != '/') n++;
     } else if (strcmp(h, "youtube.com") == 0 || strcmp(h, "music.youtube.com") == 0) {
         if (padlang == 6 && strncmp(pad, "/watch", 6) == 0 && pad[6] == '?') {
+            /* de eerste niet-lege v, met sleutel en waarde ontcijferd zoals urllib.parse.parse_qs (Codex 01-11) */
             const char *q = pad + 7, *eind = q + strcspn(q, "#");
             while (q < eind && id == NULL) {
-                size_t stuk = strcspn(q, "&#");
-                if (stuk > 2 && strncmp(q, "v=", 2) == 0) {
-                    id = q + 2;
-                    n = stuk - 2;
+                size_t stuk = strcspn(q, "&#"), is = 0;
+                while (is < stuk && q[is] != '=') is++;
+                char sleutel[8];
+                if (is < stuk && is + 1 < stuk && ontcijfer(q, is, sleutel, sizeof sleutel) == 1 && sleutel[0] == 'v') {
+                    n = ontcijfer(q + is + 1, stuk - is - 1, waarde, sizeof waarde);
+                    id = waarde;   /* te lang om te passen (n 0): geen video, zoals de Python-regel */
                 }
                 q += stuk + (q[stuk] == '&');
                 if (stuk == 0 && *q != '&') break;
@@ -686,12 +723,18 @@ static void noteer(sqlite3 *db, const Set *set, const char *naam, const char *u,
     sqlite3_finalize(stmt);
 }
 
+/* Codex 01-11: een extra bron mag de set niet ophouden. De runner wacht hoogstens 120 seconden op de hele kopie: per
+   databank hoogstens EXTRA_WACHT_MS op een slot, en na EXTRA_BUDGET seconden geen nieuwe extra databank meer (fout). */
+#define EXTRA_WACHT_MS 2000
+#define EXTRA_BUDGET 45
 static size_t extra_lezen(sqlite3 *db, const char *home, int dirfd, const char *privemap, const Set *set, double begin,
                           const char *namen[MAX_EXTRA], const char *uitkomsten[MAX_EXTRA], int *ok, int *geweigerd) {
     static char paden[MAX_PROFIELEN][PATH_MAX];
     size_t n = 0;
     sqlite3_int64 k = 0;
+    time_t start = time(NULL);
     *ok = *geweigerd = 0;
+    sqlite3_busy_timeout(db, EXTRA_WACHT_MS);
     for (size_t i = 0; i < set->extra_aantal; i++) {
         const Extra *x = &set->extra[i];
         size_t j = 0;
@@ -704,7 +747,8 @@ static size_t extra_lezen(sqlite3 *db, const char *home, int dirfd, const char *
         int aantal = extra_paden(home, x, paden);
         if (aantal < 0) noteer(db, set, x->naam, uit_errno(errno), uitkomst, ok, geweigerd);
         for (int p = 0; p < aantal; p++) {
-            const char *u = extra_een(db, home, dirfd, privemap, x, paden[p], begin, ++k * 1000000000LL);
+            const char *u = time(NULL) - start > EXTRA_BUDGET ? "fout" :
+                            extra_een(db, home, dirfd, privemap, x, paden[p], begin, ++k * 1000000000LL);
             if (strcmp(u, "ontbreekt") != 0)   /* een profiel zonder databank telt niet */
                 noteer(db, set, x->naam, u, uitkomst, ok, geweigerd);
         }
@@ -826,7 +870,8 @@ int main(int argc, char *argv[]) {
                 extra_n = extra_lezen(db, home, fd, privemap, set, begin, extra_naam, extra_uitkomst, &ok, &geweigerd);
             if (set->aantal == 0 && ok == 0 && geweigerd > 0) geheel = "geweigerd";
             sqlite3_exec(db, "DROP TABLE IF EXISTS temp.adressen; DROP TABLE IF EXISTS temp.nummers; "
-                             "DROP TABLE IF EXISTS temp.toegelaten", NULL, NULL, NULL);
+                             "DROP TABLE IF EXISTS temp.volnummers; DROP TABLE IF EXISTS temp.toegelaten", NULL, NULL,
+                         NULL);
             buf = strcmp(geheel, "ok") == 0 ? sqlite3_serialize(db, "main", &n, 0) : NULL;
             if (strcmp(geheel, "ok") == 0 && (buf == NULL || n < 100 || !schrijf(fd, uitnaam, buf, (size_t)n)))
                 geheel = "fout";

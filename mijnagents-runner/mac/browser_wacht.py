@@ -114,7 +114,11 @@ def main(vragen=None):
         nood.append({"tekst": "MacGesprekkenKopie mag een browser niet lezen: Full Disk Access (System Settings > "
                               "Privacy & Security > Full Disk Access)", "wie": "mehdi"})
     if not gelezen:
+        # Codex 01-11 (onbekend is nooit 0): zonder enige gelezen browser geen telling klaarzetten
         nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
+        hartslag("fout", taak="geen browsergeschiedenis gelezen", nood=nood)
+        print("geen browsergeschiedenis gelezen", file=sys.stderr)
+        return 1
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]
