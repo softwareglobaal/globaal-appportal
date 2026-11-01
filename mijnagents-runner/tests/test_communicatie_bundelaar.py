@@ -191,7 +191,7 @@ def test_bekend_voor_mail_alleen_uit_de_laatste_negentig_dagen():
 def test_prive_via_onbekend_kanaal_maakt_geen_bekende():
     """Controle 5: een privérij van een onbekend kanaal sluit de naam ook uit voor mail."""
     rijen = [rij("fathom:80", "Mehdi, Proefgeheim Sigma", 20, datum="2026-10-10"),
-             rij("whatsapp:81", "Proefgeheim Sigma", 0, prive=1, datum="2026-10-11"),
+             rij("fax:81", "Proefgeheim Sigma", 0, prive=1, datum="2026-10-11"),
              rij("mail:<t1@voorbeeld.test>", "Proefgeheim Sigma")]
     _, gezet, dagen, _ = ronde(rijen=rijen)
     assert "Sigma" not in json.dumps(gezet) and dagen[DAG]["overige_mail"] == 1
@@ -268,7 +268,7 @@ def test_kern_onleesbaar_nood_en_niets_klaargezet():
 
 
 def test_onbekend_kanaal_nood_zonder_getal():
-    r, _, dagen, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("whatsapp:1", "Klant Omega")])
+    r, _, dagen, _ = ronde(rijen=[rij("fathom:1", "Mehdi, Klant Omega", 5), rij("fax:1", "Klant Omega")])
     teksten = [t for t, _ in r.noden]
     assert teksten == ["Rij met een onbekend kanaal in de gesprekkentabel"], teksten
     assert not any(ch.isdigit() for t in teksten for ch in t), "N10: geen getal in een nood"
@@ -296,6 +296,139 @@ def test_groepschat_alleen_aantal():
     d = dagen[DAG]
     assert d["personen"] == [] and d["kanalen"] == {"groepschat": 1, "mail": 1}
     assert d["overige_mail"] == 1, "een kanaalnaam maakt een mailafzender niet bekend"
+
+
+def test_cb1_mac_kanalen_eigen_kanaal_en_prive_geteld():
+    """CB-1: WhatsApp, WhatsApp-oproep, telefoon, sms en Xelion zijn een eigen kanaal, geen onbekend kanaal en geen nood.
+    Oproepen dragen minuten; een Mac-groep ('groep: ...') is groepschat, nooit een persoon. De Mac-rijen zijn privé:
+    alleen een aantal en een duur per kanaal, nooit een naam (tot de keuze CB-2)."""
+    rijen = [rij("whatsapp:0a1b:2026-10-25", "Lien Proef", 0, prive=1),
+             rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0, prive=1),
+             rij("whatsapp-oproep:OPROEP1-814352400", "Lien Proef", 7, prive=1),
+             rij("whatsapp-oproep:OPROEP2-814356000", "Lien Proef", 0, prive=1),      # niet gemist, duur onbekend
+             rij("whatsapp-oproep:OPROEP3-814359600", "Lien Proef", 0, prive=1, dubbel_van="buiten:gemist"),
+             rij("telefoon:U1-1000", "Lien Proef", 4, prive=1),
+             rij("sms:0e3f:2026-10-25", "groep: Proefgroep Rho", 0, prive=1),
+             rij("sms:0e4f:2026-10-25", "+32470000099", 0, prive=1),
+             rij("xelion:X1", "Klant Omega", 12, prive=1),
+             rij("dekking:whatsapp:2026-10-25", "", 0, prive=1, dubbel_van="buiten:dekking")]
+    r, gezet, dagen, _ = ronde(rijen=rijen)
+    d = dagen[DAG]
+    assert r.noden == [], r.noden
+    assert d["kanalen"] == {"groepschat": 2, "sms": 1, "telefoon": 1, "whatsapp": 1, "whatsapp-oproep": 2, "xelion": 1}, \
+        d["kanalen"]
+    pk = d["prive_per_kanaal"]
+    assert pk["whatsapp-oproep"] == {"aantal": 2, "minuten": 7, "zonder_duur": 1}, pk
+    assert pk["telefoon"] == {"aantal": 1, "minuten": 4} and pk["xelion"] == {"aantal": 1, "minuten": 12}, pk
+    assert pk["whatsapp"] == {"aantal": 1} and pk["groepschat"] == {"aantal": 2} and pk["sms"] == {"aantal": 1}, pk
+    assert d["personen"] == [] and d["contacten"] == 8, d
+    for naam in ("Lien", "Werfgroep", "Proefgroep", "Omega", "32470000099"):
+        assert naam not in json.dumps(gezet) and naam not in r.detail, naam
+    # Codex-toets 1: ook een Mac-rij zonder privévlag geeft nooit een naam of nummer (tot de keuze CB-2), en een groep
+    # is nooit een persoon
+    r, gezet, dagen, _ = ronde(rijen=[rij("whatsapp:0a1b:2026-10-25", "Lien Proef", 0),
+                                      rij("telefoon:U2-2000", "+32470000098", 3),
+                                      rij("sms:0e5f:2026-10-25", "Klant Omega", 0),
+                                      rij("xelion:X2", "Klant Omega", 2),
+                                      rij("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef", 0),
+                                      rij("whatsapp-oproep:G1-1", "groep: Werfgroep Proef", 5),
+                                      rij("whatsapp-oproep:G2-2", "groep", 3)])
+    d = dagen[DAG]
+    assert d["personen"] == [] and d["kanalen"] == {"groepschat": 1, "sms": 1, "telefoon": 1, "whatsapp": 1,
+                                                    "whatsapp-oproep": 2, "xelion": 1}, d
+    assert sum(c["aantal"] for c in d["prive_per_kanaal"].values()) == 7, d["prive_per_kanaal"]
+    for naam in ("Lien", "32470000098", "Omega", "Werfgroep"):
+        assert naam not in json.dumps(gezet) and naam not in r.detail, naam
+    # Codex-toets 2: een gesprek dat aan een Mac-rij zonder privévlag hangt (dubbel_van, in beide richtingen), is privé
+    for rijen in ([rij("fathom:61", "Mehdi, Klant Omega", 20), rij("telefoon:U3-3000", "Klant Omega", 20,
+                                                                  dubbel_van="fathom:61")],
+                  [rij("whatsapp-oproep:K1-1", "Klant Omega", 9), rij("plaud:62", "Mehdi Chegini, Klant Omega", 9,
+                                                                      dubbel_van="whatsapp-oproep:K1-1")]):
+        r, gezet, dagen, _ = ronde(rijen=rijen)
+        assert "Omega" not in json.dumps(gezet) and dagen[DAG]["personen"] == [], (rijen[0]["uniek"], dagen[DAG])
+        assert sum(c["aantal"] for c in dagen[DAG]["prive_per_kanaal"].values()) == 1, dagen[DAG]
+    assert C.kanaal("whatsapp:0c2d:2026-10-25", "groep: Werfgroep Proef") == "groepschat"
+    assert C.kanaal("whatsapp:0a1b:2026-10-25", "Lien Proef") == "whatsapp" and C.kanaal("fax:1") is None
+    assert C.kanaal("zoom:chat:kanaal-proef-123:2026-10-25") == "groepschat", "Zoom zoals het was"
+
+
+def test_cb3_werkverslag_een_regel_per_ronde_zonder_naam():
+    """CB-3: elke ronde schrijft een regel in het werkverslag (stap bevinding) met alleen aantallen, ook een ronde die
+    niets klaarzette; zonder die regel zegt de wachtenpagina 'Geen ronde op deze dag' (wachten_dag.py leest alleen het
+    werkverslag, de ronde stuurt alleen wat gelogd is). Een ronde die breekt, schrijft een regel met stap fout."""
+    log = []
+    oud = C.ag.log
+    C.ag.log = lambda onderwerp, stap, tekst, detail="": log.append((onderwerp, stap, tekst))
+
+    def kapot(sql, args=()):
+        raise bord.BordOnbekend("databank van het bord ontbreekt")
+    try:
+        r, _, _, _ = ronde()
+        assert log == [("ronde", "bevinding", r.detail)] and "contacten" in r.detail, log
+        for naam in ("Zeta", "Omega", "Sigma", "Tau", "Robotfirma", "meldingen@"):
+            assert naam not in json.dumps(log), naam
+        for proef in (dict(lees=kapot), dict(collegas=lambda: []), dict(werkwijze="# Werkwijze\n\nIk bundel.\n")):
+            log.clear()
+            r, gezet, dagen, _ = ronde(**proef)
+            assert dagen is None and gezet == [] and log == [("ronde", "bevinding", r.detail)] and r.detail, (proef, log)
+        log.clear()
+        try:
+            C.werk(NepRonde(), vandaag=VANDAAG, lees=lambda sql, args=(): [] if sql == C.SQL_EERDER else list(RIJEN),
+                   collegas=lambda: COLLEGAS, zet=lambda its: 1 / 0, terug=lambda its: [])
+            raise AssertionError("de ronde brak niet")
+        except ZeroDivisionError:
+            pass
+        assert len(log) == 1 and log[0][:2] == ("ronde", "fout") and "ZeroDivisionError" in log[0][2], log
+    finally:
+        C.ag.log = oud
+
+
+def test_cb4_inhalen_vanaf_een_dag():
+    """CB-4: --van 2026-10-01 bundelt eenmalig elke dag vanaf 01-10 tot gisteren (op 01-11: 31 items); daarna houdt de
+    ronde die dagen zelf bij, want ze heeft er een item voor (SQL_EERDER). Hoogstens INHAAL_DAGEN terug, nooit vandaag
+    of later. Gebouwd, niet gedraaid (X6, X7)."""
+    import contextlib
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+    r, gezet = NepRonde(), []
+    lees = lambda sql, args=(): [] if sql == C.SQL_EERDER else list(RIJEN)   # noqa: E731
+    dagen = C.werk(r, vandaag=date(2026, 11, 1), lees=lees, collegas=lambda: COLLEGAS,
+                   zet=lambda its: gezet.extend(its) or {"nieuw": len(its)}, terug=lambda its: [], van="2026-10-01")
+    assert len(gezet) == 31 and min(dagen) == "2026-10-01" and max(dagen) == "2026-10-31", (len(gezet), sorted(dagen)[:2])
+    assert len({it["uniek"] for it in gezet}) == 31
+    gezet.clear()
+    C.werk(NepRonde(), vandaag=date(2026, 11, 1), lees=lees, collegas=lambda: COLLEGAS,
+           zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [])
+    assert len(gezet) == 7, "zonder --van het venster van zeven dagen"
+    assert C.inhaal_van("2026-10-01", date(2026, 11, 1)) == "2026-10-01"
+    for slecht in ("2026-11-01", "2026-11-02", "2026-09-01", "gisteren"):
+        try:
+            C.inhaal_van(slecht, date(2026, 11, 1))
+            raise AssertionError(slecht)
+        except C.argparse.ArgumentTypeError:
+            pass
+    gezien = []
+    oud = (C.droog, C.werk, C.ag.ronde, C.inhaal_van)
+    echt = C.inhaal_van
+    C.droog = lambda zaad=False, van=None: gezien.append(("droog", zaad, van))
+    C.werk = lambda r, van=None: gezien.append(("werk", van))
+    C.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde())
+    C.inhaal_van = lambda tekst: echt(tekst, date(2026, 11, 1))
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            C.main(["--droog", "--van", "2026-10-01"])
+            C.main(["--droog", "--zaad"])
+            C.main(["--van", "2026-10-01"])
+            C.main([])
+            try:
+                C.main(["--van", "2026-11-05"])
+                raise AssertionError("--van na gisteren")
+            except SystemExit as e:
+                assert e.code == 2
+    finally:
+        C.droog, C.werk, C.ag.ronde, C.inhaal_van = oud
+    assert gezien == [("droog", False, "2026-10-01"), ("droog", True, None), ("werk", "2026-10-01"), ("werk", None)], \
+        gezien
 
 
 def test_vreemde_met_voornaam_van_collega_is_geen_collega():

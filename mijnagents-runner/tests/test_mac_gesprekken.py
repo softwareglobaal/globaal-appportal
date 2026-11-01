@@ -177,8 +177,9 @@ def whatsapp_wereld(map_):
         (14, "OPROEP3", a(bxl(2026, 10, 22, 13, 5)), 70.0, 23, "900000000000002@lid", None),   # opnieuw verbonden
         (15, "OPROEP3", a(bxl(2026, 10, 23, 9, 0)), 60.0, 24, "900000000000002@lid", None),    # dezelfde ID, later
         (16, "OPROEP4", a(bxl(2026, 10, 22, 14, 0)), 600.0, 25, None, "123-456@g.us"),        # groepsoproep
+        (10, "OPROEP0", a(bxl(2026, 8, 23, 12, 0)), 30.0, 20, None, None),      # WA-2: geschiedenis vanaf het venster
     ]
-    aggregaten = [(21, 0, 0, 0), (22, 1, 1, 0), (23, 1, 0, 1), (24, 1, 0, 0), (25, 0, 0, 0)]
+    aggregaten = [(20, 0, 0, 0), (21, 0, 0, 0), (22, 1, 1, 0), (23, 1, 0, 1), (24, 1, 0, 0), (25, 0, 0, 0)]
     deelnemers = [(31, 11, "900000000000003@lid")]
     contacten = [(41, PIET, "32470000003@s.whatsapp.net", "900000000000003@lid", "+32470000003"),
                  (42, "Kees Proef", "32470000002@s.whatsapp.net", "900000000000002@lid", "+32470000002")]
@@ -260,6 +261,53 @@ def test_whatsapp_oproepen():
     assert vier["personen"] == "groep: " + GROEP and vier["minuten"] == 10, vier
 
 
+def test_wa3_niet_gemist_zonder_duur_telt_als_oproep():
+    """WA-3: WhatsApp zegt met ZMISSED of een inkomende oproep gemist is. Niet gemist en zonder duur (waarschijnlijk op de
+    gsm opgenomen) is een oproep met onbekende duur, geen gemiste: zonder buiten:gemist, dus telt hij als oproep. Alleen
+    ZMISSED=1 is gemist; een uitgaande oproep zonder duur blijft 'niet beantwoord'."""
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0)]
+    oproepen = [(11, "OPROEPA", a(bxl(2026, 10, 22, 9, 0)), 0.0, 21, "32470000001@s.whatsapp.net", None),
+                (12, "OPROEPB", a(bxl(2026, 10, 22, 10, 0)), 0.0, 22, "32470000001@s.whatsapp.net", None),
+                (13, "OPROEPC", a(bxl(2026, 10, 22, 11, 0)), 0.0, 23, None, None),
+                (14, "OPROEPD", a(bxl(2026, 10, 22, 12, 0)), 0.0, 24, "32470000001@s.whatsapp.net", None)]
+    aggregaten = [(21, 1, 0, 0), (22, 1, 1, 0), (23, 0, 0, 0), (24, 1, None, 0)]     # D: ZMISSED onbekend (NULL)
+    with tempfile.TemporaryDirectory() as map_:
+        pad = maak_whatsapp(os.path.join(map_, "wa.sqlite"), (), sessies, oproepen, aggregaten,
+                            nieuwste=a(bxl(2026, 10, 23, 20, 0)))
+        rijen, _ = M.whatsapp_rijen(pad, DAGEN)
+    op = {r["uniek"].split(":")[1].split("-")[0]: r for r in rijen}
+    a_, b_, c_ = op["OPROEPA"], op["OPROEPB"], op["OPROEPC"]
+    assert a_["thema"] == "WhatsApp-oproep, inkomend, niet gemist, duur onbekend" and a_["dubbel_van"] == "", a_
+    assert a_["minuten"] == 0 and a_["personen"] == JAN and V.is_leidend(a_) and V.soort(a_) == "oproep"
+    assert b_["thema"] == "WhatsApp-oproep, inkomend, gemist" and b_["dubbel_van"] == M.GEMIST, b_
+    assert c_["thema"] == "WhatsApp-oproep, uitgaand, niet beantwoord" and c_["dubbel_van"] == M.GEMIST, c_
+    # Codex-toets 1: een onbekende ZMISSED (NULL) is geen 'niet gemist': zoals voor WA-3, telt niet als oproep
+    assert op["OPROEPD"]["thema"] == "WhatsApp-oproep, inkomend, gemist" and op["OPROEPD"]["dubbel_van"] == M.GEMIST
+    s = M.samenvatting(rijen, DAG)
+    assert s["oproepen"] == 1 and s["minuten"] == 0 and s["gemist"] == 3, s
+    v = V.vaststellen(DAG, [], [], rijen, {}, [], "volledig", None, {"whatsapp": "aangesloten"}, lambda x: False, "volledig")
+    assert v["whatsapp"]["oproepen"] == 1, v["whatsapp"]
+
+
+def test_wa3_plaatsbezoek_barsten_en_scheuren_zelfde_uitkomst():
+    """WA-3 en B&S: een plaatsbezoek voor barsten en scheuren dat de auto ter plaatse bevestigt, houdt bij De
+    Dagbundelaar zijn uitkomst als er op dat uur alleen een gemiste oproep van de klant is (ZMISSED 1) of een niet
+    gemiste oproep zonder duur van iemand anders. De B&S-keten zelf leest de WhatsApp-rijen niet."""
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0), (2, "32470000003@s.whatsapp.net", PIET, 0)]
+    oproepen = [(11, "OPROEPA", a(bxl(2026, 10, 22, 10, 30)), 0.0, 21, "32470000001@s.whatsapp.net", None),
+                (12, "OPROEPB", a(bxl(2026, 10, 22, 10, 45)), 0.0, 22, "32470000003@s.whatsapp.net", None)]
+    aggregaten = [(21, 1, 1, 0), (22, 1, 0, 0)]
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, _ = M.whatsapp_rijen(maak_whatsapp(os.path.join(map_, "wa.sqlite"), (), sessies, oproepen, aggregaten,
+                                                  nieuwste=a(bxl(2026, 10, 23, 20, 0))), DAGEN)
+    afspraak = {"id": "bs1", "start": f"{DAG}T10:00:00+02:00", "einde": f"{DAG}T12:00:00+02:00",
+                "titel": f"[XX-BS] plaatsbezoek barsten en scheuren {JAN}", "deelnemers": []}
+    locatie = {"uitkomst": "doorgegaan", "tekst": "auto ter plaatse 10:05-11:50"}
+    zonder = V.bewijs(afspraak, V.gesprekken_van_dag(DAG, []), locatie)
+    met = V.bewijs(afspraak, V.gesprekken_van_dag(DAG, rijen), locatie)
+    assert zonder["uitkomst"] == met["uitkomst"] == "aanwijzing" and met["grond"] == zonder["grond"], (zonder, met)
+
+
 # ------------------------------------------------------------------------------------------- telefoon ---
 def test_telefoon_namen_nummers_en_diensten():
     with tempfile.TemporaryDirectory() as map_:
@@ -297,6 +345,41 @@ def test_dekking_alleen_met_gegevens_tijdens_de_dag():
     rij = M.dekking("telefoon", [DAG], gekopieerd, nieuwste, {DAG})[0]
     assert rij["uniek"] == f"dekking:telefoon:{DAG}" and rij["bron"] == "dekking" and rij["dubbel_van"] == M.DEKKING
     assert M.dekking("whatsapp", dagen, gekopieerd, None, set(dagen)) == []
+
+
+def test_wa2_geen_dekking_voor_het_begin_van_de_oproepgeschiedenis():
+    """WA-2: begint de oproepgeschiedenis van WhatsApp op de Mac later dan het venster van de helper (62 dagen), dan
+    krijgt een dag tot en met die van de oudste oproep geen dekkingsrij: zijn oproepen zijn onbekend, nooit nul. De
+    berichtrijen komen er wel. Dekt de geschiedenis het hele venster, dan blijft de dekking zoals ze was."""
+    gekopieerd = bxl(2026, 11, 1, 21, 0)
+    dagen = [f"2026-10-{d}" for d in range(12, 17)]
+    sessies = [(1, "32470000001@s.whatsapp.net", JAN, 0)]
+    berichten = [(1, a(bxl(2026, 10, int(d[-2:]), 10, 0)), 0, 0, None) for d in dagen]
+
+    def wereld(map_, eerste_oproep):
+        oproepen = [(11, "OPROEP1", a(eerste_oproep), 60.0, 21, None, None),
+                    (12, "OPROEP2", a(bxl(2026, 10, 15, 11, 0)), 120.0, 22, None, None)]
+        return maak_whatsapp(os.path.join(map_, "wa.sqlite"), berichten, sessies, oproepen, [(21, 0, 0, 0), (22, 1, 0, 0)],
+                             nieuwste=a(bxl(2026, 10, 31, 20, 0)))
+
+    def gedekt(info):
+        grens = M.oproepen_vanaf(info["oudste_oproep"], gekopieerd)
+        return [r["datum"] for r in M.dekking("whatsapp", dagen, gekopieerd, info["nieuwste"], info["aanwezig"], grens)]
+    with tempfile.TemporaryDirectory() as map_:
+        rijen, laat = M.whatsapp_rijen(wereld(map_, bxl(2026, 10, 14, 17, 23)), dagen)
+    with tempfile.TemporaryDirectory() as map_:
+        _, vroeg = M.whatsapp_rijen(wereld(map_, gekopieerd - timedelta(days=M.KOPIE_DAGEN, hours=-3)), dagen)
+    assert laat["oudste_oproep"] == bxl(2026, 10, 14, 17, 23), laat
+    assert M.oproepen_vanaf(laat["oudste_oproep"], gekopieerd) == "2026-10-14"
+    assert gedekt(laat) == ["2026-10-15", "2026-10-16"], gedekt(laat)          # 14-10 zelf: oproepen pas vanaf 17:23
+    assert sorted(r["datum"] for r in rijen if r["uniek"].startswith("whatsapp:")) == dagen    # berichten wel
+    assert M.oproepen_vanaf(vroeg["oudste_oproep"], gekopieerd) is None and gedekt(vroeg) == dagen, gedekt(vroeg)
+    # zonder een enkele oproep in de kopie is het begin van de geschiedenis onbekend: geen dag is gedekt
+    assert M.dekking("whatsapp", dagen, gekopieerd, vroeg["nieuwste"], vroeg["aanwezig"],
+                     M.oproepen_vanaf(None, gekopieerd)) == []
+    assert M.dekking("whatsapp", dagen, gekopieerd, vroeg["nieuwste"], vroeg["aanwezig"]) != [], "zonder grens zoals nu"
+    venster = re.search(r"#define VENSTER_DAGEN (\d+)", HELPER_C.read_text(encoding="utf-8")).group(1)
+    assert int(venster) == M.KOPIE_DAGEN, (venster, M.KOPIE_DAGEN)
 
 
 # ------------------------------------------------------------------------------------------ zomertijd ---
@@ -555,7 +638,117 @@ def test_whatsapp_wacht_ronde_zonder_namen():
     assert any(u.startswith("whatsapp-oproep:") for u in b.tabel)
     for naam in (JAN, PIET, GROEP, "Kees Proef", "32470000001"):
         assert naam not in gemeld, naam
-    assert "gisteren" in r.detail and "berichten" in r.detail
+    assert "gisteren niet gedekt, gezien: 1 oproepen (1 min)" in r.detail, r.detail       # 23-10 is niet gedekt
+
+
+def test_wa2_ronde_schrijft_berichten_maar_geen_dekking_voor_de_oproepgeschiedenis():
+    """WA-2 in de ronde: in een kopie zonder oproep voor 22-10 krijgen 21-10 en 22-10 hun berichtrijen, maar geen
+    dekkingsrij; het werkverslag zegt vanaf wanneer de oproepen er zijn, zonder naam."""
+    def zonder_oude_oproep(map_):
+        pad = whatsapp_wereld(map_)
+        con = sqlite3.connect(pad)
+        con.execute("DELETE FROM ZWACDCALLEVENT WHERE Z_PK = 10")
+        con.commit()
+        con.close()
+        return pad
+    r, b, gedekt, gemeld = _draai(WA, zonder_oude_oproep, "whatsapp")
+    assert gedekt is None and not any(u.startswith("dekking:") for u in b.tabel), sorted(b.tabel)
+    assert {x["datum"] for x in b.tabel.values() if x["uniek"].startswith("whatsapp:")} == {"2026-10-21", DAG}
+    assert "oproepen op de Mac pas vanaf 2026-10-22" in r.detail, r.detail
+    r, b, gedekt, gemeld = _draai(WA, whatsapp_wereld, "whatsapp")
+    assert gedekt == DAG and "pas vanaf" not in r.detail, r.detail
+
+
+def test_wa2_zonder_oproep_zegt_werkverslag_en_droog_onbekend():
+    """WA-2, Codex-toets 1: zonder een enkele oproep in de kopie noemen werkverslag, hartslag en --droog de oproepen van
+    zo'n dag niet gekend, nooit '0 oproepen'; de berichten staan er wel."""
+    def zonder_oproepen(map_):
+        pad = whatsapp_wereld(map_)
+        con = sqlite3.connect(pad)
+        con.execute("DELETE FROM ZWACDCALLEVENT")
+        con.commit()
+        con.close()
+        return pad
+    r, b, gedekt, gemeld = _draai(WA, zonder_oproepen, "whatsapp")
+    assert gedekt is None and not any(u.startswith(("dekking:", "whatsapp-oproep:")) for u in b.tabel), sorted(b.tabel)
+    # 'niet gekend', niet 'onbekend': dat woord staat als persoon in de rijen en valt onder het masker
+    assert "geen oproep op de Mac: oproepen niet gekend" in r.detail and "0 oproepen" not in gemeld, gemeld
+    assert gemeld.count("oproepen niet gekend") == 4, gemeld
+    assert any(u.startswith("whatsapp:") for u in b.tabel), "de berichten staan er wel"
+    with tempfile.TemporaryDirectory() as map_:
+        oud = M.KOPIE
+        M.KOPIE = Path(map_)
+        try:
+            os.makedirs(os.path.join(map_, "whatsapp"))
+            zonder_oproepen(os.path.join(map_, "whatsapp"))
+            os.rename(os.path.join(map_, "whatsapp", "wa.sqlite"), os.path.join(map_, "whatsapp", "gesprekken.sqlite"))
+            uit = io.StringIO()
+            with redirect_stdout(uit):
+                assert WA.droog() == 0
+        finally:
+            M.KOPIE = oud
+    regels = uit.getvalue().splitlines()
+    assert regels and all("oproepen niet gekend" in x and "0 oproepen" not in x and "niet gedekt" in x
+                          for x in regels), regels
+
+
+def test_wa2_ongedekte_dag_toont_geen_nul():
+    """WA-2 en VOL-19, Codex-toets 2: ook een dag na het begin van de oproepgeschiedenis die geen dekkingsrij heeft (de
+    Mac sliep, de dag loopt nog, de bron kreeg daarna niets) toont in werkverslag, hartslag en --droog geen nul: wat
+    gezien is, staat als 'gezien'; een gedekte dag toont zijn echte aantallen, ook een 0."""
+    leeg = {"berichten": 0, "gesprekken": 0, "oproepen": 0, "minuten": 0, "gemist": 0}
+    een = {"berichten": 5, "gesprekken": 2, "oproepen": 1, "minuten": 0, "gemist": 0}
+    assert WA._dagtekst(leeg, DAG, {DAG}, None) == "0 berichten in 0 gesprekken, 0 oproepen (0 min), 0 zonder gesprek"
+    assert WA._dagtekst(leeg, DAG, set(), None) == "niet gedekt, gezien: niets"
+    assert WA._dagtekst(een, DAG, set(), None) == "niet gedekt, gezien: 5 berichten in 2 gesprekken, 1 oproepen"
+    assert WA._dagtekst(een, DAG, set(), DAG) == "niet gedekt, gezien: 5 berichten in 2 gesprekken; oproepen niet gekend"
+    r, b, gedekt, gemeld = _draai(WA, whatsapp_wereld, "whatsapp")
+    # 23-10 (gisteren) en 24-10 (vandaag) hebben geen dekkingsrij: geen enkele nul in werkverslag of hartslag
+    assert "dag 2026-10-23 gelezen niet gedekt, gezien: 1 oproepen (1 min)" in gemeld, gemeld
+    assert "dag 2026-10-24 gelezen niet gedekt, gezien: niets" in gemeld, gemeld
+    assert not re.search(r"\b0 (berichten|gesprekken|oproepen|min|zonder)", gemeld), gemeld
+
+
+def test_wa1_inhaal_vanaf_een_dag():
+    """WA-1: --inhaal-vanaf 2026-10-01 (of --vanaf) laat De WhatsApp-wacht eenmalig vanaf 01-10 lezen: werk() krijgt
+    30-09 als laatste gedekte dag, dus 32 dagen op 01-11, en de stand op de Mac zakt niet. --droog leest dan ook vanaf
+    die dag. Zonder optie blijft alles zoals het was. Gebouwd, niet gedraaid (X6, X7)."""
+    import contextlib
+    nu = datetime(2026, 11, 1, 21, 0, tzinfo=timezone.utc)
+    assert len(M.dagen(nu, M.inhaal_grens("2026-10-31", "2026-10-01"))) == 32
+    gezien, geschreven, droog = [], [], []
+    oud = (M.slot, M.lees_token, M.stand_lezen, M.tunnel, WA.ag.ronde, WA.werk, M.eindcontrole, M.stand_schrijven,
+           M.inhaal_vanaf, WA.droog)
+    M.slot = lambda naam: contextlib.nullcontext()
+    M.lees_token = lambda: "proef"
+    M.stand_lezen = lambda naam: {"gedekt_tot": "2026-10-31"}
+    M.tunnel = lambda: contextlib.nullcontext("http://127.0.0.1:1")
+    WA.ag.ronde = lambda taak: contextlib.nullcontext(NepRonde(""))
+    WA.werk = lambda r, ronde_id, gedekt_tot=None: (gezien.append(gedekt_tot), "2026-10-31")[1]
+    M.eindcontrole = lambda *x, **k: True
+    M.stand_schrijven = lambda naam, stand: geschreven.append(stand)
+    M.inhaal_vanaf = lambda tekst, _echt=oud[8]: _echt(tekst, nu)
+    WA.droog = lambda vanaf=None: droog.append(vanaf) or 0
+    oud_platform, oud_token = bord.PLATFORM, bord.TOKEN
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            assert WA.main(["--inhaal-vanaf", "2026-10-01"]) == 0
+            assert WA.main(["--vanaf", "2026-10-01"]) == 0
+            assert WA.main([]) == 0
+            assert WA.main(["--droog", "--vanaf", "2026-10-01"]) == 0 and WA.main(["--droog"]) == 0
+            for slecht in ("2026-09-02", "2026-11-02", "gisteren"):
+                try:
+                    WA.main(["--vanaf", slecht])
+                    raise AssertionError(slecht)
+                except SystemExit as e:
+                    assert e.code == 2, slecht
+    finally:
+        (M.slot, M.lees_token, M.stand_lezen, M.tunnel, WA.ag.ronde, WA.werk, M.eindcontrole, M.stand_schrijven,
+         M.inhaal_vanaf, WA.droog) = oud
+        bord.PLATFORM, bord.TOKEN = oud_platform, oud_token
+    assert gezien == ["2026-09-30", "2026-09-30", "2026-10-31"], gezien
+    assert geschreven == [], geschreven                                 # de stand zakt niet en blijft 31-10
+    assert droog == ["2026-10-01", None], droog
 
 
 def test_belwacht_ronde_zonder_namen():
@@ -994,6 +1187,29 @@ def test_w1_oudere_dag_die_zijn_dekking_verliest_wordt_opnieuw_vastgesteld():
     tekst = V.tekst(V.vaststellen(oud, [], [], rijen, {}, [], "volledig", None,
                                   {"whatsapp": "niet aangesloten", "telefoon": stand}, lambda x: False))
     assert "- telefoon: onbekend (onbekend voor deze dag)" in tekst, tekst
+
+
+def test_wa8_gelezen_dag_blijft_aangesloten_als_de_wacht_nu_stil_is():
+    """WA-8: een dag met een dekkingsrij is gelezen, ook als de wacht nu langer dan KANAAL_UREN zweeg (de laptop stond
+    uit): die dag blijft 'aangesloten' en wordt geen 'stil sinds ...'. Alleen een dag zonder dekkingsrij krijgt de stand
+    van nu. Een vervallen dekkingsrij bewijst niets (Codex V1)."""
+    nu = datetime(2026, 10, 30, 9, 0, tzinfo=timezone.utc)
+    stil = D.kanaalstand({"status": "klaar", "taak": WA.TAAK, "ts": (nu - timedelta(hours=40)).isoformat()}, nu)
+    assert stil.startswith("stil sinds"), stil
+    rijen = [{"uniek": f"dekking:whatsapp:{DAG}", "datum": DAG, "dubbel_van": M.DEKKING},
+             {"uniek": "dekking:whatsapp:2026-10-21", "datum": "2026-10-21", "dubbel_van": M.VERVALLEN}]
+    gedekt = D.gedekte_dagen(rijen)
+    assert D.kanaal_van_dag(stil, "whatsapp", DAG, gedekt) == "aangesloten"
+    assert D.kanaal_van_dag(stil, "whatsapp", "2026-10-23", gedekt) == stil           # zonder dekking: de stand van nu
+    assert D.kanaal_van_dag(stil, "whatsapp", "2026-10-21", gedekt) == stil           # vervallen dekking: geen bewijs
+    assert D.kanaal_van_dag(stil, "telefoon", DAG, gedekt) == stil                    # dekking van een ander kanaal
+    assert D.kanaal_van_dag("aangesloten", "whatsapp", "2026-10-23", gedekt) == "onbekend voor deze dag"
+    assert D.kanaal_van_dag("niet aangesloten", "whatsapp", "2026-10-23", gedekt) == "niet aangesloten"
+    rij = {"uniek": "whatsapp:0a1b:" + DAG, "datum": DAG, "start": "09:00", "minuten": 0, "personen": JAN,
+           "thema": "3 berichten (1 in, 2 uit), 09:00 tot 09:30", "prive": 1, "bron": "whatsapp", "dubbel_van": ""}
+    tekst = V.tekst(V.vaststellen(DAG, [], [], [rij], {}, [], "volledig", None,
+                                  {"whatsapp": D.kanaal_van_dag(stil, "whatsapp", DAG, gedekt)}, lambda x: False))
+    assert "- WhatsApp: 3 berichten in 1 gesprekken, 0 oproepen, 0 min gezien\n" in tekst + "\n", tekst
 
 
 def test_q5_kapotte_waarde_komt_niet_in_de_fout():

@@ -249,7 +249,8 @@ def tegels(t):
                              "klein": f"verzonden, {'?' if getal(mail.get('binnen')) is None else mail['binnen']} binnen"
                                       + (" (onvolledig)" if mail.get("onvolledig") else "")})},
         {"naam": "WhatsApp", **kanaal(wa, "?" if getal(wa.get("berichten")) is None else wa["berichten"],
-                                      f"berichten, {getal(wa.get('oproepen')) or 0} oproepen")},
+                                      f"berichten, {'?' if getal(wa.get('oproepen')) is None else wa['oproepen']} "
+                                      "oproepen")},
         {"naam": "Telefoon", **kanaal(tel, "?" if getal(tel.get("oproepen")) is None else tel["oproepen"],
                                       f"oproepen, {min_tekst(tel.get('minuten'))}")},
     ]
@@ -332,6 +333,9 @@ def bron_stand(d, tekst, cijfers):
         goed = stand in ("volledig", "aangesloten", "afgesloten", "gelezen", "geteld")
         return {"tekst": tekst_, "stand": stand or "onbekend", "goed": goed}
 
+    def vraag(x):
+        return "?" if getal(x) is None else x
+
     return {
         "Agenda": rij(f"{getal(a.get('totaal')) or 0} afspraken", over.get("agenda")),
         "Zoom": rij(f"{tel.get('Zoom', 0)} gesprekken, {getal(t.get('zoom_chats')) or 0} chats", over.get("zoom")),
@@ -340,12 +344,12 @@ def bron_stand(d, tekst, cijfers):
         "Mail": rij("niet gelezen" if mail is None else f"{getal(mail.get('binnen')) or 0} binnen, "
                     f"{getal(mail.get('verzonden')) or 0} verzonden",
                     None if mail is None else ("onvolledig" if mail.get("onvolledig") else "volledig")),
-        "WhatsApp": rij(f"{getal(wa.get('berichten')) or 0} berichten, {getal(wa.get('oproepen')) or 0} oproepen",
-                        wa.get("stand")),
-        "Telefoon": rij(f"{getal(tf.get('oproepen')) or 0} oproepen", tf.get("stand")),
-        "Telefoon Xelion": rij(f"{getal(xe.get('oproepen')) or 0} oproepen, {getal(xe.get('gemist')) or 0} gemist",
+        # WA-6 (T-0120): een onbekend aantal van een Mac-kanaal is een vraagteken, nooit 0
+        "WhatsApp": rij(f"{vraag(wa.get('berichten'))} berichten, {vraag(wa.get('oproepen'))} oproepen", wa.get("stand")),
+        "Telefoon": rij(f"{vraag(tf.get('oproepen'))} oproepen", tf.get("stand")),
+        "Telefoon Xelion": rij(f"{vraag(xe.get('oproepen'))} oproepen, {vraag(xe.get('gemist'))} gemist",
                                xe.get("stand") or "niet aangesloten"),
-        "Sms en iMessage": rij(f"{getal(sm.get('berichten')) or 0} berichten in {getal(sm.get('gesprekken')) or 0} gesprekken",
+        "Sms en iMessage": rij(f"{vraag(sm.get('berichten'))} berichten in {vraag(sm.get('gesprekken'))} gesprekken",
                                sm.get("stand") or "niet aangesloten"),
         "Locatie": rij("locatie niet bereikbaar" if cijfers is None else
                        f"{km((cijfers.get('km') or 0) * 1000)} km, {getal(cijfers.get('verblijven')) or 0} plekken",

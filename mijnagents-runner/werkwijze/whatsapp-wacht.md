@@ -1,6 +1,7 @@
 # Werkwijze van De WhatsApp-wacht (Privé · Communicatie)
 
-Versie 3.0 (26-10-2026). Vervangt versie 2.0 van 23-10-2026, waarin ik alleen
+Versie 3.1 (01-11-2026, T-0120 WA-1, WA-2 en WA-3: inhalen vanaf een dag, geen valse nul
+oproepen, gemist volgens WhatsApp). Versie 3.0 (26-10-2026) verving versie 2.0 van 23-10-2026, waarin ik alleen
 gekozen exports anoniem telde. Mehdi besliste op 26-10-2026: ik mag de
 WhatsApp-databank op zijn Mac automatisch lezen, met namen, maar alleen wie,
 wanneer, hoeveel en hoe lang. Nooit de tekst van een bericht. Wat ik lees, gaat
@@ -33,16 +34,22 @@ nooit tekst. Ik lees alleen wat het wegschreef, en wis het na het lezen.
 2. Ik vraag MacGesprekkenKopie een verse kopie. Komt die niet binnen twee minuten,
    of weigert macOS de toegang, dan meld ik een nood en lees ik niets.
 3. Ik lees de laatste veertien Brusselse dagen; na een lange slaap van de Mac tot
-   zestig dagen terug, vanaf de laatste dag die ik las. Per gesprek per dag een rij met het
+   zestig dagen terug, vanaf de laatste dag die ik las; met --inhaal-vanaf eenmalig
+   vanaf een gegeven dag, ook hoogstens zestig dagen terug (WA-1). Per gesprek per dag een rij met het
    aantal berichten, hoeveel in en uit, het eerste en laatste uur, en de naam van
    het gesprek; een groep als "groep:" met haar naam. Groepsmeldingen,
    systeemmeldingen en de melding van een oproep tellen niet als bericht.
 4. Per oproep een rij: begin, minuten, in of uit, video, met wie. Een oproep zonder
    duur (gemist of niet beantwoord) staat in de tabel, maar telt niet als gesprek.
+   Gemist is wat WhatsApp gemist noemt: een inkomende oproep zonder duur die
+   WhatsApp niet gemist noemt, is een oproep met onbekende duur en telt wel (WA-3).
 5. Per dag die voorbij was toen de kopie gemaakt werd, die zelf berichten of
    oproepen toont en waarna de databank nog iets nieuws kreeg, een dekkingsrij. Zo
    weet De Dagbundelaar welke dagen ik echt gelezen heb. Een dag zonder dekking is
-   onbekend, nooit nul.
+   onbekend, nooit nul. Begint de oproepgeschiedenis op de Mac later dan de kopie
+   (62 dagen), dan krijgt een dag tot en met die van de oudste oproep geen
+   dekkingsrij: de berichten staan er, de oproepen van die dag zijn onbekend
+   (WA-2, 01-11-2026).
 6. Alle rijen zijn privé. Ik lees ze meteen terug op het bord. Een rij die de
    databank niet meer toont, bijvoorbeeld een gewist gesprek, markeer ik als
    vervallen; komt ze terug, dan telt ze weer.

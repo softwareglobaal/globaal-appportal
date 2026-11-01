@@ -17,6 +17,7 @@ Het contract met De Dagbundelaar (dagbundelaar.kanaal_van_dag, dagvaststelling.s
 gesprek per dag, whatsapp-oproep:<oproep-ID>, telefoon:<ZUNIQUE_ID>, en dekking:<kanaal>:<dag> met bron dekking. Alles
 privé. Een oproep zonder duur staat er met dubbel_van buiten:gemist en telt dus niet als gesprek (Z10).
 """
+import argparse
 import contextlib
 import fcntl
 import hashlib
@@ -45,6 +46,7 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 APPLE = datetime(2001, 1, 1, tzinfo=timezone.utc)      # Core Data telt seconden sinds 1-1-2001 (UTC)
 VENSTER = 14                                            # zoals de nachtronde van De Dagbundelaar
 INHAAL = 60                                             # na een lange slaap leest een ronde tot zoveel dagen terug (P7)
+KOPIE_DAGEN = 62                                        # het venster van de helper (macgesprekken_kopie.c, VENSTER_DAGEN)
 KOPIE = Path.home() / "Library/Caches/mijnagents/mac-gesprekken"
 STAAT = Path.home() / "Library/Application Support/mijnagents"
 HELPER = {"whatsapp": "be.globaal.mijnagents.kopie-whatsapp", "telefoon": "be.globaal.mijnagents.kopie-telefoon",
@@ -160,6 +162,29 @@ def dagen(nu, gedekt_tot=None, n=VENSTER):
         except ValueError:
             pass
     return [(eerste + timedelta(days=i)).isoformat() for i in range((vandaag - eerste).days + 1)]
+
+
+def inhaal_vanaf(tekst, nu=None):
+    """TEL-1: het argparse-type van --inhaal-vanaf JJJJ-MM-DD: een dag van vandaag tot hoogstens INHAAL dagen terug (zo
+    ver leest een ronde, en de helper kopieert er 62)."""
+    try:
+        dag = date.fromisoformat(str(tekst))
+    except ValueError:
+        raise argparse.ArgumentTypeError("een dag als JJJJ-MM-DD") from None
+    vandaag = (nu or datetime.now(timezone.utc)).astimezone(BRUSSEL).date()
+    if not vandaag - timedelta(days=INHAAL - 1) <= dag <= vandaag:
+        raise argparse.ArgumentTypeError(f"hoogstens {INHAAL} dagen terug en niet na vandaag")
+    return dag.isoformat()
+
+
+def inhaal_grens(gedekt_tot, vanaf=None):
+    """TEL-1: een eenmalige inhaalronde vanaf een dag. De dag ervoor geldt dan als laatste gedekte dag, zodat dagen() vanaf
+    daar leest, zoals na een lange slaap (P7). Nooit later dan de stand: een inhaalronde leest altijd minstens zoveel. De
+    stand op de Mac zakt er niet door, want de wacht schrijft alleen een latere gedekte dag weg."""
+    if not vanaf:
+        return gedekt_tot
+    grens = (date.fromisoformat(vanaf) - timedelta(days=1)).isoformat()
+    return min(grens, str(gedekt_tot)) if gedekt_tot else grens
 
 
 def minuten(seconden):
@@ -304,9 +329,10 @@ def whatsapp_rijen(pad, dagenlijst):
     for gebeurtenis, jid in lees(pad, SQL_WA_DEELNEMERS):
         if jid:
             deelnemers[gebeurtenis].append(str(jid))
-    samen, begin_van = {}, {}
+    samen, begin_van, oudste = {}, {}, None
     for pk, ident, t, duur, inkomend, gemist, video, beller, groep in lees(pad, SQL_WA_OPROEPEN):
         moment = tijd(t)
+        oudste = moment if oudste is None else min(oudste, moment)     # WA-2: waar de oproepgeschiedenis begint
         if van <= apple(moment) < tot:
             aanwezig.add(dag_van(moment))
         ident = re.sub(r"[^A-Za-z0-9-]", "", str(ident or "")) or f"pk{pk}"
@@ -314,12 +340,12 @@ def whatsapp_rijen(pad, dagenlijst):
             begin_van[ident] = moment
         sleutel = f"{ident}-{int(apple(begin_van[ident]))}"
         x = samen.setdefault(sleutel, {"ident": ident, "begin": moment, "duur": 0.0, "inkomend": inkomend,
-                                       "gemist": bool(gemist), "video": bool(video), "beller": beller, "groep": groep,
+                                       "niet_gemist": False, "video": bool(video), "beller": beller, "groep": groep,
                                        "jids": []})
         x["begin"] = min(x["begin"], moment)
         x["duur"] += float(duur or 0)
         x["video"] |= bool(video)
-        x["gemist"] &= bool(gemist)
+        x["niet_gemist"] |= gemist is not None and not gemist     # WA-3: alleen een uitdrukkelijke ZMISSED 0
         x["jids"] += [j for j in deelnemers.get(pk, []) if j not in x["jids"]]
     for sleutel, x in sorted(samen.items(), key=lambda kv: (kv[1]["begin"], kv[0])):
         if not van <= apple(x["begin"]) < tot:
@@ -337,11 +363,15 @@ def whatsapp_rijen(pad, dagenlijst):
             persoon = "onbekend"
         richting = {1: "inkomend", 0: "uitgaand"}.get(x["inkomend"], "richting onbekend")
         thema = "WhatsApp-oproep, " + richting + (", video" if x["video"] else "")
+        # WA-3: een inkomende oproep zonder duur die WhatsApp niet gemist noemt (ZMISSED 0, waarschijnlijk op de gsm
+        # opgenomen), is een oproep met onbekende duur: hij telt als oproep. Alleen ZMISSED 1 is gemist.
+        gesprek = x["duur"] > 0 or (x["inkomend"] == 1 and x["niet_gemist"])
         if x["duur"] <= 0:
-            thema += ", gemist" if x["inkomend"] == 1 else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek"
+            thema += (", niet gemist, duur onbekend" if gesprek else ", gemist" if x["inkomend"] == 1
+                      else ", niet beantwoord" if x["inkomend"] == 0 else ", zonder gesprek")
         rijen.append(_rij(f"whatsapp-oproep:{sleutel}", dag_van(x["begin"]), start_van(x["begin"]), minuten(x["duur"]),
-                          persoon, thema, "whatsapp", "" if x["duur"] > 0 else GEMIST))
-    return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig}
+                          persoon, thema, "whatsapp", "" if gesprek else GEMIST))
+    return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig, "oudste_oproep": oudste}
 
 
 def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
@@ -430,13 +460,27 @@ def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
     return rijen, {"nieuwste": _nieuwste(pad), "aanwezig": aanwezig}
 
 
-def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig):
+def dekking(kanaal, dagenlijst, gekopieerd, nieuwste, aanwezig, niet_tot=None):
     """F5 (contract met dagbundelaar.kanaal_van_dag) en Codex P4: een dag is gelezen als hij voorbij was toen de kopie
     gemaakt werd, de bron die dag zelf gegevens toont, en daarna nog iets nieuws kreeg. Een dag zonder enig bericht of
-    enige oproep blijft dus onbekend, nooit nul: een Mac die sliep of een WhatsApp die niet draaide, toont niets."""
+    enige oproep blijft dus onbekend, nooit nul: een Mac die sliep of een WhatsApp die niet draaide, toont niets.
+    niet_tot (WA-2): een dag tot en met die dag is niet gelezen, want een deel van de bron begint pas dan."""
     vandaag = dag_van(gekopieerd)
     return [_rij(f"dekking:{kanaal}:{d}", d, "", 0, "", "gelezen", "dekking", DEKKING) for d in dagenlijst
-            if d < vandaag and d in aanwezig and nieuwste is not None and nieuwste >= daggrens(volgende(d))]
+            if d < vandaag and d in aanwezig and nieuwste is not None and nieuwste >= daggrens(volgende(d))
+            and (niet_tot is None or d > niet_tot)]
+
+
+def oproepen_vanaf(oudste, gekopieerd):
+    """WA-2: de dag waarop de oproepgeschiedenis van WhatsApp op de Mac begint, of None als ze het hele venster van de
+    helper (KOPIE_DAGEN) dekt. De berichten gaan er verder terug dan de oproepen (gemeten 01-11-2026: oproepen pas vanaf
+    14-10 17:23): een dag tot en met die van de oudste oproep zou anders 'gelezen, 0 oproepen' heten, een valse nul.
+    Zonder een enkele oproep in de kopie is het begin onbekend: dan is geen dag voor vandaag gedekt."""
+    if oudste is None:
+        return dag_van(gekopieerd)
+    if oudste - (gekopieerd - timedelta(days=KOPIE_DAGEN)) <= timedelta(days=1):
+        return None
+    return dag_van(oudste)
 
 
 def samenvatting(rijen, dag):

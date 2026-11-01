@@ -2,7 +2,8 @@
 """De Communicatiebundelaar (Privé · Communicatie): legt de kanalen naast elkaar.
 
 Per Brusselse dag en per persoon: hoe vaak, hoe lang en langs welk kanaal Mehdi contact had, uit de gesprekkentabel
-(`gesprek_log`) die De Zoomwacht, De Fathomwacht, De Plaudwacht en de mailwachten vullen. Tot 26-10-2026 draaide ik als
+(`gesprek_log`) die De Zoomwacht, De Fathomwacht, De Plaudwacht en de mailwachten vullen, en sinds T-0120 CB-1 ook De
+WhatsApp-wacht, De Belwacht, De Sms-wacht en De Xelionwacht (privé, alleen aantallen). Tot 26-10-2026 draaide ik als
 skelet en las niemand de uitvoer van De Zoomwacht (driehoeksoverleg Zoomwacht 2, X4/X5). Ontwerp en keuzes van Mehdi:
 docs/codex/communicatie-bundelaar-ontwerp-v1.md.
 
@@ -18,7 +19,9 @@ waarom, link, archief of project, en een privérij is alleen een aantal, nooit e
 Draaien: python3 communicatie_bundelaar.py            (een ronde)
          python3 communicatie_bundelaar.py --droog    (geen ronde, geen klaarzet: toont wat ik zou klaarzetten)
          python3 communicatie_bundelaar.py --droog --zaad   (idem, met de werkwijze uit werkwijze/ in plaats van het bord)
+         python3 communicatie_bundelaar.py --van 2026-10-01 (eenmalig inhalen vanaf die dag, CB-4; ook met --droog)
 """
+import argparse
 import json
 import os
 import re
@@ -40,10 +43,18 @@ BRUSSEL = ZoneInfo("Europe/Brussels")
 
 VENSTER_DAGEN = 7    # de dagen die ik elke ronde opnieuw bundel; een item dat nog niet opgepakt is, volgt de bron
 BEKEND_DAGEN = 90    # hoe ver terug iemand uit een gesprek telt als bekend persoon voor mail (keuze 1 van Mehdi)
+INHAAL_DAGEN = 60    # CB-4: hoe ver een eenmalige inhaalronde (--van) hoogstens terug gaat
 
-# Kanaal uit het voorvoegsel van uniek (keuze 3 van Mehdi). zoom:chat: voor zoom:, het langste voorvoegsel wint.
-KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("plaud:", "ter plaatse"), ("mail:", "mail"))
-MET_DUUR = ("video", "ter plaatse")   # chat en mail hebben geen duur: weggelaten, nooit 0
+# Kanaal uit het voorvoegsel van uniek (keuze 3 van Mehdi). zoom:chat: voor zoom:, het langste voorvoegsel wint. CB-1
+# (T-0120): de kanalen van de Mac en Xelion, zoals De WhatsApp-wacht, De Belwacht, De Sms-wacht en De Xelionwacht ze
+# schrijven (mac_gesprekken.py). Hun rijen zijn privé: alleen een aantal en een duur per kanaal (tot de keuze CB-2).
+KANALEN = (("zoom:chat:", "chat"), ("zoom:", "video"), ("fathom:", "video"), ("plaud:", "ter plaatse"), ("mail:", "mail"),
+           ("whatsapp-oproep:", "whatsapp-oproep"), ("whatsapp:", "whatsapp"), ("telefoon:", "telefoon"), ("sms:", "sms"),
+           ("xelion:", "xelion"))
+MAC_CHATS = ("whatsapp:", "sms:")   # een groep van de Mac heet 'groep: naam' in personen
+MAC = ("whatsapp-oproep:", "whatsapp:", "telefoon:", "sms:", "xelion:")
+# chat, sms en mail hebben geen duur: weggelaten, nooit 0
+MET_DUUR = ("video", "ter plaatse", "whatsapp-oproep", "telefoon", "xelion")
 
 # Alleen deze kolommen; thema, waarom, link, archief en project zijn inhoud en lees ik nooit.
 # De hele tabel, zonder datumgrens: privé geldt over een gesprek en over iemand heen, ook als een dubbel van de nacht
@@ -58,11 +69,25 @@ MEHDI = ("mehdi", "mehdi chegini")   # zoals de bronnen hem schrijven, naast zij
 ONBEKEND = re.compile(r"^(speaker|spreker|deelnemer|externe?|onbekend|unknown)\b", re.I)
 
 
-def kanaal(uniek):
+def is_mac(rij):
+    """CB-1: een rij van de Mac of Xelion (op het voorvoegsel van uniek) is privé, ook zonder vlag, tot de keuze CB-2
+    (Codex-toets 1 en 2); zo ook het gesprek waaraan ze hangt. Dezelfde regel als privegrens op de tak van de groep
+    prive; is_prive zelf blijft van die groep."""
+    return str(rij.get("uniek") or "").startswith(MAC)
+
+
+def is_groep(personen):
+    """CB-1: een groep van de Mac ('groep: naam', of 'groep' bij een groepsoproep zonder naam) is nooit een persoon."""
+    p = str(personen or "").strip()
+    return p == "groep" or p.startswith("groep:")
+
+
+def kanaal(uniek, personen=""):
     """Een Zoom-chat zonder adres in de sleutel (zoom:chat:<sleutel>:<dag>) is een kanaal met meer mensen: de naam in
-    personen is dan de kanaalnaam, geen mens (Codex CB06). Die heet groepschat en is alleen een aantal."""
+    personen is dan de kanaalnaam, geen mens (Codex CB06). Die heet groepschat en is alleen een aantal. Zo ook een groep
+    in WhatsApp of sms (CB-1)."""
     uniek = uniek or ""
-    if uniek.startswith("zoom:chat:") and "@" not in uniek:
+    if (uniek.startswith("zoom:chat:") and "@" not in uniek) or (uniek.startswith(MAC_CHATS) and is_groep(personen)):
         return "groepschat"
     for voor, k in KANALEN:
         if uniek.startswith(voor):
@@ -155,8 +180,8 @@ def prive_gesprekken(rijen):
         if r.get("sessie"):
             koppel(u, "sessie:" + r["sessie"])
     prive = {wortel("rij:" + str(r.get("uniek") or "")) for r in rijen
-             if is_prive(r) and not str(r.get("dubbel_van") or "").startswith("buiten:")}
-    return lambda r: is_prive(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
+             if (is_prive(r) or is_mac(r)) and not str(r.get("dubbel_van") or "").startswith("buiten:")}
+    return lambda r: is_prive(r) or is_mac(r) or wortel("rij:" + str(r.get("uniek") or "")) in prive
 
 
 def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
@@ -176,7 +201,9 @@ def bundel(rijen, dagen_lijst, collegas, bekend_vanaf=""):
         if dubbel.startswith("buiten:"):
             opgevallen["telt_niet"] += in_dagen   # hoort niet bij Mehdi's gesprek: telt niet en maakt niemand bekend of privé
             continue
-        k = kanaal(r.get("uniek"))
+        k = kanaal(r.get("uniek"), r.get("personen"))
+        # CB-1: een rij van de Mac of Xelion is privé tot de keuze CB-2 (is_mac in prive_groep). Laat CB-2 ooit
+        # werkcontacten bij naam toe, dan blijft een groep (is_groep, ook een groepsoproep) erbuiten.
         prive = prive_groep(r)
         if k != "mail":
             # Ook de namen van een dubbel: een privé Zoom-dubbel naast een Fathom-rij noemt dezelfde mensen (Codex CB14).
@@ -298,7 +325,21 @@ def terug_lezen(gezet, lees=None):
     return fout
 
 
-def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None):
+def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=None, terug=None, van=None):
+    """Een ronde. CB-3 (T-0120): elke ronde laat een regel in het werkverslag, alleen aantallen, ook een ronde die niets
+    klaarzette (de wachtenpagina leest alleen het werkverslag en zei anders 'Geen ronde'); een ronde die breekt, een
+    regel met stap fout, zonder de tekst van de fout (die kan een naam dragen). van: CB-4, eenmalig ook elke dag vanaf
+    die dag bundelen."""
+    try:
+        dagen = _werk(r, vandaag, lees, collegas, zet, terug, inhaal=van)
+    except Exception as e:
+        ag.log("ronde", "fout", f"ronde gebroken ({type(e).__name__}); niets zeker klaargezet")
+        raise
+    ag.log("ronde", "bevinding", r.detail)
+    return dagen
+
+
+def _werk(r, vandaag, lees, collegas, zet, terug, inhaal=None):
     nooit, mehdi_beslist = bord.grenzen(r.werkwijze)
     if not nooit or not mehdi_beslist:
         # N2: zonder grenzen geen werk. De vaste vorm staat in bord.grenzen.
@@ -309,6 +350,9 @@ def werk(r, vandaag=None, lees=bord.db_lees, collegas=organisatie.collegas, zet=
     try:
         # Ook elke oudere dag waarvoor ik al een item zette, zodat een latere privécorrectie dat item bijwerkt (CB11).
         eerder = {x["sleutel"] for x in lees(SQL_EERDER, (NAAM,)) if x.get("sleutel") and x["sleutel"] < eerste}
+        if inhaal:
+            # CB-4: eenmalig inhalen; daarna heeft elke dag een item en herziet de gewone ronde hem zelf (CB11)
+            eerder |= {d for d in reeks(inhaal, laatste) if d < eerste}
         dagen_lijst = sorted(eerder) + reeks(eerste, laatste)
         rijen = lees(SQL)
     except bord.BordOnbekend:
@@ -346,9 +390,10 @@ def werkverslag(dagen, eerste, laatste, opgevallen, uit):
             f"{uit.get('nieuw', 0)} nieuw, {uit.get('bijgewerkt', 0)} bijgewerkt")
 
 
-def droog(zaad=False):
+def droog(zaad=False, van=None):
     """Geen ronde: geen hartslag, kennis of klaarzet. Toont de items zoals ze klaargezet zouden worden. Met zaad de
-    werkwijze uit werkwijze/, om een nieuwe versie te proeven voor ze op het bord staat."""
+    werkwijze uit werkwijze/, om een nieuwe versie te proeven voor ze op het bord staat. Met van ook de dagen van een
+    inhaalronde vanaf die dag (CB-4)."""
     class Droog:
         werkwijze, detail = "", ""
 
@@ -362,16 +407,38 @@ def droog(zaad=False):
         print(f"(droog) werkwijze niet gelezen: {e}")
         return
     gezet = []
-    werk(d, zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [])
+    werk(d, zet=lambda its: gezet.extend(its) or {}, terug=lambda its: [], van=van)
     for it in gezet:
         print(it["titel"])
         print(json.dumps(json.loads(it["inhoud"]), ensure_ascii=False, indent=1))
     print(f"(droog) {d.detail}")
 
 
+def inhaal_van(tekst, vandaag=None):
+    """CB-4: het argparse-type van --van JJJJ-MM-DD: een dag voor vandaag (Brussel), hoogstens INHAAL_DAGEN terug."""
+    try:
+        dag = date.fromisoformat(str(tekst))
+    except ValueError:
+        raise argparse.ArgumentTypeError("een dag als JJJJ-MM-DD") from None
+    vandaag = vandaag or datetime.now(BRUSSEL).date()
+    if not vandaag - timedelta(days=INHAAL_DAGEN) <= dag < vandaag:
+        raise argparse.ArgumentTypeError(f"hoogstens {INHAAL_DAGEN} dagen terug en voor vandaag")
+    return dag.isoformat()
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description="De Communicatiebundelaar: de kanalen per dag naast elkaar.")
+    p.add_argument("--droog", action="store_true", help="geen ronde, geen klaarzet: toont wat ik zou klaarzetten")
+    p.add_argument("--zaad", action="store_true", help="met --droog: de werkwijze uit werkwijze/ in plaats van het bord")
+    p.add_argument("--van", type=inhaal_van, metavar="JJJJ-MM-DD",
+                   help="eenmalig ook elke dag vanaf die dag bundelen (hoogstens 60 dagen terug)")
+    a = p.parse_args(argv)
+    if a.droog:
+        droog(zaad=a.zaad, van=a.van)
+        return
+    with ag.ronde("communicatie bundelen") as r:
+        werk(r, van=a.van)
+
+
 if __name__ == "__main__":
-    if "--droog" in sys.argv:
-        droog(zaad="--zaad" in sys.argv)
-    else:
-        with ag.ronde("communicatie bundelen") as r:
-            werk(r)
+    main()

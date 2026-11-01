@@ -11,6 +11,8 @@ de gedeelde ronde (N4, N10 tot N14). Daarna leest hij de rijen, de hartslag en d
 
     whatsapp_wacht.py           een ronde
     whatsapp_wacht.py --droog   de bestaande kopie lezen en per dag de aantallen tonen; niets naar het bord
+    whatsapp_wacht.py --inhaal-vanaf 2026-10-01   (of --vanaf)
+                                eenmalig vanaf die dag lezen (WA-1, hoogstens 60 dagen terug); met --droog alleen tonen
 """
 import argparse
 import os
@@ -29,6 +31,23 @@ TAAK = "WhatsApp-databank lezen"          # met 'databank': zo ziet De Dagbundel
 ag = bord.Agent(NAAM)
 
 
+def _dagtekst(s, dag, gedekt, oproepen_vanaf):
+    """WA-2 en VOL-19: de aantallen van een dag (M.samenvatting) als tekst, zonder naam. Een gedekte dag toont zijn echte
+    aantallen, ook een 0. Een dag zonder dekkingsrij (de dag loopt nog, de Mac sliep, de bron kreeg daarna niets) is niet
+    helemaal gelezen: alleen wat gezien is, nooit een nul (Codex-toets 2). Tot en met het begin van de oproepgeschiedenis
+    op de Mac zijn de oproepen niet gekend. ('onbekend' staat als persoon in de rijen en valt dus onder het masker.)"""
+    voor = bool(oproepen_vanaf and dag <= oproepen_vanaf)
+    if dag in gedekt and not voor:
+        return (f"{s['berichten']} berichten in {s['gesprekken']} gesprekken, {s['oproepen']} oproepen "
+                f"({s['minuten']} min), {s['gemist']} zonder gesprek")
+    delen = [f"{s['berichten']} berichten in {s['gesprekken']} gesprekken"] if s["berichten"] else []
+    if s["oproepen"] and not voor:
+        delen.append(f"{s['oproepen']} oproepen" + (f" ({s['minuten']} min)" if s["minuten"] else ""))
+    if s["gemist"] and not voor:
+        delen.append(f"{s['gemist']} zonder gesprek")
+    return "niet gedekt, gezien: " + (", ".join(delen) or "niets") + ("; oproepen niet gekend" if voor else "")
+
+
 def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
     """Een ronde: kopie vragen, lezen, schrijven en teruglezen. Geeft de laatste gedekte dag (voor de stand op de Mac:
     na een lange slaap leest de volgende ronde vanaf daar, P7), of None."""
@@ -42,7 +61,8 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
         finally:
             M.wis(kopie)
         ag.prive(M.maskerwoorden(rijen))
-        rijen += M.dekking(KANAAL, dagen, gekopieerd, info["nieuwste"], info["aanwezig"])
+        oproepen_vanaf = M.oproepen_vanaf(info["oudste_oproep"], gekopieerd)       # WA-2: geen valse nul oproepen
+        rijen += M.dekking(KANAAL, dagen, gekopieerd, info["nieuwste"], info["aanwezig"], oproepen_vanaf)
         vervallen = M.schrijf_en_lees_terug(KANAAL, rijen, dagen[0], dagen[-1], bord.call, terug)
     except M.MacFout as e:
         r.nood(e.nood, wie=e.wie)
@@ -55,40 +75,43 @@ def werk(r, ronde_id, gedekt_tot=None, kopie_vragen=M.kopie_vragen, terug=None):
     s = M.samenvatting(rijen, gisteren)
     for dag in dagen[-2:]:
         d = M.samenvatting(rijen, dag)
-        ag.log(f"dag {dag}", "gelezen", f"{d['berichten']} berichten in {d['gesprekken']} gesprekken, {d['oproepen']} "
-               f"oproepen ({d['minuten']} min), {d['gemist']} zonder gesprek")
+        ag.log(f"dag {dag}", "gelezen", _dagtekst(d, dag, set(gedekt), oproepen_vanaf))
     r.detail = (f"privé; {len(dagen)} dagen gelezen ({dagen[0]} tot {dagen[-1]}); nieuwste bericht "
                 f"{M.uur_van(nieuwste) if nieuwste else 'geen'} op {M.dag_van(nieuwste) if nieuwste else '-'}; "
-                f"gisteren {s['berichten']} berichten in {s['gesprekken']} gesprekken, {s['oproepen']} oproepen, "
-                f"{s['minuten']} min; dekking tot {max(gedekt) if gedekt else 'geen'}; {len(rijen)} rijen, "
-                f"{vervallen} vervallen; ronde-id:{ronde_id}")
+                f"gisteren {_dagtekst(s, gisteren, set(gedekt), oproepen_vanaf)}; "
+                f"dekking tot {max(gedekt) if gedekt else 'geen'}"
+                + (" (geen oproep op de Mac: oproepen niet gekend)" if info["oudste_oproep"] is None else
+                   f" (oproepen op de Mac pas vanaf {oproepen_vanaf})" if oproepen_vanaf and oproepen_vanaf >= dagen[0] else "")
+                + f"; {len(rijen)} rijen, {vervallen} vervallen; ronde-id:{ronde_id}")
     return max(gedekt) if gedekt else None
 
 
-def droog():
-    """Zonder bord en zonder nieuwe kopie: wat de bestaande kopie per dag zou geven, alleen aantallen."""
+def droog(vanaf=None):
+    """Zonder bord en zonder nieuwe kopie: wat de bestaande kopie per dag zou geven, alleen aantallen. Met vanaf de dagen
+    van een inhaalronde vanaf die dag (WA-1)."""
     kopie = M.KOPIE / KANAAL / "gesprekken.sqlite"
     if not kopie.exists():
         print("geen kopie; maak er eerst een met MacGesprekkenKopie whatsapp")
         return 1
     nu = datetime.now(timezone.utc)
-    dagen = M.dagen(nu)
+    dagen = M.dagen(nu, M.inhaal_grens(None, vanaf))
     rijen, info = M.whatsapp_rijen(kopie, dagen)
-    rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"])
+    oproepen_vanaf = M.oproepen_vanaf(info["oudste_oproep"], nu)
+    rijen += M.dekking(KANAAL, dagen, nu, info["nieuwste"], info["aanwezig"], oproepen_vanaf)
+    gedekt = {x["datum"] for x in rijen if x["bron"] == "dekking"}
     for dag in dagen:
-        s = M.samenvatting(rijen, dag)
-        gedekt = any(x["uniek"] == f"dekking:{KANAAL}:{dag}" for x in rijen)
-        print(f"{dag}: {s['berichten']} berichten in {s['gesprekken']} gesprekken, {s['oproepen']} oproepen "
-              f"({s['minuten']} min), {s['gemist']} zonder gesprek{'' if gedekt else ', niet gedekt'}")
+        print(f"{dag}: {_dagtekst(M.samenvatting(rijen, dag), dag, gedekt, oproepen_vanaf)}")
     return 0
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="De WhatsApp-wacht: de WhatsApp-databank op de Mac lezen.")
     p.add_argument("--droog", action="store_true", help="de bestaande kopie lezen, niets naar het bord")
+    p.add_argument("--inhaal-vanaf", "--vanaf", dest="inhaal_vanaf", type=M.inhaal_vanaf, metavar="JJJJ-MM-DD",
+                   help="eenmalig vanaf die dag lezen (hoogstens 60 dagen terug); de stand op de Mac zakt niet")
     a = p.parse_args(argv)
     if a.droog:
-        return droog()
+        return droog(a.inhaal_vanaf)
     ronde_id = secrets.token_hex(16)
     try:
         with M.slot(NAAM):
@@ -98,7 +121,7 @@ def main(argv=None):
                 with M.tunnel() as url:
                     bord.PLATFORM, bord.TOKEN = url, token
                     with ag.ronde(TAAK) as r:
-                        gedekt = werk(r, ronde_id, stand.get("gedekt_tot"))
+                        gedekt = werk(r, ronde_id, M.inhaal_grens(stand.get("gedekt_tot"), a.inhaal_vanaf))
                     if not M.eindcontrole(ag, NAAM, TAAK, ronde_id):
                         # P8 en Q6: het slot houdt een tweede ronde van mij op deze Mac tegen, dus de status op het bord
                         # is van mij; zonder bevestiging staat ze op fout met een nood, nooit op een oude klaar.
