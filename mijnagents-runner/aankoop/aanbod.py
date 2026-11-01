@@ -449,8 +449,9 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
     Netspanning en netfrequentie mogen ook van een andere gelezen pagina komen (bewijs_url: fabrikant, handleiding,
     specificatieblad), maar alleen als de modelcode van het aanbod op de aanbodpagina en op die pagina staat, die
     pagina geen netspanningen van twee streken noemt, geen van beide pagina's de waarde tegenspreekt (tegenstrijdig), en
-    er geen woord als accessoire voor het citaat staat (overleg 9, X1 en K1; Codex controle 10 en 11). paginas is
-    {genormaliseerde url: tekst} van de gelezen pagina's."""
+    er geen woord als accessoire voor het citaat staat (overleg 9, X1 en K1; Codex controle 10 en 11). Ook geen andere
+    gelezen pagina met dezelfde modelcode mag de waarde tegenspreken, waar het bewijs ook vandaan komt (controle 12).
+    paginas is {genormaliseerde url: tekst} van de gelezen pagina's."""
     if not eisen:
         return "ja"
     oordelen = aanbod.get("compatibiliteit") if isinstance(aanbod.get("compatibiliteit"), dict) else {}
@@ -474,6 +475,9 @@ def compatibel(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=None):
                 bewezen = _netwaarde_bewezen(m.group(3).lower(), m.group(2), str(citaat or ""), bron)
             else:
                 bewezen = citaat_op_pagina(citaat, bron)     # van de eigen pagina (Codex X2, ronde 4)
+            if bewezen and m and any(tegenstrijdig(m.group(3).lower(), m.group(2), t) for t in (paginas or {}).values()
+                                     if modelcode_op(aanbod.get("modelcode"), t)):
+                bewezen = False      # een andere gelezen pagina van dezelfde modelcode spreekt het tegen (Codex controle 12)
             if bewezen and _accessoire_ervoor(str(citaat or ""), bron):
                 bewezen = False
             if not bewezen:

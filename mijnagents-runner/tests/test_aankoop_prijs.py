@@ -225,6 +225,12 @@ check("een winkelpagina met basisstation op 50 Hz wint van een handleiding met 5
       hand_oordeel(met_hand(citaat="Robot: 220-240 V, 50/60 Hz"), {
           WINKEL: WPAG + " Basisstation: 220-240 V, 50 Hz.",
           HANDL: pagina("Technische gegevens VX-200EU. Robot: 220-240 V, 50/60 Hz.")}) == "onbekend")
+DERDE = "https://andere.voorbeeld.com/vx-200eu-review"
+check("een derde gelezen pagina met dezelfde modelcode en basisstation 50 Hz spreekt het tegen (Codex controle 12)",
+      hand_oordeel(met_hand(), {WINKEL: WPAG, HANDL: HPAG, DERDE: pagina("Test van de VX-200EU. Basisstation: 50 Hz.")})
+      == "onbekend")
+check("een derde pagina van een ander model spreekt niets tegen", hand_oordeel(met_hand(), {
+      WINKEL: WPAG, HANDL: HPAG, DERDE: pagina("Test van de VX-300. Basisstation: 50 Hz.")}) == "ja")
 check("ook op de eigen pagina spreekt een losse 50 Hz een 50/60 Hz-citaat tegen", A.compatibel(aanbod(compatibiliteit={
       "netfrequentie 60 Hz": {"oordeel": "ja", "citaat": "Ingang 100-240 V, 50/60 Hz"}}), ["netfrequentie 60 Hz"],
       BEIDE + " Lader: 50 Hz.", BEIDE + " Lader: 50 Hz.") == "onbekend")
