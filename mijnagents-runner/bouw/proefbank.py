@@ -270,9 +270,36 @@ def verken(firma, project):
         print(f"{lot.rsplit('/', 1)[-1]}: {len(b)} PDF's, {fiches} fiches volgens de naam")
 
 
+def naloop(firma, project, lot):
+    """Voor de hercontrole met de hand: per PDF van een lot (ook een submap diep) de regels met een totaal of een
+    bedrag, zoals pypdf ze leest. Leest alleen; de uitvoer komt alleen op het scherm."""
+    import re
+    import bronnen
+    from . import mappen as MP
+    from . import offertes as F
+    firma = Q.firma_uit(firma)
+    pad, lots = MP.offertemap({"firma": firma, "project": project, "lot": lot}, bronnen.lijst, MP.projectmap)
+    if not pad:
+        raise SystemExit("lot niet gevonden")
+    bestanden = MP.offertebestanden(pad, bronnen.lijst)
+    for e in bronnen.lijst(pad, recursief=False) or []:
+        if e.get(".tag") == "folder":
+            bestanden += [dict(b, naam=f"{e['name']}/{b['naam']}") for b in MP.offertebestanden(e["path_display"], bronnen.lijst)]
+    woord = re.compile(r"totaal|total|suma|razem|netto|brutto|btw|vat|tva|eur|€|zł|pln", re.I)
+    for b in bestanden:
+        blz = F.paginas(bronnen.download(b["pad"]))
+        print(f"== {b['naam']}: {len(blz) if blz else 'niet te openen'} blz, "
+              f"{sum(len(x) for x in blz) if blz else 0} tekens, soort volgens de agent: {F.lees(blz)['soort']}")
+        for regel in "\n".join(blz or []).splitlines():
+            if woord.search(regel) and re.search(r"\d", regel):
+                print("   ", regel.strip()[:140])
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 5 and sys.argv[1] == "draai":
         draai(sys.argv[2], sys.argv[3], os.path.expanduser(sys.argv[4]), set(sys.argv[5:]) or None)
+    elif len(sys.argv) == 5 and sys.argv[1] == "naloop":
+        naloop(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 4 and sys.argv[1] == "verken":
         verken(sys.argv[2], sys.argv[3])
     else:
