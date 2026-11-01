@@ -655,6 +655,55 @@ def test_db3_maandag_bundelt_het_weekend():
         D.V.gisteren, D.DAG_GEGEVEN = oud
 
 
+DAGBRONSOORTEN = ("afspraak", "transcript", "zoom", "foto", "gezondheid")
+
+
+def agentnamen_uit_de_code():
+    """{naam: [bestanden]} van elke agent in de runner en op de Mac (NAAM = "..." of bord.Agent("..."))."""
+    import glob
+    import re
+    uit = {}
+    for pad in sorted(glob.glob(os.path.join(RUNNER, "*.py")) + glob.glob(os.path.join(RUNNER, "mac", "*.py"))):
+        bron = open(pad, encoding="utf-8").read()
+        for naam in re.findall(r'^NAAM = "([a-z0-9-]+)"', bron, re.M) + re.findall(r'bord\.Agent\("([a-z0-9-]+)"\)', bron):
+            uit.setdefault(naam, []).append(pad)
+    return uit
+
+
+def test_vol6_alleen_de_bronnen_van_de_dag():
+    """VOL-6 (T-0120): bundelen() bundelde elk item van de dag van elke agent en zette het op opgepakt, ook van agents
+    buiten de groep (werfverslag-voorbereider, archivaris, wagenpark-wacht, contracten-agent, ...): die verdwenen zonder
+    tegel. Tellen per van op het bord kon niet (de lezing van de bord-databank werd geweigerd); de witte lijst komt dus
+    uit de code: de agents die een bron van de dag klaarzetten (afspraak, transcript, Zoom-dagregel, foto, gezondheid),
+    plus het Commandocentrum, waarvan de barsten-en-scheurenketen ongewijzigd blijft (test_commandocentrum.py)."""
+    import re
+    namen = agentnamen_uit_de_code()
+    bron = {pad: open(pad, encoding="utf-8").read() for paden in namen.values() for pad in paden}
+    makers = {n for n, paden in namen.items() for pad in paden for s in DAGBRONSOORTEN
+              if f'"soort": "{s}"' in bron[pad] and re.search(rf'^NAAM = "{n}"', bron[pad], re.M)}
+    assert makers == {"agenda-wacht", "fathom-wacht", "plaud-wacht", "zoom-wacht", "icloud-wacht", "gezondheid-wacht"}, makers
+    assert "wagenpark-wacht" in namen and "werfverslag-voorbereider" in namen, "de afleiding vindt ook de anderen"
+    alle = [item(100 + i, n, "mehdi", "proef", f"proefitem van {n}", sleutel=DAG, uniek=f"proef:{n}")
+            for i, n in enumerate(sorted(namen))]
+    nb = bundelen(DAG, NepBord(alle))
+    opgepakt = {alle[kid - 100]["van"] for kid in nb.opgepakt}
+    assert opgepakt == makers | {"commandocentrum"}, sorted(opgepakt ^ (makers | {"commandocentrum"}))
+    tekst = "\n".join(b["inhoud"] for b in nb.bundels)
+    assert "proefitem van wagenpark-wacht" not in tekst and "proefitem van agenda-wacht" in tekst, tekst
+    # het geval van de meting: een item van De Wagenparkwacht met een datum als sleutel
+    wagen = item(1, "wagenpark-wacht", "mehdi", "liters", "Tankbeurt proefwagen", sleutel=DAG, inhoud={"datum": DAG})
+    nb = bundelen(DAG, NepBord([wagen, WERK]))
+    assert 1 not in nb.opgepakt and 3 in nb.opgepakt, nb.opgepakt
+    # B&S: een taak van het Commandocentrum en een afspraak met dossier gaan zoals voor VOL-6 mee; een cc-taak blijft open
+    bs = [item(11, "commandocentrum", "andere-agent", "taak", "Gewone taak", sleutel="47035", inhoud={"datum": DAG},
+               uniek="zelfstandige-taak"),
+          item(12, "agenda-wacht", "tkn", "afspraak", "Fictief bezoek", sleutel="47035", inhoud={"datum": DAG}, uniek="afspraak:test"),
+          item(13, "commandocentrum", "tkn", "impuls", "Voorbereiding", sleutel="47035", inhoud={"datum": DAG},
+               uniek="cc:afspraak:bs1:voorbereiding")]
+    nb = bundelen(DAG, NepBord(bs))
+    assert sorted(nb.opgepakt) == [11, 12], nb.opgepakt
+
+
 def test_db2_geen_vaste_plaudmelding():
     """DB-2 (T-0120): tot 01-11-2026 zette elke ochtendronde zonder meting de nood 'Plaud-opnames komen pas als de
     Plaud-routine op claude.ai draait' (wie mehdi). Die zei niets over de echte stand; De Plaudwacht meldt die zelf. Een

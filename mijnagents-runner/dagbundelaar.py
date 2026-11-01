@@ -122,6 +122,13 @@ def bundelen(voor_dag=None):
     # functie uit, met een nagebootst bord.
     from datetime import date, timedelta
     DAG = voor_dag or globals()["DAG"]   # DB-3 (T-0120): de ochtend bundelt ook de dagen sinds de vorige geslaagde ronde
+    # VOL-6 (T-0120): de witte lijst van bronnen. Alleen wie een bron van de dag klaarzet (afspraak, transcript,
+    # Zoom-dagregel, foto, gezondheid: de soorten waar deze functie op let) en het Commandocentrum, waarvan de keten voor
+    # barsten en scheuren ongewijzigd blijft. Tot 01-11-2026 bundelde ik elk item van de dag van elke agent en zette het
+    # op opgepakt, ook van agents buiten de groep (werfverslag, archivaris, wagenpark): die verdwenen zonder tegel.
+    # tests/test_dagbundelaar.py leidt deze lijst af uit de code.
+    bronnen = ("agenda-wacht", "fathom-wacht", "plaud-wacht", "zoom-wacht", "icloud-wacht", "gezondheid-wacht",
+               "commandocentrum")
 
     def is_datum(s):
         try:
@@ -186,6 +193,8 @@ def bundelen(voor_dag=None):
             continue  # mail volgt De Mailregisseur op; tot 19-10-2026 haalde ik hier elke nacht opvolgpunten weg (37 stuks)
         if it.get("soort") == "locatie" or it.get("van") == "locatie-wacht":
             continue  # het bewegingslogboek is alleen voor Mehdi; nooit in een bundel voor een afdeling
+        if it.get("van") not in bronnen:
+            continue  # VOL-6: geen bron van de dag; de agent die het klaarzette, sluit het zelf
         if it.get("soort") == "zoom":
             # De dagregel van De Zoomwacht: een regel in het Dagverslag, nooit een bundel. Nagekomen of herzien
             # (weer op klaar) en van de zes dagen ervoor: ook mee, zo komen vrijdag en zaterdag op maandag mee.
