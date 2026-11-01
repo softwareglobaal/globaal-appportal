@@ -2,69 +2,149 @@
 samenvatting van een pagina, geen letterlijke tekst; een citaat, een ondernemingsnummer of een mailadres moet de code
 letterlijk terugvinden, dus leest ze die pagina's zelf.
 
-Alleen http en https naar een openbaar adres op poort 80 of 443, ook na een omleiding: nooit de server zelf of het
-interne netwerk (een link komt van het model en dus van het web). Hoogstens MAX_BYTES per pagina, alleen HTML of tekst.
+Alleen http en https naar een openbaar adres op poort 80 of 443 (een link komt van het model en dus van het web): nooit
+de server zelf of het interne netwerk. De code zoekt het IP-adres een keer op, keurt het en verbindt met precies dat
+adres (Codex, controle 17: geen tweede opzoeking die naar binnen kan wijzen); https controleert het certificaat op de
+naam. Een omleiding volgt de code zelf, met dezelfde keuring, hoogstens MAX_OMLEIDINGEN keer. Hoogstens MAX_BYTES per
+pagina, alleen HTML of tekst, en hoogstens TIMEOUT seconden in totaal per pagina.
 """
+import http.client
 import ipaddress
 import re
 import socket
-import urllib.error
-import urllib.request
+import ssl
+import time
 from html.parser import HTMLParser
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 MAX_BYTES = 2_000_000
 TIMEOUT = 10
+MAX_OMLEIDINGEN = 4
 SOORTEN = ("text/html", "application/xhtml+xml", "text/plain")
+KOPPEN = {"User-Agent": "Mozilla/5.0 (compatible; mijnagents-bouw)",
+          "Accept": "text/html,application/xhtml+xml,text/plain;q=0.8", "Accept-Language": "nl-BE,nl;q=0.9,fr;q=0.5",
+          "Accept-Encoding": "identity", "Connection": "close"}
 BLOK = {"p", "div", "br", "li", "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "footer",
         "header", "address", "table", "ul", "ol", "dd", "dt", "nav", "main", "aside", "blockquote", "form", "label"}
 WEG = {"script", "style", "noscript", "svg", "template", "iframe", "head"}
 
 
-def openbaar(url, opzoeken=socket.getaddrinfo):
-    """Is dit een http(s)-adres op poort 80 of 443 waarvan elk IP-adres openbaar is?"""
+def _doel(url):
+    """(schema, host, poort, pad) van een http(s)-url op poort 80 of 443, of None."""
     try:
         d = urlsplit(str(url or ""))
         poort = d.port
     except ValueError:
-        return False
+        return None
     if d.scheme not in ("http", "https") or not d.hostname or poort not in (None, 80, 443):
-        return False
+        return None
+    pad = (d.path or "/") + (f"?{d.query}" if d.query else "")
+    return d.scheme, d.hostname, poort or (443 if d.scheme == "https" else 80), pad
+
+
+def openbaar_ip(host, poort, opzoeken=socket.getaddrinfo):
+    """Het eerste IP-adres van de host als elk adres openbaar is, anders None."""
     try:
-        adressen = {a[4][0] for a in opzoeken(d.hostname, poort or (443 if d.scheme == "https" else 80),
-                                              proto=socket.IPPROTO_TCP)}
-        return bool(adressen) and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in adressen)
+        adressen = [a[4][0] for a in opzoeken(host, poort, proto=socket.IPPROTO_TCP)]
+        if adressen and all(ipaddress.ip_address(a.split("%")[0]).is_global for a in adressen):
+            return adressen[0]
     except (OSError, ValueError):
-        return False
+        pass
+    return None
 
 
-class _Omleiding(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if not openbaar(newurl):
-            raise urllib.error.URLError("omleiding naar een adres dat niet openbaar is")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+def openbaar(url, opzoeken=socket.getaddrinfo):
+    """Is dit een http(s)-adres op poort 80 of 443 waarvan elk IP-adres openbaar is?"""
+    d = _doel(url)
+    return bool(d and openbaar_ip(d[1], d[2], opzoeken))
 
 
-def haal(url, timeout=TIMEOUT):
-    """De HTML van een openbare pagina; een OSError (ook URLError en HTTPError) als dat niet lukt of niet mag."""
-    if not openbaar(url):
-        raise OSError("geen openbaar http(s)-adres")
-    opener = urllib.request.build_opener(_Omleiding)
-    verzoek = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; mijnagents-bouw)",
-                                                   "Accept": "text/html,application/xhtml+xml,text/plain;q=0.8",
-                                                   "Accept-Language": "nl-BE,nl;q=0.9,fr;q=0.5"})
-    with opener.open(verzoek, timeout=timeout) as antwoord:
-        if antwoord.headers.get_content_type() not in SOORTEN:
-            raise OSError(f"geen webpagina ({antwoord.headers.get_content_type()})")
-        data = antwoord.read(MAX_BYTES)
-        charset = antwoord.headers.get_content_charset()
-    if not charset:
-        m = re.search(rb"<meta[^>]+charset=[\"']?([\w-]+)", data[:4000], re.I)
-        charset = m.group(1).decode("ascii", "replace") if m else "utf-8"
+class _VastHTTP(http.client.HTTPConnection):
+    def __init__(self, host, poort, ip, timeout):
+        super().__init__(host, poort, timeout=timeout)
+        self.ip = ip
+
+    def connect(self):
+        self.sock = socket.create_connection((self.ip, self.port), self.timeout)
+
+
+class _VastHTTPS(http.client.HTTPSConnection):
+    def __init__(self, host, poort, ip, timeout):
+        super().__init__(host, poort, timeout=timeout, context=ssl.create_default_context())
+        self.ip = ip
+
+    def connect(self):
+        ruw = socket.create_connection((self.ip, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(ruw, server_hostname=self.host)
+
+
+def _een_verzoek(url, rest, opzoeken, verbinding):
+    """(status, koppen, data of None): een GET naar het gekeurde IP-adres, zonder omleiding te volgen."""
+    d = _doel(url)
+    if not d:
+        raise OSError("geen http(s)-adres op poort 80 of 443")
+    schema, host, poort, pad = d
+    ip = openbaar_ip(host, poort, opzoeken)
+    if not ip:
+        raise OSError("geen openbaar adres")
+    begin = time.monotonic()
+    c = verbinding(schema, host, poort, ip, max(1.0, rest))
     try:
-        return data.decode(charset, errors="replace")
-    except LookupError:
-        return data.decode("utf-8", errors="replace")
+        c.request("GET", pad, headers=KOPPEN)
+        a = c.getresponse()
+        if a.status in (301, 302, 303, 307, 308):
+            return a.status, a, None
+        if a.status != 200:
+            raise OSError(f"http {a.status}")
+        if (a.getheader("Content-Type") or "").split(";")[0].strip().lower() not in SOORTEN:
+            raise OSError("geen webpagina")
+        stukken, grootte = [], 0
+        while grootte < MAX_BYTES:
+            if time.monotonic() - begin > rest:
+                raise OSError("te traag")
+            stuk = a.read(min(65536, MAX_BYTES - grootte))
+            if not stuk:
+                break
+            stukken.append(stuk)
+            grootte += len(stuk)
+        return a.status, a, b"".join(stukken)
+    finally:
+        c.close()
+
+
+def _verbinding(schema, host, poort, ip, timeout):
+    return (_VastHTTPS if schema == "https" else _VastHTTP)(host, poort, ip, timeout)
+
+
+def haal(url, timeout=TIMEOUT, opzoeken=socket.getaddrinfo, verbinding=_verbinding):
+    """De HTML van een openbare pagina; een OSError als dat niet lukt of niet mag, ook binnen een omleiding."""
+    einde = time.monotonic() + timeout
+    for _ in range(MAX_OMLEIDINGEN + 1):
+        rest = einde - time.monotonic()
+        if rest <= 0:
+            raise OSError("te traag")
+        try:
+            status, a, data = _een_verzoek(url, rest, opzoeken, verbinding)
+        except http.client.HTTPException as e:      # een kapot antwoord is geen OSError
+            raise OSError(f"kapot antwoord ({type(e).__name__})") from None
+        if data is None:
+            nieuw = a.getheader("Location")
+            if not nieuw:
+                raise OSError("omleiding zonder adres")
+            url = urljoin(url, nieuw)
+            continue
+        charset = None
+        m = re.search(r"charset=[\"']?([\w-]+)", a.getheader("Content-Type") or "", re.I)
+        if m:
+            charset = m.group(1)
+        if not charset:
+            m = re.search(rb"<meta[^>]+charset=[\"']?([\w-]+)", data[:4000], re.I)
+            charset = m.group(1).decode("ascii", "replace") if m else "utf-8"
+        try:
+            return data.decode(charset, errors="replace")
+        except LookupError:
+            return data.decode("utf-8", errors="replace")
+    raise OSError("te veel omleidingen")
 
 
 def _cf_mail(hexa):

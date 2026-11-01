@@ -27,6 +27,7 @@ from . import scheiding as S
 MAX_ZOEKEN = 5
 MAX_LEZEN = 12
 MAX_BEURTEN = 25
+MAX_GEREEDSCHAP = 2 * (MAX_ZOEKEN + MAX_LEZEN)    # harde grens: daarboven stopt de code Claude Code (controle 17)
 PER_FIRMA = 4
 MAX_SITES = 10
 LEESTIJD = 90          # seconden die na het model overblijven voor de pagina's en de KBO
@@ -304,6 +305,16 @@ def kbo_zetel(nummer, gelezen):
     return None
 
 
+def eigen_paginas(f, gelezen):
+    """{url: tekst} van de pagina's die bij deze firma horen: wat de code voor haar las (f["_paginas"], lees_sites);
+    zonder die lijst alle gelezen pagina's (de functies hieronder houden dan alleen de eigen site over)."""
+    if not isinstance(gelezen, dict):
+        return {}
+    if isinstance(f.get("_paginas"), list):
+        return {u: gelezen[u] for u in f["_paginas"] if u in gelezen}
+    return gelezen
+
+
 def sleutel(f):
     """Om dubbels weg te halen: het ondernemingsnummer, anders het domein van de website."""
     if f.get("ondernemingsnummer"):
@@ -321,28 +332,34 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer, kbo=None):
     met_tekst = []
     for f in gelezen_firmas:     # Codex X6 (controle 2): een gelezen pagina zonder tekst bewijst niets
         url = O.schoon_url(f.get("url"))
+        eigen = eigen_paginas(f, gelezen)
         if host(url) == KBO:     # Codex X2 (controle 3): de KBO is geen eigen pagina van de firma
             afgewezen.append({"aanbod": f, "redenen": ["alleen een KBO-pagina, geen eigen pagina"]})
-        elif len((gelezen.get(url, "") if isinstance(gelezen, dict) else "").strip()) < MIN_TEKST:
+        elif sum(len((t or "").strip()) for t in eigen.values()) < MIN_TEKST:   # controle 17: over al haar pagina's
             afgewezen.append({"aanbod": f, "redenen": ["pagina zonder leesbare tekst"]})
         else:
             met_tekst.append(f)
-    gelezen_firmas = met_tekst
     uit = {"goed": [], "na_te_kijken": [], "buiten": [], "afgewezen": afgewezen}
-    gezien = set()
-    for f in gelezen_firmas:
+    kandidaten = []
+    for f in met_tekst:
+        eigen = eigen_paginas(f, gelezen)
         f["ondernemingsnummer"] = btw_geldig(f.get("ondernemingsnummer"))
         door_code = f["ondernemingsnummer"] in (kbo or {})      # Codex 15, punt 1: dan telt alleen wat de code las
         zelf = (kbo or {}).get(f["ondernemingsnummer"]) or {}
         f["kbo_actief"] = zelf.get("actief") if door_code else kbo_actief(f["ondernemingsnummer"], gelezen)
         # Codex X2 (controle 6): de site hoort bij de onderneming als het nummer op een gelezen pagina van die site
         # staat (een Belgische firmasite moet het tonen); anders is de site niet bewezen en komt ze bij na te kijken
-        f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), gelezen)
-                             and naam_en_werk_op_site(f, gelezen))
-        contact_van_site(f, gelezen)
+        f["site_bewezen"] = (nummer_op_site(f["ondernemingsnummer"], f.get("url"), eigen)
+                             and naam_en_werk_op_site(f, eigen))
+        contact_van_site(f, eigen)
         if f["kbo_actief"] is False:
             uit["afgewezen"].append({"aanbod": f, "redenen": ["stopgezet volgens de KBO"]})
             continue
+        kandidaten.append((f, zelf, door_code))
+    # Codex, controle 17: bij een dubbel (zelfde nummer of domein) blijft de best bewezen kandidaat, niet de eerste
+    kandidaten.sort(key=lambda k: (not k[0]["site_bewezen"], k[0]["kbo_actief"] is not True))
+    gezien = set()
+    for f, zelf, door_code in kandidaten:
         k = sleutel(f)
         if k in gezien:
             continue
@@ -386,20 +403,28 @@ def lees_sites(firmas, gehaald, haal, deadline=None, werkers=6):
               for x in [f.get("url")] + (f.get("paginas") if isinstance(f.get("paginas"), list) else [])] + list(gehaald or []):
         origineel.setdefault(O.schoon_url(u), str(u or "").strip())
     gehaald = [O.schoon_url(u) for u in gehaald or []]
+    firmas = [f for f in firmas or [] if isinstance(f, dict)][:MAX_SITES]
+    # Codex, controle 17: delen firma's een site (een gids), dan krijgt elke firma alleen haar eigen pagina's en niets uit
+    # wat het model daar verder opende; elke pagina hoort bij hoogstens een firma (f["_paginas"]).
+    per_host = {}
+    for f in firmas:
+        per_host[host(O.schoon_url(f.get("url")))] = per_host.get(host(O.schoon_url(f.get("url"))), 0) + 1
     lijst, gezien = [], set()
-    for f in [f for f in firmas or [] if isinstance(f, dict)][:MAX_SITES]:
+    for f in firmas:
         eigen = O.schoon_url(f.get("url"))
+        f["_paginas"] = []
         if not eigen:
             continue
         extra = [O.schoon_url(p) for p in (f.get("paginas") if isinstance(f.get("paginas"), list) else [])]
         per = []
-        for u in [eigen] + extra + gehaald:
+        for u in [eigen] + extra + (gehaald if per_host[host(eigen)] == 1 else []):
             if u and host(u) == host(eigen) and u not in per:
                 per.append(u)
         for u in per[:PER_FIRMA]:
             if u not in gezien:
                 gezien.add(u)
                 lijst.append(u)
+                f["_paginas"].append(u)
 
     def een(u):
         if deadline and time.monotonic() + WP.TIMEOUT > deadline:
@@ -427,7 +452,7 @@ def zoek(werkwijze, werk, gemeente, straal_km, soort, vandaag="", deadline=None,
         haal = webpagina.haal
     systeem, gebruiker = opdracht(werkwijze, werk, gemeente, straal_km, soort, vandaag, omvang, kennis)
     uit = vraag(systeem, gebruiker, tools=("WebSearch", "WebFetch"), timeout=max(60.0, deadline - time.monotonic() - LEESTIJD),
-                max_beurten=MAX_BEURTEN)
+                max_beurten=MAX_BEURTEN, max_gereedschap=MAX_GEREEDSCHAP)
     gehaald = [str((inv or {}).get("url") or "") for naam, inv in uit["gereedschap"] if naam == "WebFetch"]
     gegevens = O.json_uit(uit["tekst"])
     gelezen = lees_sites((gegevens or {}).get("firmas"), gehaald, haal, deadline)

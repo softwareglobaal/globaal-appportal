@@ -148,7 +148,7 @@ def een_vraag(r, tekst, vandaag, deadline):
         return 0
     gemeente = v["gemeente"] = officieel
     try:
-        eigen = E.in_mappen(firma, v["werk"])
+        eigen = E.in_mappen(firma, v["werk"], deadline=min(deadline, time.monotonic() + 60))
         r.bron(f"eigen mappen {S.FIRMANAMEN[firma]}", f"{len(eigen)} treffers onder {E.BASIS[firma]}")
     except Exception as e:  # noqa: BLE001  de eigen mappen zijn een aanvulling; het webzoeken gaat door
         eigen = []
@@ -235,8 +235,8 @@ def werk(r, hand_vraag=None, droog=False, begin=None):
             klaar += een_vraag(r, tekst, vandaag, deadline)
         except claude_abonnement.Fout as e:
             ag.log("aannemersvraag", "fout", f"vraag {Q.vingerafdruk(tekst, vandaag)}: {str(e)[:300]}")
-            if e.aanmelden:     # de vraag blijft klaarstaan tot Claude op de VM weer aangemeld is
-                r.nood(claude_abonnement.AANMELDEN_NOOD, wie="mehdi")
+            if e.aanmelden or e.limiet:     # de vraag blijft klaarstaan tot Claude weer kan, zonder extra verbruik
+                r.nood(claude_abonnement.AANMELDEN_NOOD if e.aanmelden else claude_abonnement.LIMIET_NOOD, wie="mehdi")
                 break
             r.nood("Aannemersvraag mislukt bij Claude op het abonnement", wie="claude-code")
         except Exception as e:  # noqa: BLE001  een mislukte vraag komt niet vanzelf terug

@@ -10,6 +10,7 @@ met alleen firmacode, partij_id, vak, regio, bewijs en datum).
 """
 import json
 import re
+import time
 
 from . import scheiding as S
 
@@ -58,8 +59,9 @@ class Onvolledig(list):
     volledig = True
 
 
-def _dropbox_zoek(query, pad, rpc=None):
-    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12)."""
+def _dropbox_zoek(query, pad, rpc=None, deadline=None):
+    """Treffers van files/search_v2 met vervolgpagina's (search/continue_v2), hoogstens MAX_PAGINAS (Codex X12) en niet
+    na de deadline (time.monotonic, controle 17): dan zegt het verslag dat er meer zijn."""
     if rpc is None:
         import bronnen
         rpc = bronnen._rpc
@@ -72,16 +74,18 @@ def _dropbox_zoek(query, pad, rpc=None):
                 treffers.append({"soort": meta.get(".tag"), "naam": meta.get("name", ""), "pad": meta["path_display"]})
         if not (uit or {}).get("has_more") or not (uit or {}).get("cursor"):
             return treffers
+        if deadline and time.monotonic() > deadline:
+            break
         uit = rpc("files/search/continue_v2", {"cursor": uit["cursor"]})
     treffers.volledig = False
     return treffers
 
 
-def in_mappen(firma, werk, zoek=None, maximum=12):
+def in_mappen(firma, werk, zoek=None, maximum=12, deadline=None):
     """[{naam, pad, project}] uit de offerte- en onderaannemersmappen van deze firma, met het werk als heel woord in de
     naam. zoek(query, pad) is te vervangen in een test. Een map die onder de andere firma ligt, telt nooit mee (ook niet
     als de zoekfunctie ze teruggeeft)."""
-    zoek = zoek or _dropbox_zoek
+    zoek = zoek or (lambda q, p: _dropbox_zoek(q, p, deadline=deadline))
     basis = BASIS[firma]
     gezien, uit = set(), Onvolledig()
     for woord in zoekwoorden(werk):

@@ -748,10 +748,12 @@ from bouw import webpagina as WP  # noqa: E402
 _oud_env = dict(os.environ)
 os.environ.update({"ANTHROPIC_API_KEY": "sk-ant-api-nep", "SALES_ANTHROPIC_API_KEY": "x", "ANTHROPIC_AUTH_TOKEN": "y",
                    "KENNIS_DSN": "postgres://geheim", "PATH": "/usr/bin"})
-env = CA.omgeving("sk-ant-oat01-nep")
+env = CA.omgeving("sk-ant-oat01-nep", "/tmp/thuis-nep")
 check("het kindproces krijgt geen API-sleutel en geen ander geheim", not any(
     k in env for k in ("ANTHROPIC_API_KEY", "SALES_ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "KENNIS_DSN"))
     and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat01-nep" and env.get("PATH") == "/usr/bin")
+check("controle 17: een eigen lege HOME, geen instellingen of login van de server", env["HOME"] == "/tmp/thuis-nep"
+      and env["CLAUDE_CONFIG_DIR"].startswith("/tmp/thuis-nep") and env["XDG_CONFIG_HOME"].startswith("/tmp/thuis-nep"))
 os.environ.clear()
 os.environ.update(_oud_env)
 cmd = CA.opdracht("systeem", ("WebSearch", "WebFetch"), "opus", 25)
@@ -761,58 +763,95 @@ check("Claude Code zonder CLAUDE.md, plugins, MCP of andere tools", all(x in cmd
 cmd0 = CA.opdracht("systeem", (), "opus", 2)
 check("zonder gereedschap: --tools leeg en niets toegelaten", cmd0[cmd0.index("--tools") + 1] == "" and "--allowedTools" not in cmd0)
 
-_runs = []
-_echt_run = CA.subprocess.run
-
-
-def _run_nep(uitvoer, code=0, stderr=""):
-    def run(cmd, **kw):
-        _runs.append((cmd, kw))
-        return subprocess.CompletedProcess(cmd, code, uitvoer, stderr)
-    return run
-
-
+INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5-5", "apiKeySource": "none"}
+LIMIET_OK = {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": False}}
+WS = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebSearch", "input": {"query": "dak"}}]}}
+WF = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch",
+                                                   "input": {"url": "https://www.dakeen.voorbeeld.com/"}}]}}
+KLAAR = {"type": "result", "subtype": "success", "is_error": False, "result": "klaar", "num_turns": 3,
+         "usage": {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}}
+_NEP = r"""import json, os, sys, time
+rec, uit, code = sys.argv[1], sys.argv[2], int(sys.argv[3])
+json.dump({"env": dict(os.environ), "cwd": os.getcwd(), "invoer": sys.stdin.read()}, open(rec, "w"))
+for regel in open(uit):
+    if regel.strip() == "SLAAP":
+        time.sleep(30)
+    print(regel.rstrip("\n"), flush=True)
+sys.exit(code)
+"""
+_echt_opdracht = CA.opdracht
 with tempfile.TemporaryDirectory() as _d:
     leeg, vol = os.path.join(_d, "leeg.env"), os.path.join(_d, "vol.env")
     open(leeg, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\n")
     open(vol, "w").write("ANTHROPIC_API_KEY=sk-ant-api-nep\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-nep\n")
-    CA.subprocess.run = _run_nep("")
+    nep, rec, uitf = os.path.join(_d, "nep.py"), os.path.join(_d, "rec.json"), os.path.join(_d, "uit.txt")
+    open(nep, "w").write(_NEP)
+
+    def nep_claude(regels, code=0):
+        open(uitf, "w").write("\n".join(r if isinstance(r, str) else json.dumps(r) for r in regels) + "\n")
+        CA.opdracht = lambda *a, **k: [sys.executable, nep, rec, uitf, str(code)]
+
+    def fout_van(**kw):
+        try:
+            CA.vraag("s", "g", bron=vol, **kw)
+            return None
+        except CA.Fout as e:
+            return e
+
+    _gestart = []
+    _echt_draai = CA.draai
+    CA.draai = lambda *a, **k: _gestart.append(a) or ("", "", 0, None)
+    e = None
     try:
         CA.vraag("s", "g", bron=leeg)
-        check("zonder token start niets en valt niets terug op de API", False)
-    except CA.Fout as e:
-        check("zonder token start niets en valt niets terug op de API", e.aanmelden and not _runs)
-    stroom = "\n".join(json.dumps(x) for x in [
-        {"type": "system", "subtype": "init", "model": "claude-opus-5-5"},
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebSearch", "input": {"query": "dak"}}]}},
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch",
-                                                       "input": {"url": "https://www.dakeen.voorbeeld.com/"}}]}},
-        {"type": "result", "subtype": "success", "is_error": False, "result": "klaar", "num_turns": 3,
-         "usage": {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}}])
-    CA.subprocess.run = _run_nep(stroom)
+    except CA.Fout as x:
+        e = x
+    check("zonder token start niets en valt niets terug op de API", e is not None and e.aanmelden and not _gestart)
+    CA.draai = _echt_draai
+
+    nep_claude([INIT, LIMIET_OK, WS, WF, KLAAR])
     uit = CA.vraag("systeem", "de vraag", tools=("WebSearch", "WebFetch"), bron=vol)
-    cmd, kw = _runs[-1]
-    check("de vraag gaat via stdin, in een lege werkmap, met alleen het token", kw["input"] == "de vraag"
-          and "claude-abonnement-" in kw["cwd"] and "ANTHROPIC_API_KEY" not in kw["env"]
-          and kw["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-nep")
+    r = json.load(open(rec))
+    check("de vraag gaat via stdin, in een lege werkmap, met alleen het token", r["invoer"] == "de vraag"
+          and "claude-abonnement-" in r["cwd"] and "ANTHROPIC_API_KEY" not in r["env"]
+          and r["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-nep" and "claude-thuis-" in r["env"]["HOME"])
     check("antwoord, gereedschap, tokens en model uit de stroom", uit["tekst"] == "klaar" and uit["tokens"] == 115
           and uit["beurten"] == 3 and uit["model"] == "claude-opus-5-5"
           and [n for n, _ in uit["gereedschap"]] == ["WebSearch", "WebFetch"])
-    CA.subprocess.run = _run_nep(json.dumps({"type": "result", "subtype": "success", "is_error": True,
-                                             "result": "Invalid API key sk-ant-oat01-nep · Please run /login"}), code=1)
-    try:
-        CA.vraag("s", "g", bron=vol)
-        check("een geweigerde login vraagt Mehdi om aan te melden, zonder het token te tonen", False)
-    except CA.Fout as e:
-        check("een geweigerde login vraagt Mehdi om aan te melden, zonder het token te tonen", e.aanmelden
-              and "sk-ant-oat01-nep" not in str(e))
-    CA.subprocess.run = _run_nep(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True}), code=1)
-    try:
-        CA.vraag("s", "g", bron=vol)
-        check("te veel beurten is een fout, geen half antwoord", False)
-    except CA.Fout as e:
-        check("te veel beurten is een fout, geen half antwoord", not e.aanmelden)
-CA.subprocess.run = _echt_run
+    _t0 = time.monotonic()
+    nep_claude([dict(INIT, apiKeySource="ANTHROPIC_API_KEY"), "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 17: meldt Claude Code een API-sleutel, dan stopt de code voor de eerste vraag", e is not None
+          and "abonnement" in str(e) and time.monotonic() - _t0 < 10)
+    nep_claude([dict(INIT, apiKeySource="apiKeyHelper"), "SLAAP", KLAAR])
+    check("controle 17: ook een apiKeyHelper telt als API-sleutel", fout_van() is not None)
+    _t0 = time.monotonic()
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "isUsingOverage": True}},
+                "SLAAP", KLAAR])
+    e = fout_van()
+    check("controle 17: extra verbruik boven het abonnement stopt het proces meteen", e is not None and e.limiet
+          and time.monotonic() - _t0 < 10)
+    nep_claude([INIT, {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}}, "SLAAP", KLAAR])
+    e = fout_van()
+    check("een bereikte limiet laat de vraag wachten", e is not None and e.limiet)
+    nep_claude([INIT, WS, WS, WS, "SLAAP", KLAAR])
+    e = fout_van(max_gereedschap=2)
+    check("controle 17: een harde grens op zoek- en leesbeurten", e is not None and "zoek- of leesbeurten" in str(e))
+    _t0 = time.monotonic()
+    nep_claude([INIT, "SLAAP", KLAAR])
+    e = fout_van(timeout=2)
+    check("na de timeout stopt de code het proces", e is not None and "binnen 2 s" in str(e) and time.monotonic() - _t0 < 10)
+    nep_claude([INIT, {"type": "result", "subtype": "success", "is_error": True,
+                       "result": "Invalid API key sk-ant-oat01-nep · Please run /login"}], code=1)
+    e = fout_van()
+    check("een geweigerde login vraagt Mehdi om aan te melden, zonder het token te tonen", e is not None and e.aanmelden
+          and "sk-ant-oat01-nep" not in str(e))
+    nep_claude([INIT, {"type": "result", "subtype": "error_max_turns", "is_error": True}], code=1)
+    e = fout_van()
+    check("te veel beurten is een fout, geen half antwoord", e is not None and not e.aanmelden and not e.limiet)
+CA.opdracht = _echt_opdracht
+check("bewaking: een gewone start en een toegelaten limiet stoppen niets", CA.bewaking(json.dumps(INIT), {}) is None
+      and CA.bewaking(json.dumps(LIMIET_OK), {}) is None and CA.bewaking("geen json", {}) is None)
 
 _hier = Path(__file__).resolve().parents[1]
 _bronnen = [_hier / "aannemerszoeker.py", _hier / "offertevergelijker.py"] + sorted((_hier / "bouw").glob("*.py"))
@@ -831,6 +870,70 @@ for _url, _ip in (("http://127.0.0.1:3022/api", "127.0.0.1"), ("http://localhost
                   ("https://dakeen.voorbeeld.com:8443/", "93.184.216.34"), ("ftp://dakeen.voorbeeld.com/", "93.184.216.34"),
                   ("file:///etc/passwd", "93.184.216.34")):
     check(f"webpagina: {_url} mag niet", not WP.openbaar(_url, _dns(_ip)))
+
+
+class _Antw:
+    def __init__(self, status=200, soort="text/html; charset=utf-8", data=b"<p>hallo</p>", plaats=None, traag=0):
+        self.status, self.soort, self.data, self.plaats, self.traag = status, soort, data, plaats, traag
+
+    def getheader(self, naam):
+        return {"Content-Type": self.soort, "Location": self.plaats}.get(naam)
+
+    def read(self, n):
+        time.sleep(self.traag)
+        stuk, self.data = self.data[:n], self.data[n:]
+        return stuk
+
+
+def _web(antwoorden, verbonden):
+    class Verbinding:
+        def __init__(self, schema, host, poort, ip, timeout):
+            verbonden.append((host, ip))
+
+        def request(self, *a, **k):
+            pass
+
+        def getresponse(self):
+            return antwoorden.pop(0)
+
+        def close(self):
+            pass
+    return Verbinding
+
+
+_vb = []
+_dnsrij = iter(["93.184.216.34", "10.0.0.5"])
+WP.haal("https://dakeen.voorbeeld.com/", opzoeken=lambda h, p, **k: [(2, 1, 6, "", (next(_dnsrij), p))],
+        verbinding=_web([_Antw()], _vb))
+check("controle 17: de code verbindt met het gekeurde adres, een tweede opzoeking telt niet", _vb == [("dakeen.voorbeeld.com",
+                                                                                                         "93.184.216.34")])
+
+
+def _dns_naar(tabel):
+    return lambda host, poort, **kw: [(2, 1, 6, "", (tabel[host], poort))]
+
+
+_dnst = {"dakeen.voorbeeld.com": "93.184.216.34", "intern.voorbeeld.com": "10.0.0.5"}
+for _naam, _antw, _verwacht in (
+        ("een omleiding naar binnen", [_Antw(302, plaats="http://intern.voorbeeld.com/")], "geen openbaar adres"),
+        ("te veel omleidingen", [_Antw(301, plaats="/a") for _ in range(WP.MAX_OMLEIDINGEN + 1)], "te veel omleidingen"),
+        ("een pdf is geen webpagina", [_Antw(soort="application/pdf")], "geen webpagina"),
+        ("een fout van de server", [_Antw(500)], "http 500")):
+    try:
+        WP.haal("https://dakeen.voorbeeld.com/", opzoeken=_dns_naar(_dnst), verbinding=_web(_antw, []))
+        check(f"webpagina: {_naam} wordt geweigerd", False)
+    except OSError as e:
+        check(f"webpagina: {_naam} wordt geweigerd", _verwacht in str(e), str(e))
+_t0 = time.monotonic()
+try:
+    WP.haal("https://dakeen.voorbeeld.com/", timeout=0.5, opzoeken=_dns_naar(_dnst),
+            verbinding=_web([_Antw(data=b"x" * 300000, traag=0.2)], []))
+    check("controle 17: een trage pagina stopt na de totale tijd", False)
+except OSError as e:
+    check("controle 17: een trage pagina stopt na de totale tijd", "te traag" in str(e) and time.monotonic() - _t0 < 3)
+check("een omleiding binnen de site wordt gevolgd", WP.haal("http://dakeen.voorbeeld.com/", opzoeken=_dns_naar(_dnst),
+      verbinding=_web([_Antw(301, plaats="https://dakeen.voorbeeld.com/nl"), _Antw(data=b"<p>welkom</p>")], [])) ==
+      "<p>welkom</p>")
 _html = ("<html><head><title>x</title><style>.a{}</style></head><body><script>var geheim=1</script><nav>Menu</nav>"
          "<p>Wij leggen&nbsp;EPDM op platte daken.</p><footer>BTW BE 0123.456.749 <a href='mailto:info@dakeen.voorbeeld.com'>"
          "mail ons</a> <span data-cfemail='" + bytes([0x42] + [ord(c) ^ 0x42 for c in "jo@dakeen.voorbeeld.com"]).hex()
@@ -895,6 +998,39 @@ check("een firma met citaat en nummer op de pagina die de code las, staat klaar"
 check("een citaat dat niet op de pagina staat die de code las, bewijst niets", not _drie.get("site_bewezen"))
 check("het model hoort dat de code de pagina's zelf leest", "De code leest die pagina's daarna zelf" in Z.VORM
       and "web_fetch" not in Z.VORM)
+
+_gids = {"https://gids.voorbeeld.com/x": "<p>Dak X legt EPDM op platte daken in de regio Leuven.</p>" * 3,
+         "https://gids.voorbeeld.com/y": "<p>Dak Y, BTW BE 0123.456.749, dakwerken.</p>" * 3}
+_fg = [{"naam": "Dak X", "url": "https://gids.voorbeeld.com/x", "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Dak X legt EPDM op platte daken in de regio Leuven."},
+       {"naam": "Dak Y", "url": "https://gids.voorbeeld.com/y"}]
+_lg = Z.lees_sites(_fg, ["https://gids.voorbeeld.com/z"], lambda u: _gids.get(u, "<p>andere firma</p>" * 20))
+check("controle 17: op een gedeelde gids leest de code alleen de eigen pagina van elke firma", "https://gids.voorbeeld.com/z"
+      not in _lg and _fg[0]["_paginas"] == ["https://gids.voorbeeld.com/x"])
+_kg = Z.keur(_fg, _lg, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+_x = next(f for f in _kg["goed"] + _kg["na_te_kijken"] if f["naam"] == "Dak X")
+check("controle 17: het nummer van een andere firma op dezelfde gids bewijst niets", not _x["site_bewezen"] and _x not in _kg["goed"])
+_kort = {"https://kort.voorbeeld.com": "Welkom", "https://kort.voorbeeld.com/over":
+         "Kort BV legt EPDM op platte daken. BTW BE 0123.456.749. " * 3}
+_fk = [{"naam": "Kort BV", "url": "https://kort.voorbeeld.com/", "_paginas": list(_kort), "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Kort BV legt EPDM op platte daken."}]
+_kk = Z.keur(_fk, _kort, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+check("controle 17: een korte homepage met een goede tweede pagina wordt niet geweerd", [f["naam"] for f in _kk["goed"]] == ["Kort BV"])
+_db = {"https://een.voorbeeld.com": "<p>Een</p>" * 30, "https://twee.voorbeeld.com":
+       "Dak Twee BV legt EPDM op platte daken. BTW BE 0123.456.749. " * 3}
+_fd = [{"naam": "Dak Een", "url": "https://een.voorbeeld.com/", "ondernemingsnummer": "0123.456.749", "bewijs": "niets"},
+       {"naam": "Dak Twee BV", "url": "https://twee.voorbeeld.com/", "ondernemingsnummer": "0123.456.749",
+        "bewijs": "Dak Twee BV legt EPDM op platte daken."}]
+_kd = Z.keur(_fd, _db, {"lat": 50.88, "lon": 4.70}, 25, lambda p: {"lat": 50.9, "lon": 4.7},
+             {"0123.456.749": {"actief": True, "plaats": "3000 Leuven"}})
+check("controle 17: bij een dubbel blijft de best bewezen kandidaat", [f["naam"] for f in _kd["goed"]] == ["Dak Twee BV"]
+      and not _kd["na_te_kijken"])
+_dbp = []
+E._dropbox_zoek("dak", "/x", rpc=lambda m, b: _dbp.append(m) or {"matches": [], "has_more": True, "cursor": "c"},
+                deadline=time.monotonic() - 1)
+check("controle 17: het zoeken in Dropbox stopt na de deadline", len(_dbp) == 1)
 
 print("\nEigen mappen: hele woorden, alleen offertemappen (gemeten 01-11-2026)")
 for _naam in ("Fastening Plates", "Platane 6Platane_6.rfa", "04 Percelen Informatie Platform", "Offerte koper dak Platteau.pdf",
