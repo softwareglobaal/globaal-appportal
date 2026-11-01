@@ -846,6 +846,30 @@ def test_nepmail_nooit_uitschrijven_ook_niet_na_helemaal_weg():
         postvak.postvak = oud_pv
 
 
+def test_zonder_oplichtingslijst_niemand_uitschrijven():
+    """MAIL-1, Codex-toets 3: is de [oplichting]-lijst niet leesbaar, dan kan het uitschrijven nepmail niet herkennen
+    (een ondertekende mail die een merk claimt). Dan schrijft het die ronde in dat postvak niemand uit."""
+    import uitschrijven as U
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    brieven = [_nieuwsbrief(van_naam="Microsoft 365 nieuws"),
+               _nieuwsbrief(van_naam="Microsoft 365 nieuws", message_id="<o@brand.be>",
+                            datum=datetime.fromisoformat("2026-10-01T10:00:00+02:00"))]
+    oud_pv, oud_opl = postvak.postvak, postvak.oplichting_regels
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+        assert not uit, "met de lijst: nepmail, nooit uitschrijven"
+        postvak.oplichting_regels = lambda adres: None
+        uit, redenen = U.kandidaten(cfg, nu, frozenset(), frozenset(), {}, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: brieven, inst=inst)
+        assert not uit and redenen.get("oplichtingslijst niet leesbaar: niemand uitschrijven") == 1, redenen
+    finally:
+        postvak.postvak, postvak.oplichting_regels = oud_pv, oud_opl
+
+
 def test_een_aanvraag_wordt_nooit_uitgeschreven_of_als_oplichting_opgeruimd():
     """MAIL-1, Codex-toets 2: "Aanvraag: barsten en scheuren" is in de wacht nooit nepmail; dan mag het uitschrijven zo'n
     terugkerende afzender ook niet raken, en mogen de sorteerregels haar niet als oplichting naar Opgeruimd zetten (de
@@ -879,6 +903,11 @@ def test_een_aanvraag_wordt_nooit_uitgeschreven_of_als_oplichting_opgeruimd():
                             r, False, None)[1] != "oplichting", bestand
         assert s.bestemming(rij("x@anderdomein.test", "De Watergroep", "Terugbetaling"), r, False, None) == \
             (s.OPGERUIMD, "oplichting"), bestand
+        # Codex-toets 3: ook niet als "nieuwe reclame" omdat de mail een List-Unsubscribe-kop draagt
+        aanvraag = dict(rij("formulier@webdienst.test", "Webformulier", "Aanvraag: barsten en scheuren"), unsub=True)
+        assert s.bestemming(aanvraag, r, True, None)[1] != "nieuwe reclame", bestand
+        assert s.bestemming(dict(rij("news@winkelproef.test", "Winkel", "Najaarsactie"), unsub=True), r, True, None)[1] \
+            == "nieuwe reclame", "gewone reclame blijft opgeruimd"
 
 
 def test_mail_zonder_datum_staat_in_het_werkverslag():

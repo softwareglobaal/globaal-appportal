@@ -135,7 +135,8 @@ def bestemming(rij, regels, nieuwe_reclame, archief_grens):
     for suf, m in regels["suffix"]:
         if adres.endswith(suf) or adres.endswith("@" + suf[1:]):
             return m, "domein"
-    if nieuwe_reclame and rij["unsub"] and not TRANSACTIE.search(rij["subject"] or ""):
+    if (nieuwe_reclame and rij["unsub"] and not TRANSACTIE.search(rij["subject"] or "")
+            and not AANVRAAG_ONDERWERP.search(rij["subject"] or "")):  # een aanvraag is nooit reclame (Codex-toets 3)
         return OPGERUIMD, "nieuwe reclame"
     if archief_grens and rij["datum"] and rij["datum"] < archief_grens:
         return regels["archief"]["map"].replace("{jaar}", str(rij["datum"].year)), "archief"

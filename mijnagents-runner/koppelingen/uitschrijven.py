@@ -577,6 +577,9 @@ def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=
         alleen = _alleen_lezen(adres, mb)
         berichten = lezen(mb, mappen_voor(adres, mb, inst), sinds)
         opl = postvak.oplichting_regels(adres)  # nepmail is verdacht en wordt nooit uitgeschreven (MAIL-1)
+        if opl is None:  # zonder de lijst herken ik nepmail niet: dan deze ronde niemand (Codex-toets 3)
+            tel("oplichtingslijst niet leesbaar: niemand uitschrijven")
+            continue
         per_van = {}
         for b in berichten:
             per_van.setdefault(b["van"], []).append(b)
