@@ -565,12 +565,13 @@ def kandidaten(cfg, nu, bekend, veilig, regels, staat, lezen=koppen_lezen, inst=
             tel("postvak zonder uitschrijfkoppen (hotmail van de Mac)")
             continue
         berichten = lezen(mb, mappen_voor(adres, mb, inst), sinds)
+        opl = postvak.oplichting_regels(adres)  # nepmail is verdacht en wordt nooit uitgeschreven (MAIL-1)
         per_van = {}
         for b in berichten:
             per_van.setdefault(b["van"], []).append(b)
         for b in berichten:
             regel = postvak.regel_voor(regels, adres, b["van"])
-            soort, _waarom = postvak.trieer(b, eigen, bekend, regel)
+            soort, _waarom = postvak.trieer(b, eigen, bekend, regel, opl)
             url, reden = beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerend(per_van[b["van"]], nu))
             if not url:
                 tel(reden)

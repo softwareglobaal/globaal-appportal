@@ -16,7 +16,8 @@ De wachtwoorden blijven in ~/post-config/mailboxen.yaml; deze module leest ze da
 schrijft ze nergens heen.
 
 De soorten, van stil naar luid:
-  verdacht  lijkt phishing (bank of overheid vanaf een gratis adres): alleen geteld
+  verdacht  lijkt phishing (bank of overheid vanaf een gratis adres, of een naam die een firma of dienst claimt op
+            een domein dat er niet bij hoort, zie nepmail): alleen geteld
   rommel    reclame, nieuwsbrief, afmeldbevestiging: alleen geteld
   koud      een mens die we niet kennen, zonder aanvraag (koude verkoop): alleen geteld
   melding   automatisch bericht zonder gevolg (pakje, bestelling): alleen geteld
@@ -109,6 +110,12 @@ GRATIS = ("gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "live.com", "i
 GRATIS_DIENSTEN = ("gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "outlook.com", "outlook.be", "live.com",
                    "live.be", "yahoo.com", "icloud.com", "me.com", "telenet.be", "skynet.be", "proximus.be")
 VERDACHTE_NAMEN = ["minfin", "fod financi", "belastingdienst", "kbc", "belfius", "ing ", "itsme", "politie", "bpost"]
+# Nepmail die een firma of dienst claimt (T-0117, MAIL-1; driehoeksoverleg 01-11-2026, X1 3-0). In oktober 2026 kwam ze
+# binnen als melding, hoog of koud, nooit als verdacht: een enquetedienst met "klantendienst@<firma> via ..." als naam, en
+# namen als CSAM, Isabel, Kruispunt of one.com op een vreemd domein. Een adres in de naam op een ander hoofddomein telt;
+# een gratis adres in de naam niet (een klant via een webformulier is een mens), een mailinglijst ook niet.
+ADRES_IN_NAAM = re.compile(r"[\w.+-]+@((?:[\w-]+\.)+[a-z]{2,})")
+LIJSTDIENSTEN = ("googlegroups.com",)   # "'iemand@firma.be' via Groep": de groep stuurt door wat een lid schreef
 GESPREK = re.compile(r"^\s*(re|antw|aw|sv|fw|fwd|tr)\s*:", re.I)
 # Dringend: hiervoor mag De Mailregisseur De Bode vragen Mehdi te bellen (Mehdi, 26-09-2026: "voor de urgente zaken kan
 # de agent mijn andere agent vragen mij te bellen"). Alleen bij belangrijk zonder antwoord; bewust smal, anders is het ruis.
@@ -311,10 +318,44 @@ def regel_voor(regels, postvak_adres, van):
     return ""
 
 
-def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
+def _hoofddomein(dom):
+    """Het geregistreerde domein, zoals bij het uitschrijven: mail.firma.be -> firma.be, x.firma.co.uk -> firma.co.uk."""
+    if HIER not in sys.path:
+        sys.path.insert(0, HIER)
+    import uitschrijven  # noqa: E402  (importeert dit bestand; pas hier, niet bovenaan)
+    return uitschrijven.hoofddomein(dom)
+
+
+def nepmail(b, eigen_domeinen=(), bekend=frozenset(), oplichting=None):
+    """Waarom dit bericht nepmail lijkt die een firma of dienst claimt, of ''. (a) De naam noemt een adres op een ander
+    hoofddomein dan de afzender; (b) de naam claimt een merk uit de [oplichting]-lijst van mailregels op een domein dat er
+    niet bij hoort (sorteren.is_oplichting, dezelfde toets als het sorteren; `oplichting` is laad_regels van die lijst).
+    Nooit bij een eigen domein, een bekend contact of een aanvraag: een klant die via een webformulier om een plaatsbezoek
+    vraagt (barsten en scheuren), blijft een aanvraag."""
+    van, naam = (b.get("van") or "").lower(), b.get("van_naam") or ""
+    dom = _domein(van)
+    if not dom or zelfde_domein(dom, eigen_domeinen):
+        return ""
+    reden = ""
+    if not zelfde_domein(dom, LIJSTDIENSTEN):
+        for d in ADRES_IN_NAAM.findall(naam.lower()):
+            if not zelfde_domein(d, GRATIS_DIENSTEN) and _hoofddomein(d) != _hoofddomein(dom):
+                reden = f"de naam noemt een adres op {d}, de afzender is {dom}"
+                break
+    if not reden and oplichting and _sorteren().is_oplichting(naam, van, oplichting):
+        reden = f"'{naam[:60]}' claimt een firma of dienst die niet bij {dom} hoort"
+    if not reden:
+        return ""
+    o = schoon(b.get("onderwerp")).lower()
+    kent = van in bekend or zelfde_domein(dom, {_domein(a) for a in bekend if not zelfde_domein(_domein(a), GRATIS_DIENSTEN)})
+    return "" if kent or any(w in o for w in AANVRAAG) else reden
+
+
+def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel="", oplichting=None):
     """(soort, waarom) voor een kop uit imapbron.lijst; zie de lijst bovenaan dit bestand.
     Een bron mag zelf zeggen dat een bericht automatisch is ('automatisch', zoals Mail op de Mac dat bijhoudt)
-    of van een mailinglijst komt ('lijst'). `regel` is wat Mehdi over deze afzender besliste (regel_voor)."""
+    of van een mailinglijst komt ('lijst'). `regel` is wat Mehdi over deze afzender besliste (regel_voor).
+    `oplichting`: de [oplichting]-lijst voor dit postvak (oplichting_regels); zonder lijst alleen toets (a) van nepmail."""
     van, naam, ond = (b.get("van") or "").lower(), (b.get("van_naam") or "").lower(), schoon(b.get("onderwerp"))
     o = ond.lower()
     dom = _domein(van)
@@ -329,6 +370,9 @@ def trieer(b, eigen_domeinen=(), bekend=frozenset(), regel=""):
         return "rommel", "op het maildashboard op Helemaal weg gezet"
     if regel in ("ruis", "opruimen"):
         return "rommel", "Mehdi zette deze afzender op ruis"
+    nep = nepmail(b, eigen_domeinen, bekend, oplichting)  # na de beslissing van Mehdi, voor rol en woord (MAIL-1)
+    if nep:
+        return "verdacht", nep
     if automatisch_antwoord(ond):
         return "melding", "automatisch antwoord of ontvangstbevestiging"
     if van.startswith(MAILSERVER) or naam in ("postmaster", "mail delivery subsystem", "mail delivery system"):
@@ -545,6 +589,9 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             continue
         # Wat het postvak zelf verstuurde, is geen opvolgpunt (Gmail 'Alle e-mail' bevat ook de verzonden post).
         berichten = [b for b in berichten if (b.get("van") or "").lower() != adres.lower()]
+        opl = oplichting_regels(adres)
+        if opl is None:
+            ag.log("oplichting", "bron", f"{adres}: de [oplichting]-lijst van mailregels niet gelezen")
         afwezig = {}
         for b in berichten:
             if automatisch_antwoord(b.get("onderwerp")) and _datum(b):
@@ -554,7 +601,7 @@ def ronde(naam, ag, r, nu=None, regels=None, oude=None, veilig=frozenset()):
             if not d or not (b.get("message_id") or b.get("uid")):
                 continue  # zonder datum of zonder sleutel kan ik het niet volgen (resultaattoets K5)
             regel = regel_voor(regels, adres, b.get("van"))
-            soort, waarom = trieer(b, eigen, bekend, regel)
+            soort, waarom = trieer(b, eigen, bekend, regel, opl)
             ond = schoon(b.get("onderwerp"))
             wacht = werkdagen_tussen(d, nu)
             opvolging, door, wanneer, naar = "geen", "", "", ""
@@ -809,6 +856,19 @@ def sorteerregels_van(adres):
     except (OSError, ValueError):
         return None
     return os.path.join(REGELMAP, naam) if naam else None
+
+
+# De gedeelde [oplichting]-lijst: regels_hinvest.txt, waaruit maak_regels.py de andere regelbestanden maakt (MAIL-1).
+OPLICHTING_BASIS = os.path.join(REGELMAP, "regels_hinvest.txt")
+
+
+def oplichting_regels(adres):
+    """De [oplichting]-lijst voor dit postvak (sorteren.laad_regels): die van zijn sorteerregels, anders de gedeelde
+    (hotmail heeft geen sorteerregels). None als het bestand niet leesbaar is."""
+    try:
+        return _sorteren().laad_regels(sorteerregels_van(adres) or OPLICHTING_BASIS)
+    except (OSError, ValueError):
+        return None
 
 
 def gmailnaam(mb, mapnaam):

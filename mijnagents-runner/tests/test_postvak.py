@@ -791,6 +791,75 @@ def test_de_beslissing_van_mehdi_gaat_voor_de_regels():
     assert postvak.trieer(kop("x@gmail.com", "Action requise", "My MINFIN"), EIGEN, regel="belangrijk")[0] == "verdacht"
 
 
+def test_nepmail_die_een_firma_claimt_is_verdacht():
+    """T-0117, MAIL-1 (driehoeksoverleg 01-11-2026, X1 3-0): in oktober kwam nepmail binnen als melding, hoog of koud, nooit
+    als verdacht. (a) De naam noemt een adres op een ander hoofddomein dan de afzender (de vorm van een enquetedienst die
+    'klantendienst@firma via ...' schrijft); (b) de naam claimt een merk uit de [oplichting]-lijst van mailregels. Alle
+    adressen zijn verzonnen, behalve de echte domeinen die in die lijst staan."""
+    opl = postvak.oplichting_regels("info@h-invest.be")
+    t = lambda van, naam, ond="Uw mening telt", **k: postvak.trieer(  # noqa: E731
+        kop(van, ond, naam), EIGEN, k.pop("bekend", frozenset()), k.pop("regel", ""), opl)
+    # (a) een adres van een firma in de naam, de afzender is een ander domein
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst")[0] == "verdacht"
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst", ond="Uw factuur")[0] == "verdacht"
+    # (b) een merk uit de lijst op een domein dat er niet bij hoort (de vormen van oktober, verzonnen afzenders)
+    assert t("info@drukluchtproef.test", "CSAM", ond="Teruggave belasting")[0] == "verdacht"
+    assert t("x@chocoproef.test", "Isabel 6", ond="Uw certificaat verloopt")[0] == "verdacht"
+    assert t("x@afvalproef.test", "Kruispuntbank van Ondernemingen", ond="Actualisatie")[0] == "verdacht"
+    assert t("proefpersoon@gmail.com", "one.com", ond="Uw domein verloopt")[0] == "verdacht"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling")[0] == "verdacht"
+    # niet: de echte firma, een Google-groep, een adres op hetzelfde (hoofd)domein, een eigen domein
+    assert t("proef@dewatergroep.be", "De Watergroep", ond="Uw factuur")[0] != "verdacht", "echte De Watergroep"
+    assert t("bouwgroep@googlegroups.com", "'Proef Persoon' via Bouwgroep")[0] != "verdacht"
+    assert t("bouwgroep@googlegroups.com", "'proef@voorbeeld.test' via Bouwgroep")[0] != "verdacht", "een lijst, geen nep"
+    for van, naam in (("info@winkelproef.test", "info@winkelproef.test"),
+                      ("noreply@mail.winkelproef.test", "service@winkelproef.test"),
+                      ("x@nieuws.proefbedrijf.co.uk", "info@proefbedrijf.co.uk via Proefbedrijf")):
+        assert t(van, naam)[0] != "verdacht", (van, naam)
+    assert t("website@h-invest.be", "klant@voorbeeld.test via webformulier")[0] != "verdacht", "eigen domein"
+    # een klant met een gratis adres via een webformulier is een mens, geen firma die geclaimd wordt
+    assert t("formulier@webdienst.test", "proefklant@gmail.com via webformulier", ond="Vraag")[0] != "verdacht"
+    # een bekend contact of een aanvraag wordt nooit verdacht door de naam alleen
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst",
+             bekend=frozenset({"lid@enquetedienst.test"}))[0] != "verdacht"
+    # de beslissing van Mehdi gaat voor
+    assert t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst", regel="belangrijk")[0] == "hoog"
+    assert t("x@anderdomein.test", "De Watergroep", ond="Terugbetaling", regel="ruis")[0] == "rommel"
+    # zonder lijst (zoals De Wagenparkwacht trieer(b) aanroept) alleen (a)
+    assert postvak.trieer(kop("x@anderdomein.test", "Terugbetaling", "De Watergroep"))[0] != "verdacht"
+    assert postvak.trieer(kop("lid@enquetedienst.test", "Uw mening telt", "facturatie@waterproef.test via Enquetedienst"))[0] \
+        == "verdacht"
+    waarom = t("lid@enquetedienst.test", "facturatie@waterproef.test via Enquetedienst")[1]
+    assert "waterproef.test" in waarom and "enquetedienst.test" in waarom, waarom
+
+
+def test_nepmail_ook_voor_hotmail_en_bs_aanvraag_blijft():
+    """MAIL-1: hotmail heeft geen sorteerregels; de gedeelde [oplichting]-lijst (regels_hinvest.txt, waaruit de andere
+    regelbestanden gemaakt worden) geldt er toch. Een aanvraag barsten en scheuren (B&S) via een webformulier, van een klant
+    met een gratis adres of een firma-adres, blijft precies wat ze was: gewoon, met opvolging (nooit verdacht)."""
+    assert postvak.sorteerregels_van("mehdichegini@hotmail.com") is None
+    opl = postvak.oplichting_regels("mehdichegini@hotmail.com")
+    assert opl and any(m == "de watergroep" for m, _ in opl["oplichting"]), "de gedeelde lijst, met De Watergroep"
+    nu = datetime.fromisoformat("2026-10-19T15:00:00+02:00")
+    aanvragen = [
+        _in(1, "formulier@webdienst.test", "Aanvraag plaatsbezoek barsten in de gevel", "2026-10-15T10:00:00+02:00",
+            van_naam="proefklant@gmail.com via webformulier"),
+        _in(2, "formulier@webdienst.test", "Offerteaanvraag scheuren in de muur", "2026-10-15T11:00:00+02:00",
+            van_naam="proef@bouwbedrijfproef.test via webformulier"),
+        _in(3, "proefklant2@gmail.com", "Aanvraag plaatsbezoek scheuren", "2026-10-15T12:00:00+02:00",
+            van_naam="Isabel Proefnaam"),
+        _in(4, "lid@enquetedienst.test", "Uw mening telt", "2026-10-15T13:00:00+02:00",
+            van_naam="facturatie@waterproef.test via Enquetedienst"),
+        _in(5, "x@anderdomein.test", "Terugbetaling", "2026-10-15T14:00:00+02:00", van_naam="De Watergroep"),
+    ]
+    alle, items, tel, _ = _ronde(aanvragen, nu)
+    voor = {b["onderwerp"]: postvak.trieer(b, ("h-architects.be", "harmoniebouw.be", "globaal.be"))[0] for b in aanvragen[:3]}
+    for ond in ("Aanvraag plaatsbezoek barsten in de gevel", "Offerteaanvraag scheuren in de muur", "Aanvraag plaatsbezoek scheuren"):
+        assert alle[ond]["soort"] == "midden" == voor[ond] and alle[ond]["opvolging"] == "open", (ond, alle[ond])
+    assert alle["Uw mening telt"]["soort"] == "verdacht" and alle["Uw mening telt"]["opvolging"] == "geen"
+    assert alle["Terugbetaling"]["soort"] == "verdacht", "de gedeelde lijst geldt ook voor een postvak zonder sorteerregels"
+
+
 def test_opruimen_raakt_alleen_de_juiste_afzender():
     assert postvak.past("info@kbc.be", "@kbc.be") and postvak.past("x@mail.kbc.be", "@kbc.be")
     assert not postvak.past("x@mail-kbc.be", "@kbc.be"), "een ander domein dat op kbc.be eindigt"

@@ -688,6 +688,8 @@ BNP Paribas = bnpparibasfortis.be, bnpparibasfortis.com
 Easy Banking = bnpparibasfortis.be
 Telenet = telenet.be, telenetgroup.be
 Fluvius = fluvius.be
+# MAIL-1 (T-0117, overleg 01-11-2026, X1 3-0): nepmail die De Watergroep claimt, gezien in oktober 2026
+De Watergroep = dewatergroep.be
 CardStop = cardstop.be
 Cardstop = cardstop.be
 Card Stop = cardstop.be
