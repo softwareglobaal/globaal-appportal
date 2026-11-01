@@ -422,16 +422,19 @@ def ontvangst():
 
 def inhaaldagen(nu, venster):
     """Codex P7 en W1: de dagen ouder dan het venster (tot INHAAL terug) waarvoor De WhatsApp-wacht of De Belwacht een
-    dekkingsrij schreef of vervallen verklaarde na de laatste vaststelling of inhaalbeurt van die dag. Nieuwste eerst,
-    hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
+    dekkingsrij schreef of vervallen verklaarde, of waarvoor een Plaud- of Fathom-rij binnenkwam (PLAUD-10), na de laatste
+    vaststelling of inhaalbeurt van die dag. Nieuwste eerst, hoogstens INHAAL_PER_NACHT, oplopend teruggegeven."""
     oudste = date.fromisoformat(min(venster))
     vroegste = date.fromisoformat(V.gisteren(nu)) - timedelta(days=INHAAL - 1)
     if vroegste >= oudste:
         return []
     # elke wijziging van een dekkingsrij telt, ook een die vervallen werd (Codex W1): dan is de dag niet meer gedekt
-    # en moet zijn vaststelling 'onbekend' worden in plaats van de oude telling
-    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE bron = 'dekking' AND datum BETWEEN ? AND ? "
-                         "GROUP BY datum", (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
+    # en moet zijn vaststelling 'onbekend' worden in plaats van de oude telling. PLAUD-10 (T-0120): ook een nieuwere rij
+    # van Plaud of Fathom; de 7 Plaud-opnames van 13-10 en 14-10 kwamen op 28-10 binnen, buiten het venster, en bleven
+    # zo buiten hun dagbestand. Die wachten herschrijven een rij alleen in hun eigen venster van hoogstens 14 dagen.
+    rijen = bord.db_lees("SELECT datum, MAX(ts) AS ts FROM gesprek_log WHERE (bron = 'dekking' OR bron IN "
+                         "('plaud', 'fathom')) AND datum BETWEEN ? AND ? GROUP BY datum",
+                         (vroegste.isoformat(), (oudste - timedelta(days=1)).isoformat()))
     try:
         staat = json.loads(_lees(STAAT) or "{}")
     except ValueError:

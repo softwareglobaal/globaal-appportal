@@ -1038,6 +1038,38 @@ def test_k5_hotmailkopie_dekt_de_nachtelijke_inhaal():
         assert vanaf <= sinds, (nacht, vanaf, sinds)
 
 
+def test_plaud10_nieuwere_plaud_of_fathom_rij_laat_een_oude_dag_inhalen():
+    """PLAUD-10 (T-0120): de 7 Plaud-opnames van 13-10 en 14-10 kwamen pas op 28-10 in de gesprekkentabel, na de laatste
+    vaststelling van hun dag en buiten het nachtvenster van 14 dagen. Het inhalen keek alleen naar dekkingsrijen van de
+    Mac-wachten, dus die dagen bleven zonder hun opnames. Nu telt ook een nieuwere Plaud- of Fathom-rij."""
+    import sqlite3
+    nu = datetime(2026, 10, 28, 23, 30, tzinfo=timezone.utc)
+    venster = D.V.venster(nu, D.NACHTVENSTER)
+    vastgesteld, daarna = (nu - timedelta(days=1)).isoformat(), (nu - timedelta(hours=2)).isoformat()
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.execute("CREATE TABLE gesprek_log(uniek TEXT, datum TEXT, bron TEXT, ts TEXT)")
+    con.executemany("INSERT INTO gesprek_log VALUES(?,?,?,?)", [
+        ("plaud:of_" + "1" * 32, "2026-10-13", "plaud", daarna),        # na de vaststelling: inhalen
+        ("fathom:801", "2026-10-12", "fathom", daarna),                   # idem
+        ("whatsapp-oproep:1", "2026-10-11", "whatsapp", daarna),          # geen dekkingsrij, geen Plaud of Fathom
+        ("plaud:of_" + "2" * 32, "2026-10-10", "plaud", (nu - timedelta(days=3)).isoformat()),   # al vastgesteld
+        ("dekking:telefoon:2026-10-09", "2026-10-09", "dekking", daarna)])  # zoals voordien: inhalen
+    with tempfile.TemporaryDirectory() as map_:
+        oud = D.STAAT, D.INHAALSTAAT, bord.db_lees
+        D.STAAT, D.INHAALSTAAT = os.path.join(map_, "staat.json"), os.path.join(map_, "inhaal.json")
+        try:
+            with open(D.STAAT, "w") as f:
+                json.dump({d: {"ts": vastgesteld} for d in ("2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12",
+                                                            "2026-10-13")}, f)
+            bord.db_lees = lambda sql, args=(): [dict(r) for r in con.execute(sql, args).fetchall()]
+            uit = D.inhaaldagen(nu, venster)
+        finally:
+            D.STAAT, D.INHAALSTAAT, bord.db_lees = oud
+    assert min(venster) == "2026-10-15", venster
+    assert uit == ["2026-10-09", "2026-10-12", "2026-10-13"], uit
+
+
 def test_lens5_9_dekking_per_dag():
     """Lenzen 26-10-2026 (5 en 9): de dekking van een kopie geldt per dag. Een dag na de begindatum is gedekt, ook als
     een andere dag van dezelfde ronde dat niet is; de kopie zoekt op UTC-datum, dus de dag ervoor moet erin staan. Een
