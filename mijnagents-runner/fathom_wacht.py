@@ -270,7 +270,7 @@ def bewaar(g, tekst, herkenning):
     open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(kop + tekst)
     # ANGEL-8 en FATHOM-1: de samenvatting als markdown-tekst (tot T-0120 str() van het hele object) en de actiepunten in
     # onze vorm, alleen wat ontbreekt; de vraag met transcript levert ze niet, de aanvulvraag van deze ronde wel.
-    fathom.vul_aan(map_, g)
+    fathom.vul_aan(map_, g, prive=is_prive(herkenning))     # samen2: niets voor een privégesprek
     if g.get("highlights"):
         open(os.path.join(map_, "hoogtepunten.md"), "w", encoding="utf-8").write(json.dumps(g["highlights"], ensure_ascii=False, indent=1))
     meta = {k: v for k, v in g.items() if k != "transcript"}

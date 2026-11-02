@@ -103,7 +103,8 @@ def bewaar(g, map_, oud_pad):
             herk = json.load(open(os.path.join(oud_pad, "gesprek.json"))).get("herkenning")
         except (OSError, ValueError):
             herk = None
-    if not herk or herk.get("prive") or str(herk.get("afdeling") or "").strip().lower() in ("prive", "privé"):
+    prive = not herk or bool(herk.get("prive")) or str(herk.get("afdeling") or "").strip().lower() in ("prive", "privé")
+    if prive:
         # FATHOM-3 en FATHOM-7 (T-0120): zonder herkenning (privé bij twijfel) of bij een privégesprek geen deellink in
         # het archief, die opent zonder aanmelden; zoals De Fathomwacht alleen de gewone link
         g = {k: v for k, v in g.items() if k != "share_url"}
@@ -125,7 +126,7 @@ def bewaar(g, map_, oud_pad):
         open(os.path.join(map_, "geen-transcript.txt"), "w", encoding="utf-8").write("Fathom heeft voor dit gesprek geen transcript.\n")
     # FATHOM-1 en ANGEL-8: samenvatting en actiepunten in de vorm van De Fathomwacht (koppelingen/fathom.py, het contract
     # met De Dagbundelaar), alleen wat ontbreekt; tot T-0120 schreef ik hier json.dumps van het object
-    fathom.vul_aan(map_, g)
+    fathom.vul_aan(map_, g, prive=prive)                     # samen2: niets voor een privégesprek
     if g.get("highlights"):
         inhoud = g["highlights"] if isinstance(g["highlights"], str) else json.dumps(g["highlights"], ensure_ascii=False, indent=1)
         open(os.path.join(map_, "hoogtepunten.md"), "w", encoding="utf-8").write(inhoud + "\n")

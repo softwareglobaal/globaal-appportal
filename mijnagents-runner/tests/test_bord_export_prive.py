@@ -14,7 +14,9 @@ zette zijn volledige takenlijst klaar, met werknamen en concepten, en die ging v
 - E06 (Codex, toets 2): het ochtend- en avondverslag van Ai Angel (soort verslag, met alle open taken) staat in geen
   enkel exportbestand; een gewoon verslag blijft voluit in Ontwikkelaar/verslagen;
 - E07: in het werkverslag van een privé-agent alleen tijd, stap en onderwerp, zoals De Regisseur (agent_verslag) het
-  geeft; het werkverslag van een gewone agent blijft voluit.
+  geeft; het werkverslag van een gewone agent blijft voluit;
+- E08 (samen2, Codex-toets 1): van een privé-agent geven noden.md, voorstellen.md en de stand van het team alleen tijd,
+  status en wie; van een gewone agent blijven ze voluit.
 
 Geen netwerk: de databank is tijdelijk en komt uit init_db van mijnagents/app.py (export_db uit test_bord_lees.py).
 Alle namen en inhoud zijn verzonnen.
@@ -153,6 +155,30 @@ def test_e07_werkverslag_van_prive_agent_alleen_tijd_stap_onderwerp():
         assert geheim not in angel, (geheim, angel)
     gewoon = "\n".join(t for p, t in gelezen.items() if p.startswith(os.path.join("export", "Agendawacht", "werkverslag")))
     assert "Gewone logregel Kappa" in gewoon and "gewoon detail Lambda" in gewoon, gewoon
+
+
+def test_e08_noden_voorstellen_en_stand_van_prive_agent_zonder_inhoud():
+    pad = met_agents("e08", 1)
+    c = sqlite3.connect(pad)
+    for agent, tekst in (("mehdi-agent", "Proefconcept Omega naar Klant Sigma"), ("agenda-wacht", "Gewone nood Kappa")):
+        c.execute("INSERT INTO nood(naam, tekst, wie, open, ts) VALUES(?, ?, 'mehdi', 1, '2026-11-01T08:00:00Z')", (agent, tekst))
+        c.execute("INSERT INTO voorstel(naam, actie, doel, reden, status, ts) VALUES(?, ?, ?, ?, 'open', "
+                  "'2026-11-01T08:00:00Z')", (agent, f"Actie {tekst}", "Doel Werknaam Tau", "Reden Omega"))
+        c.execute("INSERT OR REPLACE INTO status(naam, status, taak, detail, ts) VALUES(?, 'klaar', ?, ?, "
+                  "'2026-11-01T08:00:00Z')", (agent, f"Taak {tekst}", "Detail Sigma"))
+    c.commit()
+    c.close()
+    gelezen = export(pad, [], [])
+    angel = "\n".join(t for p, t in gelezen.items() if p.startswith(os.path.join("export", "Ai Angel")))
+    stand = "\n".join(t for p, t in gelezen.items() if p.endswith("stand van het team.md"))
+    assert "privé-agent" in angel and "| ja |" in angel and "| open |" in angel, angel
+    regel_angel = [r for r in stand.splitlines() if r.startswith("| Ai Angel |")]
+    assert regel_angel and "privé-agent" in regel_angel[0], stand
+    for geheim in GEHEIM:
+        assert geheim not in angel and geheim not in regel_angel[0], (geheim, angel, regel_angel)
+    gewoon = "\n".join(t for p, t in gelezen.items() if p.startswith(os.path.join("export", "Agendawacht")))
+    assert "Gewone nood Kappa" in gewoon and "Actie Gewone nood Kappa" in gewoon, gewoon
+    assert "Taak Gewone nood Kappa" in stand and "Detail Sigma" in stand, stand
 
 
 if __name__ == "__main__":

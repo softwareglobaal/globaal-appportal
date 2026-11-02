@@ -51,6 +51,7 @@ ANGEL_STAAT = os.environ.get("WACHTEN_ANGEL_STAAT", "/data/mehdi-agent/staat.jso
 ANGEL_MAX = 12
 ANGEL_BORD = "/agent/mehdi-agent"
 TAAK_RE = re.compile(r"(\d{1,3})\.\s+(.+)")
+DOSSIER_RE = re.compile(r"^\[[^\[\]]{1,60}\] ")       # '[dossier] ' vooraan een taak van Ai Angel (mehdi_agent.lijst)
 PRIVE_RE = re.compile(r"priv[eé]", re.I)            # zoals mehdi_agent.PRIVE
 # ARCH-2 (contract van de groep zoom): het overzicht van De Zoomarchivaris, op het bord alleen lezend
 ZOOM_ARCHIEF = os.environ.get("WACHTEN_ZOOM_ARCHIEF", "/data/zoom-archief/wachten.json")
@@ -596,9 +597,13 @@ def angel_taken(inhoud, staat=(None, None)):
         # de tekst van de taak zoals de staat hem bewaart: zonder '(prioriteit)' achteraan en, bij een collega of een
         # agent, misschien met 'Naam: ' vooraan (mehdi_agent.lijst); exact vergeleken, nooit een stuk van een tekst
         kern = re.sub(r" \((?:hoog|normaal|laag)\)$", "", t["tekst"]).strip()
-        if PRIVE_RE.search(" ".join(t["blok"])) or {kern, kern.split(": ", 1)[-1].strip()} & prive_teksten:
+        # samen2 (bundel en pagina): een taak uit een gesprek staat er met '[dossier] ' vooraan (mehdi_agent.lijst, ANGEL-2),
+        # de staat kent haar tekst zonder; vergeleken wordt de regel met en zonder die code, elk exact
+        kernen = {kern, DOSSIER_RE.sub("", kern, count=1)}
+        varianten = {x for k in kernen for x in (k, k.split(": ", 1)[-1].strip())}
+        if PRIVE_RE.search(" ".join(t["blok"])) or varianten & prive_teksten:
             uit.append(f"{t['nr']}. privé")
-        elif kern in werk_teksten:              # Codex-toets 2: exact, met de naam ervoor zoals de staat hem kent
+        elif kernen & werk_teksten:             # Codex-toets 2: exact, met de naam ervoor zoals de staat hem kent
             uit.append(f"{t['nr']}. {kort(t['tekst'], 140)}")
         else:
             uit.append(f"{t['nr']}. niet meer na te gaan of dit privé was: zie het bord")

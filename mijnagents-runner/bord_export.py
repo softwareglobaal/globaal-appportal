@@ -15,7 +15,8 @@ status, tijd en lengtes mee, nooit de vraag of het antwoord; in het werkverslag 
 een bericht alleen hoe lang vraag en antwoord waren.
 Van een privé-item in klaargezet/ alleen tijd, soort, voor wie en status, nooit titel, verwijzing of inhoud; van een
 privé-agent (agent.prive = 1, zoals Ai Angel) alleen tijd, soort, voor wie, status en titel, in zijn werkverslag alleen
-tijd, stap en onderwerp, en geen verslag, coaching, dagbundel of dagplan voluit (T-0120 ANGEL-11). In een
+tijd, stap en onderwerp, en geen verslag, coaching, dagbundel of dagplan voluit (T-0120 ANGEL-11); van zijn noden,
+voorstellen en stand alleen tijd, status en wie (samen2). In een
 Dagverslag, in de inhoud van elk ander klaarzet-item en in het werkverslag wordt een regel met PRIVÉ, of een bevinding van
 De Plaudwacht in de oude vorm met ' · privé', "(privé)" (RZ2-01, voor wat van voor 22-10-2026 nog in het venster staat).
 Privé is ook een item met afdeling prive in de inhoud, en een regel met de titel of de verwijzing van zo'n item (RZ3-01).
@@ -305,7 +306,9 @@ def main():
         uit = [f"# Noden van {m}", "", "| open | sinds | wie | wat |", "|---|---|---|---|"]
         for r in lijst:
             d = be(r["ts"])
-            uit.append(f"| {'ja' if r['open'] else 'opgelost'} | {d.strftime('%d-%m %H:%M') if d else ''} | {r['wie']} | {r['tekst'][:200]} |")
+            # samen2 (Codex-toets 1, ANGEL-11): de nood van een privé-agent kan een taak noemen; alleen open, sinds en wie
+            wat = "(niet in de export: privé-agent)" if prive_agent(agents, naam) else r["tekst"][:200]
+            uit.append(f"| {'ja' if r['open'] else 'opgelost'} | {d.strftime('%d-%m %H:%M') if d else ''} | {r['wie']} | {wat} |")
         geschreven += schrijf(os.path.join(UIT, m, "noden.md"), "\n".join(uit) + "\n")
     vs = defaultdict(list)
     for r in c.execute("select naam, actie, doel, reden, parameters, runbook, status, besluit_door, ts from voorstel order by ts desc limit 500"):
@@ -315,6 +318,11 @@ def main():
         uit = [f"# Voorstellen van {m}", "", "| wanneer | status | actie | doel | reden | runbook | besluit door |", "|---|---|---|---|---|---|---|"]
         for r in lijst:
             d = be(r["ts"])
+            if prive_agent(agents, naam):
+                # samen2 (Codex-toets 1, ANGEL-11): van een privé-agent alleen wanneer, status en wie besliste
+                uit.append(f"| {d.strftime('%d-%m %H:%M') if d else ''} | {r['status']} | (niet in de export: privé-agent) "
+                           f"|  |  |  | {r['besluit_door'] or ''} |")
+                continue
             if naam == "zoom-wacht" and (r["actie"] or "").startswith("Zoom: ") and not r["runbook"]:
                 try:
                     code = json.loads(r["parameters"] or "{}").get("zoom_advies")
@@ -358,7 +366,10 @@ def main():
     uit = ["# Stand van het team", "", f"Gemaakt {datetime.now(BE).strftime('%Y-%m-%d %H:%M')} (Belgische tijd).", "", "| agent | status | taak | detail | laatste hartslag |", "|---|---|---|---|---|"]
     for r in c.execute("select s.naam, a.label, s.status, s.taak, s.detail, s.ts from status s join agent a on a.naam=s.naam order by a.label"):
         d = be(r["ts"])
-        uit.append(f"| {r['label']} | {r['status']} | {(r['taak'] or '')[:60]} | {(r['detail'] or '')[:100]} | {d.strftime('%d-%m %H:%M') if d else ''} |")
+        # samen2 (Codex-toets 1, ANGEL-11): van een privé-agent alleen de status en de hartslag
+        taak, detail = (("", "(niet in de export: privé-agent)") if prive_agent(agents, r["naam"])
+                        else ((r["taak"] or "")[:60], (r["detail"] or "")[:100]))
+        uit.append(f"| {r['label']} | {r['status']} | {taak} | {detail} | {d.strftime('%d-%m %H:%M') if d else ''} |")
     geschreven += schrijf(os.path.join(UIT, "_Werkwijzen", "stand van het team.md"), "\n".join(uit) + "\n")
     print(f"export: {geschreven} bestanden geschreven of bijgewerkt in {UIT}")
 

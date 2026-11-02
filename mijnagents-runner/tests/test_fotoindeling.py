@@ -94,6 +94,16 @@ class Regels(unittest.TestCase):
         for x in ("gezicht", '"q0"', str(PRIVE[0]), "21:00", "20:00"):
             self.assertNotIn(x, tekst)
 
+    def test_klein_gezicht_buiten_een_project_telt_bij_met_mensen(self):
+        # samen2 (Codex-toets 1): een klein gezicht (mensen nee, gezicht ja) buiten een project telde met GPS als privé en
+        # zonder GPS als onbeslist; het telt bij 'met mensen', zonder id, tijd of plaats.
+        fotos = [foto("klein-met-gps", "19:00", *PRIVE, gezicht=True), foto("klein-zonder-gps", "19:30", gezicht=True),
+                 foto("thuis", "20:00", *PRIVE), foto("los", "20:30")]
+        ind = FI.indeel("2026-10-29", fotos, [P1], [], [])
+        self.assertEqual(ind["telling"], {"prive": 1, "mensen": 2, "overig": 0, "onbeslist": 1})
+        for x in ("klein-met-gps", "klein-zonder-gps", "19:00", "19:30", str(PRIVE[0])):
+            self.assertNotIn(x, json.dumps(ind))
+
     def test_mensen_binnen_werk_geteld_zonder_id_tijd_of_voorvertoning(self):
         a = bij((P1["lat"], P1["lon"]))
         fotos = [foto("w1", "10:15", *a), foto("mens", "10:50", *a, mensen=True), foto("onbekend", "10:25", *a, mensen=None),

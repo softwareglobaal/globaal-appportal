@@ -173,7 +173,7 @@ def test_fathom1_trage_pagina_voor_de_grens_houdt_wat_al_binnen_is():
     for rid in (7801, 7802):
         os.makedirs(os.path.join(archief, f"map {rid}"))
         with open(os.path.join(archief, f"map {rid}", "gesprek.json"), "w", encoding="utf-8") as f:
-            json.dump({"recording_id": rid}, f)
+            json.dump({"recording_id": rid, "herkenning": {"prive": False, "afdeling": "regie"}}, f)   # samen2: werk
     echt = (F._haal, F.sleutels, F.time.sleep, F.time.monotonic, fw.time.monotonic, fw.ARCHIEF, fw._INDEX)
     F._haal, F.sleutels, F.time.sleep = traag, (lambda: ["s1"]), (lambda s: None)
     F.time.monotonic = fw.time.monotonic = lambda: klok[0]
@@ -227,14 +227,42 @@ def test_fathom1_actiepunten_onbekend_is_nooit_leeg():
         "een lijst in een vorm die we niet kennen is onbekend, geen nul"
 
 
+def _werkmap(rid, herkenning=None):
+    """Een archiefmap zoals De Fathomwacht ze schrijft, met gesprek.json en (standaard) een werkherkenning."""
+    map_ = tempfile.mkdtemp(prefix="fathom-map-")
+    with open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8") as f:
+        json.dump({"recording_id": rid, "herkenning": {"prive": False, "afdeling": "regie"} if herkenning is None
+                   else herkenning}, f)
+    return map_
+
+
+def test_samen2_vul_aan_schrijft_niets_bij_een_privegesprek():
+    """samen2 (Codex-toets 1): het archief gaat via de Mac-sync naar Dropbox; een privégesprek krijgt er geen samenvatting
+    en geen actiepunten bij. Privé is de herkenning prive, de afdeling privé, of geen of een onleesbare herkenning
+    (FATHOM-7); wat de schrijver al weet (prive=True of False) gaat voor."""
+    F = _koppeling()
+    g = {"recording_id": 7311, "default_summary": SAMENVATTING, "action_items": ACTIEPUNTEN}
+    for herk in ({"prive": True, "afdeling": "regie"}, {"prive": False, "afdeling": "Privé"}, {}, "kapot"):
+        map_ = _werkmap(7311, herk)
+        assert F.vul_aan(map_, g) == [] and os.listdir(map_) == ["gesprek.json"], herk
+    zonder = tempfile.mkdtemp(prefix="fathom-map-")
+    assert F.vul_aan(zonder, g) == [] and os.listdir(zonder) == [], "zonder gesprek.json: privé"
+    with open(os.path.join(zonder, "gesprek.json"), "w", encoding="utf-8") as f:
+        f.write("{kapot")
+    assert F.vul_aan(zonder, g) == [], "onleesbaar: privé"
+    nieuw = tempfile.mkdtemp(prefix="fathom-map-")
+    assert F.vul_aan(nieuw, g, prive=True) == [] and F.vul_aan(_werkmap(7312), g, prive=True) == []
+    assert F.vul_aan(nieuw, g, prive=False) == ["samenvatting.md", "actiepunten.json", "actiepunten.md"]
+
+
 def test_fathom1_vul_aan_schrijft_alleen_wat_ontbreekt():
     """Een map zonder bestanden krijgt ze; een bestaand bestand blijft byte voor byte gelijk; droog schrijft niets;
     een map die niet bestaat, wordt niet gemaakt."""
     F = _koppeling()
-    map_ = tempfile.mkdtemp(prefix="fathom-map-")
+    map_ = _werkmap(7301)
     g = {"recording_id": 7301, "default_summary": SAMENVATTING, "action_items": ACTIEPUNTEN}
     assert F.vul_aan(map_, g, droog=True) == ["samenvatting.md", "actiepunten.json", "actiepunten.md"]
-    assert os.listdir(map_) == [], "droog schrijft niets"
+    assert os.listdir(map_) == ["gesprek.json"], "droog schrijft niets"
     eigen = "# eigen samenvatting, met de hand\n".encode("utf-8")
     with open(os.path.join(map_, "samenvatting.md"), "wb") as f:
         f.write(eigen)
@@ -247,7 +275,7 @@ def test_fathom1_vul_aan_schrijft_alleen_wat_ontbreekt():
     assert F.vul_aan(map_, ander) == [] and voor == {n: open(os.path.join(map_, n), "rb").read() for n in os.listdir(map_)}
     weg = os.path.join(map_, "bestaat-niet")
     assert F.vul_aan(weg, g) == [] and not os.path.exists(weg)
-    leeg = tempfile.mkdtemp(prefix="fathom-map-")
+    leeg = _werkmap(7302)
     assert F.vul_aan(leeg, {"recording_id": 7302, "action_items": []}) == [], "nog niet verwerkt: niets, ook geen []"
     assert F.vul_aan(leeg, {"recording_id": 7302, "action_items": [], "default_summary": SAMENVATTING}) == \
         ["samenvatting.md", "actiepunten.json", "actiepunten.md"]
@@ -271,13 +299,16 @@ def test_fathom1_ronde_vult_aan_en_zet_niets_op_het_bord():
                                     archief=archief, samenvattingen=lambda sinds, tot=None: gevraagd.append(sinds) or met)
     fw = _fathom_wacht()
     assert gevraagd and nb.statussen()[-1]["status"] == "waakt", (gevraagd, nb.statussen()[-1])
-    for g in (werk, prive):
-        map_ = os.path.join(archief, fw.archiefmap(g))
-        assert {"samenvatting.md", "actiepunten.json", "actiepunten.md"} <= set(os.listdir(map_)), os.listdir(map_)
+    werkmap, privemap = (os.path.join(archief, fw.archiefmap(g)) for g in (werk, prive))
+    assert {"samenvatting.md", "actiepunten.json", "actiepunten.md"} <= set(os.listdir(werkmap)), os.listdir(werkmap)
+    # samen2 (Codex-toets 1): het archief gaat naar Dropbox; een privégesprek krijgt er geen samenvatting of actiepunten
+    assert not {"samenvatting.md", "actiepunten.json", "actiepunten.md"} & set(os.listdir(privemap)), os.listdir(privemap)
+    alles = "".join(open(os.path.join(privemap, n), "rb").read().decode("utf-8", "replace") for n in os.listdir(privemap))
+    assert "Vakantie boeken" not in alles and "Lotte" not in alles, "geen inhoud van Fathom bij een privégesprek"
     naar_bord = json.dumps(gezet, ensure_ascii=False) + scherm
     for geheim in ("Kort", "Offerte proefdak", "Geheim", "Vakantie", "Lotte"):
         assert geheim not in naar_bord, f"{geheim!r} ging naar het bord of het scherm"
-    assert "samenvatting en actiepunten van Fathom: 2 samenvatting(en), 2 lijst(en) actiepunten" in scherm, scherm
+    assert "samenvatting en actiepunten van Fathom: 1 samenvatting(en), 1 lijst(en) actiepunten" in scherm, scherm
 
 
 def test_fathom1_aanvulvraag_pas_na_tabel_en_klaarzet():
@@ -471,12 +502,18 @@ def test_fathom1_eenmalige_aanvulronde_droog_en_echt():
     map_ = os.path.join(doel, "2026-10-21 1000 Proefgesprek")
     os.makedirs(map_)
     with open(os.path.join(map_, "gesprek.json"), "w", encoding="utf-8") as f:
-        json.dump({"recording_id": 7601, "herkenning": None}, f)
+        json.dump({"recording_id": 7601, "herkenning": {"prive": False, "afdeling": "regie"}}, f)
     with open(os.path.join(map_, "actiepunten.md"), "w", encoding="utf-8") as f:
         f.write("[]")
+    # samen2: een oude map zonder herkenning (fathom_haal_alles tot 17-09) is privé en krijgt niets
+    zonder = os.path.join(doel, "2026-10-21 1100 Proefgesprek zonder herkenning")
+    os.makedirs(zonder)
+    with open(os.path.join(zonder, "gesprek.json"), "w", encoding="utf-8") as f:
+        json.dump({"recording_id": 7602, "herkenning": None}, f)
     gevraagd = []
     antwoord = [{"recording_id": 7601, "title": "Proefgesprek Geheim", "default_summary": SAMENVATTING,
-                 "action_items": ACTIEPUNTEN}, {"recording_id": 7699, "default_summary": SAMENVATTING}]
+                 "action_items": ACTIEPUNTEN}, {"recording_id": 7699, "default_summary": SAMENVATTING},
+                {"recording_id": 7602, "default_summary": SAMENVATTING, "action_items": ACTIEPUNTEN}]
     oud = (H.DOEL, H.fathom.samenvattingen)
     H.DOEL, H.fathom.samenvattingen = doel, (lambda sinds: gevraagd.append(sinds) or antwoord)
     try:
@@ -491,6 +528,7 @@ def test_fathom1_eenmalige_aanvulronde_droog_en_echt():
             assert H.aanvullen("2026-10-01") == 0 and H.aanvullen("gisteren") == 2
         assert sorted(os.listdir(doel)) == voor[0], "geen nieuwe map, geen log in het archief"
         assert {"samenvatting.md", "actiepunten.json"} <= set(os.listdir(map_)), os.listdir(map_)
+        assert os.listdir(zonder) == ["gesprek.json"], "zonder herkenning (privé) niets aangevuld"
         assert open(os.path.join(map_, "actiepunten.md"), encoding="utf-8").read() == "[]", "nooit overschrijven"
         assert "Geheim" not in scherm.getvalue() and "Kort" not in scherm.getvalue(), scherm.getvalue()
     finally:

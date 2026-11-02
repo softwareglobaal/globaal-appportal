@@ -68,6 +68,13 @@
     {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
   </div>
 
+  {% for kop, regels in d['bundel'] %}
+  <div class="kaart">
+    <h2>{{ kop }}</h2>
+    {% for r in regels %}<div class="{{ 'klein zacht' if r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+
   <div class="kaart">
     <h2>Eigen werk en gezondheid</h2>
     {% for r in d['eigen'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}

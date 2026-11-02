@@ -252,6 +252,12 @@ def _gps(f):
     return isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and -90 <= lat <= 90 and -180 <= lon <= 180
 
 
+def met_mensen(f):
+    """Een foto met mensen: Photos zegt mensen, of het zag een gezicht (ook een klein). nazorg-mac en samen2 (Codex-toets 1):
+    zo telt een klein gezicht overal bij 'met mensen', in een werfgroep, buiten een project en zonder GPS."""
+    return bool(f.get("mensen")) or f.get("gezicht") is True
+
+
 def indeel(dag, fotos, plekken, afspraken, verblijven):
     """De indeling van een dag als dict (zie de module-uitleg). Privé, mensen buiten werk, scherm en onbeslist staan er
     alleen als telling in: geen id, geen tijd, geen plaats."""
@@ -273,7 +279,7 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
         zeker = all(f.get(k) is False for k in ("mensen", "gezicht", "scherm", "app"))
         # nazorg-mac: een klein gezicht (mensen False, gezicht True) is een foto met mensen, geen onbekende vlag
         g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")),
-                           "mensen": True if f.get("gezicht") is True else f.get("mensen"), "zeker": zeker})
+                           "mensen": True if met_mensen(f) else f.get("mensen"), "zeker": zeker})
 
     for f in fotos:
         try:
@@ -312,7 +318,7 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
             if dichtst and dichtst[0] <= STRAAL_M:
                 p = dichtst[1]
                 zet(groep(f"kandidaat:{p['firma']}:{p['nummer']}", "kandidaat", p["firma"], p["nummer"], p["naam"], None), f, t)
-            elif f.get("mensen"):
+            elif met_mensen(f):
                 telling["mensen"] += 1
             else:
                 telling["prive"] += 1
@@ -327,7 +333,7 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
                     break
         if thuis:
             zet(thuis, f, t)
-        elif f.get("mensen"):
+        elif met_mensen(f):
             telling["mensen"] += 1
         else:
             telling["onbeslist"] += 1

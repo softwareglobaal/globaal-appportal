@@ -486,5 +486,28 @@ check("D47 (VOL-14) de dagpagina linkt naar wat de wachten die dag kregen, vanaf
 html = C.get("/dag/2026-09-22", headers=MET).get_data(as_text=True)
 check("D47 voor 01-10 geen link naar de wachten", "wat de wachten kregen" not in html)
 
+# samen2 (Codex-toets 1): de vier blokken van De Dagbundelaar voor Ai Angel staan op de dagpagina, met hun volledige kop
+# en zoals het dagbestand ze schrijft (privé zonder naam); een dag zonder die blokken toont ze niet.
+BLOKKEN = ("\n## Werkgesprekken\n\nSamenvatting en actiepunten van Fathom.\n\n"
+           "- 10:00 Fathom, 25 min: Proef Klant, dossier: 9001 (bevestigd) [fathom:7001]\n"
+           "  - actiepunt: Offerte proefdak sturen\n- 18:00 privégesprek, 12 min\n\n"
+           "## Gemist zonder terugbellen\n\n- 09:12 telefoon (privé): geen terugbelpoging gezien\n\n"
+           "## Mail wacht op antwoord\n\n- proef@voorbeeld.test: belangrijk, van Proef Klant: Vraag over de offerte\n"
+           "- privé@voorbeeld.test: 2 mails (privé)\n\n"
+           "## Morgen, 2026-10-23 (agenda onvolledig)\n\n- 09:00 [HA] 9001 Proefbezoek\n- 12:00 (privé)\n")
+md = os.path.join(MAP, "2026", "2026-10-22.md")
+oud_md = open(md, encoding="utf-8").read()
+open(md, "w", encoding="utf-8").write(oud_md + BLOKKEN)
+html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
+open(md, "w", encoding="utf-8").write(oud_md)
+check("D50 (samen2) de vier bundelblokken staan op de dagpagina, met hun kop",
+      all(f"<h2>{k}</h2>" in html for k in ("Werkgesprekken", "Gemist zonder terugbellen", "Mail wacht op antwoord",
+                                             "Morgen, 2026-10-23 (agenda onvolledig)")), html[-3000:])
+check("D50 hun regels zoals in het dagbestand, privé zonder naam",
+      "Offerte proefdak sturen" in html and "18:00 privégesprek, 12 min" in html and "09:12 telefoon (privé)" in html
+      and "privé@voorbeeld.test: 2 mails (privé)" in html and "12:00 (privé)" in html, html[-3000:])
+check("D50 een dag zonder die blokken toont ze niet",
+      "<h2>Werkgesprekken</h2>" not in C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True))
+
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)

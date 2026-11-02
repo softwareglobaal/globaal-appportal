@@ -258,6 +258,25 @@ def tegels(t):
     ]
 
 
+# T-0120 (ANGEL-2, DB-6): de blokken die De Dagbundelaar voor Ai Angel in het dagbestand zet. Het dagbestand schrijft ze al
+# zonder privénamen (privé is 'privégesprek, N min' of '(privé)'), dus de pagina toont ze zoals ze er staan.
+BUNDELBLOKKEN = ("Werkgesprekken", "Gemist zonder terugbellen", "Mail wacht op antwoord", "Morgen")
+
+
+def bundel_blokken(tekst):
+    """samen2 (Codex-toets 1): de blokken van BUNDELBLOKKEN in hun volgorde, met hun volledige kop (ook '(agenda
+    onvolledig)'), als [(kop, regels)]; het streepje vooraan valt weg."""
+    uit, huidig = [], None
+    for regel in (tekst or "").splitlines():
+        if regel.startswith("## "):
+            huidig = (regel[3:].strip(), []) if regel[3:].startswith(BUNDELBLOKKEN) else None
+            if huidig:
+                uit.append(huidig)
+        elif huidig is not None and regel.strip():
+            huidig[1].append(regel[2:] if regel.startswith("- ") else regel.strip())
+    return uit
+
+
 def dag_gegevens(dag, cijfers=None):
     d = date.fromisoformat(dag)
     tekst, rauw = lees(dag, "md"), lees(dag, "json")
@@ -277,6 +296,7 @@ def dag_gegevens(dag, cijfers=None):
             "tegels": tg, "gesprekken": praat,
             "gepland": gepland(s.get("Gepland", [])), "niet_gepland": niet_gepland(s.get("Niet gepland", [])),
             "communicatie": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Communicatie", [])],
+            "bundel": bundel_blokken(tekst),
             "eigen": [r[2:] if r.startswith("- ") else r.strip() for r in s.get("Eigen werk en gezondheid", [])],
             "versie": over[0] if over else ""}
 

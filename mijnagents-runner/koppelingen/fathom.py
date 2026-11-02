@@ -164,11 +164,29 @@ def _actiepunten_md(punten):
                                                            if p["wie"] or p["tijd"] else "") + "\n" for p in punten)
 
 
-def vul_aan(map_, g, droog=False):
+def map_is_prive(map_):
+    """Privé volgens de archiefmap zelf (gesprek.json, zoals De Fathomwacht een bestaande map leest): de herkenning zegt
+    prive of afdeling privé. Geen, een lege of een onleesbare herkenning is privé (FATHOM-7, de veilige kant)."""
+    try:
+        with open(os.path.join(map_, "gesprek.json"), encoding="utf-8") as f:
+            herk = json.load(f).get("herkenning")
+    except (OSError, ValueError, AttributeError):
+        return True
+    if not isinstance(herk, dict) or not herk:
+        return True
+    return bool(herk.get("prive")) or str(herk.get("afdeling") or "").strip().casefold() in ("prive", "privé")
+
+
+def vul_aan(map_, g, droog=False, prive=None):
     """FATHOM-1: schrijf in een bestaande archiefmap de samenvatting en de actiepunten van Fathom, alleen wat ontbreekt.
     Een bestand dat er al is, blijft byte voor byte gelijk (open met 'x': ook bij twee schrijvers tegelijk nooit
-    overschrijven); een map die er niet is, maak ik niet. Geeft de namen van wat geschreven werd (droog: zou worden)."""
+    overschrijven); een map die er niet is, maak ik niet. Geeft de namen van wat geschreven werd (droog: zou worden).
+    samen2 (Codex-toets 1): een privégesprek krijgt geen samenvatting en geen actiepunten, want het archief gaat via de
+    Mac-sync naar Dropbox en niets leest ze (privé blijft 'privégesprek, N min'). prive: wat de schrijver al weet (een
+    nieuwe map); None: de herkenning in gesprek.json van de map (map_is_prive)."""
     if not os.path.isdir(map_):
+        return []
+    if map_is_prive(map_) if prive is None else prive:
         return []
     bestanden = []
     tekst = samenvatting_tekst(g)
