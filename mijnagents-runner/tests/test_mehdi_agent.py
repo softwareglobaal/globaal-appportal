@@ -1146,6 +1146,42 @@ def test_codex1_model_maakt_geen_dubbel_en_niet_gepland_geeft_geen_taak():
         o.weg()
 
 
+def test_codex2_een_klantnaam_in_een_actiepunt_maakt_een_echte_taak_geen_dubbel():
+    """Codex-toets 2: al_in_lijst weigert alleen een bron die de kern van een actie- of opvolgpunt draagt, niet een stuk dat
+    toevallig ook in een actiepunt staat (een klantnaam)."""
+    bundel = [{"dag": GISTEREN, "dagbestand": WERKBUNDEL, "telling": {}}]
+    al = M.lijstregels(bundel)
+    assert M.is_dubbel("actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: Offerte keuken sturen", al)
+    assert M.is_dubbel("Offerte keuken sturen", al)
+    assert not M.is_dubbel("Klant Omega", al) and not M.is_dubbel("UNABO 9405", al)
+
+
+def test_codex2_een_uitgesteld_punt_komt_de_volgende_tussenronde_ook_bij_dezelfde_bundel():
+    """Codex-toets 2: een punt dat bij een volle lijst moest wachten, komt de volgende tussenronde (zelfde bundel, zelfde
+    vingerafdruk) erbij zodra er plaats is: de ronde slaat dan niet over."""
+    o = _werkbundel()
+    try:
+        r, staat = o.ronde(uit=antwoord())
+        assert len(staat["taken"]) == 3
+        # de offerte moest wachten (de lijst was vol); in een ronde met het model kwam er een plaats vrij
+        offerte = next(t for t in staat["taken"].values() if t["tekst"] == "Offerte keuken sturen")
+        st = json.load(open(o.staat, encoding="utf-8"))
+        del st["taken"][offerte["id"]]
+        for i in range(M.MAX_OPEN - 3):
+            st["taken"][f"t-{i:07d}"] = {"id": f"t-{i:07d}", "tekst": f"taak {i}", "voor": "mehdi", "wie": "", "waarom": "",
+                                         "bron": "", "dag": GISTEREN, "prioriteit": "normaal", "status": "open",
+                                         "sinds": "2026-10-31T06:00:00+00:00", "bijgewerkt": "2026-10-31T06:00:00+00:00"}
+        json.dump(st, open(o.staat, "w", encoding="utf-8"))
+        aantal = len(o.claude_oproepen)
+        r, staat = o.ronde(uit=antwoord(), nu=MIDDAG_UTC, moment="tussendoor")
+        assert offerte["id"] in staat["taken"] and len(o.claude_oproepen) == aantal + 1, "er was plaats: geen overslaan"
+        aantal = len(o.claude_oproepen)
+        r, staat = o.ronde(uit=antwoord(), nu=NAMIDDAG_UTC, moment="tussendoor")
+        assert len(o.claude_oproepen) == aantal and "niets nieuw" in r.detail, "zonder nieuws slaat ze wel over"
+    finally:
+        o.weg()
+
+
 def test_codex1_volle_lijst_laat_een_actiepunt_wachten_in_plaats_van_vervallen():
     """Codex-toets 1: met MAX_OPEN open taken wordt een nieuw actiepunt niet meteen als vervallen bewaard; het komt de
     volgende ronde, als er plaats is."""
@@ -1199,6 +1235,73 @@ def test_db6_opvolgpunten_blijven_staan_en_sluiten_als_ze_weg_zijn():
     staat4, tel4 = M.neem_actiepunten(staat, M.actiepunten(b3), b3, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b3))
     assert tel4["opvolg_af"] == 1 and staat4["afgerond"][-1]["reden"] == "staat niet meer open in de dagbundel", tel4
     assert any("Terugbellen" in t["tekst"] for t in staat4["taken"].values()), "de oproep staat er nog"
+    # Codex-toets 2: een blok met 'onvolledig: ... niet gelezen' sluit niets
+    xel = tekst.replace("- 10:12 telefoon (privé): geen terugbelpoging gezien",
+                        "- onvolledig: Xelion niet gelezen voor deze dag")
+    b5 = [{"dag": GISTEREN, "dagbestand": xel, "telling": {}}]
+    staat5, tel5 = M.neem_actiepunten(staat, M.actiepunten(b5), b5, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b5))
+    assert not tel5["opvolg_af"] and any("Terugbellen" in t["tekst"] for t in staat5["taken"].values()), tel5
+    # een andere soort bij dezelfde mail (belangrijk wordt actie, of 'mogelijk al beantwoord'): dezelfde taak, nieuwe regel
+    ander = tekst.replace("belangrijk, van Klant Omega: Vraag over de offerte",
+                          "actie, van Klant Omega: Vraag over de offerte (mogelijk al beantwoord)")
+    b6 = [{"dag": GISTEREN, "dagbestand": ander, "telling": {}}]
+    staat6, tel6 = M.neem_actiepunten(staat, M.actiepunten(b6), b6, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b6))
+    mails = [t for t in staat6["taken"].values() if t["tekst"].startswith("Mail beantwoorden")]
+    assert not tel6["opvolg_af"] and not tel6["opvolgpunt"] and len(mails) == 1, (tel6, mails)
+    assert mails[0]["bron"].endswith("(mogelijk al beantwoord)") and M.bron_in(mails[0]["bron"], M.corpus_van(b6, []))
+    # terug naar de eerste soort: nog steeds een taak, nooit weg
+    staat7, tel7 = M.neem_actiepunten(staat6, M.actiepunten(bundel), bundel, KERN, NAMIDDAG_UTC, opvolg=M.opvolgpunten(bundel))
+    assert len([t for t in staat7["taken"].values() if t["tekst"].startswith("Mail beantwoorden")]) == 1, staat7["taken"]
+
+
+def test_codex2_open_opvolgtaak_van_een_oudere_dag_blijft_zolang_ze_openstaat():
+    """Codex-toets 2: een opvolgtaak van een dag die uit de drie dagen invoer viel, vervalt niet zolang ze in het
+    dagbestand van haar dag (tot veertien dagen, het nachtvenster) nog openstaat, en sluit als ze daar weg is. Werk leest
+    daarvoor alleen dat dagbestand na, nooit een voorlopige bundel."""
+    oud_dag = "2026-10-24"
+    mail = "- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte"
+    dagbestand = f"# Dag {oud_dag} vastgesteld\n\n## Mail wacht op antwoord\n\n{mail}\n\n## Over deze vaststelling\n\n- x\n"
+    o = _werkbundel()
+    try:
+        with open(os.path.join(o.map, "2026", f"{oud_dag}.md"), "w", encoding="utf-8") as f:
+            f.write(dagbestand)
+        p = M.opvolgpunten([{"dag": oud_dag, "dagbestand": dagbestand, "telling": {}}])[0]
+        tid = M.opvolg_id(p)
+        os.makedirs(os.path.dirname(o.staat), exist_ok=True)
+        oud_ts = "2026-10-15T08:00:00+00:00"                     # langer dan OUD_DAGEN niet bijgewerkt
+        json.dump({"taken": {tid: {"id": tid, "tekst": p["wat"], "voor": "mehdi", "wie": "", "waarom": "", "bron": p["bron"],
+                                   "dag": oud_dag, "prioriteit": "normaal", "status": "open", "sinds": oud_ts,
+                                   "bijgewerkt": oud_ts, "opvolgblok": p["blok"]}},
+                   "afgerond": [], "geleerd": [], "nummers": {}}, open(o.staat, "w", encoding="utf-8"))
+        r, staat = o.ronde(uit=antwoord())
+        assert tid in staat["taken"], "staat nog open in het dagbestand van haar dag: blijft"
+        with open(os.path.join(o.map, "2026", f"{oud_dag}.md"), "w", encoding="utf-8") as f:
+            f.write(dagbestand.replace(mail, "- geen mail van deze dag wacht nog"))
+        o.gezegd = [{"id": 1, "ts": "", "tekst": "verder", "antwoord": ""}]
+        r, staat = o.ronde(uit=antwoord(), nu=MIDDAG_UTC, moment="tussendoor")
+        assert tid not in staat["taken"] and staat["afgerond"][-1]["reden"] == "staat niet meer open in de dagbundel", staat
+    finally:
+        o.weg()
+
+
+def test_codex2_voorlopige_bundel_verbergt_een_ontbrekend_dagbestand_van_gisteren_niet():
+    """Codex-toets 2: is er alleen een voorlopige bundel van vandaag en geen dagbestand van gisteren, dan de nood."""
+    wortel = tempfile.mkdtemp(prefix="mehdi-agent-voorlopig-")
+    try:
+        dagboek, voorlopig = os.path.join(wortel, "dagboek"), os.path.join(wortel, "dagbundel-voorlopig")
+        os.makedirs(voorlopig)
+        os.makedirs(dagboek)
+        with open(os.path.join(voorlopig, "vandaag.md"), "w", encoding="utf-8") as f:
+            f.write("# Dag 2026-10-31 voorlopig (stand 07:00)\n\n## Communicatie\n\n- mail: 1 binnen\n")
+        with open(os.path.join(voorlopig, "vandaag.json"), "w", encoding="utf-8") as f:
+            json.dump({"dag": "2026-10-31"}, f)
+        r = NepRonde()
+        M.werk(r, nu=OCHTEND_UTC, map_=dagboek, gezegd=lambda nu: [], kern=lambda: list(KERN),
+               claude=lambda system, inhoud: (antwoord(), {}), zet=lambda its: {"nieuw": len(its)},
+               lees=lambda uniek: [], staatpad=os.path.join(wortel, "staat.json"), bewaar=False)
+        assert ("Dagbundel van gisteren ontbreekt", "claude-code") in r.noden, r.noden
+    finally:
+        shutil.rmtree(wortel, ignore_errors=True)
 
 
 def test_angel7_voorlopige_bundel_van_vandaag_en_de_nacht_gaat_voor():

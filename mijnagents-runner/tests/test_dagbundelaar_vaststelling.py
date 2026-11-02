@@ -1761,6 +1761,10 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
         _schrijf_tekst(os.path.join(zonder_id, "samenvatting.md"), "IDMERKTEKEN samenvatting.")
         koppel = _fathom_map(m, "2026-10-22 1240 Koppeling", 708)
         os.symlink(os.path.join(buiten, "samenvatting.md"), os.path.join(koppel, "samenvatting.md"))
+        # Codex-toets 2: ook de archiefmap zelf als koppeling (naar een map met een geldig gesprek.json) wordt niet gevolgd
+        echt = _fathom_map(m, "echt", 710, "MAPKOPPELMERKTEKEN samenvatting.", [])
+        mapkoppel = os.path.join(m, "fathom-data", "2026-10-22 1245 Mapkoppeling")
+        os.symlink(echt, mapkoppel)
         rec = {"versie": 3, "uniek": "plaud:p1", "bron": "plaud", "datum": DAG, "start": "13:00", "minuten": 30,
                "prive": False, "label": "", "firma": "HA", "soort": "", "dossier": "9003", "dossier_bewijs": "bevestigd",
                "label_van": "afdeling van de wacht", "samenvatting": "De werf is bezocht. De vloer moet opnieuw.",
@@ -1778,6 +1782,7 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
                    _gesprek("fathom:707", "12:30", 15, "fathom", buiten, thema="Buiten de datamap"),
                    _gesprek("fathom:709", "12:35", 15, "fathom", zonder_id, thema="Zonder id"),
                    _gesprek("fathom:708", "12:40", 15, "fathom", koppel, thema="Koppeling"),
+                   _gesprek("fathom:710", "12:45", 15, "fathom", mapkoppel, thema="Mapkoppeling"),
                    _gesprek("plaud:p1", "13:00", 30, "plaud", "Data uit Mehdi/Plaud/2026-10-22 1300 Werf/x.md", thema="Werf"),
                    _gesprek("plaud:p2", "15:00", 12, "plaud", thema="GESPREKMERKTEKEN"),
                    _gesprek("plaud:p4", "15:30", 25, "plaud", thema="Overleg"),
@@ -1798,6 +1803,7 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
         assert "[fathom:707]" in blok and "BUITENMERKTEKEN" not in t, "nooit een bestand buiten de datamap"
         assert "[fathom:709]" in blok and "IDMERKTEKEN" not in t, "zonder gesprek.json met het id lees ik niets"
         assert "[fathom:708]" in blok and "BUITENMERKTEKEN" not in t, "nooit een symbolische koppeling volgen"
+        assert "[fathom:710]" in blok and "MAPKOPPELMERKTEKEN" not in t, "ook geen archiefmap die een koppeling is"
         assert "[plaud:p1]\n  - firma: HA; dossier: 9003 (bevestigd)\n  - samenvatting (De Gespreksanalist): De werf is bezocht." \
                in blok, blok
         assert "  - actiepunt [plaud:p1; HA 9003; wie: Mehdi; tegen: vrijdag; voor: mehdi]: Aannemer bellen over de vloer" in blok

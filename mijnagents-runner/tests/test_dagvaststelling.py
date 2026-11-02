@@ -193,6 +193,16 @@ def test_agenda_en_standen():
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"}))
     eis("WhatsApp: gezien 14 berichten in 1 gesprekken; oproepen en minuten onbekend (niet aangesloten)" in t, f"rijen alleen\n{t}")
     eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(kanalen={"whatsapp": "niet aangesloten"})), "zonder rijen")
+    # Codex-toets 2: zo ook telefoon, sms en Xelion
+    andere = [rij("telefoon:a", "09:00", 4, "Proef", bron="telefoon", prive=1, thema="iPhone, inkomend"),
+              rij("sms:b:2026-10-22", "10:00", 0, "Proef", bron="sms", prive=1, thema="3 berichten"),
+              rij("xelion:c", "11:00", 0, "Proef", bron="xelion", prive=1, dubbel_van="buiten:gemist",
+                  thema="Xelion, inkomend, gemist")]
+    t = V.tekst(vast(rijen=andere, kanalen={"telefoon": "niet aangesloten", "sms": "niet aangesloten",
+                                            "xelion": "niet aangesloten"}))
+    eis("- telefoon: gezien 1 oproepen, 4 min; gemiste oproepen onbekend (niet aangesloten)" in t
+        and "- sms en iMessage: 3 berichten in 1 gesprekken gezien (niet aangesloten)" in t
+        and "- Xelion: gezien 1 gemist; oproepen en minuten onbekend (niet aangesloten)" in t, f"andere kanalen\n{t}")
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "stil sinds 2026-10-20 09:00"}))
     # WA-6 (T-0120): op een dag die niet gelezen is, is een nul onbekend; wat gezien is, blijft een ondergrens
     eis("WhatsApp: gezien 14 berichten in 1 gesprekken; oproepen en minuten onbekend (stil sinds 2026-10-20 09:00)" in t
@@ -372,16 +382,26 @@ def test_angel2_werkgesprekken_per_gesprek_met_verwijzing():
     eis("actiepunten: geen" not in blok.split("[fathom:703]")[1].split("\n- ")[0], "onbekend is nooit geen")
     eis("Werkgesprekken" in V.wijzigingen(V.tekst(vast()), t), "het blok telt in de wijzigingen")
     # Codex-toets 1: wat privé is volgens de inhoud, is privé in de hele dagtekst (ook Niet gepland en Gepland)
-    rijen2 = rijen + [rij("plaud:p5", "17:00", 25, "Klant Privaat", bron="plaud", thema="Geheim")]
+    rijen2 = rijen + [rij("plaud:p5", "17:00", 25, "Pieter Privaat", bron="plaud", thema="Geheim")]
     INHOUD["plaud:p5"] = {"prive": True}
-    afs = [afspraak("a", "16:55", "17:30", "!! Mehdi: [HA] 9003 Bespreking", personen="Klant Privaat")]
+    afs = [afspraak("a", "16:55", "17:30", "!! Mehdi: [HA] 9003 Bespreking - Pieter Privaat")]
     v2 = V.vaststellen(DAG, afs, set(), rijen2, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
                        bundel={"inhoud_van": lambda g: INHOUD.get(g["uniek"]), "morgen": [], "mail_open": [],
                                "prive_postvakken": set()})
     t2 = V.tekst(v2)
-    eis("Klant Privaat" not in t2 and "- 17:00 Plaud, 25 min, privé" in t2 and "- 17:00 privégesprek, 25 min" in t2,
+    eis("Pieter Privaat" not in t2 and "- 17:00 privégesprek, 25 min" in t2,
         f"privé volgens de inhoud: nergens een naam\n{t2}")
     eis("Klant Omega" in t2, "een werkgesprek houdt zijn naam")
+    eis("- 16:55 (privé): bevestigd" in t2 and "Bespreking" not in t2,
+        f"Codex-toets 2: een afspraak bevestigd door een privégesprek toont haar titel niet\n{t2}")
+    # Codex-toets 2: een privé Plaud-opname die in een Fathom-gesprek valt, maakt dat gesprek privé (geen naam)
+    rijen3 = [rij("fathom:801", "09:00", 45, "Klant Omega", bron="fathom", thema="Keuken"),
+              rij("plaud:p8", "09:05", 40, "", bron="plaud", prive=1, thema="Privé")]
+    v3 = V.vaststellen(DAG, [], set(), rijen3, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
+                       bundel={"inhoud_van": lambda g: {"samenvatting": "GEHEIM", "actiepunten": []}, "morgen": [],
+                               "mail_open": [], "prive_postvakken": set()})
+    t3 = V.tekst(v3)
+    eis("Klant Omega" not in t3 and "GEHEIM" not in t3 and "- 09:00 privégesprek, 45 min" in t3, f"Plaud privé\n{t3}")
     # zonder bundel (oude aanroep) geen nieuwe blokken
     eis(all(f"## {k}" not in V.tekst(vast()) for k in V.BUNDELKOPPEN), "oude aanroep zonder blokken")
 

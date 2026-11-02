@@ -202,7 +202,9 @@ def gesprek_tekst(g):
 
 def gesprekken_van_dag(dag, rijen):
     """De leidende gesprekken en oproepen van de dag, zonder Plaud-dubbels van een Zoom- of Fathom-gesprek. Een Zoom-rij
-    met zo'n Plaud-dubbel krijgt 'opname': 'plaud' (F6): het gesprek telt een keer, en wel als gesprek met opname."""
+    met zo'n Plaud-dubbel krijgt 'opname': 'plaud' (F6): het gesprek telt een keer, en wel als gesprek met opname. Is die
+    Plaud-opname privé, dan is het gesprek privé (Codex-toets 2, T-0120): anders stond de naam van de Zoom- of Fathom-rij
+    erbij."""
     praat = [dict(g) for g in rijen if str(g.get("datum") or "")[:10] == dag and is_leidend(g)
              and soort(g) in ("gesprek", "oproep")]
     vast = [g for g in praat if g.get("bron") in ("zoom", "fathom")]
@@ -212,6 +214,8 @@ def gesprekken_van_dag(dag, rijen):
             z = next((z for z in vast if _samen(gesprek_venster(g), gesprek_venster(z)) >= PLAUD_SAMEN), None)
             if z is not None:
                 z["opname"] = "plaud"
+                if is_prive(g):
+                    z["prive"] = 1
                 continue
         uit.append(g)
     return uit
@@ -280,12 +284,16 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
     gepland, gebruikt = [], set()
+    # Codex-toets 2 (T-0120): een afspraak die bevestigd wordt door een opgenomen gesprek dat privé is, toont haar titel
+    # niet (die kan de naam dragen); alleen met de bundel, zoals de rest van de inhoud voor Ai Angel
+    prive_opname = {g["uniek"] for g in praat if g.get("bron") in WERKBRONNEN and is_prive(g)} if bundel is not None else set()
     for a in sorted(afspraken, key=lambda x: x.get("start") or ""):
         loc = (locatie_per_id or {}).get(a.get("id"))
         b = bewijs(a, praat, loc)
         gebruikt.update(b["gesprekken"])
         gepland.append({"id": a.get("id"), "tijd": str(a.get("start") or "")[11:16], "titel": a.get("titel") or "",
-                        "prive": bool(prive_afspraak(a)), "uitkomst": b["uitkomst"], "grond": b["grond"]})
+                        "prive": bool(prive_afspraak(a)) or any(u in prive_opname for u in b["gesprekken"]),
+                        "uitkomst": b["uitkomst"], "grond": b["grond"]})
     ongepland = [g for g in sorted(praat, key=lambda g: gesprek_venster(g)[0])
                  if g["uniek"] not in gebruikt and int(g.get("minuten") or 0) >= MIN_GESPREK]
     leidend = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and is_leidend(g)]

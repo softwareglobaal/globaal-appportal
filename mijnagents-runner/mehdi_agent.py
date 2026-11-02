@@ -85,6 +85,7 @@ DAGBESTAND_MAX = 60000  # tekens per dagbestand naar het model
 GESPREK_DAGEN = 14      # zo ver terug lees ik wat Mehdi tegen mij zei
 MAX_NIEUW = 12          # nieuwe taken per ronde
 MAX_NIEUW_ACTIE = 20    # nieuwe taken uit de actiepunten van de bundel per ronde (ANGEL-2); de rest komt de volgende ronde
+CONTROLE_DAGEN = 14     # zo ver terug lees ik het dagbestand van een open opvolgtaak na (het nachtvenster van De Dagbundelaar)
 MAX_OPEN = 40           # open taken die ik bijhoud
 OUD_DAGEN = 14          # een open taak die zo lang niet bijgewerkt werd, vervalt
 MAX_AFGEROND = 100
@@ -474,9 +475,17 @@ def zonder_gesprekken_zonder_actie(dagbestand):
 
 
 def lijstregels(bundels):
-    """De regels die al zonder model een taak worden (actiepunten en opvolgpunten), genormaliseerd: een nieuwe taak van het
-    model met haar bron daarin is een dubbel (Codex-toets 1)."""
-    return [normaal(p["bron"]) for p in actiepunten(bundels) + opvolgpunten(bundels)]
+    """(regel, kern) van wat al zonder model een taak wordt (actiepunten en opvolgpunten), genormaliseerd. Een nieuwe taak
+    van het model is een dubbel (Codex-toets 1) als elk stuk van haar bron in zo'n regel staat en de kern van het punt
+    draagt (de tekst van het actiepunt, of de hele regel van een opvolgpunt). Een stuk als een klantnaam dat toevallig ook
+    in een actiepunt staat, is zo geen dubbel (Codex-toets 2)."""
+    return ([(normaal(p["bron"]), normaal(p["wat"])) for p in actiepunten(bundels)]
+            + [(normaal(p["bron"]), normaal(p["bron"])) for p in opvolgpunten(bundels)])
+
+
+def is_dubbel(bron, al_lijst):
+    stukken = _stukken(bron)
+    return bool(stukken) and all(any(s in regel and kern in s for regel, kern in al_lijst) for s in stukken)
 
 
 def opvolgpunten(bundels):
@@ -492,8 +501,22 @@ def opvolgpunten(bundels):
                 continue
             if blok and regel.startswith("- ") and not OPVOLG_STAND.match(regel):
                 uit.append({"dag": b["dag"], "blok": blok, "wat": f"{OPVOLGBLOKKEN[blok]}: {regel[2:].strip()}",
-                            "bron": regel[2:].strip()})
+                            "bron": regel[2:].strip(), "sleutel": opvolg_sleutel(blok, regel[2:].strip())})
     return uit
+
+
+def opvolg_sleutel(blok, regel):
+    """Wat een opvolgpunt is, los van wat erbij kan veranderen (Codex-toets 2): bij een gemiste oproep het uur en het
+    kanaal (niet de stand); bij een mail het postvak, de afzender en het onderwerp (niet de soort of 'mogelijk al
+    beantwoord'); bij een privépostvak alleen het postvak (niet het aantal). Anders de hele regel."""
+    if blok == "Gemist zonder terugbellen":
+        m = re.match(r"(\d\d:\d\d) (.+?) \(privé\):", regel)
+        return f"{m.group(1)}|{m.group(2)}" if m else regel
+    m = re.match(r"(.+?): \d+ mails? \(privé\)$", regel)
+    if m:
+        return f"{m.group(1)}|privé"
+    m = re.match(r"(.+?): .*?, van (.*?): (.*?)(?: \(mogelijk al beantwoord\))?$", regel)
+    return f"{m.group(1)}|{m.group(2)}|{m.group(3)}" if m else regel
 
 
 def opvolg_gelezen(bundels):
@@ -511,7 +534,9 @@ def opvolg_gelezen(bundels):
             if blok and regel.startswith("- "):
                 regels[blok].append(regel)
         for k, rs in regels.items():
-            if not any(r.startswith(("- niet gelezen", "- onbekend")) for r in rs):
+            # Codex-toets 2: ook 'onvolledig: Xelion niet gelezen' of 'geen gezien (... niet gelezen ...)' is geen gelezen
+            # blok: een punt dat daar ontbreekt, kan nog openstaan
+            if not any(r.startswith(("- niet gelezen", "- onbekend", "- onvolledig")) or "niet gelezen" in r for r in rs):
                 gelezen.add((b["dag"], k))
     return gelezen
 
@@ -552,8 +577,8 @@ def actiepunten(bundels):
 
 
 def opvolg_id(p):
-    """Een vaste id per opvolgpunt: dezelfde dag, hetzelfde blok en dezelfde regel."""
-    return "o-" + hashlib.sha1(f"{p['dag']}|{p['blok']}|{normaal(p['bron'])}".encode()).hexdigest()[:8]
+    """Een vaste id per opvolgpunt: dezelfde dag, hetzelfde blok en dezelfde sleutel (opvolg_sleutel)."""
+    return "o-" + hashlib.sha1(f"{p['dag']}|{p['blok']}|{normaal(p['sleutel'])}".encode()).hexdigest()[:8]
 
 
 def actie_id(p):
@@ -561,16 +586,17 @@ def actie_id(p):
     return "a-" + hashlib.sha1(f"{p['verwijzing']}|{normaal(p['wat'])}".encode()).hexdigest()[:8]
 
 
-def neem_actiepunten(staat, punten, bundels, kern, nu, opvolg=None):
+def neem_actiepunten(staat, punten, bundels, kern, nu, opvolg=None, controle=None):
     """ANGEL-2: elk open actiepunt uit de bundel wordt een taak in de lijst, zonder model en een keer (actie_id). Staat ze
     al open, dan blijft ze zoals ze is (het model of Mehdi kan ze bijwerken); is ze afgerond, dan komt ze niet terug. Staat
     het punt als 'klaar in Fathom' in de bundel, dan wordt het geen taak, en gaat een open taak naar afgerond. Let op: dat
     is de stand toen De Fathomwacht actiepunten.json schreef; ze overschrijft het bestand nooit, dus een punt dat later in
     Fathom afgevinkt wordt, ziet Ai Angel niet (Codex-toets 1, open punt voor de groep fathom). Voor wie: een collega uit
     kern als wie die naam draagt, anders Mehdi. Een privéstuk in de bron houdt de taak bij Mehdi.
-    DB-6: opvolg (opvolgpunten) wordt zo ook een taak voor Mehdi (id o-...), en gaat naar afgerond als de regel niet meer
-    in een gelezen blok van zijn dag staat (teruggebeld, beantwoord). Een nieuw punt alleen als er plaats is in de lijst
-    (MAX_OPEN), anders de volgende ronde: nooit meteen vervallen. Geeft (nieuwe staat, telling)."""
+    DB-6: opvolg (opvolgpunten) wordt zo ook een taak voor Mehdi (id o-...). Ze blijft open (en wordt bijgewerkt, dus
+    vervalt niet) zolang haar punt in de bundel of in het dagbestand van haar dag (controle) staat, en gaat naar afgerond
+    als het daar niet meer staat in een blok dat gelezen werd (teruggebeld, beantwoord). Een nieuw punt alleen als er
+    plaats is in de lijst (MAX_OPEN), anders de volgende ronde: nooit meteen vervallen. Geeft (nieuwe staat, telling)."""
     staat = json.loads(json.dumps(staat))
     taken, telling = staat["taken"], Counter()
     al_af = {t.get("id") for t in staat["afgerond"]}
@@ -579,16 +605,28 @@ def neem_actiepunten(staat, punten, bundels, kern, nu, opvolg=None):
     def plaats():
         return len(taken) < MAX_OPEN and telling["actiepunt"] + telling["opvolgpunt"] < MAX_NIEUW_ACTIE
     if opvolg is not None:
-        gelezen = opvolg_gelezen(bundels)
-        nu_open = {opvolg_id(p) for p in opvolg}
+        # controle: ook de dagbestanden van oudere dagen met een open opvolgtaak (werk leest ze erbij, tot het nachtvenster),
+        # zodat zo'n taak blijft zolang ze openstaat en sluit zodra ze weg is (Codex-toets 2)
+        alle = list(bundels) + [b for b in controle or [] if b["dag"] not in {x["dag"] for x in bundels}]
+        gelezen = opvolg_gelezen(alle)
+        nu_open = {opvolg_id(p): p for p in opvolgpunten(alle)}
         for tid, t in list(taken.items()):
-            if tid.startswith("o-") and (t.get("dag"), t.get("opvolgblok")) in gelezen and tid not in nu_open:
+            if not tid.startswith("o-"):
+                continue
+            if tid in nu_open:
+                p = nu_open[tid]
+                if t.get("bron") != p["bron"][:300]:          # zelfde punt, andere regel (soort, aantal): de nieuwe regel
+                    t.update(tekst=p["wat"][:300], bron=p["bron"][:300])
+                t["bijgewerkt"] = nu_s                         # staat nog open: vervalt niet
+            elif (t.get("dag"), t.get("opvolgblok")) in gelezen:
                 staat["afgerond"].append(dict(taken.pop(tid), status="gedaan", afgerond=nu_s,
                                               reden="staat niet meer open in de dagbundel"))
                 telling["opvolg_af"] += 1
         for p in opvolg:
             tid = opvolg_id(p)
-            if tid in taken or tid in al_af:
+            if tid in taken:
+                continue
+            if tid in al_af:
                 continue
             if not plaats():
                 telling["actiepunt_later"] += 1
@@ -746,7 +784,7 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
             if not bron_in(t["bron"], corpus):
                 telling["zonder_bron"] += 1                 # geen bron in de bundel: geen taak (werkwijze, stap 4)
                 continue
-            if all(any(s in regel for regel in al_lijst) for s in _stukken(t["bron"])):
+            if is_dubbel(t["bron"], al_lijst):
                 telling["al_in_lijst"] += 1                 # een actie- of opvolgpunt staat al in de lijst (a- of o-)
                 continue
             tid = "t-" + hashlib.sha1(f"{normaal(t['tekst'])}|{t['dag']}".encode()).hexdigest()[:8]
@@ -1094,7 +1132,8 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         r.nood("Geen dagbundel gevonden van vandaag of de twee dagen ervoor", wie="claude-code")
         r.detail = "geen dagbundel, niets klaargezet"
         return None
-    if bundels[0]["dag"] < (vandaag - timedelta(days=1)).isoformat():
+    # Codex-toets 2: een voorlopige bundel van vandaag is geen dagbestand van gisteren
+    if not any(not b.get("voorlopig") and b["dag"] >= (vandaag - timedelta(days=1)).isoformat() for b in bundels):
         r.nood("Dagbundel van gisteren ontbreekt", wie="claude-code")
     gezegd_lijst = (gezegd or wat_mehdi_zei)(nu)
     if gezegd_lijst is None:
@@ -1106,13 +1145,21 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         kern_lijst = []
     m = kies_moment or moment(nu, staat)
     vinger = vingerafdruk(bundels, gezegd_lijst)
-    if m == "tussendoor" and vinger == staat.get("vingerafdruk"):
+    # ANGEL-2 en DB-6: de actie- en opvolgpunten van de bundel zonder model in de lijst, voor Claude ze ziet (in
+    # open_taken); ook als Claude straks niet bereikbaar is, staan ze erin. Voor de controle van de open opvolgtaken ook de
+    # dagbestanden van hun dag, tot het nachtvenster van De Dagbundelaar (veertien dagen), nooit een voorlopige.
+    grens = (vandaag - timedelta(days=CONTROLE_DAGEN)).isoformat()
+    oud = sorted({t.get("dag") for t in staat["taken"].values() if str(t.get("id", "")).startswith("o-")
+                  and grens <= str(t.get("dag") or "") and t.get("dag") not in {b["dag"] for b in bundels}})
+    controle = lees_bundels(oud, map_, vandaag="-") if oud else []
+    staat, actie = neem_actiepunten(staat, actiepunten(bundels), bundels, kern_lijst, nu, opvolg=opvolgpunten(bundels),
+                                    controle=controle)
+    # Codex-toets 2: een punt dat er nu bij kan (of een opvolgtaak die sluit), is nieuws, ook bij dezelfde bundel
+    nieuws = any(n for k, n in actie.items() if k != "actiepunt_later")
+    if m == "tussendoor" and vinger == staat.get("vingerafdruk") and not nieuws:
         ag.log("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")   # anders alleen een hartslag (ANGEL-10)
         r.detail = werkverslag(m, bundels, Counter(), staat, {}, overgeslagen=True)
         return staat
-    # ANGEL-2: de actiepunten van de bundel zonder model in de lijst, voor Claude ze ziet (in open_taken); ook als Claude
-    # straks niet bereikbaar is, staan ze erin
-    staat, actie = neem_actiepunten(staat, actiepunten(bundels), bundels, kern_lijst, nu, opvolg=opvolgpunten(bundels))
     inhoud = invoer(nu, m, bundels, staat, gezegd_lijst, kern_lijst)
     uit, meta, telling, ontbreekt = None, {}, Counter(), []
     try:
