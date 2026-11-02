@@ -113,7 +113,7 @@ PLIST
         cdhash "$APP" > "$BASIS/PROEF"
         print -r -- "proef ok onder launchd: het Chrome-profiel is gelezen (cdhash $(cat "$BASIS/PROEF")); nu: aan"
     else
-        print -r -- "proef mislukt: $(grep -m1 'BrowserWacht:\|onleesbaar' "$uit" || head -c 200 "$uit")"
+        print -r -- "proef mislukt: $(grep -m1 'BrowserWacht:\|"reden"' "$uit" || head -c 200 "$uit")"
         print -r -- "$APP" | /usr/bin/pbcopy
         print -r -- "Stap voor Mehdi: System Settings > Privacy & Security > Full Disk Access: BrowserWacht met min (-) weg als hij er staat, dan plus (+), Command Shift G, Command V (het pad staat op het klembord), Open. Daarna opnieuw: proef"
         exit 1

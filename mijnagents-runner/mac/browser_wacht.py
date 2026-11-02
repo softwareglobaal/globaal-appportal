@@ -177,6 +177,8 @@ def main():
                      "wie": "claude-code"})
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
+    if not gelezen:
+        inhoud["reden"] = reden or "geen toegang (Full Disk Access)"   # ook in --droog: de proef van de uitrol leest dit
     v = per_dag[DAG]
     titel = f"Websites {DAG}: {v['bezoeken']} bezoeken op {v['sites']} sites"
     if DROOG:
