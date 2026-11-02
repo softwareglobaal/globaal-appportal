@@ -236,8 +236,13 @@ def pdf_tekst(data):
 
 
 def _gelezen_tot_nu(log):
-    """(geslaagd, pogingen) in het leeslog. De eerste MAX_VERZEND geslaagde verzendpagina's van een winkel waarvan al
-    een pagina gelezen is, tellen niet mee (overleg 44, D en X4)."""
+    """(geslaagd, pogingen) in het leeslog; zie _stand."""
+    return _stand(log)[:2]
+
+
+def _stand(log):
+    """(geslaagd, pogingen, verzend, hosts) in het leeslog. De eerste MAX_VERZEND geslaagde verzendpagina's van een
+    winkel waarvan al een pagina gelezen is, tellen niet als geslaagd (overleg 44, D en X4)."""
     geslaagd = pogingen = verzend = 0
     hosts = set()
     try:
@@ -258,14 +263,18 @@ def _gelezen_tot_nu(log):
                         pass
     except OSError:
         pass
-    return geslaagd, pogingen
+    return geslaagd, pogingen, verzend, hosts
 
 
 def lees(url, log, ophalen=haal):
     """(tekst voor het model, geslaagd). Schrijft elke poging, ook een mislukte, in het leeslog."""
     url = str(url or "").strip()
-    geslaagd, pogingen = _gelezen_tot_nu(log)
-    if geslaagd >= MAX_LEZEN or pogingen >= MAX_POGINGEN:
+    geslaagd, pogingen, verzend, hosts = _stand(log)
+    if bijna_plafond(log):
+        # Verplicht afronden voor het plafond, zodat het werk niet verloren gaat (overleg 44, X7; Codex 45).
+        return "Bijna aan het plafond van de beurten: lees en zoek niets meer en lever nu je JSON-verslag.", False
+    vrije_verzend = verzendpagina(url) and _host(url) in hosts and verzend < MAX_VERZEND    # ook na de leesgrens (Codex 45)
+    if (geslaagd >= MAX_LEZEN and not vrije_verzend) or pogingen >= MAX_POGINGEN:
         return f"Leesgrens bereikt ({geslaagd} pagina's gelezen, {pogingen} pogingen): rond af met wat je las.", False
     regel = {"url": url, "eind_url": url, "ok": False, "tekst": "", "fout": ""}
     try:
@@ -293,12 +302,9 @@ def lees(url, log, ophalen=haal):
         regel["fout"] = f"{type(e).__name__}: {str(e)[:200]}"
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(regel, ensure_ascii=False) + "\n")
-    afronden = ("\n\n[Bijna aan het plafond van de beurten: lees niets meer en lever nu je JSON-verslag met wat je hebt.]"
-                if bijna_plafond(log) else "")
     if regel["ok"]:
-        # deze url geldt voor het aanbod (Codex 15, 3)
-        return f"URL: {regel['eind_url']}\n\n{regel['tekst']}{afronden}", True
-    return f"Niet leesbaar: {regel['fout']}{afronden}", False
+        return f"URL: {regel['eind_url']}\n\n{regel['tekst']}", True    # deze url geldt voor het aanbod (Codex 15, 3)
+    return f"Niet leesbaar: {regel['fout']}", False
 
 
 def antwoord(bericht, log, ophalen=haal):

@@ -241,6 +241,14 @@ def boven_drempel(citaat, aanbod):
     return True
 
 
+def ander_bedrag(citaat):
+    """Noemt het citaat een bedrag dat geen drempel en geen 0,00 is? Dan bewijst het geen gratis verzending naar Belgie:
+    "gratis verzending binnen Nederland, naar België € 9,95" (Codex controle 45, punt 3)."""
+    rest = DREMPEL.sub(" ", _schoon(citaat))
+    rest = re.sub(r"(?<![\d.,])0[.,]00(?!\d)", " ", rest)
+    return bool(BEDRAG_TUSSEN.search(rest))
+
+
 def _zonder_gratis_verzending(tekst):
     """De tekst zonder de niet-ontkende vermeldingen van gratis verzending: die zijn geen kost."""
     stukken, vanaf = [], 0
@@ -424,7 +432,7 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
             if waarde:
                 return woord and bedrag_op_pagina(waarde, citaat)
             # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3); een drempel moet gehaald zijn
-            return boven_drempel(citaat, aanbod) and (gratis_verzending(_schoon(citaat)) or bool(
+            return boven_drempel(citaat, aanbod) and not ander_bedrag(citaat) and (gratis_verzending(_schoon(citaat)) or bool(
                 woord and not NEGATIE.search(citaat) and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat))))
         return bedrag_op_pagina(waarde, citaat)
 
@@ -683,7 +691,8 @@ def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=No
             # Het citaat staat op de aanbodpagina en verbindt het toestel met een paswoord (overleg 44, F en X6).
             c = str(citaat or "")
             gevonden = (oordeel == "ja" and citaat_op_pagina(c, eigen_tekst or "") and modelcode_op(mp.group(1), c)
-                        and PASWOORD.search(c) and not _accessoire_ervoor(c, eigen_tekst or ""))
+                        and PASWOORD.search(c) and not ONTKENNING.search(c)          # "Niet geschikt voor" (Codex 45)
+                        and not _accessoire_ervoor(c, eigen_tekst or ""))
             waarden.append("ja" if gevonden else "nee" if oordeel == "nee" else "onbekend")
             continue
         if oordeel == "ja" and alle_tekst is not None:

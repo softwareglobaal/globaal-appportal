@@ -1229,8 +1229,8 @@ with tempfile.TemporaryDirectory() as d:
     with open(os.path.join(d, "beurten"), "w") as f:
         f.write("33 40")
     tekst, _ = L.lees("http://127.0.0.1/x", log, ophalen=lambda u: (u, "text/html", b"<p>Voorbeeld pagina tekst</p>"))
-    check("E: acht beurten voor het plafond zegt de leestool het model af te ronden", "lever nu je JSON-verslag" in tekst
-          and O.MAX_BEURTEN == 40, tekst[-120:])
+    check("E: acht beurten voor het plafond leest de leestool niets meer en zegt het model af te ronden (Codex 45)",
+          "lever nu je JSON-verslag" in tekst and not _ and O.MAX_BEURTEN == 40, tekst[-120:])
 check("E: het noodverslag op een grens raadt niets aan en noemt de gelezen pagina's",
       "**Onvolledig:**" in V.onvolledig("beurten", ["https://w.voorbeeld.be/p"]) and "https://w.voorbeeld.be/p" in
       V.onvolledig("beurten", ["https://w.voorbeeld.be/p"]))
@@ -1250,6 +1250,44 @@ for c, waarom in (("Klanten bekeken ook: DDF485.", "een andere code"), ("zoals d
     r = A.verwerk([dict(accu, compatibiliteit=past(c))], VANDAAG, KOERSEN, ["past op DDF484"], paginas=ACCUPAG)
     check(f"F: geen aanbeveling met een pasvormcitaat {waarom}", r["beste"] is None
           and r["goed"][0]["niet_bevestigd"] == ["past op DDF484"])
+
+# Echte citaten uit de uitslag van 02-11 (Codex controle 45, K7) en de twee functieproeven van Codex.
+BEAMER = "https://beamerexpert.nl/epson-eb-fh08.html"
+BEAMERPAG = {BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. Al 20 jaar met recht dé expert en nr. 1 beamer winkel. "
+                            "Uitstekende service en altijd gratis verzendingKlanten beoordelen ons met een 9,1.")}
+r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+    "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": "Uitstekende service en altijd gratis verzending"})],
+    VANDAAG, KOERSEN, paginas=BEAMERPAG)
+check("P07 echt: 'altijd gratis verzending' van beamerexpert.nl bewijst geen gratis levering naar Belgie",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"])
+NLGRATIS = "Gratis verzending binnen Nederland, naar België € 9,95."
+r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+    "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": NLGRATIS})], VANDAAG, KOERSEN,
+    paginas={BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. " + NLGRATIS)})
+check("Codex 45: gratis binnen Nederland met 9,95 naar Belgie is geen gratis verzending", r["beste"] is None
+      and "verzending niet bewezen" in r["goed"][0]["ontbreekt"])
+FIXAMI = "https://fixami.be/makita-bl1850b-18v-li-ion-accu-5ah.html"
+FIXPAG = {FIXAMI: pagina("Makita BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro. Gratis levering. Klanten kochten ook: "
+                         "DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (2 st), snellader, in Mbox")}
+for citaat, waarom in (("DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (2 st), snellader, in Mbox",
+                        "het echte citaat van P09 (een andere set, geen paswoord)"),
+                       ("Niet geschikt voor DDF484", "een ontkenning (Codex 45)")):
+    pag = FIXPAG if "DDF484RTJ" in citaat else {FIXAMI: FIXPAG[FIXAMI] + " Niet geschikt voor DDF484."}
+    r = A.verwerk([aanbod(titel="Makita BL1850B 18V Li-Ion accu - 5.0Ah", url=FIXAMI, prijs=74.99, bewijs={
+        "prijs": "BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro", "verzending": "Gratis levering."},
+        compatibiliteit={"past op DDF484": {"oordeel": "ja", "citaat": citaat}})], VANDAAG, KOERSEN, ["past op DDF484"],
+        paginas=pag)
+    check(f"P09: geen aanbeveling met {waarom}", r["beste"] is None and r["goed"][0]["niet_bevestigd"] == ["past op DDF484"])
+with tempfile.TemporaryDirectory() as d:
+    log = os.path.join(d, "gelezen.jsonl")
+    with open(log, "w", encoding="utf-8") as f:
+        for i in range(6):
+            f.write(json.dumps({"url": f"https://w.voorbeeld.be/p{i}", "ok": True}) + "\n")
+    nep = lambda u: (u, "text/html", b"<p>Verzendkosten naar Belgie: 4,95 euro voor elke bestelling.</p>")  # noqa: E731
+    tekst, gelukt = L.lees("https://w.voorbeeld.be/verzending", log, ophalen=nep)
+    tekst2, gelukt2 = L.lees("https://w.voorbeeld.be/p9", log, ophalen=nep)
+    check("D: na zes lezingen mag een verzendpagina van dezelfde winkel nog, een gewone pagina niet (Codex 45)",
+          gelukt and not gelukt2 and "Leesgrens" in tekst2, tekst[:80])
 
 print("Proefbank: prijsvragen zonder het bord (overleg 39)")
 from aankoop import proefbank as PB  # noqa: E402

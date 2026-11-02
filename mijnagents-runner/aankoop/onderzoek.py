@@ -107,8 +107,8 @@ Regels voor de JSON: prijs exact zoals op de pagina, als getal in de munt van de
 pagina een prijs zonder btw toont, null als je het niet weet; staat de verzending niet op de aanbodpagina, lees dan de
 verzendpagina van dezelfde winkel en kopieer het tarief naar Belgie met het woord Belgie erin (of de zin dat het voor
 alle bestellingen geldt), anders telt het niet; een verzendpagina van een winkel waarvan je al een pagina las, kost geen
-leesbeurt (hoogstens vier); bij een winkel buiten Belgie moet ook het citaat van de aanbodpagina zeggen dat het voor
-Belgie geldt; verzending null als geen van beide het zegt; bij een
+leesbeurt (hoogstens vier, ook na de leesgrens); bij een winkel buiten Belgie moet ook het citaat van de aanbodpagina
+zeggen dat het voor Belgie geldt; verzending null als geen van beide het zegt; bij een
 veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 als de voorwaarden geen vaste kosten
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
 btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met lees_pagina las en de prijs daar zag.
@@ -125,7 +125,8 @@ als een andere gelezen winkelpagina met dezelfde EAN-code dat document linkt. Le
 specificatieblad dat een winkelpagina van dit product linkt. In niet_nagekeken
 komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina niet leesbaar was; die worden nooit
 aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
-ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een
+ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Zegt
+de leestool dat je bijna aan het plafond van de beurten zit, zoek en lees dan niets meer en lever meteen je JSON. Een
 pagina die niet leesbaar is (HTTP 403, een viewer zonder tekst), kost geen leesbeurt: zoek dan een andere bron voor
 dezelfde modelcode, zoals de fabrikant, een PDF of een specificatieblad. Vind je geen leesbare handleiding, zoek dan op
 de EAN-code of de modelcode met het woord handleiding of manual, en lees een winkelpagina met dezelfde EAN die een
