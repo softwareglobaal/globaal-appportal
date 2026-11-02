@@ -2086,6 +2086,20 @@ def api_wachten_dag():
                           wacht=request.args.get("wacht") or None, blad=request.args.get("blad", type=int)))
 
 
+@app.route("/api/wachten/gesprek")
+def api_wachten_gesprek():
+    """T-0120 VOL-19: wat het Dagboek van één gesprek mag openen, achter zijn eigen route (Authentik): ?wat=fathom de
+    link naar Fathom, ?wat=transcript het transcript van een Plaud-opname. Alleen lezen, met het token van het bord.
+    404 bij een privégesprek, een andere bron of als er niets is (wachten_dag.gesprek_open)."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    import wachten_dag as WD  # noqa: PLC0415
+    uit = WD.gesprek_open(db(), request.args.get("uniek") or "", request.args.get("wat") or "")
+    if uit is None:
+        abort(404)
+    return jsonify(uit)
+
+
 @app.route("/bronnen")
 def bronnen_pagina():
     if not mag_beslissen():

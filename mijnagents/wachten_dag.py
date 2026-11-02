@@ -33,6 +33,30 @@ ZOOM_DAG_BRONNEN = ("rapport", "vaste vergaderruimte", "gepland", "opnames", "la
 REGELS_VAN = ("agenda-wacht", "calendly-wacht")
 MAX_REGELS = 200
 
+# T-0120 VOL-19 en DB-5 (groep pagina): elke link op de wachtenpagina loopt via een route van het Dagboek achter
+# Authentik, nooit rechtstreeks naar een gedeelde Dropbox-link of een andere site. Een item draagt daarom alleen wat
+# voor link het is ({"soort": dag | fotos | fathom | transcript | bord, ...}); het Dagboek maakt er zijn eigen route van.
+# Nooit een link bij een privé-item, en nooit bij de berichten en oproepen van de Mac en Xelion.
+GEEN_LINK = ("whatsapp-wacht", "sms-wacht", "belwacht", "xelion-wacht")
+# FATHOM-3: gesprek_log.link bij Fathom is de deellink of de gewone url van fathom.video; iets anders is geen link.
+FATHOM_LINK = re.compile(r"https://fathom\.video/[A-Za-z0-9/_.~%?=&+-]{1,400}")
+# De dagbestanden van De Dagbundelaar en de dag van De Communicatiebundelaar staan op /dag/<dag> in het Dagboek.
+DAG_LINK = {"dagbundelaar": ("dagvaststelling", "dagbundel"), "communicatie-bundelaar": ("communicatie",)}
+DAG_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Oude foto-items (van voor de indeling van FOTO-5) hadden coördinaten in de titel; ook privéfoto's (FOTO-8: privé en
+# mensen alleen een telling zonder plaats). Op de pagina komt er geen plaats meer van.
+COORD_RE = re.compile(r"-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}")
+# ANGEL-6: de takenlijst van Ai Angel (mehdi_agent.lijst: 'N. tekst (prioriteit)' met ingesprongen Waarom/Bron/Concept)
+ANGEL_STAAT = os.environ.get("WACHTEN_ANGEL_STAAT", "/data/mehdi-agent/staat.json")
+ANGEL_MAX = 12
+ANGEL_BORD = "/agent/mehdi-agent"
+TAAK_RE = re.compile(r"(\d{1,3})\.\s+(.+)")
+PRIVE_RE = re.compile(r"priv[eé]", re.I)            # zoals mehdi_agent.PRIVE
+# ARCH-2 (contract van de groep zoom): het overzicht van De Zoomarchivaris, op het bord alleen lezend
+ZOOM_ARCHIEF = os.environ.get("WACHTEN_ZOOM_ARCHIEF", "/data/zoom-archief/wachten.json")
+ZOOM_MAP_RE = re.compile(r"Zoom/\d{4}-\d{2}-\d{2} \d{4}")
+MAX_TRANSCRIPT = 5000                               # uitingen op de transcriptpagina
+
 
 def grenzen(dag):
     """De Brusselse dag als UTC-tekst [van, tot), zoals de ts in de databank staat (isoformat in UTC)."""
@@ -149,6 +173,124 @@ def lees_plaud(conn, dag):
     return items, stand
 
 
+def plaud_mappen():
+    """{plaud_id: archief.map} uit het manifest van de Mac; leeg als het niet te lezen is."""
+    try:
+        with open(os.path.join(PLAUD_INVOER, "00 manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        return {str(o.get("plaud_id")): str((o.get("archief") or {}).get("map") or "") for o in m["opnames"]
+                if isinstance(o, dict) and isinstance(o.get("archief"), dict) and (o.get("archief") or {}).get("map")}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def plaud_transcript_pad(r, mappen=None):
+    """PLAUD-7 (contract van de groep plaud): waar het transcript van een Plaud-rij op het bord staat,
+    /data/plaud-invoer/<archief.map>/transcript.json, of leeg. De map komt uit het manifest (op plaud_id), anders uit
+    gesprek_log.archief ('Data uit Mehdi/Plaud/<map>/transcript.md', een pad in Dropbox: dat wordt nooit een link).
+    Alleen een map direct onder de invoer; een naam met een schuine streep of '..' telt niet."""
+    uniek = str(privegrens._veld(r, "uniek") or "")
+    if not uniek.startswith("plaud:"):
+        return ""
+    map_ = (mappen if mappen is not None else plaud_mappen()).get(uniek[len("plaud:"):], "")
+    if not map_:
+        m = re.fullmatch(r"Data uit Mehdi/Plaud/([^/]+)/transcript\.(?:md|json)", str(privegrens._veld(r, "archief") or ""))
+        map_ = m.group(1) if m else ""
+    if not map_ or "/" in map_ or "\\" in map_ or "\x00" in map_ or map_.strip(".") == "":
+        return ""
+    basis = os.path.realpath(PLAUD_INVOER)
+    pad = os.path.realpath(os.path.join(basis, map_, "transcript.json"))
+    return pad if os.path.dirname(os.path.dirname(pad)) == basis and os.path.isfile(pad) else ""
+
+
+def _klok(ms):
+    """Milliseconden in de opname als UU:MM:SS (zoals plaud/archief._klok)."""
+    try:
+        s = int(float(ms or 0)) // 1000
+    except (TypeError, ValueError):
+        return ""
+    return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def gesprek_open(conn, uniek, wat):
+    """T-0120 VOL-19: wat het Dagboek achter zijn eigen route (Authentik) van één gesprek mag openen, of None.
+    wat 'fathom': {'link'}, de link van de rij (FATHOM-3: de deellink bij een werkgesprek), alleen naar fathom.video.
+    wat 'transcript': de uitingen van een Plaud-opname uit transcript.json (PLAUD-7), met wanneer en met wie.
+    Nooit bij een privégesprek (is_prive_gesprek), nooit bij een andere bron (WhatsApp, sms, telefoon, Xelion hebben
+    geen link), nooit een pad of een Dropbox-link. Er is geen audiolink: de audio staat alleen op de Mac."""
+    r = conn.execute("SELECT * FROM gesprek_log WHERE uniek=?", (str(uniek or ""),)).fetchone()
+    if r is None:
+        return None
+    r = _gesprek_rij(r)
+    if is_prive_gesprek(r):
+        return None
+    bron = privegrens.bron(r)
+    if wat == "fathom" and bron == "fathom" and FATHOM_LINK.fullmatch(r["link"] or ""):
+        return {"uniek": r["uniek"], "link": r["link"]}
+    if wat != "transcript" or bron != "plaud":
+        return None
+    pad = plaud_transcript_pad(r)
+    if not pad:
+        return None
+    try:
+        with open(pad, encoding="utf-8") as f:
+            uitingen = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(uitingen, list):
+        return None
+    regels = [{"tijd": _klok(u.get("start_time")), "wie": kort(u.get("speaker") or "spreker onbekend", 80),
+               "tekst": str(u.get("content") or "").strip()} for u in uitingen if isinstance(u, dict)]
+    return {"uniek": r["uniek"], "dag": r["datum"], "tijd": uur(r["start"]), "minuten": r["minuten"],
+            "wie": kort(r["personen"] or "onbekend", 120), "thema": kort(r["thema"], 200),
+            "regels": regels[:MAX_TRANSCRIPT], "meer": max(0, len(regels) - MAX_TRANSCRIPT)}
+
+
+def _hhmm(x):
+    t = str(x or "")
+    return t if re.fullmatch(r"[0-2]\d:[0-5]\d", t) else ""
+
+
+def _mb(x):
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return "grootte onbekend"
+    return f"{v:.1f} MB".replace(".", ",")
+
+
+def lees_zoom_archief(dag):
+    """ARCH-2 (contract van de groep zoom): (items, stand) van De Zoomarchivaris uit zoom-archief/wachten.json. Per
+    Brusselse dag van de kopie elk bewezen bestand: uur van het gesprek, soort, MB en 'bewezen in je Dropbox, map
+    Zoom/<datum uur>'; verdwenen gevallen apart, als fout. Nooit een onderwerp, id, pad of link: het overzicht heeft ze
+    niet, en een map die niet de vorm Zoom/<datum uur> heeft, wordt 'Zoom'. stand None: het overzicht ontbreekt, is
+    onleesbaar of van voor die dag (onbekend, nooit 0); na_de_dag: de telling van die dag is af."""
+    try:
+        with open(ZOOM_ARCHIEF, encoding="utf-8") as f:
+            d = json.load(f)
+        dagen = d["dagen"]
+        moment = datetime.fromisoformat(str(d.get("ts") or "").replace("Z", "+00:00"))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return [], None
+    moment = moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    van, tot = (datetime.fromisoformat(x) for x in grenzen(dag))
+    if not isinstance(dagen, dict) or moment < van:
+        return [], None
+    x = dagen.get(dag) if isinstance(dagen.get(dag), dict) else {}
+    gek = [f for f in x.get("gekopieerd") or [] if isinstance(f, dict)]
+    weg = [f for f in x.get("verdwenen") or [] if isinstance(f, dict)]
+    items = []
+    for f in gek:
+        kaart = str(f.get("map") or "")
+        kaart = kaart if ZOOM_MAP_RE.fullmatch(kaart) else "Zoom"
+        soort = re.sub(r"[^a-z0-9 ()-]", "", str(f.get("soort") or "").lower())[:40] or "bestand"
+        items.append(_item(_hhmm(f.get("uur")), soort, f"{_mb(f.get('mb'))}, bewezen in je Dropbox, map {kaart}"))
+    for f in weg:
+        items.append(_item(_hhmm(f.get("uur")), "verdwenen in Zoom", f"{_mb(f.get('mb'))}, niet gekopieerd", fout=True))
+    return items, {"gekopieerd": len(gek), "verdwenen": len(weg), "overzicht_van": moment.isoformat(),
+                   "na_de_dag": moment >= tot}
+
+
 def _json(tekst):
     try:
         x = json.loads(tekst or "")
@@ -194,11 +336,38 @@ def dubbel_tekst(dubbel_van, thema=""):
     return "dubbel, telt niet"
 
 
+GESPREK_STANDAARD = (("dubbel_van", ""), ("afdeling", ""), ("prive", 0), ("link", ""), ("archief", ""), ("thema", ""),
+                     ("personen", ""), ("start", ""), ("minuten", None), ("bron", ""), ("uniek", ""), ("datum", ""))
+
+
+def _gesprek_rij(r):
+    """Een rij van gesprek_log als dict, met de kolommen die deze pagina leest; NULL of ontbrekend wordt de standaard
+    (zoals de COALESCE van voordien)."""
+    d = dict(r)
+    for k, standaard in GESPREK_STANDAARD:
+        if d.get(k) is None:
+            d[k] = standaard
+    return d
+
+
+def gesprek_link(r, mappen=None):
+    """VOL-19: de link van een gesprek dat niet privé is, als soort (het Dagboek maakt er zijn route van), of None.
+    Fathom: 'open in Fathom' als de rij een link van fathom.video heeft (FATHOM-3). Plaud: 'transcript lezen' als het
+    transcript op het bord staat (PLAUD-7). Andere bronnen geen link."""
+    b = privegrens.bron(r)
+    if b == "fathom" and FATHOM_LINK.fullmatch(str(privegrens._veld(r, "link") or "")):
+        return {"soort": "fathom", "uniek": r["uniek"], "tekst": "open in Fathom"}
+    if b == "plaud" and plaud_transcript_pad(r, mappen):
+        return {"soort": "transcript", "uniek": r["uniek"], "tekst": "transcript lezen"}
+    return None
+
+
 def lees_gesprekken(conn, bron, dag):
-    rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
-                         "COALESCE(afdeling,'') AS afdeling, COALESCE(prive,0) AS prive FROM gesprek_log "
-                         "WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start", (dag, bron)).fetchall()
+    # SELECT *: link en archief (VOL-19) en de andere kolommen met hun standaard, ook bij een oudere tabel zonder ze
+    rijen = [_gesprek_rij(r) for r in conn.execute("SELECT * FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
+                                                   "ORDER BY start", (dag, bron)).fetchall()]
     items, gedekt = [], False
+    mappen = plaud_mappen() if bron == "plaud" else {}
     for r in rijen:
         if r["bron"] == "dekking":
             # een vervallen dekkingsrij (de bron toont de dag niet meer) bewijst niets (Codex V1, TEL-8)
@@ -213,7 +382,11 @@ def lees_gesprekken(conn, bron, dag):
             continue
         wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "", kort(r["thema"], 100),
                                     dubbel_tekst(r["dubbel_van"], r["thema"])) if x)
-        items.append(_item(uur(r["start"]), r["personen"] or "onbekend", wat))
+        it = _item(uur(r["start"]), r["personen"] or "onbekend", wat)
+        link = gesprek_link(r, mappen) if bron in ("fathom", "plaud") else None
+        if link:
+            it["link"] = link
+        items.append(it)
     return items, gedekt
 
 
@@ -242,16 +415,48 @@ def zoom_gedekt(conn, dag):
                 and inhoud.get("telling") == "volledig" and inhoud.get("stand") == "definitief")
 
 
+def _grootte(n):
+    return f"{max(1, round(n / 1024))} kB" if n < 1024 ** 2 else f"{n / 1024 ** 2:.1f} MB".replace(".", ",")
+
+
+def bijlagen_tekst(aantal, info):
+    """VOL-9 (contract van de groep mail): '2 bijlagen (pdf, dwg), 1,3 MB'. Alleen aantal, soort en grootte, zoals de
+    wacht ze uit de BODYSTRUCTURE las; nooit een bestandsnaam, er wordt niets gedownload. Bij NULL (onbekend) of 0
+    niets, nooit '0 bijlagen'. Een soort die vaker voorkomt, staat een keer met haar aantal ('3 bijlagen (2 pdf, dwg)'),
+    in de volgorde van de mail."""
+    if not isinstance(aantal, int) or isinstance(aantal, bool) or aantal <= 0:
+        return ""
+    lijst = _json(info) if isinstance(info, str) else info
+    lijst = [x for x in lijst if isinstance(x, dict)][:20] if isinstance(lijst, list) else []
+    soorten = {}
+    for x in lijst:
+        s = re.sub(r"[^a-z0-9-]", "", str(x.get("soort") or "").lower())[:12] or "bestand"
+        soorten[s] = soorten.get(s, 0) + 1
+    deel = [s if n == 1 else f"{n} {s}" for s, n in soorten.items()]
+    if deel and aantal > len(lijst):
+        deel[-1] += f" en nog {aantal - len(lijst)}"
+    groot = sum(x["bytes"] for x in lijst if isinstance(x.get("bytes"), int) and not isinstance(x.get("bytes"), bool)
+                and x["bytes"] > 0)
+    return (f"{aantal} bijlage{'n' if aantal != 1 else ''}" + (f" ({', '.join(deel)})" if deel else "")
+            + (f", {_grootte(groot)}" if groot else ""))
+
+
 def lees_mail(conn, wacht, dag):
-    rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map, opvolging, besluit, naar, opgeruimd "
-                         "FROM mailbericht WHERE wacht=? AND dag=? ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
+    # SELECT *: de kolommen bijlagen en bijlagen_info (VOL-9) komen er pas bij met _mail_tabellen; een oudere tabel
+    # zonder die kolommen geeft gewoon geen bijlagen, geen leesfout.
+    rijen = conn.execute("SELECT * FROM mailbericht WHERE wacht=? AND dag=? ORDER BY datum LIMIT ?",
+                         (wacht, dag, MAX_ITEMS)).fetchall()
     items = []
     for r in rijen:
-        opv = r["besluit"] or OPVOLGING.get(r["opvolging"] or "", "")
-        waar = ("naar Opgeruimd" if r["opgeruimd"] else f"naar {_map_kort(r['naar'])}" if r["naar"]
-                else f"in {_map_kort(r['map'])}" if r["map"] and r["map"] != "INBOX" else "")
-        items.append(_item(uur(r["datum"]), r["van_naam"] or r["van"] or "onbekend",
-                           " · ".join(x for x in (r["onderwerp"] or "(geen onderwerp)", r["soort"] or "", opv, waar) if x)))
+        r = dict(r)
+        opv = r.get("besluit") or OPVOLGING.get(r.get("opvolging") or "", "")
+        waar = ("naar Opgeruimd" if r.get("opgeruimd") else f"naar {_map_kort(r['naar'])}" if r.get("naar")
+                else f"in {_map_kort(r['map'])}" if r.get("map") and r["map"] != "INBOX" else "")
+        # de bijlagen direct na het onderwerp: zo vallen ze niet weg als de regel te lang is
+        bij = bijlagen_tekst(r.get("bijlagen"), r.get("bijlagen_info"))
+        items.append(_item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend",
+                           " · ".join(x for x in (r.get("onderwerp") or "(geen onderwerp)", bij, r.get("soort") or "",
+                                                  opv, waar) if x)))
     return items
 
 
@@ -268,6 +473,7 @@ def lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=False):
         + "ORDER BY ts LIMIT ?",
         (wacht, van, tot, dag, f"%:{dag}", f"%:{dag}:%", f"{dag} %", MAX_ITEMS)).fetchall()
     items = []
+    angel_prive = angel_prive_teksten() if wacht == "mehdi-agent" else ()
     for r in rijen:
         inhoud = _json(r["inhoud"])
         wat = r["titel"] or ""
@@ -276,7 +482,9 @@ def lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=False):
             t = pd.get(dag) if isinstance(pd, dict) else inhoud.get("vandaag")
             if isinstance(t, dict) and t:
                 wat = f"{wat}: {_telling_tekst(t)}"
-        titel = str(r["titel"] or "")
+        if wacht == "icloud-wacht":
+            wat = foto_zonder_plaats(wat)
+        titel = foto_zonder_plaats(r["titel"]) if wacht == "icloud-wacht" else str(r["titel"] or "")
         tijd = uur(r["ts"])
         if titel.startswith(dag + " "):
             # "2026-10-31 20:25-20:56: 22 foto's bij ...": de eerste tijd is de tijd, de rest is wat; een bereik komt erachter.
@@ -289,8 +497,78 @@ def lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=False):
         it = _item(tijd, r["soort"] or "item", wat)
         if wacht in REGELS_VAN and r["soort"] in ("signaal", "dagplan") and inhoud is None and r["inhoud"]:
             it["regels"] = inhoud_regels(r["inhoud"])
+        if wacht == "mehdi-agent" and r["soort"] == "taken":
+            # ANGEL-6: de genummerde taken, niet alleen de titel; een privétaak alleen 'privé'
+            it["regels"] = angel_taken(r["inhoud"], angel_prive)
+        link = klaarzet_link(wacht, r, inhoud, dag)
+        if link:
+            it["link"] = link
         items.append(it)
     return items
+
+
+def foto_zonder_plaats(tekst):
+    """Een foto-item zonder plaats: de coördinaten van een oud item worden 'een plek (plaats niet getoond)'."""
+    return COORD_RE.sub("een plek (plaats niet getoond)", str(tekst or ""))
+
+
+def klaarzet_link(wacht, r, inhoud, dag):
+    """VOL-19 en DB-5: de link van een klaargezet item, als soort, of None. Nooit bij een privé-item (inhoud.prive of
+    PRIVÉ in de titel) en nooit bij een wacht uit GEEN_LINK.
+    - De Dagbundelaar (dagvaststelling, dagbundel) en De Communicatiebundelaar: de dag op /dag/<dag>.
+    - De Fotowacht: een werfgroep of kandidaat (FOTO-5) naar de foto's per project op /fotos/<dag>; de telling van wat
+      geen werk is, krijgt geen link.
+    - Ai Angel: zijn takenlijst en verslag naar zijn pagina op het bord."""
+    if wacht in GEEN_LINK or (isinstance(inhoud, dict) and inhoud.get("prive")) or "PRIVÉ" in str(r["titel"] or ""):
+        return None
+    soort = r["soort"] or ""
+    if soort in DAG_LINK.get(wacht, ()):
+        m = DAG_RE.search(str(r["uniek"] or "")) or DAG_RE.fullmatch(str(r["sleutel"] or ""))
+        return {"soort": "dag", "dag": m.group(0) if m else dag, "tekst": "de dag openen"}
+    if wacht == "icloud-wacht" and soort == "foto" and isinstance(inhoud, dict) \
+            and inhoud.get("soort") in ("zeker", "kandidaat") and not inhoud.get("vervallen"):
+        d = str(inhoud.get("datum") or "")
+        return {"soort": "fotos", "dag": d if DAG_RE.fullmatch(d) else dag, "tekst": "foto's per project"}
+    if wacht == "mehdi-agent" and soort in ("taken", "verslag"):
+        return {"soort": "bord", "pad": ANGEL_BORD, "tekst": "de volledige lijst op het bord"}
+    return None
+
+
+def angel_prive_teksten():
+    """De teksten van de privétaken van Ai Angel uit zijn staat (mehdi-agent/staat.json, op het bord /data): ook een
+    taak die alleen door haar herkomst privé is (mehdi_agent.bron_prive), zonder het woord privé. Onleesbaar: leeg, dan
+    telt alleen het woord."""
+    try:
+        with open(ANGEL_STAAT, encoding="utf-8") as f:
+            staat = json.load(f)
+        taken = list((staat.get("taken") or {}).values()) + list(staat.get("afgerond") or [])
+    except (OSError, ValueError, AttributeError, TypeError):
+        return ()
+    return tuple({str(t.get("tekst") or "").strip()[:300] for t in taken
+                  if isinstance(t, dict) and t.get("prive") and len(str(t.get("tekst") or "").strip()) >= 4})
+
+
+def angel_taken(inhoud, prive_teksten=()):
+    """ANGEL-6: de genummerde taken uit de takenlijst van Ai Angel, kort en hoogstens ANGEL_MAX, met hun nummer (zo
+    noemt Mehdi ze: 'Ai Angel, 2 is gedaan'). Een taak is privé als het woord privé in haar blok staat (tekst, waarom,
+    bron, concept, zoals mehdi_agent) of als ze in de staat privé is: dan alleen 'N. privé'."""
+    taken, huidig = [], None
+    for regel in str(inhoud or "").splitlines():
+        m = TAAK_RE.fullmatch(regel.strip()) if not regel.startswith(" ") else None
+        if m:
+            huidig = {"nr": m.group(1), "tekst": m.group(2), "blok": [m.group(2)]}
+            taken.append(huidig)
+        elif huidig is not None and regel.startswith("   ") and regel.strip():
+            huidig["blok"].append(regel.strip())
+        elif regel.startswith("#") or regel.startswith("- "):
+            huidig = None
+    uit = []
+    for t in taken[:ANGEL_MAX]:
+        prive = PRIVE_RE.search(" ".join(t["blok"])) or any(p in t["tekst"] for p in prive_teksten)
+        uit.append(f"{t['nr']}. privé" if prive else f"{t['nr']}. {kort(t['tekst'], 140)}")
+    if len(taken) > ANGEL_MAX:
+        uit.append(f"en nog {len(taken) - ANGEL_MAX} op het bord")
+    return uit
 
 
 def inhoud_regels(inhoud):
@@ -331,9 +609,67 @@ def alleen_werkdagen(cadans):
     return bool(WERKDAGEN_RE.search(c)) and not NIET_ALLEEN_WERKDAGEN_RE.search(c)
 
 
-def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=""):
+def _moment(ts):
+    """Een tijdstip als 'dd-mm HH:MM' in Brussel; onleesbaar is leeg."""
+    try:
+        x = datetime.fromisoformat(str(ts or "").replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return (x if x.tzinfo else x.replace(tzinfo=timezone.utc)).astimezone(BRUSSEL).strftime("%d-%m %H:%M")
+
+
+def gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout, cadans, rondes_geteld=None, plaud=None, archief=None):
+    """T-0120 VOL-13, de laag van de wachtenpagina: tot waar deze wacht de dag las, uit haar eigen bewijs, in één
+    ontwerp voor alle wachten. Wat de groepen al bouwden, blijft de bron: de dekkingsrij (TEL-8, FATHOM-4), de dagregel
+    van De Zoomwacht (WACHT-2), de rondes in het werkverslag (MAIL-6, CB-3, LOC-6, YT-2) en de cadans uit de tabel agent
+    (CL-4). Daarbij: het manifest van de Mac (PLAUD-7), het overzicht van De Zoomarchivaris (ARCH-2) en de dagvaststelling
+    van De Dagbundelaar. Alleen lezen: deze pagina schrijft nooit een dekkingsrij (elke dekkingsrij laat De Dagbundelaar
+    inhalen, dagbundelaar.py). Onbekend is nooit 0.
+    stand: gelezen (de hele dag), deels (nog niet helemaal), tot (rondes op die dag), items (iets binnen zonder ronde
+    op die dag), rust (geen ronde gepland), niet (niet gelezen), onbekend (het bord kon het niet lezen)."""
+    def uit(stand, tekst, bewijs=""):
+        return {"stand": stand, "tekst": tekst, "bewijs": bewijs}
+    if leesfout:
+        return uit("onbekend", "onbekend: het bord kon deze wacht niet lezen")
+    rondes = sorted(x["tijd"] for x in log if not x["fout"] and x["tijd"])
+    laatste = rondes[-1] if rondes else ""
+    geteld = f", {rondes_geteld} rondes" if rondes_geteld else ""
+    leeg = "" if items else ", niets gebeurd"
+    if gedekt:
+        return uit("gelezen", "helemaal gelezen" + leeg,
+                   "de dagregel van De Zoomwacht" if wacht == "zoom-wacht" else "de dekkingsrij van de wacht")
+    if isinstance(plaud, dict) and plaud.get("na_de_dag"):
+        return uit("gelezen", "alle opnames van deze dag bekend" + leeg,
+                   f"het manifest van de Mac van {_moment(plaud.get('manifest_van'))}")
+    if isinstance(archief, dict) and archief.get("na_de_dag"):
+        return uit("gelezen", "alle kopieën van deze dag bekend" + leeg,
+                   f"het overzicht van De Zoomarchivaris van {_moment(archief.get('overzicht_van'))}")
+    if wacht == "dagbundelaar":
+        try:
+            r = conn.execute("SELECT ts FROM klaarzet WHERE van='dagbundelaar' AND uniek=? AND status!='vervallen' "
+                             "ORDER BY id DESC LIMIT 1", (f"vaststelling:{dag}",)).fetchone()
+        except Exception:  # noqa: BLE001  dan zonder dit bewijs
+            r = None
+        if r:
+            return uit("gelezen", "dag vastgesteld", f"de dagvaststelling van {_moment(r['ts'])}")
+    if gedekt is False and (laatste or items):
+        # een gesprekswacht zonder dekkingsrij (of De Zoomwacht zonder volledige dagregel) die wel iets las
+        return uit("deels", "nog niet helemaal gelezen" + (f", laatste ronde {laatste}" if laatste else ""),
+                   "de dagregel van De Zoomwacht is nog niet volledig" if wacht == "zoom-wacht"
+                   else "geen dekkingsrij voor deze dag")
+    if laatste:
+        return uit("tot", f"gelezen tot {laatste}", f"de laatste ronde in het werkverslag van deze dag{geteld}")
+    if items:
+        return uit("items", "items binnen, geen ronde op deze dag zelf", "klaargezet in een ronde van een andere dag")
+    if alleen_werkdagen(cadans) and date.fromisoformat(dag).weekday() >= 5:
+        return uit("rust", "geen ronde gepland", f"cadans: {kort(cadans, 120)}")
+    return uit("niet", "niet gelezen", "geen ronde, geen dekking en geen item van deze dag")
+
+
+def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans="", rol=""):
     """blad: welk blad van het werkverslag (1 is het begin); zonder blad het laatste, zoals voordien de laatste MAX_LOG
-    regels. Een blad buiten het bereik wordt het dichtstbijzijnde (T-0120 AG-9)."""
+    regels. Een blad buiten het bereik wordt het dichtstbijzijnde (T-0120 AG-9). rol en cadans: uit de tabel agent, als
+    uitleg bij de wacht (DB-5)."""
     van, tot = grenzen(dag)
     items, gedekt, leesfout, logfout = [], None, "", ""
     # Items en werkverslag apart gelezen en apart gemeld (Codex 01-11): faalt het een, dan blijft het ander staan.
@@ -366,6 +702,17 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
             items += extra
         except Exception as e:  # noqa: BLE001  zoals hierboven: de rest van de pagina blijft staan
             leesfout = f"niet gelezen ({type(e).__name__})"
+    archief = None
+    if wacht == "zoom-archief" and not leesfout:
+        try:                                    # ARCH-2: de gekopieerde bestanden van die dag
+            extra, archief = lees_zoom_archief(dag)
+            items += extra
+        except Exception as e:  # noqa: BLE001
+            leesfout = f"niet gelezen ({type(e).__name__})"
+    # VOL-19, tweede slot: wat een lezer hierboven ook gaf, nooit een link bij privé of bij de Mac-kanalen en Xelion
+    for it in items:
+        if wacht in GEEN_LINK or it.get("wie") == "privégesprek" or it.get("label") == "privé":
+            it.pop("link", None)
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
     st = dict(status) if status else None
@@ -393,6 +740,7 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
     bladen = max(1, -(-len(log) // MAX_LOG))
     blad = bladen if blad is None else min(max(1, int(blad)), bladen)
+    gelezen = gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout or logfout, cadans, rondes_geteld, plaud, archief)
     return {"naam": wacht, "label": label, "oordeel": oordeel, "kleur": kleur, "aantal": len(items),
             "items": items[:MAX_ITEMS], "rondes": len(log), "fouten": fouten,
             "log": log[(blad - 1) * MAX_LOG:blad * MAX_LOG], "log_blad": blad, "log_bladen": bladen,
@@ -401,7 +749,12 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
                                             "laatste": uur(st.get("ts")), "laatste_ts": st.get("ts")},
             "rondes_geteld": rondes_geteld,
             # PLAUD-7: bij De Plaudwacht de opnames van die dag volgens het manifest, of None (onbekend)
-            **({"plaud": plaud} if wacht == "plaud-wacht" else {})}
+            **({"plaud": plaud} if wacht == "plaud-wacht" else {}),
+            # ARCH-2: bij De Zoomarchivaris de telling van die dag uit haar overzicht, of None (onbekend)
+            **({"archief": archief} if wacht == "zoom-archief" else {}),
+            # VOL-13: tot waar de wacht deze dag las, uit haar eigen bewijs; DB-5: wat ze doet en wanneer
+            "gelezen": gelezen,
+            "uitleg": {"rol": kort(rol, 300), "cadans": kort(cadans, 200)} if (rol or cadans) else None}
 
 
 def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
@@ -413,14 +766,17 @@ def dag(conn, dag_, agents, vakken, boven, wacht=None, blad=None):
     for r in conn.execute("SELECT naam, tekst FROM nood WHERE open=1 ORDER BY id").fetchall():
         nood.setdefault(r["naam"], []).append(kort(r["tekst"], 200))
     try:                                        # CL-4: de cadans uit de tabel agent; zonder tabel blijft grijs grijs
-        cadans = {r["naam"]: r["cadans"] or "" for r in conn.execute("SELECT naam, cadans FROM agent").fetchall()}
+        agenttabel = {r["naam"]: r for r in conn.execute("SELECT naam, rol, cadans FROM agent").fetchall()}
     except Exception:  # noqa: BLE001
-        cadans = {}
+        agenttabel = {}
+    cadans = {n: r["cadans"] or "" for n, r in agenttabel.items()}
+    rol = {n: r["rol"] or "" for n, r in agenttabel.items()}      # DB-5: de uitleg per wacht
     groepen = [("De Dagbundelaar en Ai Angel", tuple(boven))] + [(v, tuple(w)) for v, w in vakken]
     uit = []
     for vak, namen in groepen:
         uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n), nood.get(n, ()),
-                                                      blad=blad if n == wacht else None, cadans=cadans.get(n, ""))
+                                                      blad=blad if n == wacht else None, cadans=cadans.get(n, ""),
+                                                      rol=rol.get(n, ""))
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]
     return {"dag": dag_, "vakken": uit,

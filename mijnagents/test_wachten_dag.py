@@ -131,7 +131,8 @@ check("W08 andere dag telt niet", w30["whatsapp-wacht"]["aantal"] == 0 and w30["
 fo = w["icloud-wacht"]
 check("W09 fototitel: tijd en wat", fo["aantal"] == 4 and fo["items"][0]["tijd"] == "18:56"
       and fo["items"][0]["wat"] == "1 foto's zonder plaats" and fo["items"][1]["tijd"] == "20:25"
-      and fo["items"][1]["wat"] == "22 foto's bij 50.88906,4.7214 (20:25 tot 20:56)", fo["items"])
+      and fo["items"][1]["wat"] == "22 foto's bij een plek (plaats niet getoond) (20:25 tot 20:56)", fo["items"])
+check("W09 (T-0120 FOTO-8, groep pagina) een oud foto-item toont geen coördinaten", "50.88906" not in str(fo["items"]))
 check("W09 geen tijd: titel blijft heel", fo["items"][2]["wat"] == "20:25pizza bij de bakker" and fo["items"][2]["tijd"] == "21:16"
       and fo["items"][3]["wat"] == "99:99: geen tijd" and fo["items"][3]["tijd"] == "21:17", fo["items"][2:])
 
@@ -295,6 +296,195 @@ con.close()
 w30 = {x["naam"]: x for v in C.get("/api/wachten/dag?dag=2026-10-30", headers=K).get_json()["vakken"] for x in v["wachten"]}
 check("W13 vervallen dekking is niet gelezen", w30["xelion-wacht"]["kleur"] == "grijs"
       and w30["xelion-wacht"]["gedekt"] is False, (w30["xelion-wacht"]["oordeel"], w30["xelion-wacht"]["gedekt"]))
+
+# --- T-0120 groep pagina: VOL-19/DB-5 (links via een route achter Authentik), VOL-9 (bijlagen), VOL-13 (gelezen tot),
+# ARCH-2 (De Zoomarchivaris), ANGEL-6 (de taken van Ai Angel). Verzonnen voorbeelden op 27-10 (dinsdag) en 24-10 (zaterdag).
+import json  # noqa: E402
+
+import wachten_dag as WD  # noqa: E402
+
+INV = tempfile.mkdtemp()                        # /data/plaud-invoer
+WD.PLAUD_INVOER = INV
+for mapnaam in ("2026-10-27 1000 Proefopname", "2026-10-27 1100 Prive proef"):
+    os.makedirs(os.path.join(INV, mapnaam))
+    with open(os.path.join(INV, mapnaam, "transcript.json"), "w", encoding="utf-8") as f:
+        json.dump([{"start_time": 0, "speaker": "Spreker Proef", "content": "Goedemorgen, dit is een proefzin."},
+                   {"start_time": 65000, "speaker": "Spreker Twee", "content": "Tweede proefzin."}], f)
+with open(os.path.join(INV, "00 manifest.json"), "w", encoding="utf-8") as f:
+    json.dump({"meta": {"gemaakt": "2026-10-28T08:00:00+00:00"}, "opnames": [
+        {"plaud_id": "pw1", "start_brussel": "2026-10-27T10:00", "duur_minuten": 12, "toestand": "compleet",
+         "audio": {"staat": "ok"}, "archief": {"map": "2026-10-27 1000 Proefopname"}},
+        {"plaud_id": "pw2", "start_brussel": "2026-10-27T11:00", "duur_minuten": 5, "toestand": "compleet",
+         "audio": {"staat": "ontbreekt"}, "archief": {"map": "2026-10-27 1100 Prive proef"}}]}, f)
+ZA = tempfile.mkdtemp()                         # /data/zoom-archief
+WD.ZOOM_ARCHIEF = os.path.join(ZA, "wachten.json")
+with open(WD.ZOOM_ARCHIEF, "w", encoding="utf-8") as f:
+    json.dump({"ts": "2026-10-28T06:00:00+00:00", "dagen": {"2026-10-27": {
+        "gekopieerd": [{"uur": "10:05", "soort": "scherm en spreker", "mb": 512.34, "map": "Zoom/2026-10-27 1005"},
+                       {"uur": "14:00", "soort": "chat", "mb": 0.1, "map": "Zoom/2026-10-27 1400 Geheim onderwerp"}],
+        "verdwenen": [{"uur": "16:00", "mb": 20.0}]}}}, f)
+WD.ANGEL_STAAT = os.path.join(ZA, "staat.json")
+with open(WD.ANGEL_STAAT, "w", encoding="utf-8") as f:
+    json.dump({"taken": {"t3": {"id": "t3", "tekst": "Bel de proefaannemer over de offerte", "prive": True}},
+               "afgerond": []}, f)
+TAKEN = ["Bijgewerkt 27-10-2026 10:20. Bijsturen kan op het bord.", "", "## Voor jou", ""]
+for i in range(1, 15):
+    tekst = {3: "Bel de proefaannemer over de offerte"}.get(i, f"Proeftaak nummer {i}")
+    TAKEN += [f"{i}. {tekst} (normaal)", "   Waarom: omdat het in de proef staat",
+              f"   Bron: 2026-10-27, {'privégesprek, 12 min' if i == 2 else 'proefregel'}"]
+TAKEN += ["", "## Afgerond vandaag", "", "- Oude proeftaak (gedaan)"]
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, prive, afd, link, archief in (
+        ("fathom:f1", 0, "regie", "https://fathom.video/share/PROEF1", ""),
+        ("fathom:f2", 1, "regie", "https://fathom.video/calls/2", ""),
+        ("fathom:f3", 0, "regie", "https://elders.example/x", ""),
+        ("plaud:pw1", 0, "regie", "Data uit Mehdi/Plaud/2026-10-27 1000 Proefopname/transcript.md",
+         "Data uit Mehdi/Plaud/2026-10-27 1000 Proefopname/transcript.md"),
+        ("plaud:pw2", 1, "", "Data uit Mehdi/Plaud/2026-10-27 1100 Prive proef/transcript.md",
+         "Data uit Mehdi/Plaud/2026-10-27 1100 Prive proef/transcript.md"),
+        ("plaud:pw3", 0, "regie", "", "Data uit Mehdi/Plaud/../transcript.md"),
+        ("whatsapp:w30", 1, "", "https://fathom.video/share/NIET", "")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,link,archief,ts) "
+                "VALUES(?,'2026-10-27','10:00',12,'Proef Persoon','Proefonderwerp',?,?,?,?,?,'x')",
+                (uniek, afd, prive, uniek.split(":")[0], link, archief))
+for uniek, n, info in (("m30", 2, '[{"soort":"pdf","bytes":120000},{"soort":"dwg","bytes":1300000}]'),
+                       ("m31", 0, "[]"), ("m32", None, None), ("m33", 1, '[{"soort":"pdf","bytes":500}]'),
+                       ("m34", 3, '[{"soort":"pdf","bytes":10},{"soort":"pdf","bytes":10},{"soort":"eml","bytes":0}]')):
+    con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,bijlagen,"
+                "bijlagen_info) VALUES(?,'mail-mch','proef@voorbeeld.test','INBOX','2026-10-27T09:00:00+00:00',"
+                "'2026-10-27','p@voorbeeld.test','Proef',?,'klant','x',?,?)", (uniek, f"Onderwerp {uniek}", n, info))
+for van, soort, uniek, sleutel, titel, inhoud in (
+        ("dagbundelaar", "dagvaststelling", "vaststelling:2026-10-27", "2026-10-27", "Dagvaststelling 2026-10-27", ""),
+        ("communicatie-bundelaar", "communicatie", "communicatie:dag:2026-10-27", "2026-10-27", "Communicatie 27-10", ""),
+        ("icloud-wacht", "foto", "fotos:2026-10-27:w1", "2026-10-27",
+         "2026-10-27 10:00-10:30: HA 9001 Proefproject: 3 werkfoto's, bij afspraak '[HA] 9001 proef' 10:00-11:00",
+         json.dumps({"datum": "2026-10-27", "soort": "zeker", "firma": "HA", "nummer": "9001", "aantal": 3})),
+        ("icloud-wacht", "foto", "fotos:2026-10-27:telling", "2026-10-27",
+         "2026-10-27: geen werk: privé 4, met mensen 1, scherm of app 0, onbeslist 0 (alleen geteld, geen plaats)",
+         json.dumps({"datum": "2026-10-27", "aantal": 5, "prive": 4, "mensen": 1})),
+        ("mehdi-agent", "taken", "mehdi-agent:taken:2026-10-27", "2026-10-27", "Te doen 27-10: 14 open", "\n".join(TAKEN)),
+        ("mehdi-agent", "verslag", "mehdi-agent:avond:2026-10-27", "2026-10-27", "Avondoverzicht 27-10", "Proefoverzicht")):
+    con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,sleutel,ts) VALUES(?,'mehdi',?,?,?,?,?,"
+                "'2026-10-27T20:00:00+00:00')", (van, soort, titel, inhoud, uniek, sleutel))
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:whatsapp:2026-10-24','2026-10-24','',0,'',1,'dekking','buiten:dekking','x')")
+for naam, uur_ in (("belwacht", "09:00"), ("belwacht", "15:30"), ("zoom-archief", "06:00"), ("plaud-wacht", "08:00"),
+                   ("mail-mch", "09:05")):
+    con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES(?,'','bron','proefronde',?)",
+                (naam, f"2026-10-27T{uur_}:00+00:00"))
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('zoom-archief','','bron','proefronde',"
+            "'2026-10-26T06:00:00+00:00')")
+con.execute("INSERT INTO agent(naam,label,rol,cadans,aangemaakt) VALUES('agenda-wacht','De Agendawacht',"
+            "'Leest de agenda''s en zet de afspraken klaar','Elke werkdag 07:15','x')")
+con.commit()
+tel_voor = [con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("gesprek_log", "klaarzet", "logboek")]
+con.close()
+
+
+def wachten(dag):
+    return {x["naam"]: x for v in C.get(f"/api/wachten/dag?dag={dag}", headers=K).get_json()["vakken"] for x in v["wachten"]}
+
+
+w27, w26, w24 = wachten("2026-10-27"), wachten("2026-10-26"), wachten("2026-10-24")
+f1 = [x for x in w27["fathom-wacht"]["items"] if x.get("link")]
+check("P30 (FATHOM-3) een werkgesprek van Fathom heeft 'open in Fathom', als soort en zonder url",
+      len(f1) == 1 and f1[0]["link"] == {"soort": "fathom", "uniek": "fathom:f1", "tekst": "open in Fathom"},
+      w27["fathom-wacht"]["items"])
+check("P30 een privégesprek van Fathom heeft geen link en geen naam",
+      any(x["wie"] == "privégesprek" and "link" not in x for x in w27["fathom-wacht"]["items"]), w27["fathom-wacht"]["items"])
+pl = w27["plaud-wacht"]["items"]
+check("P31 (PLAUD-7) een werkopname van Plaud heeft 'transcript lezen'; privé en een map met '..' niet",
+      [x["link"]["uniek"] for x in pl if x.get("link")] == ["plaud:pw1"]
+      and any(x["wie"] == "privégesprek" and "link" not in x for x in pl), pl)
+alle_links = [(n, x) for n, w in w27.items() for x in w["items"] if x.get("link")]
+check("P32 (VOL-19) geen enkele link bij WhatsApp, sms, telefoon of Xelion, of bij een privé-item",
+      alle_links and not any(n in WD.GEEN_LINK or x["wie"] == "privégesprek" for n, x in alle_links), alle_links)
+check("P32 een link draagt nooit een url of een pad naar Dropbox",
+      "http" not in json.dumps([x["link"] for _, x in alle_links]) and "Data uit Mehdi" not in json.dumps(alle_links))
+check("P33 (DB-5) dagvaststelling en communicatie naar /dag/<dag>",
+      [x["link"] for x in w27["dagbundelaar"]["items"]] == [{"soort": "dag", "dag": "2026-10-27", "tekst": "de dag openen"}]
+      and w27["communicatie-bundelaar"]["items"][0]["link"]["soort"] == "dag", w27["communicatie-bundelaar"]["items"])
+check("P34 (FOTO-5) een werfgroep linkt naar de foto's per project; de telling van privé en mensen niet",
+      [x["link"]["soort"] for x in w27["icloud-wacht"]["items"] if x.get("link")] == ["fotos"]
+      and any("alleen geteld, geen plaats" in x["wat"] and "link" not in x for x in w27["icloud-wacht"]["items"]),
+      w27["icloud-wacht"]["items"])
+bij = {x["wat"].split(" · ")[0]: x["wat"] for x in w27["mail-mch"]["items"]}
+check("P35 (VOL-9) een mail met een pdf en een dwg toont '2 bijlagen (pdf, dwg)' met de grootte",
+      bij.get("Onderwerp m30") == "Onderwerp m30 · 2 bijlagen (pdf, dwg), 1,4 MB · klant", bij)
+check("P35 bij 0 of onbekend nooit '0 bijlagen'", "bijlage" not in bij["Onderwerp m31"] and "bijlage" not in bij["Onderwerp m32"],
+      bij)
+check("P35 een bijlage enkelvoud, en dezelfde soort een keer met haar aantal",
+      "1 bijlage (pdf), 1 kB" in bij["Onderwerp m33"] and "3 bijlagen (2 pdf, eml)" in bij["Onderwerp m34"], bij)
+za = w27["zoom-archief"]
+check("P36 (ARCH-2) De Zoomarchivaris toont elk gekopieerd bestand met uur, soort, MB en de map, en verdwenen apart",
+      [(x["tijd"], x["wie"], x["wat"]) for x in za["items"]] == [
+          ("10:05", "scherm en spreker", "512,3 MB, bewezen in je Dropbox, map Zoom/2026-10-27 1005"),
+          ("14:00", "chat", "0,1 MB, bewezen in je Dropbox, map Zoom"),
+          ("16:00", "verdwenen in Zoom", "20,0 MB, niet gekopieerd")] and za["items"][2]["fout"] and za["kleur"] == "groen",
+      za["items"])
+check("P36 nooit een onderwerp uit de map", "Geheim" not in json.dumps(za), za["items"])
+check("P36 een dag zonder kopie blijft oranje", w26["zoom-archief"]["kleur"] == "oranje" and w26["zoom-archief"]["aantal"] == 0,
+      w26["zoom-archief"]["oordeel"])
+check("P36 de telling van die dag", za["archief"] == {"gekopieerd": 2, "verdwenen": 1, "overzicht_van": "2026-10-28T06:00:00+00:00",
+                                                      "na_de_dag": True}, za["archief"])
+an = {x["wie"]: x for x in w27["mehdi-agent"]["items"]}
+regels = an["taken"].get("regels") or []
+check("P37 (ANGEL-6) de genummerde taken van Ai Angel, hoogstens 12, met de rest geteld en de link naar het bord",
+      regels[:1] == ["1. Proeftaak nummer 1 (normaal)"] and len(regels) == 13 and regels[-1] == "en nog 2 op het bord"
+      and an["taken"]["link"] == {"soort": "bord", "pad": "/agent/mehdi-agent", "tekst": "de volledige lijst op het bord"},
+      regels)
+check("P37 een privétaak toont alleen 'privé', ook als alleen de staat haar privé noemt",
+      regels[1:3] == ["2. privé", "3. privé"] and "proefaannemer" not in json.dumps(w27["mehdi-agent"]), regels)
+check("P37 het verslag van Ai Angel linkt naar het bord, zonder regels", an["verslag"]["link"]["soort"] == "bord"
+      and "regels" not in an["verslag"])
+check("P37 een andere wacht ziet niets veranderen: geen regels bij De Dagbundelaar",
+      all("regels" not in x for x in w27["dagbundelaar"]["items"]))
+g = {n: w["gelezen"] for n, w in w27.items()}
+check("P38 (VOL-13) rondes op die dag zonder dekkingsrij: nog niet helemaal, met de laatste ronde (Brussel)",
+      g["belwacht"]["stand"] == "deels" and g["belwacht"]["tekst"] == "nog niet helemaal gelezen, laatste ronde 16:30",
+      g["belwacht"])
+check("P38 een mailwacht met een ronde: gelezen tot die ronde", g["mail-mch"]["stand"] == "tot"
+      and g["mail-mch"]["tekst"] == "gelezen tot 10:05", g["mail-mch"])
+check("P38 het manifest van na de dag: alle opnames bekend; het overzicht van na de dag: alle kopieën bekend",
+      g["plaud-wacht"]["stand"] == "gelezen" and g["zoom-archief"]["stand"] == "gelezen"
+      and g["zoom-archief"]["tekst"] == "alle kopieën van deze dag bekend", (g["plaud-wacht"], g["zoom-archief"]))
+check("P38 de dagvaststelling van die dag: dag vastgesteld", g["dagbundelaar"]["stand"] == "gelezen"
+      and g["dagbundelaar"]["tekst"] == "dag vastgesteld", g["dagbundelaar"])
+check("P38 een wacht zonder ronde, dekking of item: niet gelezen, nooit 0",
+      g["gezondheid-wacht"] == {"stand": "niet", "tekst": "niet gelezen",
+                                "bewijs": "geen ronde, geen dekking en geen item van deze dag"}, g["gezondheid-wacht"])
+g24 = {n: w["gelezen"] for n, w in w24.items()}
+check("P38 een dekkingsrij zonder item: helemaal gelezen, niets gebeurd", g24["whatsapp-wacht"]["stand"] == "gelezen"
+      and g24["whatsapp-wacht"]["tekst"] == "helemaal gelezen, niets gebeurd", g24["whatsapp-wacht"])
+check("P38 zaterdag bij een werkdagwacht: geen ronde gepland (cadans uit de agenttabel)",
+      g24["agenda-wacht"]["stand"] == "rust" and "Elke werkdag 07:15" in g24["agenda-wacht"]["bewijs"], g24["agenda-wacht"])
+check("P38 een wacht die het bord niet kon lezen: onbekend",
+      WD.gelezen_tot(None, "x", "2026-10-27", [], [], None, "niet gelezen (X)", "")["stand"] == "onbekend")
+check("P39 (DB-5) de uitleg van een wacht komt uit agent.rol en agent.cadans",
+      w24["agenda-wacht"]["uitleg"] == {"rol": "Leest de agenda's en zet de afspraken klaar", "cadans": "Elke werkdag 07:15"}
+      and w24["gezondheid-wacht"]["uitleg"] is None, w24["agenda-wacht"]["uitleg"])
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+tel_na = [con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("gesprek_log", "klaarzet", "logboek")]
+con.close()
+check("P38 de pagina schrijft niets: geen dekkingsrij, geen item, geen regel", tel_voor == tel_na, (tel_voor, tel_na))
+
+
+def open_(uniek, wat, h=K):
+    return C.get(f"/api/wachten/gesprek?uniek={uniek}&wat={wat}", headers=h)
+
+
+check("P40 (VOL-19) zonder token geen gesprek", open_("fathom:f1", "fathom", {}).status_code == 403)
+check("P40 Fathom: de link van een werkgesprek", open_("fathom:f1", "fathom").get_json() == {
+    "uniek": "fathom:f1", "link": "https://fathom.video/share/PROEF1"})
+check("P40 Fathom privé, een link buiten fathom.video, WhatsApp of een onbekend gesprek: 404",
+      [open_(u, "fathom").status_code for u in ("fathom:f2", "fathom:f3", "whatsapp:w30", "fathom:geen")] == [404] * 4)
+tr = open_("plaud:pw1", "transcript").get_json() or {}
+check("P41 (PLAUD-7) het transcript van een werkopname, met tijd en spreker", (tr.get("regels") or [None, None])[1] == {
+    "tijd": "00:01:05", "wie": "Spreker Twee", "tekst": "Tweede proefzin."} and tr.get("dag") == "2026-10-27"
+      and tr.get("meer") == 0, tr)
+check("P41 Plaud privé, een map met '..', Fathom als transcript of Plaud als Fathom-link: 404",
+      [open_("plaud:pw2", "transcript").status_code, open_("plaud:pw3", "transcript").status_code,
+       open_("fathom:f1", "transcript").status_code, open_("plaud:pw1", "fathom").status_code] == [404] * 4)
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)
