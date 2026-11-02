@@ -523,7 +523,7 @@ print("\nRegressie na controle 8 van Codex (X1 tot X8)")
 tooltekst = next(t["description"] for t in RG.TOOLS if t["name"] == "agent_ronde")
 check("X1 de tooltekst van De Regisseur noemt geen firma", not S.noemt(tooltekst, S.HA) and not S.noemt(tooltekst, S.HB))
 x2 = F.lees(pdf("Totaal excl. btw: nog te bepalen, geldig tot 30.10.2026", "btw 21%"))
-check("X2 een datum is nooit een bedrag", x2["excl"] is None, x2)
+check("X2 een datum is nooit een bedrag", x2.get("excl") is None, x2)
 fant = Z.keur([{"naam": "Dakwerken Fantasio", "url": "https://dak-een.voorbeeld.com", "postcode": "3020", "gemeente": "Herent",
                 "ondernemingsnummer": "0537.405.239", "bewijs": "Dakwerken, platte daken, EPDM, renovatie"}],
               GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
@@ -1377,6 +1377,10 @@ _tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026050.pdf", "gewijzigd": "20
                         {"naam": "Nieuwe offerte/Kosztorys OF_26_1098155 2.pdf", "gewijzigd": "2026-09-20"}])
 check("twee inschrijvers met toevallig hetzelfde nummer blijven apart; een kopie in een andere map is een versie",
       len(_tel) == 3 and [o[0]["naam"] for o in _oud] == ["Kosztorys OF_26_1098155.pdf"], [b["naam"] for b in _tel])
+check("een fiche in een submap 'Nieuwe offerte' is een fiche", F.fiche_naam("Nieuwe offerte/U84 ramen technische_fiche SVK2.pdf")
+      and not F.fiche_naam("Fiches/offerte ramen.pdf"))
+_p = F.lees(pdf("Offerte schilderwerken, muren: 1.500, geldig 30 dagen."))
+check("Codex 32: een offerte met een prijs zonder decimalen blijft een offerte (nooit wegzetten)", _p["soort"] == "offerte", _p)
 from bouw import proefbank as PB  # noqa: E402
 _p = F.lees(pdf("Offerte 12", "Totaal 1.000,00 EUR", "Optie 1.210,00 EUR", "Voorwaarden volgen."))
 check("Codex 29: een optie op de regel na een kaal totaal is geen inclusief", _p["incl"] is None and _p["excl"] is None, _p)

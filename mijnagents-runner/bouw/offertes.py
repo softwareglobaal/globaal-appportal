@@ -45,8 +45,10 @@ OFFERTEWOORD = re.compile(r"offerte|prijsofferte|prijsopgave|prijsaanbod|aanbied
 
 
 def fiche_naam(naam):
-    """Zegt de bestandsnaam dat het een fiche, brochure of attest is, en niet dat het een offerte is?"""
-    return bool(FICHE_NAAM.search(naam or "")) and not OFFERTEWOORD.search(naam or "")
+    """Zegt de bestandsnaam dat het een fiche, brochure of attest is, en niet dat het een offerte is? Alleen de naam van
+    het bestand telt, niet die van de submap ("Nieuwe offerte/... technische fiche.pdf", proefbank 02-11-2026)."""
+    naam = str(naam or "").rsplit("/", 1)[-1]
+    return bool(FICHE_NAAM.search(naam)) and not OFFERTEWOORD.search(naam)
 # Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
 BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
 EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|\bna\b.{0,20}korting|netto\s+tota|tota\w*\s+netto|"
