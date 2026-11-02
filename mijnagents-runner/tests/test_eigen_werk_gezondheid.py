@@ -48,7 +48,8 @@ check("E03 geen gezondheid", "Health Auto Export stuurt nog niets" in t)
 
 # dagbundelaar zonder zijn zware imports: alleen de leesfuncties
 src = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
-ns = {"json": __import__("json"), "os": os}
+ns = {"json": __import__("json"), "os": os, "re": __import__("re"), "datetime": __import__("datetime").datetime,
+      "date": __import__("datetime").date, "timedelta": __import__("datetime").timedelta}
 start = src.index("def _inhoud(x):")
 eind = src.index("\ndef ", src.index("def lees_eigen(eerste):") + 1)
 exec(src[start:eind], ns)
