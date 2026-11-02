@@ -36,8 +36,10 @@ MAP = tempfile.mkdtemp()
 os.environ["AGENTS_DB"] = os.path.join(MAP, "w.db")
 os.environ["MIJNAGENTS_DATA"] = MAP
 os.environ["AGENTS_TOKEN"] = "proef"
+os.environ["FATHOM_MEHDI_ADRESSEN"] = "eigen@voorbeeld.test"   # het eigen Fathom-account van Mehdi in de proef (EIGEN-3)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app as A  # noqa: E402
+import wachten_dag as WD  # noqa: E402
 
 K = {"X-Agents-Token": "proef"}
 C = A.app.test_client()
@@ -155,7 +157,7 @@ json.dump({"recording_id": 11, "default_summary": {"template_name": "Enhanced", 
            "## Volgende Stappen\n\n  - [Collega stuurt de lijst door.](https://fathom.video/share/x?timestamp=20.0)\n"},
            "action_items": [{"description": "Lijst doorsturen", "assignee": {"name": "Collega (IT)"}, "completed": False,
                              "recording_playback_url": "https://fathom.video/calls/1?timestamp=20"},
-                            {"description": "Proef goedkeuren", "assignee": {"name": "Mehdi Chegini"}, "completed": False,
+                            {"description": "Proef goedkeuren", "assignee": {"name": "Afspraken Account", "email": "eigen@voorbeeld.test"}, "completed": False,
                              "recording_playback_url": "https://fathom.video/calls/1?timestamp=30"}]},
           open(os.path.join(fs, "gesprek.json"), "w"))
 pm = os.path.join(MAP, "plaud-invoer", "2026-10-31 0816 Werfvergadering")
@@ -242,7 +244,10 @@ check("W17 fathom kern uit de samenvatting", [k["kop"] for k in fk["kern"]] == [
       and fk["kern_ontbreekt"] == "", fk["kern"])
 check("W17 fathom taken voor jou en anderen", fk["taken"] == [
       {"wat": "Lijst doorsturen", "wie": "Collega (IT)", "mij": False, "klaar": False, "link": "https://fathom.video/calls/1?timestamp=20"},
-      {"wat": "Proef goedkeuren", "wie": "Mehdi Chegini", "mij": True, "klaar": False, "link": "https://fathom.video/calls/1?timestamp=30"}], fk["taken"])
+      {"wat": "Proef goedkeuren", "wie": "jij", "mij": True, "klaar": False, "link": "https://fathom.video/calls/1?timestamp=30"}], fk["taken"])
+check("W17 Mehdi aan het exacte adres van zijn account, niet aan een deel ervan of een naam alleen",
+      WD.is_mehdi("Afspraken Account", "eigen@voorbeeld.test") and not WD.is_mehdi("Afspraken Account", "x-eigen@voorbeeld.test")
+      and WD.is_mehdi("Mehdi Chegini") and not WD.is_mehdi("Collega", "collega@voorbeeld.test"))
 check("W17 fathom zonder samenvatting zegt dat", fa_items["Geheim Persoon"]["kern"] == [] and "geen samenvatting" in fa_items["Geheim Persoon"]["kern_ontbreekt"])
 check("W17 zoom met tekst wacht op De Gespreksanalist", "T-0122" in zo["Angela, Mehdi"]["kern_ontbreekt"] and zo["Tom"]["kern_ontbreekt"] == "")
 check("W19 fathom telregel", fa["samen"] == "3 gesprekken, 24 min, 1 taken voor jou", fa["samen"])

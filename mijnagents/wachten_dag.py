@@ -50,6 +50,10 @@ VASTE_PRIVE_BRON = ("whatsapp", "telefoon", "sms", "xelion")
 VASTE_REGEL = ("vaste regel: berichten en oproepen van je telefoon tellen als privé tot je anders beslist (keuze T-0141); "
                "de wacht las nooit de tekst")
 MEHDI_NAMEN = ("mehdi",)
+# Mehdi's eigen Fathom-account (EIGEN-3, dezelfde lijst als koppelingen/fathom.py MEHDI_FATHOM_ADRESSEN): alleen deze exacte
+# adressen, in kleine letters. Gemeten 02-11-2026: zijn actiepunten dragen de naam van dat account, niet 'Mehdi'.
+MEHDI_ADRESSEN = frozenset(a.strip().lower() for a in (os.environ.get("FATHOM_MEHDI_ADRESSEN") or
+                                                        "zoomafspraken@gmail.com,mch@h-architects.be").split(",") if a.strip())
 
 
 def grenzen(dag):
@@ -163,8 +167,9 @@ def label_en_reden(r):
     return "", ""
 
 
-def is_mehdi(naam):
-    return any(n in str(naam or "").casefold() for n in MEHDI_NAMEN)
+def is_mehdi(naam, adres=""):
+    """Mehdi zelf: het exacte adres van zijn eigen Fathom-account, of zijn naam."""
+    return str(adres or "").strip().lower() in MEHDI_ADRESSEN or any(n in str(naam or "").casefold() for n in MEHDI_NAMEN)
 
 
 MD_LINK = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)\)")
@@ -202,10 +207,13 @@ def taken_uit(actiepunten, bron_wie=""):
     for a in actiepunten if isinstance(actiepunten, list) else []:
         if not isinstance(a, dict):
             continue
-        wie = (a.get("assignee") or {}).get("name") if isinstance(a.get("assignee"), dict) else a.get("assignee")
+        ass = a.get("assignee")
+        wie = ass.get("name") if isinstance(ass, dict) else ass
+        adres = ass.get("email") if isinstance(ass, dict) else ""
         wat = str(a.get("description") or "").strip()
         if wat:
-            uit.append({"wat": kort(wat, 400), "wie": kort(wie or "", 60), "mij": is_mehdi(wie), "klaar": bool(a.get("completed")),
+            mij = is_mehdi(wie, adres)
+            uit.append({"wat": kort(wat, 400), "wie": "jij" if mij else kort(wie or "", 60), "mij": mij, "klaar": bool(a.get("completed")),
                         "link": str(a.get("recording_playback_url") or "")})
     return uit
 
