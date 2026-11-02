@@ -5,6 +5,10 @@
 - E03: geen gezondheidsmetingen geeft de zin over Health Auto Export, metingen staan zonder kop;
 - E04: de Browserwacht houdt alleen de sitenaam, nooit het adres, en geen chrome:, file: of about:;
 - E05: zonder eigen (oude aanroep) blijft het blok weg en de tekst gelijk; geen gedachtestreepje.
+- E07: leest de Browserwacht geen enkele browser (geen Full Disk Access), dan zet ze niets klaar, geen nullen.
+- E08: De Dagbundelaar laat een websites-item zonder gelezen browser weg (onbekend); een gelezen browser met 0 bezoeken telt.
+- E09 (Mehdi, 02-11-2026): alleen het Chrome-profiel dat is aangemeld met zijn account telt; andere profielen, een
+  profiel met alleen dezelfde naam, of geen account geven geen bron.
 """
 import importlib.util
 import os
@@ -46,16 +50,37 @@ check("E03 geen gezondheid", "Health Auto Export stuurt nog niets" in t)
 
 # dagbundelaar zonder zijn zware imports: alleen de leesfuncties
 src = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
-ns = {"json": __import__("json"), "os": os}
+ns = {"json": __import__("json"), "os": os, "re": __import__("re"), "datetime": __import__("datetime").datetime,
+      "date": __import__("datetime").date, "timedelta": __import__("datetime").timedelta}
 start = src.index("def _inhoud(x):")
-eind = src.index("def lees_eigen(eerste):")
+eind = src.index("\ndef ", src.index("def lees_eigen(eerste):") + 1)
 exec(src[start:eind], ns)
+ns["WISPR_GEBRUIKER"] = "Mehdi"
 items = [{"uniek": "wispr:Mehdi:2026-10-29", "inhoud": '{"vandaag": {"dictaten": 3, "woorden": 40, "seconden": 30}}'},
          {"uniek": "wispr:Mehdi:2026-10-31", "inhoud": '{"vandaag": {"dictaten": 0}, "per_dag": {"2026-10-30": {"dictaten": 19}, "2026-10-31": {"dictaten": 0}}}'},
          {"uniek": "wispr:Mehdi:2026-10-30", "inhoud": '{"vandaag": {"dictaten": 7}}'}]
 pd = ns["per_dag_uit"](items, "wispr:Mehdi:", lambda i: i.get("vandaag"))
 check("E02 nieuwste ronde wint", pd["2026-10-30"]["dictaten"] == 19 and pd["2026-10-31"]["dictaten"] == 0, pd)
 check("E02 oud item telt voor zijn dag", pd["2026-10-29"]["dictaten"] == 3, pd)
+# E08 (overleg 02-11-2026 K4): tweede vangnet in De Dagbundelaar tegen oude items met nullen.
+wi = [{"uniek": "websites:2026-11-01", "inhoud": '{"browsers": {}, "per_dag": {"2026-11-01": {"bezoeken": 0, "sites": 0, "top": []}}}'},
+      {"uniek": "websites:2026-11-02", "inhoud": '{"browsers": {"Chrome": 9}, "per_dag": {"2026-11-02": {"bezoeken": 0, "sites": 0, "top": []}}}'},
+      {"uniek": "websites:2026-10-31", "inhoud": '{"per_dag": {"2026-10-31": {"bezoeken": 5, "sites": 1, "top": [["a.be", 5]]}}}'}]
+
+
+class _Bord:
+    """Nagebootst bord voor lees_eigen: alleen websites-items, de rest leeg."""
+    def db_lees(self, sql, params):
+        return wi if "websites:" in sql else []
+
+
+ns["bord"] = _Bord()
+eigen = ns["lees_eigen"]("2026-10-31")
+check("E08 zonder gelezen browser onbekend", eigen("2026-11-01")["websites"] is None and eigen("2026-10-31")["websites"] is None,
+      [eigen(d) for d in ("2026-10-31", "2026-11-01")])
+check("E08 gelezen browser met 0 bezoeken telt", eigen("2026-11-02")["websites"] == {"bezoeken": 0, "sites": 0, "top": []},
+      eigen("2026-11-02"))
+
 g = ns["gezondheid_regels"]("Gezondheid op 2026-10-30\n========================\nGeen metingen in deze periode.")
 check("E03 geen metingen is None", g is None, g)
 g = ns["gezondheid_regels"]("Gezondheid op 2026-10-30\n=====\nStappen: 8234\nRusthartslag: 58\n\nSlaap: 6u40")
@@ -92,6 +117,66 @@ t = dag({"wispr": None, "websites": None, "youtube": None, "gezondheid": None})
 check("E06 onbekend zonder wacht", "- YouTube: onbekend (YouTube-wacht las deze dag niet)" in t, t)
 t2 = dag({"wispr": None, "websites": None, "gezondheid": None})
 check("E06 oude aanroep zonder YouTube-regel", "YouTube" not in t2, t2)
+
+# E09: het ene Chrome-profiel, gekozen op het aangemelde account (user_name), niet op naam.
+ls = {"profile": {"info_cache": {"Default": {"name": "werk", "user_name": "Werk@Example.com"},
+                                 "Profile 1": {"name": "werk@example.com", "user_name": "ander@example.com"},
+                                 "Profile 2": {"name": "x", "user_name": ""}}}}
+check("E09 profiel op account, hoofdletters gelijk", B.profiel_van(ls, "werk@example.com") == "Default")
+check("E09 profielnaam telt niet, onbekend account geen profiel", B.profiel_van(ls, "niemand@example.com") is None)
+B.account = lambda: ""
+check("E09 zonder account geen bron", B.bronnen() == ([], "geen account in " + B.ACCOUNT_BESTAND), B.bronnen())
+code = open(B.__file__).read().split('"""', 2)[2]
+check("E09 geen Firefox, Safari of Edge meer", not hasattr(B, "BRONNEN") and not any(w in code for w in ("Firefox", "Safari", "Edge", "places.sqlite", "History.db")))
+import tempfile as _tf
+_thuis = _tf.mkdtemp()
+_map = os.path.join(_thuis, B.CHROME)
+os.makedirs(_map)
+with open(os.path.join(_map, "Local State"), "w") as _f:
+    _f.write('{"profile": {"info_cache": {"Profile 1": {"name": "werk@example.com", "user_name": "ander@example.com"}}}}')
+_oud_thuis = B.THUIS
+B.THUIS = _thuis
+B.account = lambda: "werk@example.com"
+check("E09 account zonder aangemeld profiel: geen bron", B.bronnen() == ([], "geen Chrome-profiel aangemeld met het account"), B.bronnen())
+aanroepen = []
+B.bord = lambda pad, payload: aanroepen.append((pad, payload)) or {}
+B.DROOG = False
+B.DAGEN = 2
+B.main()
+_statussen = [p for pad, p in aanroepen if pad == "/agent-status"]
+check("E09 geen profiel: niets klaargezet, hartslag fout met nood", "/api/klaarzet" not in [p for p, _ in aanroepen]
+      and _statussen[-1]["status"] == "fout" and _statussen[-1]["nood"] and "geen Chrome-profiel aangemeld" in _statussen[-1]["nood"][0]["tekst"],
+      _statussen)
+B.THUIS = _oud_thuis
+
+# E07 (T-0077, 02-11-2026): onder launchd zonder Full Disk Access leest de wacht niets; dan geen klaarzet met nullen.
+aanroepen = []
+B.bord = lambda pad, payload: aanroepen.append((pad, payload)) or {}
+B.bronnen = lambda: ([], "geen toegang")
+B.DROOG = False
+B.DAGEN = 3
+B.main()
+paden = [p for p, _ in aanroepen]
+status = [p.get("status") for pad, p in aanroepen if pad == "/agent-status"]
+check("E07 niets gelezen: geen klaarzet", "/api/klaarzet" not in paden, paden)
+check("E07 niets gelezen: precies een logregel", paden.count("/api/logboek") == 1
+      and len(aanroepen[paden.index("/api/logboek")][1]["regels"]) == 1, aanroepen)
+check("E07 niets gelezen: hartslag eindigt op fout", status and status[-1] == "fout", status)
+
+
+def bord_faalt(pad, payload):
+    aanroepen.append((pad, payload))
+    if pad == "/api/logboek":
+        raise OSError("bord weg")
+    return {}
+
+
+aanroepen = []
+B.bord = bord_faalt
+B.main()
+status = [p.get("status") for pad, p in aanroepen if pad == "/agent-status"]
+check("E07 logboek mislukt: toch hartslag fout en geen klaarzet", status[-1] == "fout"
+      and "/api/klaarzet" not in [p for p, _ in aanroepen], aanroepen)
 
 oud = dag()
 check("E05 zonder eigen geen blok", "Eigen werk en gezondheid" not in oud)
