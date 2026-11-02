@@ -1,6 +1,6 @@
 # Fathom: samenvatting en actiepunten per gesprek (contract)
 
-Versie 1.0, 01-11-2026 (T-0120, FATHOM-1 en ANGEL-8). Voor wie ze leest: De Dagbundelaar, later Ai Angel.
+Versie 1.1, 02-11-2026 (T-0120, FATHOM-1 en ANGEL-8; 1.1: geen bestanden bij een privégesprek). Voor wie ze leest: De Dagbundelaar, later Ai Angel.
 De code is de bron: `mijnagents-runner/koppelingen/fathom.py` (samenvattingen, samenvatting_tekst, actiepunten,
 vul_aan). Verandert de vorm, dan veranderen dit blad en de test `tests/test_fathom_wacht.py` mee.
 
@@ -36,9 +36,12 @@ Niet op het bord en niet in de gesprekkentabel: alleen in de archiefmap van het 
 
 ## Privé
 
-Ook een privégesprek krijgt de bestanden in het archief, zoals zijn transcript. Wie leest, volgt de privéregel van
-de rij: `prive = 1` of afdeling `prive`/`privé` betekent bij Fathom privé. Lees dan niets uit de map en toon alleen
-"privégesprek, N min". Lees ook niets voor een rij met `dubbel_van`: de leidende rij telt.
+Een privégesprek krijgt de drie bestanden niet (sinds T-0120 samen2): het archief gaat via de Mac-sync naar Dropbox.
+Privé is hier wat de archiefmap zelf zegt (`koppelingen/fathom.py`, `map_is_prive`): de herkenning in `gesprek.json`
+zegt `prive`, of afdeling `prive`/`privé`, of er is geen of een onleesbare herkenning (FATHOM-7). Oudere privémappen
+kunnen ze nog hebben; niets wist ze. Wie leest, volgt daarnaast de privéregel van de rij: `prive = 1` of afdeling
+`prive`/`privé` betekent bij Fathom privé. Lees dan niets uit de map en toon alleen "privégesprek, N min". Lees ook
+niets voor een rij met `dubbel_van`: de leidende rij telt.
 
 ## De link naar Fathom
 

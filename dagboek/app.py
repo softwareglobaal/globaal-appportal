@@ -265,7 +265,8 @@ BUNDELBLOKKEN = ("Werkgesprekken", "Gemist zonder terugbellen", "Mail wacht op a
 
 def bundel_blokken(tekst):
     """samen2 (Codex-toets 1): de blokken van BUNDELBLOKKEN in hun volgorde, met hun volledige kop (ook '(agenda
-    onvolledig)'), als [(kop, regels)]; het streepje vooraan valt weg."""
+    onvolledig)'), als [(kop, [(inspring, tekst)])]; het streepje vooraan valt weg. Codex-toets 2: een ingesprongen regel
+    (firma, samenvatting, actiepunt onder een werkgesprek) blijft ingesprongen."""
     uit, huidig = [], None
     for regel in (tekst or "").splitlines():
         if regel.startswith("## "):
@@ -273,7 +274,8 @@ def bundel_blokken(tekst):
             if huidig:
                 uit.append(huidig)
         elif huidig is not None and regel.strip():
-            huidig[1].append(regel[2:] if regel.startswith("- ") else regel.strip())
+            kaal = regel.strip()
+            huidig[1].append((regel[:1].isspace(), kaal[2:] if kaal.startswith("- ") else kaal))
     return uit
 
 

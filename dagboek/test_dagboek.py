@@ -506,6 +506,9 @@ check("D50 (samen2) de vier bundelblokken staan op de dagpagina, met hun kop",
 check("D50 hun regels zoals in het dagbestand, privé zonder naam",
       "Offerte proefdak sturen" in html and "18:00 privégesprek, 12 min" in html and "09:12 telefoon (privé)" in html
       and "privé@voorbeeld.test: 2 mails (privé)" in html and "12:00 (privé)" in html, html[-3000:])
+check("D50 (Codex-toets 2) een ingesprongen regel blijft ingesprongen, een gewone niet",
+      '<div class="klein zacht inspring" style="margin:3px 0 3px 18px">actiepunt: Offerte proefdak sturen</div>' in html
+      and '<div class="" style="margin:3px 0">18:00 privégesprek, 12 min</div>' in html, html[-3000:])
 check("D50 een dag zonder die blokken toont ze niet",
       "<h2>Werkgesprekken</h2>" not in C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True))
 

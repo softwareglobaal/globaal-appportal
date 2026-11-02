@@ -641,7 +641,19 @@ check("P52 (Codex 3) Ai Angel voor een agent: alleen de exacte weergave 'Naam: t
 DOSSIERLIJST = ("## Voor jou\n\n1. [9999] Offerte proefdak sturen (normaal)\n2. [9999] Geheime proeftaak (normaal)\n"
                 "3. [onbekend] Taak die niet meer in de staat staat (normaal)\n\n## Voor een collega\n\n"
                 "4. [9999] Proef Collega: Plan proefdak nakijken (normaal)\n5. [9999] Proef Collega: Geheime proeftaak (normaal)\n")
-staat_d = (frozenset({"Geheime proeftaak"}), frozenset({"Offerte proefdak sturen", "Proef Collega: Plan proefdak nakijken"}))
+# de staat zoals mehdi_agent hem bewaart (veld dossier), gelezen door angel_prive_teksten
+STAAT_D = os.path.join(tempfile.mkdtemp(), "staat.json")
+with open(STAAT_D, "w", encoding="utf-8") as f:
+    json.dump({"taken": {
+        "a-1": {"id": "a-1", "tekst": "Offerte proefdak sturen", "voor": "mehdi", "wie": "", "dossier": "9999"},
+        "a-2": {"id": "a-2", "tekst": "Geheime proeftaak", "voor": "mehdi", "wie": "", "dossier": "9999", "prive": True},
+        "a-4": {"id": "a-4", "tekst": "Plan proefdak nakijken", "voor": "collega", "wie": "Proef Collega",
+                "dossier": "9999"},
+        "a-6": {"id": "a-6", "tekst": "Proefdak bespreken", "voor": "mehdi", "wie": "", "dossier": "9998"}},
+        "afgerond": []}, f)
+oud_staat, WD.ANGEL_STAAT = WD.ANGEL_STAAT, STAAT_D
+staat_d = WD.angel_prive_teksten()
+WD.ANGEL_STAAT = oud_staat
 check("P53 (samen2) een taak met dossiercode: werk met de code erbij, privé alleen 'privé', onbekend blijft verborgen",
       WD.angel_taken(DOSSIERLIJST, staat_d) == ["1. [9999] Offerte proefdak sturen (normaal)", "2. privé",
                                                 "3. niet meer na te gaan of dit privé was: zie het bord",
@@ -649,6 +661,11 @@ check("P53 (samen2) een taak met dossiercode: werk met de code erbij, privé all
       WD.angel_taken(DOSSIERLIJST, staat_d))
 check("P53 de code alleen telt niet: '[9999] Offerte' is geen werktaak als de staat 'Offerte proefdak sturen' kent",
       WD.angel_taken("1. [9999] Offerte (normaal)", staat_d) == ["1. niet meer na te gaan of dit privé was: zie het bord"])
+check("P53 (samen2, Codex-toets 2) een oude taak van een ander dossier met dezelfde tekst als een werktaak blijft verborgen",
+      WD.angel_taken("1. [9997] Proefdak bespreken (normaal)\n2. Proefdak bespreken (normaal)\n"
+                     "3. [9998] Proefdak bespreken (normaal)", staat_d)
+      == ["1. niet meer na te gaan of dit privé was: zie het bord", "2. niet meer na te gaan of dit privé was: zie het bord",
+          "3. [9998] Proefdak bespreken (normaal)"], WD.angel_taken("1. [9997] Proefdak bespreken (normaal)", staat_d))
 
 # P46 (Codex 1): bord en Dagboek samen, zoals op de VM: het Dagboek vraagt het echte bord (test client). Alleen in de repo
 # (de Docker-build kopieert alleen mijnagents/); daar staat 'overgeslagen'.

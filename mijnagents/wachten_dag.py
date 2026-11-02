@@ -561,11 +561,13 @@ def angel_prive_teksten():
     except (OSError, ValueError, AttributeError, TypeError):
         return None, None
     def weergave(t):
-        """De taak zoals mehdi_agent.lijst haar toont, zonder nummer en prioriteit: 'Naam: tekst' bij een collega of
-        agent met een naam, anders de tekst."""
+        """De taak zoals mehdi_agent.lijst haar toont, zonder nummer en prioriteit: '[dossier] ' vooraan bij een taak met
+        een dossier (ANGEL-2), dan 'Naam: ' bij een collega of agent met een naam, dan de tekst. samen2 (Codex-toets 2):
+        met de dossiercode, zodat een oude privétaak van een ander dossier met dezelfde tekst geen werktaak wordt."""
         tekst = str(t.get("tekst") or "")[:300].strip()
         wie = str(t.get("wie") or "")
-        return f"{wie}: {tekst}" if t.get("voor") in ("collega", "agent") and wie else tekst
+        dossier = f"[{t['dossier']}] " if t.get("dossier") else ""
+        return dossier + (f"{wie}: " if t.get("voor") in ("collega", "agent") and wie else "") + tekst
     teksten = [(bool(t.get("prive")), weergave(t), str(t.get("tekst") or "")[:300].strip()) for t in taken
                if isinstance(t, dict)]
     # privé: de weergave en de kale tekst (liever te veel verborgen); werk: alleen de exacte weergave
@@ -597,13 +599,14 @@ def angel_taken(inhoud, staat=(None, None)):
         # de tekst van de taak zoals de staat hem bewaart: zonder '(prioriteit)' achteraan en, bij een collega of een
         # agent, misschien met 'Naam: ' vooraan (mehdi_agent.lijst); exact vergeleken, nooit een stuk van een tekst
         kern = re.sub(r" \((?:hoog|normaal|laag)\)$", "", t["tekst"]).strip()
-        # samen2 (bundel en pagina): een taak uit een gesprek staat er met '[dossier] ' vooraan (mehdi_agent.lijst, ANGEL-2),
-        # de staat kent haar tekst zonder; vergeleken wordt de regel met en zonder die code, elk exact
-        kernen = {kern, DOSSIER_RE.sub("", kern, count=1)}
-        varianten = {x for k in kernen for x in (k, k.split(": ", 1)[-1].strip())}
+        # samen2 (bundel en pagina): een taak uit een gesprek staat er met '[dossier] ' vooraan (mehdi_agent.lijst, ANGEL-2).
+        # Privé: ook met de regel zonder die code (liever te veel verborgen); werk: alleen de volledige regel, met dossier
+        # en naam zoals de staat hem kent (Codex-toets 2 van samen2: een oude privétaak van een ander dossier met
+        # dezelfde tekst als een huidige werktaak blijft verborgen)
+        varianten = {x for k in (kern, DOSSIER_RE.sub("", kern, count=1)) for x in (k, k.split(": ", 1)[-1].strip())}
         if PRIVE_RE.search(" ".join(t["blok"])) or varianten & prive_teksten:
             uit.append(f"{t['nr']}. privé")
-        elif kernen & werk_teksten:             # Codex-toets 2: exact, met de naam ervoor zoals de staat hem kent
+        elif kern in werk_teksten:              # Codex-toets 2: exact, met de naam ervoor zoals de staat hem kent
             uit.append(f"{t['nr']}. {kort(t['tekst'], 140)}")
         else:
             uit.append(f"{t['nr']}. niet meer na te gaan of dit privé was: zie het bord")
