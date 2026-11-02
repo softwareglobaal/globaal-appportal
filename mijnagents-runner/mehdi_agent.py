@@ -479,13 +479,17 @@ def lijstregels(bundels):
     van het model is een dubbel (Codex-toets 1) als elk stuk van haar bron in zo'n regel staat en de kern van het punt
     draagt (de tekst van het actiepunt, of de hele regel van een opvolgpunt). Een stuk als een klantnaam dat toevallig ook
     in een actiepunt staat, is zo geen dubbel (Codex-toets 2)."""
-    return ([(normaal(p["bron"]), normaal(p["wat"])) for p in actiepunten(bundels)]
-            + [(normaal(p["bron"]), normaal(p["bron"])) for p in opvolgpunten(bundels)])
+    return ([(normaal(p["bron"]), normaal(p["wat"]), normaal(p["verwijzing"])) for p in actiepunten(bundels)]
+            + [(normaal(p["bron"]), normaal(p["bron"]), "") for p in opvolgpunten(bundels)])
 
 
 def is_dubbel(bron, al_lijst):
+    """Codex-toets 3: ook een bron die de verwijzing van een gesprek met actiepunten noemt (fathom:701): van zo'n gesprek
+    komen alleen zijn actiepunten in de lijst."""
     stukken = _stukken(bron)
-    return bool(stukken) and all(any(s in regel and kern in s for regel, kern in al_lijst) for s in stukken)
+    if any(v and v in normaal(bron) for _, _, v in al_lijst):
+        return True
+    return bool(stukken) and all(any(s in regel and kern in s for regel, kern, _ in al_lijst) for s in stukken)
 
 
 def opvolgpunten(bundels):
@@ -536,7 +540,10 @@ def opvolg_gelezen(bundels):
         for k, rs in regels.items():
             # Codex-toets 2: ook 'onvolledig: Xelion niet gelezen' of 'geen gezien (... niet gelezen ...)' is geen gelezen
             # blok: een punt dat daar ontbreekt, kan nog openstaan
-            if not any(r.startswith(("- niet gelezen", "- onbekend", "- onvolledig")) or "niet gelezen" in r for r in rs):
+            # Codex-toets 3: alleen de standregels van De Dagbundelaar (een onderwerp met 'niet gelezen' is een punt), en een
+            # blok met 'en N meer' is niet volledig: een punt voorbij de grens staat er niet, maar wacht nog
+            if not any(r.startswith(("- niet gelezen", "- onbekend", "- onvolledig")) or re.match(r"- en \d+ meer", r)
+                       or (r.startswith("- geen gezien (") and "niet gelezen" in r) for r in rs):
                 gelezen.add((b["dag"], k))
     return gelezen
 
@@ -617,6 +624,7 @@ def neem_actiepunten(staat, punten, bundels, kern, nu, opvolg=None, controle=Non
                 p = nu_open[tid]
                 if t.get("bron") != p["bron"][:300]:          # zelfde punt, andere regel (soort, aantal): de nieuwe regel
                     t.update(tekst=p["wat"][:300], bron=p["bron"][:300])
+                    telling["opvolg_bijgewerkt"] += 1
                 t["bijgewerkt"] = nu_s                         # staat nog open: vervalt niet
             elif (t.get("dag"), t.get("opvolgblok")) in gelezen:
                 staat["afgerond"].append(dict(taken.pop(tid), status="gedaan", afgerond=nu_s,
@@ -1154,16 +1162,19 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
     controle = lees_bundels(oud, map_, vandaag="-") if oud else []
     staat, actie = neem_actiepunten(staat, actiepunten(bundels), bundels, kern_lijst, nu, opvolg=opvolgpunten(bundels),
                                     controle=controle)
-    # Codex-toets 2: een punt dat er nu bij kan (of een opvolgtaak die sluit), is nieuws, ook bij dezelfde bundel
+    # Codex-toets 2 en 3: een punt dat er nu bij kan, een opvolgtaak die sluit of een andere regel krijgt, is nieuws, ook
+    # bij dezelfde bundel. Dan bewaar ik de lijst en zet ik ze klaar, maar zonder Claude: de bundel zelf veranderde niet.
     nieuws = any(n for k, n in actie.items() if k != "actiepunt_later")
-    if m == "tussendoor" and vinger == staat.get("vingerafdruk") and not nieuws:
+    zonder_claude = m == "tussendoor" and vinger == staat.get("vingerafdruk")
+    if zonder_claude and not nieuws:
         ag.log("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")   # anders alleen een hartslag (ANGEL-10)
         r.detail = werkverslag(m, bundels, Counter(), staat, {}, overgeslagen=True)
         return staat
     inhoud = invoer(nu, m, bundels, staat, gezegd_lijst, kern_lijst)
     uit, meta, telling, ontbreekt = None, {}, Counter(), []
     try:
-        uit, meta = (claude or vraag_claude)(systeem(r.werkwijze, r.collegas, r.lessen), inhoud)
+        if not zonder_claude:
+            uit, meta = (claude or vraag_claude)(systeem(r.werkwijze, r.collegas, r.lessen), inhoud)
     except Weigering as e:
         ag.log("claude", "fout", str(e)[:200])
         r.nood("Claude weigerde de takenlijst te maken", wie="claude-code")

@@ -402,6 +402,16 @@ def test_angel2_werkgesprekken_per_gesprek_met_verwijzing():
                                "mail_open": [], "prive_postvakken": set()})
     t3 = V.tekst(v3)
     eis("Klant Omega" not in t3 and "GEHEIM" not in t3 and "- 09:00 privégesprek, 45 min" in t3, f"Plaud privé\n{t3}")
+    # Codex-toets 3: twee gesprekken waarin de privé-opname valt, zijn allebei privé
+    rijen4 = rijen3 + [rij("zoom:meeting:z9", "09:00", 45, "Klant Zeta", thema="Zelfde uur")]
+    t4 = V.tekst(V.vaststellen(DAG, [], set(), rijen4, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
+                               bundel={"inhoud_van": lambda g: None, "morgen": [], "mail_open": [], "prive_postvakken": set()}))
+    eis("Klant Omega" not in t4 and "Klant Zeta" not in t4, f"elk gesprek met de privé-opname\n{t4}")
+    # en een korte privé-opname (minder dan 2 min) maakt een werkafspraak niet privé
+    kort = [rij("plaud:k1", "16:56", 1, "Pieter Privaat", bron="plaud", prive=1)]
+    t5 = V.tekst(V.vaststellen(DAG, afs, set(), kort, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
+                               bundel={"inhoud_van": lambda g: None, "morgen": [], "mail_open": [], "prive_postvakken": set()}))
+    eis("- 16:55 !! Mehdi: [HA] 9003 Bespreking - Pieter Privaat: bevestigd" in t5, f"korte opname\n{t5}")
     # zonder bundel (oude aanroep) geen nieuwe blokken
     eis(all(f"## {k}" not in V.tekst(vast()) for k in V.BUNDELKOPPEN), "oude aanroep zonder blokken")
 

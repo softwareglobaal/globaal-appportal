@@ -1154,6 +1154,8 @@ def test_codex2_een_klantnaam_in_een_actiepunt_maakt_een_echte_taak_geen_dubbel(
     assert M.is_dubbel("actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: Offerte keuken sturen", al)
     assert M.is_dubbel("Offerte keuken sturen", al)
     assert not M.is_dubbel("Klant Omega", al) and not M.is_dubbel("UNABO 9405", al)
+    assert M.is_dubbel("fathom:701", al) and M.is_dubbel("[fathom:701; UNABO 9405]", al), "Codex-toets 3: de verwijzing"
+    assert not M.is_dubbel("fathom:702", al), "een gesprek zonder actiepunt heeft geen lijstregel"
 
 
 def test_codex2_een_uitgesteld_punt_komt_de_volgende_tussenronde_ook_bij_dezelfde_bundel():
@@ -1174,7 +1176,8 @@ def test_codex2_een_uitgesteld_punt_komt_de_volgende_tussenronde_ook_bij_dezelfd
         json.dump(st, open(o.staat, "w", encoding="utf-8"))
         aantal = len(o.claude_oproepen)
         r, staat = o.ronde(uit=antwoord(), nu=MIDDAG_UTC, moment="tussendoor")
-        assert offerte["id"] in staat["taken"] and len(o.claude_oproepen) == aantal + 1, "er was plaats: geen overslaan"
+        assert offerte["id"] in staat["taken"] and len(o.claude_oproepen) == aantal, "er was plaats: erbij, zonder Claude"
+        assert json.load(open(o.staat, encoding="utf-8"))["taken"].get(offerte["id"]), "en bewaard"
         aantal = len(o.claude_oproepen)
         r, staat = o.ronde(uit=antwoord(), nu=NAMIDDAG_UTC, moment="tussendoor")
         assert len(o.claude_oproepen) == aantal and "niets nieuw" in r.detail, "zonder nieuws slaat ze wel over"
@@ -1252,6 +1255,22 @@ def test_db6_opvolgpunten_blijven_staan_en_sluiten_als_ze_weg_zijn():
     # terug naar de eerste soort: nog steeds een taak, nooit weg
     staat7, tel7 = M.neem_actiepunten(staat6, M.actiepunten(bundel), bundel, KERN, NAMIDDAG_UTC, opvolg=M.opvolgpunten(bundel))
     assert len([t for t in staat7["taken"].values() if t["tekst"].startswith("Mail beantwoorden")]) == 1, staat7["taken"]
+    assert tel6["opvolg_bijgewerkt"] == 1, "een andere regel is nieuws (de tussenronde bewaart ze)"
+    # Codex-toets 3: een onderwerp met 'niet gelezen' is een punt, geen stand; en een blok met 'en N meer' sluit niets
+    twee = tekst.replace("- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte",
+                         "- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte\n"
+                         "- info@h-architects.be: actie, van Klant Eta: Bericht niet gelezen?")
+    b8 = [{"dag": GISTEREN, "dagbestand": twee, "telling": {}}]
+    staat8, _ = M.neem_actiepunten(M.laad_staat("/bestaat/niet"), M.actiepunten(b8), b8, KERN, OCHTEND_UTC,
+                                   opvolg=M.opvolgpunten(b8))
+    zonder = twee.replace("- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte\n", "")
+    b9 = [{"dag": GISTEREN, "dagbestand": zonder, "telling": {}}]
+    staat9, tel9 = M.neem_actiepunten(staat8, M.actiepunten(b9), b9, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b9))
+    assert tel9["opvolg_af"] == 1, "het andere punt is beantwoord: het blok telt als gelezen"
+    vol = twee.replace("- info@h-architects.be: actie, van Klant Eta: Bericht niet gelezen?", "- en 3 meer")
+    b10 = [{"dag": GISTEREN, "dagbestand": vol, "telling": {}}]
+    staat10, tel10 = M.neem_actiepunten(staat8, M.actiepunten(b10), b10, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b10))
+    assert not tel10["opvolg_af"], "voorbij de grens van de lijst: niets gesloten"
 
 
 def test_codex2_open_opvolgtaak_van_een_oudere_dag_blijft_zolang_ze_openstaat():
@@ -1300,6 +1319,15 @@ def test_codex2_voorlopige_bundel_verbergt_een_ontbrekend_dagbestand_van_gistere
                claude=lambda system, inhoud: (antwoord(), {}), zet=lambda its: {"nieuw": len(its)},
                lees=lambda uniek: [], staatpad=os.path.join(wortel, "staat.json"), bewaar=False)
         assert ("Dagbundel van gisteren ontbreekt", "claude-code") in r.noden, r.noden
+        # tegenproef: met het dagbestand van gisteren erbij geen nood
+        os.makedirs(os.path.join(dagboek, "2026"))
+        with open(os.path.join(dagboek, "2026", f"{GISTEREN}.md"), "w", encoding="utf-8") as f:
+            f.write(DAGBESTAND)
+        r = NepRonde()
+        M.werk(r, nu=OCHTEND_UTC, map_=dagboek, gezegd=lambda nu: [], kern=lambda: list(KERN),
+               claude=lambda system, inhoud: (antwoord(), {}), zet=lambda its: {"nieuw": len(its)},
+               lees=lambda uniek: [], staatpad=os.path.join(wortel, "staat.json"), bewaar=False)
+        assert not any(t == "Dagbundel van gisteren ontbreekt" for t, _ in r.noden), r.noden
     finally:
         shutil.rmtree(wortel, ignore_errors=True)
 
