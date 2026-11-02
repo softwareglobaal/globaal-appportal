@@ -5,7 +5,9 @@
    script een keer in het geheugen, vergelijkt de hash en geeft precies die inhoud via een pijp aan Python. Een ander
    script, een gewijzigd script of een symlink start nooit. Verandert het script, dan is er een nieuwe starter met een
    nieuwe cdhash, en geeft Mehdi opnieuw Full Disk Access (System Settings > Privacy & Security > Full Disk Access).
-   Geen omgeving, geen paden van buiten; alleen --droog (lezen en printen, niets naar het bord) gaat door. */
+   Geen omgeving, geen paden van buiten; alleen --proef gaat door: de wacht zegt dan alleen of het Chrome-profiel
+   leesbaar is, zonder tellingen of sitenamen (Codex 02-11, punt 1: --droog zou elk proces van deze gebruiker de
+   bezochte sites laten lezen). */
 #include <CommonCrypto/CommonDigest.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -51,9 +53,9 @@ static int hex_gelijk(const unsigned char *d, const char *hex) {
 }
 
 int main(int argc, char *argv[]) {
-    int droog = argc == 2 && strcmp(argv[1], "--droog") == 0;
-    if (argc > 2 || (argc == 2 && !droog)) {
-        fprintf(stderr, "Gebruik: BrowserWacht [--droog]\n");
+    int proef = argc == 2 && strcmp(argv[1], "--proef") == 0;
+    if (argc > 2 || (argc == 2 && !proef)) {
+        fprintf(stderr, "Gebruik: BrowserWacht [--proef]\n");
         return EX_USAGE;
     }
     static const char *python_mappen[] = {
@@ -146,7 +148,7 @@ int main(int argc, char *argv[]) {
         return EX_CONFIG;
     }
     char *omgeving[] = {home, "PATH=/usr/bin:/bin", "LANG=en_US.UTF-8", NULL};
-    char *args[] = {PYTHON, "-I", "-B", "-c", start, droog ? "--droog" : NULL, NULL};
+    char *args[] = {PYTHON, "-I", "-B", "-c", start, proef ? "--proef" : NULL, NULL};
     pid_t kind;
     if (posix_spawn(&kind, args[0], NULL, NULL, args, omgeving) != 0) {
         fprintf(stderr, "BrowserWacht: Python kon niet starten\n");

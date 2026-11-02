@@ -15,7 +15,8 @@ Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste D
 op in het dagbestand. Is het profiel niet te lezen, dan staat het bij 'onleesbaar' en zet de wacht niets klaar: onbekend
 is geen 0 (T-0077, 02-11-2026). macOS 27 beschermt de map van Chrome; onder launchd heeft alleen een programma met
 Full Disk Access toegang.
-Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
+Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog | --proef]
+--proef (de uitrol, via de starter) zegt alleen of het profiel leesbaar is: nooit tellingen of sitenamen.
 """
 import json
 import os
@@ -39,6 +40,7 @@ TOP = 10
 DAGEN = 14
 DAG = None
 DROOG = "--droog" in sys.argv
+PROEF = "--proef" in sys.argv
 for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
         DAG = sys.argv[i + 1]
@@ -168,6 +170,10 @@ def main():
             continue
         gelezen[browser] += 1
         bezoeken += [(browser, t, s) for t, s in rijen]
+    if PROEF:
+        print(json.dumps({"proef": "ok" if gelezen else "mislukt", "browsers": dict(gelezen), "onleesbaar": onleesbaar,
+                          "reden": "" if gelezen else (reden or "geen toegang (Full Disk Access)")}))
+        return
     per_dag = tel(bezoeken, dagen)
     nood = []
     if not gelezen:

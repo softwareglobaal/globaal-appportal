@@ -7,9 +7,10 @@
 #
 #   uitrol_browser_wacht.sh              script en starter uit origin/main bijwerken (bouwen alleen bij een nieuwe
 #                                         bron), LaunchAgent klaarzetten maar niet laden; de wacht staat daarna uit
-#   uitrol_browser_wacht.sh proef        de toegangsproef onder launchd met precies dit programma (--droog): leest
-#                                         het Chrome-profiel? Dan een proefbewijs voor deze cdhash; anders de stap
-#                                         voor Mehdi, met het pad van de app op zijn klembord
+#   uitrol_browser_wacht.sh proef        de toegangsproef onder launchd met precies dit programma (--proef, alleen
+#                                         leesbaar of niet, nooit sitenamen): leest het Chrome-profiel? Dan een
+#                                         proefbewijs voor deze cdhash; anders de stap voor Mehdi, met het pad van de
+#                                         app op zijn klembord
 #   uitrol_browser_wacht.sh aan          de wacht laden (elk uur), alleen met een proefbewijs van deze cdhash
 #   uitrol_browser_wacht.sh uit          de wacht uitzetten; de starter en zijn toestemming blijven
 #   uitrol_browser_wacht.sh controleer   versie, cdhash, proefbewijs en de stand in launchd
@@ -33,6 +34,13 @@ WACHT=mijnagents-runner/mac/browser_wacht.py
 
 fout() { print -r -- "uitrol_browser_wacht: $*" >&2; exit 2; }
 cdhash() { /usr/bin/codesign -dvvv "$1" 2>&1 | /usr/bin/sed -n 's/^CDHash=//p' | head -1; }
+geladen() { /bin/launchctl print "gui/$(id -u)/$1" > /dev/null 2>&1; }
+# Uitzetten en nakijken dat launchd de taak echt kwijt is (Codex 02-11, punt 2).
+bootout_zeker() {
+    /bin/launchctl bootout "gui/$(id -u)/$1" 2>/dev/null || true
+    for i in {1..10}; do geladen "$1" || return 0; sleep 1; done
+    fout "$1 blijft geladen in launchd"
+}
 
 bron_ophalen() {
     git -C "$REPO" fetch -q origin
@@ -48,11 +56,11 @@ bron_ophalen() {
 installeer() {
     bron_ophalen
     mkdir -p "$BASIS" "$LOGS"; chmod 700 "$BASIS"
+    # Altijd eerst uit: na installeer staat de wacht uit tot een proef en aan (ook bij een ongewijzigde bron).
+    bootout_zeker "$LABEL"
     if [[ -f "$BASIS/BRON_SHA256" && "$(cat "$BASIS/BRON_SHA256")" == "$bron_hash" && -x "$STARTER" ]]; then
-        print -r -- "bron ongewijzigd ($sha[1,8]); starter blijft (cdhash $(cdhash "$APP"))"
+        print -r -- "bron ongewijzigd ($sha[1,8]); starter blijft (cdhash $(cdhash "$APP")); wacht staat uit tot aan"
     else
-        # Eerst uit: tijdens de wissel draait er geen ronde met een halve installatie.
-        /bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
         nieuw="$werk/BrowserWacht.app"
         mkdir -p "$nieuw/Contents/MacOS"
         /usr/bin/plutil -lint "$werk/Info-browserwacht.plist" > /dev/null
@@ -88,8 +96,14 @@ PLIST
 
 proef() {
     [[ -x "$STARTER" ]] || fout "geen starter; eerst installeer"
-    uit="$BASIS/proef.uit"; rm -f "$uit"
-    plist="$BASIS/proef.plist"
+    /usr/bin/codesign --verify --strict "$APP" || fout "handtekening van $APP klopt niet"
+    cd_voor=$(cdhash "$APP")
+    [[ -n "$cd_voor" ]] || fout "geen cdhash"
+    # Codex 02-11, punt 3: de uitvoer in een verse privemap, en het bewijs alleen als de app voor en na de proef
+    # dezelfde cdhash heeft.
+    proefmap=$(mktemp -d "$BASIS/proef.XXXXXX"); chmod 700 "$proefmap"
+    uit="$proefmap/uit"
+    plist="$proefmap/proef.plist"
     cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,20 +114,22 @@ proef() {
   <key>StandardOutPath</key><string>$uit</string><key>StandardErrorPath</key><string>$uit</string>
 </dict></plist>
 PLIST
-    /bin/launchctl bootout "gui/$(id -u)/$LABEL.proef" 2>/dev/null || true
+    bootout_zeker "$LABEL.proef"
     /bin/launchctl bootstrap "gui/$(id -u)" "$plist"
     /bin/launchctl kickstart "gui/$(id -u)/$LABEL.proef"
     for i in {1..30}; do
         [[ -s "$uit" ]] && ! /bin/launchctl print "gui/$(id -u)/$LABEL.proef" 2>/dev/null | grep -q "state = running" && break
         sleep 1
     done
-    /bin/launchctl bootout "gui/$(id -u)/$LABEL.proef" 2>/dev/null || true
-    rm -f "$plist"
-    if grep -q '"Chrome": 1' "$uit" 2>/dev/null && ! grep -q 'PermissionError\|OperationalError' "$uit"; then
-        cdhash "$APP" > "$BASIS/PROEF"
-        print -r -- "proef ok onder launchd: het Chrome-profiel is gelezen (cdhash $(cat "$BASIS/PROEF")); nu: aan"
+    bootout_zeker "$LABEL.proef"
+    uitkomst=$(cat "$uit" 2>/dev/null || true)
+    rm -rf "$proefmap"
+    cd_na=$(cdhash "$APP")
+    if [[ "$uitkomst" == *'"proef": "ok"'* && "$cd_voor" == "$cd_na" ]]; then
+        print -r -- "$cd_na" > "$BASIS/PROEF"
+        print -r -- "proef ok onder launchd: het Chrome-profiel is leesbaar (cdhash $cd_na); nu: aan"
     else
-        print -r -- "proef mislukt: $(grep -m1 'BrowserWacht:\|"reden"' "$uit" || head -c 200 "$uit")"
+        print -r -- "proef mislukt: $(print -r -- "$uitkomst" | grep -m1 'BrowserWacht:\|"reden"' || print -r -- "$uitkomst" | head -c 200)"
         print -r -- "$APP" | /usr/bin/pbcopy
         print -r -- "Stap voor Mehdi: System Settings > Privacy & Security > Full Disk Access: BrowserWacht met min (-) weg als hij er staat, dan plus (+), Command Shift G, Command V (het pad staat op het klembord), Open. Daarna opnieuw: proef"
         exit 1
@@ -121,16 +137,17 @@ PLIST
 }
 
 aan() {
+    /usr/bin/codesign --verify --strict "$APP" || fout "handtekening van $APP klopt niet"
     [[ -f "$BASIS/PROEF" && "$(cat "$BASIS/PROEF")" == "$(cdhash "$APP")" ]] || fout "geen proefbewijs voor deze starter; eerst proef"
-    /bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    bootout_zeker "$LABEL"
     /bin/launchctl bootstrap "gui/$(id -u)" "$AGENTS/$LABEL.plist"
     /bin/launchctl kickstart "gui/$(id -u)/$LABEL"
     print -r -- "Browserwacht aan (elk uur om :40); log $LOGS/browser_wacht.log"
 }
 
 uit() {
-    /bin/launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-    print -r -- "Browserwacht uit; starter en toestemming blijven"
+    bootout_zeker "$LABEL"
+    print -r -- "Browserwacht uit (nagekeken in launchd); starter en toestemming blijven"
 }
 
 controleer() {
