@@ -2224,6 +2224,22 @@ def test_r6_drie_uitrollen_en_terug():
         bewijs = m / "PROEF_ZONDER_COMMIT"
         r = subprocess.run(["zsh", "-c", functies + f"proef_schrijf '{bewijs}'"], capture_output=True, text=True)
         assert r.returncode != 0 and not bewijs.exists() and "Geen commit" in r.stderr, (r.returncode, r.stderr)
+        # Codex toets 3: en een uitrol op een geldige, maar commitloze worktree: niets bewaard of gewisseld
+        apart = m / "werk apart"
+        werk.rename(apart)
+        werk.mkdir()
+        git("init", "-q", cwd=werk)
+        try:
+            assert "Geen commit" in uitrol(ref=shas[0], ok=False)
+            assert (vorige / "COMMIT").read_text().strip() == shas[1]
+            assert not (basis / "mac-gesprekken" / "vorige.nieuw").exists()
+            assert subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], cwd=werk,
+                                  capture_output=True).returncode != 0          # niets uitgecheckt
+        finally:
+            shutil.rmtree(werk)
+            apart.rename(werk)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[1]
+        (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
