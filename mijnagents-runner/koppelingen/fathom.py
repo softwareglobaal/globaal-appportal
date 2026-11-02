@@ -93,8 +93,7 @@ def gesprekken(sinds_iso, met_transcript=False, tot_iso=None):
             cursor = d.get("next_cursor")
             if not cursor:
                 break
-            if met_transcript:
-                time.sleep(PAUZE)
+            time.sleep(PAUZE)   # ook zonder transcript een pauze per pagina (Codex 02-11)
     return uit
 
 

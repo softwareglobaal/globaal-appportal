@@ -97,6 +97,25 @@ def test_aanvullen_bestaand_gesprek_houdt_herkenning():
     assert FW.samenvatting_aanvullen(map2, _gesprek(rid=11, met=False)) is False
 
 
+def test_aanvullen_zonder_nummer_en_zonder_half_bestand():
+    """Codex 02-11 (T-0154 ronde 1): twee ontbrekende recording_id's zijn niet gelijk; de markdown gaat via een tijdelijk
+    bestand op zijn plaats, zodat een afgebroken ronde nooit een half bestand achterlaat."""
+    g = _gesprek(rid=12)
+    g.pop("recording_id")
+    map_, _ = FW.bewaar(dict(g, recording_id=12), "tekst", {})
+    gj = os.path.join(map_, "gesprek.json")
+    meta = json.load(open(gj, encoding="utf-8"))
+    meta.pop("recording_id", None); meta.pop("default_summary", None); meta.pop("action_items", None)
+    json.dump(meta, open(gj, "w", encoding="utf-8"))
+    assert FW.samenvatting_aanvullen(map_, g) is False
+    assert FW.samenvatting_aanvullen(map_, _gesprek(rid=12)) is False
+    # schrijf_heel: het doel verschijnt in één keer, zonder tijdelijk restant
+    pad = os.path.join(map_, "proef.md")
+    FW.schrijf_heel(pad, "heel")
+    assert open(pad, encoding="utf-8").read() == "heel" and not os.path.exists(pad + ".tmp")
+    assert not [f for f in os.listdir(map_) if f.endswith(".tmp")]
+
+
 def test_inhaalronde_droog_en_een():
     FW._INDEX = None
     for rid in (21, 22, 23):

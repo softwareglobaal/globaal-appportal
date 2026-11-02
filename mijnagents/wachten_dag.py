@@ -150,14 +150,14 @@ def label_en_reden(r):
     prive = is_prive_gesprek(r)
     if prive and str(r.get("bron") or "") in VASTE_PRIVE_BRON:
         return "privé", VASTE_REGEL
-    if prive:
-        if twijfelt(r):
+    # Twijfel gaat voor privé, met of zonder privévlag (Codex 02-11: zonder vlag telden 'twijfel', middel en een lege
+    # afdeling niet mee); privé alleen als de wacht zeker was.
+    if twijfelt(r):
+        if prive:
             return "twijfel", "de wacht zette het op privé omdat ze twijfelde: " + (waarom or "zonder reden") + ". Wat moet het zijn?"
-        return "privé", waarom
-    zeker = str(r.get("zekerheid") or "").strip().casefold()
-    afd = str(r.get("afdeling") or "").strip().casefold()
-    if zeker == "laag" or afd == "onbekend":
         return "twijfel", "de wacht wist niet bij wie of wat dit hoort: " + (waarom or "zonder reden") + ". Wat moet het zijn?"
+    if prive:
+        return "privé", waarom
     return "", ""
 
 
@@ -294,8 +294,9 @@ def tekst(conn, uniek):
     if r is None:
         return {"fout": "onbekend gesprek"}
     r = dict(r)
+    label, reden = label_en_reden(r)   # hetzelfde label en dezelfde reden als op de dagpagina (Codex 02-11)
     kop = {"uniek": uniek, "wie": r.get("personen") or "onbekend", "wat": kort(r.get("thema"), 200), "bron": r.get("bron"),
-           "datum": r.get("datum"), "tijd": uur(r.get("start")), "label": "privé" if is_prive_gesprek(r) else ""}
+           "datum": r.get("datum"), "tijd": uur(r.get("start")), "label": label, "reden": reden}
     pad = tekst_pad(r)
     if not pad:
         return dict(kop, fout="geen tekst bewaard: dit gesprek heeft geen opname of transcript op het bord")
@@ -341,9 +342,10 @@ def chat_wat(r):
 
 
 def lees_gesprekken(conn, wacht, bron, dag):
-    rijen = conn.execute("SELECT * FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start",
-                         (dag, bron)).fetchall()
     voorvoegsel = UNIEK_VOORVOEGSEL.get(wacht, "")
+    # Een afgesplitste rij (zoom-chat) kiest op het nummer, wat de bron ook zegt (Codex 02-11).
+    rijen = conn.execute("SELECT * FROM gesprek_log WHERE datum=? AND (bron IN (?, 'dekking') OR uniek LIKE ?) ORDER BY start",
+                         (dag, bron, (voorvoegsel + "%") if voorvoegsel else "\x00")).fetchall()
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
@@ -400,6 +402,26 @@ def lees_mail(conn, wacht, dag):
     return uit
 
 
+def inhoud_regels(inhoud, dag, maximum=40):
+    """Een json-inhoud van een klaarzet-item als leesbare regels 'sleutel: waarde'. Een telling per dag (per_dag) toont
+    alleen de dag van de pagina. Nooit meer dan maximum regels; de rest zegt hoeveel er nog zijn."""
+    def plat(v):
+        return kort(json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else "" if v is None else v, 200)
+    if isinstance(inhoud, dict):
+        d = dict(inhoud)
+        pd = d.pop("per_dag", None)
+        if isinstance(pd, dict) and isinstance(pd.get(dag), dict):
+            d = {**pd[dag], **d}
+        regels = [f"{k}: {plat(v)}" for k, v in d.items()]
+    elif isinstance(inhoud, list):
+        regels = [plat(x) for x in inhoud]
+    else:
+        regels = [plat(inhoud)]
+    if len(regels) > maximum:
+        regels = regels[:maximum] + [f"en nog {len(regels) - maximum} regels (zie technisch)"]
+    return regels
+
+
 def lees_klaarzet(conn, wacht, dag, van, tot):
     """Wat de wacht die dag klaarzette, of wat over die dag gaat (sleutel, uniek of titel met de dag)."""
     rijen = conn.execute(
@@ -428,10 +450,15 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
         inhoud_tekst = r["inhoud"] or ""   # letterlijk zoals bewaard, nooit opnieuw opgemaakt of afgekapt
         # Leesbare inhoud (een dagplan, een signaal) is de kern; een telling of lijst (json) hoort bij het technische.
-        kern = [] if inhoud is not None or not inhoud_tekst.strip() else [{"kop": "", "tekst": inhoud_tekst}]
-        oordeel = [("soort", r["soort"]), ("voor", r["voor"]), ("status", r["status"]), ("opgepakt door", r["opgepakt_door"]),
-                   ("opgepakt op", uur(r["opgepakt_ts"]))]
-        technisch = [("titel", r["titel"]), ("sleutel", r["sleutel"]), ("verwijzing", r["verwijzing"]), ("nummer", r["uniek"]),
+        # Laag 2 houdt titel, inhoud en status (overleg T-0154 X1, wijziging Codex): leesbare tekst als tekst, een lijst of
+        # telling (json) als regels 'sleutel: waarde'; het ruwe json blijft achter de knop technisch.
+        if inhoud is None:
+            kern = [{"kop": "", "tekst": inhoud_tekst}] if inhoud_tekst.strip() else []
+        else:
+            kern = [{"kop": "Inhoud", "regels": [{"tekst": t, "link": ""} for t in inhoud_regels(inhoud, dag)]}]
+        oordeel = [("titel", r["titel"]), ("soort", r["soort"]), ("voor", r["voor"]), ("status", r["status"]),
+                   ("opgepakt door", r["opgepakt_door"]), ("opgepakt op", uur(r["opgepakt_ts"]))]
+        technisch = [("sleutel", r["sleutel"]), ("verwijzing", r["verwijzing"]), ("nummer", r["uniek"]),
                      ("klaargezet", uur(r["ts"])), ("inhoud", inhoud_tekst if inhoud is not None else "")]
         # Een klaargezet item dat zichzelf privé noemt (inhoud.prive) draagt hetzelfde label als een gesprek.
         prive = isinstance(inhoud, dict) and bool(inhoud.get("prive"))
@@ -449,11 +476,18 @@ def lees_log(conn, wacht, van, tot):
              "fout": r["stap"] == "fout"} for r in rijen]
 
 
+def opname_nummer(nummer):
+    """Het gespreksnummer dat bij een klaarzet-nummer hoort: zoom-tekst:<uuid> is de opname zoom:meeting:<uuid>;
+    transcript-items van Fathom en Plaud dragen het gespreksnummer zelf."""
+    n = str(nummer or "")
+    return "zoom:meeting:" + n[len("zoom-tekst:"):] if n.startswith("zoom-tekst:") else n
+
+
 def samen(wacht, items):
     """Eén telregel per wacht voor de rij (Mehdi 01-11-2026: "ik wil weten hoeveel berichten ik krijg", "je zit in te
     veel groepen"): WhatsApp en sms per gesprek en groep, telefoon met gemist en minuten, Zoom en Fathom met minuten
     en taken, mail met dringend. Leeg als er niets te tellen is."""
-    n = len(items)
+    n = sum(1 for it in items if it["soort"] in ("gesprek", "chat")) if wacht in GESPREK_BRON else len(items)
     if not n:
         return ""
     if wacht in ("whatsapp-wacht", "sms-wacht"):
@@ -498,7 +532,13 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=()):
         elif wacht in MAIL_WACHTEN:
             items = lees_mail(conn, wacht, dag)
         if echte == wacht:
-            items += lees_klaarzet(conn, wacht, dag, van, tot)
+            kz = lees_klaarzet(conn, wacht, dag, van, tot)
+            if wacht in GESPREK_BRON:
+                # Dezelfde opname telt één keer (overleg T-0154 X3): het klaarzet-item (transcript, zoom-tekst) van een
+                # gesprek dat al als gesprek in de rij staat, valt weg.
+                gezien = {dict(it["technisch"]).get("nummer") for it in items}
+                kz = [k for k in kz if opname_nummer(dict(k["technisch"]).get("nummer")) not in gezien]
+            items += kz
     except Exception as e:  # noqa: BLE001  een kapotte tabel mag de rest van de pagina niet tegenhouden
         leesfout = f"niet gelezen ({type(e).__name__})"
     try:
@@ -565,7 +605,7 @@ def dag(conn, dag_, agents, vakken, boven):
     groepen = [("De Dagbundelaar en Ai Angel", tuple(boven))] + [(v, tuple(w)) for v, w in vakken]
     uit = []
     for vak, namen in groepen:
-        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(ECHTE_AGENT.get(n, n)),
+        uit.append({"vak": vak, "wachten": [per_wacht(conn, n, agents.get(n, n), dag_, st.get(n) if n == ECHTE_AGENT.get(n, n) else None,
                                                       nood.get(ECHTE_AGENT.get(n, n), ()) if n == ECHTE_AGENT.get(n, n) else ())
                                             for n in namen]})
     alle = [w for v in uit for w in v["wachten"]]

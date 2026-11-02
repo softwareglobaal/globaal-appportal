@@ -229,13 +229,22 @@ def samenvatting_bewaren(map_, g):
     geschreven = False
     md = fathom.samenvatting_md(g)
     if md.strip():
-        open(os.path.join(map_, "samenvatting.md"), "w", encoding="utf-8").write(
-            "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n" + md)
+        schrijf_heel(os.path.join(map_, "samenvatting.md"),
+                     "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n" + md)
         geschreven = True
     if g.get("action_items"):
-        open(os.path.join(map_, "actiepunten.md"), "w", encoding="utf-8").write(json.dumps(g["action_items"], ensure_ascii=False, indent=1))
+        schrijf_heel(os.path.join(map_, "actiepunten.md"), json.dumps(g["action_items"], ensure_ascii=False, indent=1))
         geschreven = True
     return geschreven
+
+
+def schrijf_heel(pad, tekst):
+    """Eerst naast het doel, dan in één keer op zijn plaats (Codex 02-11): een afgebroken ronde laat nooit een half
+    bestand achter."""
+    tmp = pad + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(tekst)
+    os.replace(tmp, pad)
 
 
 def samenvatting_aanvullen(map_, g):
@@ -247,7 +256,8 @@ def samenvatting_aanvullen(map_, g):
         meta = json.load(open(gj, encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    if not isinstance(meta, dict) or meta.get("recording_id") != g.get("recording_id"):
+    # Alleen dezelfde opname, en alleen als beide een nummer hebben (Codex 02-11: twee lege nummers zijn niet gelijk).
+    if not isinstance(meta, dict) or not meta.get("recording_id") or meta.get("recording_id") != g.get("recording_id"):
         return False
     nieuw = {}
     if not meta.get("default_summary") and fathom.samenvatting_md(g).strip():
@@ -258,9 +268,7 @@ def samenvatting_aanvullen(map_, g):
         return False
     samenvatting_bewaren(map_, dict(meta, **nieuw))
     meta.update(nieuw)
-    tmp = gj + ".tmp"
-    open(tmp, "w", encoding="utf-8").write(json.dumps(meta, ensure_ascii=False, indent=1))
-    os.replace(tmp, gj)
+    schrijf_heel(gj, json.dumps(meta, ensure_ascii=False, indent=1))
     return True
 
 
@@ -445,12 +453,16 @@ def _ronde(r):
             # herkenning alleen voor wat nog niet in het archief zit (kosten)
             al = bestaande_map(g)
             if al:
-                herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
+                try:
+                    herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
+                except (OSError, ValueError):
+                    herk = {}   # een kapot gesprek.json houdt de ronde niet tegen (Codex 02-11)
                 map_, nieuw = al, False
-                # De samenvatting van Fathom komt soms pas na de eerste ronde: dan nu bijschrijven.
+                # De samenvatting van Fathom komt soms pas na de eerste ronde: dan nu bijschrijven. Ze is een extra:
+                # mislukt dat, dan gaat de ronde door.
                 try:
                     samenvatting_aanvullen(al, g)
-                except OSError:
+                except Exception:  # noqa: BLE001
                     pass
             else:
                 herk = herken(g, tekst, personen, deal, hoe)

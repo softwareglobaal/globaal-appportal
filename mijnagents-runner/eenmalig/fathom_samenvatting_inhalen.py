@@ -54,7 +54,7 @@ def main():
             tel["bijgewerkt"] += 1
             if a.een:
                 break
-            time.sleep(0.05)
+            time.sleep(0.5)
         else:
             tel["niets_nieuws"] += 1
     print(("droog: zou bijwerken " if a.droog else "bijgewerkt ") + ", ".join(f"{k} {v}" for k, v in tel.items()))
