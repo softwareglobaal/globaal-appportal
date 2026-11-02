@@ -38,7 +38,8 @@ PATRONEN = (
     ("naam", re.compile(r"\b(?i:dhr|mevr|meneer|mevrouw|heer|madame|monsieur|herr|frau)\.?\s+[A-Z][a-z]+"
                         r"|\b(?i:mr|mrs)\.?\s+(?!(?:Proper|Muscle|Clean|Bean|Coffee|Freeze|Frosty|Handyman)\b)[A-Z][a-z]+"
                         r"|\b(?i:klant|bewoner|eigenaar|naam)\s*:?\s+[A-Z][a-z]+\s+[A-Z][a-z]+")),
-    ("naam", re.compile(rf"\b(?:{VOORNAMEN})\s+[A-Z][a-zà-ÿ]+(?:[-'][A-Za-zà-ÿ]+)?\b")),
+    ("naam", re.compile(rf"\b(?:{VOORNAMEN})\s+(?:(?i:van|de|der|den|ter|ten|te|het|op|du|la|le|da|di|von|el|al)\s+)*"
+                        r"[A-Z][a-zà-ÿ]+(?:[-'][A-Za-zà-ÿ]+)?\b")),
     ("adres", re.compile(r"\b[A-Z][a-zà-ÿ]+(?:straat|laan|lei|weg|plein|steenweg|dreef|kaai|baan|hof)\s+\d+[a-z]?\b", re.I)),
 )
 

@@ -1076,6 +1076,8 @@ check("een klant met voor- en achternaam", P.gevonden("klant Jan Proefnaam wil e
 check("een naam zonder aanspreking houdt de vraag tegen (overleg 39, K4)",
       P.gevonden("Zoek lasklemmen, te leveren aan Lotte Proefnaam in Mechelen") == ["naam"]
       and P.gevonden("stofzuiger voor Jan Peeters") == ["naam"])
+check("een naam met tussenvoegsel houdt de vraag tegen (Codex controle 40)", all(P.gevonden(t) == ["naam"] for t in (
+      "voor Lotte de Proefnaam", "Jan van der Proef wil een droger", "Kim Van den Proefnaam")))
 check("een merk met een voornaam gaat door (overleg 39, K4)", all(P.gevonden(t) == [] for t in (
       "Herman Miller Aeron bureaustoel tweedehands", "Tommy Hilfiger jas", "Seat Leon Cupra velgen",
       "Stanley Black and Decker boor", "iPhone 15 Pro Max", "Sonos Era 100 wit", "Jan 2026 levering")))
@@ -1199,21 +1201,36 @@ check("de proefbank schrijft niets op het bord en zet het bord daarna terug",
       and "**Aanbevolen:**" in uit["verslag"], str(uit.get("fout")))
 check("de proefbank bewaart de keuze van de code", uit["keuze"]["beste"]["url"] == X1URL and uit["model_vragen"] == 1)
 check("een geslaagde proef doorstaat de keuring", all(ok for ok, _ in PB.keur(
-      {"automatisch": {"aanbeveling": True, "verslag_moet": ["Aanbevolen"], "beste_nooit": ["veiling"],
-                       "beste_max_eur": 600, "model": True}}, uit)))
+      {"uitkomst": "M", "automatisch": {"verslag_moet": ["Aanbevolen"], "beste_nooit": ["veiling"],
+                                         "beste_max_eur": 600, "model": True}}, uit)), str(PB.keur({}, uit)))
 check("een verkeerde aanbeveling valt op in de keuring", not all(ok for ok, _ in PB.keur(
-      {"automatisch": {"aanbeveling": False, "beste_nooit": ["x1"]}}, uit)))
+      {"uitkomst": "N", "automatisch": {"beste_nooit": ["x1"]}}, uit)))
+kort = dict(uit, eisen=["netfrequentie 60 Hz", "netspanning 220 V"],
+            keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], per_eis=["ja"])))
+check("een ontbrekend oordeel over een bindende eis valt op in de keuring (Codex controle 40, K3)",
+      not all(ok for ok, _ in PB.keur({}, kort)))
+vijftig = dict(uit, eisen=["netfrequentie 60 Hz"],
+               keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], per_eis=["onbekend"])))
+check("een aanbevolen toestel zonder bewezen 60 Hz valt op in de keuring", not all(ok for ok, _ in PB.keur({}, vijftig)))
+check("een aanbeveling zonder bewezen prijs valt op in de keuring", not all(ok for ok, _ in PB.keur(
+      {}, dict(uit, keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], bewezen=[]))))))
+check("te veel gelezen pagina's vallen op in de keuring", not all(ok for ok, _ in PB.keur(
+      {}, dict(uit, gelezen=uit["gelezen"] + [f"https://x.voorbeeld.com/{i}" for i in range(7)]))))
 check("een aanbeveling boven het budget valt op in de keuring", not all(ok for ok, _ in PB.keur(
       {"automatisch": {"beste_max_eur": 150}}, uit)))
 check("een aanbod zonder gelezen pagina valt op in de keuring", not all(ok for ok, _ in PB.keur(
       {}, dict(uit, gelezen=[]))))
 uit = PB.een_proef(PO, {"id": "T2", "vraag": "stofzuiger, bel Jan Proefnaam op 0478 12 34 56"}, "2026-10-30", KOERSEN, "w")
 check("een vraag met persoonsgegevens gaat in de proefbank ook niet naar het model", uit["model_vragen"] == 0
-      and all(ok for ok, _ in PB.keur({"automatisch": {"model": False, "aanbeveling": False}}, uit)), str(uit["keuze"]))
+      and all(ok for ok, _ in PB.keur({"uitkomst": "N", "automatisch": {"model": False}}, uit)),
+      str(PB.keur({"uitkomst": "N", "automatisch": {"model": False}}, uit)))
+check("zonder aanbeveling en zonder reden in het verslag faalt een B-proef", not all(ok for ok, _ in PB.keur(
+      {"uitkomst": "B"}, dict(uit, verslag="**Geen aanbeveling:** niets."))))
 reeks = json.load(open(os.path.join(PB.HIER, "docs", "aankoop", "proeven", "prijsonderzoeker.json"), encoding="utf-8"))
 check("de reeks van overleg 39 heeft twintig proeven P01 tot P20, zonder echte persoonsgegevens buiten P18 en P19",
       [p["id"] for p in reeks] == [f"P{i:02d}" for i in range(1, 21)]
-      and [p["id"] for p in reeks if P.gevonden(p["vraag"])] == ["P18", "P19"])
+      and [p["id"] for p in reeks if P.gevonden(p["vraag"])] == ["P18", "P19"]
+      and all(p["uitkomst"] in "MNB" for p in reeks) and [p["id"] for p in reeks if p["uitkomst"] == "N"] == ["P18", "P19"])
 try:
     PB.draai("onbestaand.json", os.path.join(PB.HIER, "proeven"))
     binnen = False

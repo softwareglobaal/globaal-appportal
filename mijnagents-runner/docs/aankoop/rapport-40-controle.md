@@ -1,0 +1,7 @@
+**Nee, nog niet live zetten of de twintig VM-proeven starten.** Er is een concreet privacy-lek.
+
+1. **X1 deels:** M/N/B ontbreekt per proef. **X2 deels:** de proefbank toetst leeslimiet, citaten en kosten niet zelfstandig. **X3 deels:** twintig geslaagde proeven en maximaal acht keer geen aanbeveling worden alleen gerapporteerd. Zie [testset](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/docs/aankoop/proeven/prijsonderzoeker.json:38) en [proefbank](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/proefbank.py:181).
+2. **G1, G2 en K1: ja. K3 deels:** een nagebootste P01-uitslag met een aanbevolen 230 V/50 Hz-toestel en een ontbrekend tweede eisoordeel krijgt toch alle controles groen door `zip` in [proefbank.py](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/proefbank.py:77). **K4: nee.** K2 is conform afgewezen: de proefbank gebruikt geen vaste modelantwoorden.
+3. **Hoog:** “Lotte de Vries” passeert [privacy.py](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/privacy.py:41) als `[]`; [prijsonderzoeker.py](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/prijsonderzoeker.py:112) stuurt de volledige vraag dan naar het model. P19 test alleen “Lotte Proefnaam”.
+
+Alleen gelezen en twee controles in het geheugen uitgevoerd. Niets gewijzigd of gepusht; de twintig VM-proeven zijn niet gedraaid.

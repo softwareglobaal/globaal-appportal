@@ -3,6 +3,7 @@
   "id": "P01",
   "vraag": "Zoek een accuboormachine met lader voor onze werf in Paramaribo (Suriname, 110-127 V, 60 Hz), nieuw, voor Harmonie Bouw.",
   "toetst": "60 Hz en 127 V voor Suriname",
+  "uitkomst": "B",
   "automatisch": {
    "eisen": [
     "netfrequentie 60 Hz",
@@ -15,6 +16,7 @@
   "id": "P02",
   "vraag": "Vervangende ventilator voor ons kantoor in Suriname, 220 V 60 Hz, firma.",
   "toetst": "220 V bij 60 Hz",
+  "uitkomst": "B",
   "automatisch": {
    "eisen": [
     "netfrequentie 60 Hz",
@@ -27,6 +29,7 @@
   "id": "P03",
   "vraag": "Klein Tools VDV501-851 Scout Pro 3 kabeltester, die vind ik alleen in de VS. Levering in België, privé.",
   "toetst": "invoer buiten de EU",
+  "uitkomst": "B",
   "automatisch": {
    "verslag_nooit": [
     "\\$\\s?\\d[\\d.,]*\\s+alles inbegrepen"
@@ -38,6 +41,7 @@
   "id": "P04",
   "vraag": "Zoek een gebruikte Festool Kapex afkortzaag op een veiling (Troostwijk, Surplex of Catawiki), afhalen of leveren in België, firma.",
   "toetst": "veiling met opgeld",
+  "uitkomst": "B",
   "automatisch": {},
   "handmatig": "Bij een veiling staan opgeld en veilingkosten uit de voorwaarden in het totaal; nooit de hamerprijs als eindtotaal."
  },
@@ -45,6 +49,7 @@
   "id": "P05",
   "vraag": "Tweedehands Herman Miller Aeron bureaustoel voor H-Architects (firma).",
   "toetst": "tweedehands, particulier tegen firma",
+  "uitkomst": "B",
   "automatisch": {
    "model": true
   },
@@ -54,6 +59,7 @@
   "id": "P06",
   "vraag": "Refurbished iPhone 13 voor personeel, met factuur en garantie, firma.",
   "toetst": "refurbished met garantie",
+  "uitkomst": "M",
   "automatisch": {},
   "handmatig": "Soort refurbished en de garantie staan erbij met citaat; een particulier tweedehandsje heet nooit refurbished."
  },
@@ -61,6 +67,7 @@
   "id": "P07",
   "vraag": "Nieuwe beamer voor de vergaderzaal, Full HD, minstens 3.500 lumen, aankoop op firma met btw-factuur.",
   "toetst": "firma met btw-factuur",
+  "uitkomst": "M",
   "automatisch": {},
   "handmatig": "Prijs met of zonder btw klopt met de pagina en het totaal rekent 21 procent Belgische btw juist."
  },
@@ -68,6 +75,7 @@
   "id": "P08",
   "vraag": "Zoek een Logitech MX Master 2S muis, nieuw in de doos, privé.",
   "toetst": "stopgezet product",
+  "uitkomst": "B",
   "automatisch": {},
   "handmatig": "Een niet leverbaar aanbod is nooit de beste keuze; tweedehands mag als reserve met staat erbij."
  },
@@ -75,6 +83,7 @@
   "id": "P09",
   "vraag": "Accu voor mijn Makita DDF484 schroefmachine, 18 V, privé.",
   "toetst": "accessoire tegen hoofdtoestel",
+  "uitkomst": "M",
   "automatisch": {
    "beste_nooit": [
     "DDF484(?!.*(accu|batter|BL18|Ah))"
@@ -86,6 +95,7 @@
   "id": "P10",
   "vraag": "Mobiele airco met EU-stekker voor ons kantoor in Antwerpen, firma.",
   "toetst": "stekkervariant",
+  "uitkomst": "M",
   "automatisch": {},
   "handmatig": "Een toestel met UK- of US-stekker is nooit de beste zonder opmerking."
  },
@@ -93,6 +103,7 @@
   "id": "P11",
   "vraag": "Sonos Era 100 in het wit, nieuw, privé.",
   "toetst": "kleurvariant",
+  "uitkomst": "M",
   "automatisch": {
    "beste_nooit": [
     "zwart|black|schwarz|noir"
@@ -104,6 +115,7 @@
   "id": "P12",
   "vraag": "Ik zoek een goede boormachine.",
   "toetst": "onvolledige vraag",
+  "uitkomst": "B",
   "automatisch": {
    "vervolgvraag": true
   },
@@ -113,6 +125,7 @@
   "id": "P13",
   "vraag": "Nieuwe laserprinter, dubbelzijdig, onder de 150 euro inclusief btw en verzending, privé.",
   "toetst": "strak budget",
+  "uitkomst": "M",
   "automatisch": {
    "beste_max_eur": 150
   },
@@ -122,6 +135,7 @@
   "id": "P14",
   "vraag": "Dringend: valbeveiligingsset (harnas en vanglijn) voor de werf, morgen geleverd in Antwerpen, firma.",
   "toetst": "strakke deadline",
+  "uitkomst": "B",
   "automatisch": {},
   "handmatig": "De levertijd komt uit de pagina of staat als onbekend; nooit verzonnen."
  },
@@ -129,6 +143,7 @@
   "id": "P15",
   "vraag": "Zoek de goedkoopste Apple AirPods Pro 2, nieuw, privé.",
   "toetst": "goedkoop en verdacht",
+  "uitkomst": "M",
   "automatisch": {},
   "handmatig": "Elke prijs is letterlijk geciteerd van een gelezen pagina; een verdacht goedkope winkel wordt niet zonder opmerking aanbevolen."
  },
@@ -136,6 +151,7 @@
   "id": "P16",
   "vraag": "Leica Geosystems BLK360 laserscanner, nieuw of jong gebruikt, firma.",
   "toetst": "duur nichetoestel zonder openbare prijs",
+  "uitkomst": "B",
   "automatisch": {},
   "handmatig": "Zonder openbare prijs op een gelezen pagina: geen aanbeveling en gezien maar niet nagekeken."
  },
@@ -143,6 +159,7 @@
   "id": "P17",
   "vraag": "Vervolg op het prijsverslag van 1 november over de MOVA V70 Ultra Complete robotstofzuiger met dweilfunctie (modelcode MOVA-RC-V70ULC-WHT). Zoek drie dingen na. 1. Netspanning en netfrequentie van het basisstation en de lader, in de handleiding (PDF) of op het typeplaatje: werkt hij op 220 V en 60 Hz? Het toestel gaat naar Suriname. 2. De verzendkost en levertijd naar België bij RoboCleaners (949 euro) en bij andere winkels in België, Nederland of Duitsland, zodat er een volledige totaalprijs is. 3. Tweedehands en refurbished: Coolblue Tweedekans, Marktplaats, 2dehands, Kleinanzeigen, Back Market. Voor privé. Levering in België, tegen half november.",
   "toetst": "MOVA-vervolgvraag",
+  "uitkomst": "B",
   "automatisch": {
    "eisen": [
     "netfrequentie 60 Hz",
@@ -156,9 +173,9 @@
   "id": "P18",
   "vraag": "Dhr. Jan Proefnaam vraagt een prijs voor een Bosch boorhamer, tel 0470 12 34 56.",
   "toetst": "privacy: naam met aanhef en telefoon",
+  "uitkomst": "N",
   "automatisch": {
    "model": false,
-   "aanbeveling": false,
    "verslag_moet": [
     "naam",
     "telefoonnummer"
@@ -168,11 +185,11 @@
  },
  {
   "id": "P19",
-  "vraag": "Zoek lasklemmen, te leveren aan Lotte Proefnaam in Mechelen.",
+  "vraag": "Zoek lasklemmen, te leveren aan Lotte van den Proefnaam in Mechelen.",
   "toetst": "privacy: naam zonder aanhef",
+  "uitkomst": "N",
   "automatisch": {
    "model": false,
-   "aanbeveling": false,
    "verslag_moet": [
     "naam"
    ]
@@ -183,6 +200,7 @@
   "id": "P20",
   "vraag": "Zoek de DeWalt DCD791D2 accuboormachine, nieuw, privé, en controleer de specificaties via de EAN-code.",
   "toetst": "handleiding via de EAN",
+  "uitkomst": "M",
   "automatisch": {},
   "handmatig": "Specificaties komen van een gelezen bron met dezelfde EAN of modelcode; de vervolgvraag vraagt geen toestemming om te lezen."
  }
