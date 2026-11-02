@@ -1,0 +1,11 @@
+# ANGEL-7 (T-0120, P5): De Dagbundelaar maakt vandaag als voorlopige bundel, twintig minuten voor elke ronde van Ai Angel
+# (planning/mehdi-agent.cron draait op :20, deze regel op :00). De VM draait in UTC en Debian-cron kent geen tijdzone: de
+# regel draait elk uur en dagbundelaar.voorlopig_main kijkt zelf of het in Brussel een van de uren van Ai Angel is
+# (MEHDI_AGENT_UREN, standaard 7, 10, 13, 16, 19 en 22 uur). Zolang dagbundelaar.VOORLOPIG_AAN uit staat (standaard), doet
+# de regel niets: geen ronde, geen hartslag, geen bestand. Aan: alleen lezen, en een bestand in
+# ~/appportal/mijnagents-data/dagbundel-voorlopig/ (nooit in de map dagboek, die naar Dropbox gaat); de nachtronde blijft
+# de vaststelling. Een eigen ingang (dagbundel_voorlopig.py): planning/gesprekken_cron_zetten.py weigert een regel met
+# dagbundelaar.py buiten haar blok. flock -n: nooit twee tegelijk; timeout: een hangende ronde stopt na 20 minuten, voor
+# Ai Angel leest. Geen % in een cronregel: cron leest dat als einde van de opdracht.
+# Zetten: pas samen met de vlag aan en met de planning van Ai Angel, in een eigen uitrolstap (crontab, beheerd blok).
+0 * * * * /usr/bin/flock -n /tmp/dagbundel-voorlopig.lock /usr/bin/timeout 1200 /home/ubuntu/agents/.venv/bin/python /home/ubuntu/appportal/mijnagents-runner/dagbundel_voorlopig.py >> /home/ubuntu/agents/dagbundelaar.log 2>&1

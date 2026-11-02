@@ -405,7 +405,7 @@ def main():
             # Codex-controle mailnood 2 tot 4 (C1): deze ronde maakte de vaststelling niet af en sluit dus haar noden
             # niet; de noden van de bundels wel, want bundelen() liep. De ronde breekt niet, want het ochtendbericht
             # wacht op haar (ochtend.py).
-            behoud(r, lambda t: t.startswith(VASTSTELLING_NODEN + (WEEKNOOD,)))
+            behoud(r, lambda t: t.startswith(VASTSTELLING_NODEN + (WEEKNOOD, VOORLOPIG_NOOD)))
         if NACHT and not DAG_GEGEVEN and VENSTER is None and vastgesteld:
             # Fase 2 (overleg 27-10-2026, Q3 en K3): elke nacht het overzicht van de laatst afgesloten week, in een eigen
             # blok met een eigen tijdslimiet. Zo werkt het zichzelf bij als een dag van die week herzien wordt, en een
@@ -429,9 +429,34 @@ def main():
             behoud(r, lambda t: not t.startswith(VASTSTELLING_NODEN + KETEN_NODEN + (WEEKNOOD,)))
         elif vastgesteld:
             # Review 27-10-2026: de ochtend legt alleen gisteren vast. Een locatienood of een postvak op het plafond kan
-            # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na.
-            behoud(r, alleen_nacht)
+            # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na. De voorlopige bundel (ANGEL-7)
+            # kijkt de ochtend ook niet na.
+            behoud(r, lambda t: alleen_nacht(t) or t.startswith(VOORLOPIG_NOOD))
         r.detail = "; ".join(d for d in delen if d)
+
+
+def voorlopig_main(nu=None):
+    """ANGEL-7 (T-0120, P5): vandaag als voorlopige bundel, op de uren van Ai Angel (VOORLOPIG_UREN, gelijk aan
+    mehdi_agent.UREN; de cron draait elk uur op :00, Ai Angel op :20). Zolang VOORLOPIG_AAN uit staat, doet ze niets: geen
+    ronde, geen hartslag, geen bestand. Aan: een ronde met de taak van de nacht (ochtend.NACHTTAAK, die het ochtendbericht
+    nooit vrijgeeft), die alleen het voorlopige bestand schrijft (vastleggen met voorlopig), geen nood van de
+    vaststelling geeft en geen nood sluit, behalve haar eigen nood als ze nu wel lukte."""
+    if not VOORLOPIG_AAN:
+        return 0
+    nu = nu or datetime.now(timezone.utc)
+    if nu.astimezone(V.BRUSSEL).hour not in VOORLOPIG_UREN:
+        return 0
+    import ochtend
+    vandaag = nu.astimezone(V.BRUSSEL).date().isoformat()
+    with ag.ronde(f"{ochtend.NACHTTAAK} voorlopig") as r:
+        try:
+            r.detail = vastleggen(r, [vandaag], voorlopig=True, nu=nu)
+        except Exception as e:  # noqa: BLE001  de nachtronde blijft de vaststelling; deze fout is een eigen nood
+            ag.log("voorlopig", "fout", f"voorlopige bundel mislukt: {type(e).__name__}: {str(e)[:200]}")
+            r.nood(VOORLOPIG_NOOD, wie="claude-code")
+            r.detail = "voorlopige bundel van vandaag mislukt"
+        behoud(r, lambda t: not t.startswith(VOORLOPIG_NOOD))
+    return 0
 
 
 def nachtstappen(stappen):
@@ -481,9 +506,124 @@ def behoud(r, houden):
 
 
 # ------------------------------------------------------------------------------------------- dagvaststelling ---
+# ANGEL-7 (T-0120, P5): vandaag als voorlopige bundel op de uren van Ai Angel min 20 minuten (planning/dagbundel-voorlopig.cron
+# om :00, Ai Angel om :20). Alleen in de datamap op de VM, nooit in DAGBOEK (die map gaat naar Dropbox): een bestand dat elke
+# ronde vervangen wordt. De nachtronde blijft de vaststelling. De vlag staat uit: zonder ze doet de cronregel niets.
+VOORLOPIG_AAN = False
+VOORLOPIG = os.path.join(DATA, "dagbundel-voorlopig")
+VOORLOPIG_MD = os.path.join(VOORLOPIG, "vandaag.md")
+VOORLOPIG_JSON = os.path.join(VOORLOPIG, "vandaag.json")
+VOORLOPIG_UREN = tuple(int(u) for u in os.environ.get("MEHDI_AGENT_UREN", "7,10,13,16,19,22").split(",") if u.strip())
+VOORLOPIG_NOOD = "Voorlopige dagbundel van vandaag niet gemaakt, zie dagbundelaar.log"
 NACHTBESTAND = os.path.join(DATA, "nacht.json")               # keten.py --nacht: start, einde, stappen met exit
 KETENBESTAND = os.path.join(DATA, "keten.json")               # keten.py: de lopende ochtendketen, met de Zoomwacht
 NACHT_UREN = 30                                               # zo oud mag de laatste nachtketen overdag zijn
+
+
+def volgende_dag(dag):
+    return (date.fromisoformat(dag) + timedelta(days=1)).isoformat()
+
+
+# --------------------------------------------------------------------- de inhoud van een werkgesprek (ANGEL-2) ---
+def _binnen(pad, map_):
+    """Ligt pad in map_ (na ~ en symbolische koppelingen)? Zo leest de bundel nooit een bestand buiten de datamap."""
+    try:
+        echt, basis = os.path.realpath(os.path.expanduser(pad)), os.path.realpath(map_)
+    except (TypeError, ValueError):
+        return False
+    return echt == basis or echt.startswith(basis + os.sep)
+
+
+def _json_van(pad):
+    try:
+        d = json.loads(_lees(pad) or "")
+    except ValueError:
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def archiefmap(g, GA):
+    """(map, reden): de archiefmap van een werkgesprek op de VM, of ('', reden). Fathom: kolom archief, alleen in
+    fathom-data en alleen als gesprek.json bij dit gesprek hoort (het recording_id of de url; zonder id telt ze, zoals bij De
+    Archivaris). Plaud: De Plaudwacht noemt de map op de Mac (Data uit Mehdi/Plaud/<map>/); op de VM staat ze in
+    plaud-invoer. Zoom: geen archiefmap (De Gespreksanalist leest zoom-data zelf)."""
+    archief = str(g.get("archief") or "")
+    if g.get("bron") == "fathom":
+        if not archief or not _binnen(archief, GA.FATHOM_DATA):
+            return "", "archiefmap niet gevonden"
+        map_ = os.path.expanduser(archief)
+        d = _json_van(os.path.join(map_, "gesprek.json"))
+        sleutel = str(g["uniek"]).split(":", 1)[-1]
+        ids = {str(d[k]) for k in ("recording_id",) if d and d.get(k) not in (None, "")}
+        if d and d.get("url"):
+            ids.add(str(d["url"]).rstrip("/").rsplit("/", 1)[-1])
+        if ids and sleutel not in ids:
+            return "", "archiefmap hoort niet bij dit gesprek"
+        return map_, ""
+    if g.get("bron") == "plaud":
+        deel = archief[len(GA.PLAUD_OP_MAC):].split("/")[0] if archief.startswith(GA.PLAUD_OP_MAC) else ""
+        map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel and deel not in (".", "..") else ""
+        return (map_, "") if map_ and _binnen(map_, GA.PLAUD_INVOER) else ("", "archiefmap niet gevonden")
+    return "", ""
+
+
+def fathom_inhoud(map_, uniek, GA):
+    """(samenvatting, actiepunten, reden) uit de archiefmap van De Fathomwacht, volgens het contract van de groep fathom
+    (docs/dagbundelaar/naslag/fathom-samenvatting-en-actiepunten.md v1.0): samenvatting.md (kopregel, lege regel,
+    markdown; een oude str() van het object leest ook), actiepunten.json {bron, recording_id, actiepunten: [{tekst, wie,
+    tijd, klaar}]}. Geen bestand, een ander recording_id of een onbekende vorm: None (onbekend, nooit 0). Een lege lijst:
+    Fathom vond er geen. De samenvatting: twee zinnen (zoals De Gespreksanalist)."""
+    reden = "Fathom leverde ze nog niet"
+    ruw = _lees(os.path.join(map_, "samenvatting.md")) if map_ else None
+    samenvatting = None
+    if ruw is not None:
+        lichaam = ruw.split("\n", 1)[1] if ruw.startswith("# Samenvatting van Fathom") and "\n" in ruw else ruw
+        samenvatting = GA.twee_zinnen(GA._markdown(lichaam)) or None
+    d = _json_van(os.path.join(map_, "actiepunten.json")) if map_ else None
+    punten = None
+    if d is not None and str(d.get("recording_id")) == str(uniek).split(":", 1)[-1] and isinstance(d.get("actiepunten"), list):
+        punten = [{"wat": str(p.get("tekst") or "").strip(), "wie": str(p.get("wie") or "").strip(),
+                   "tijd": str(p.get("tijd") or "").strip(), "klaar": p.get("klaar") is True}
+                  for p in d["actiepunten"] if isinstance(p, dict) and str(p.get("tekst") or "").strip()]
+        if len(punten) != len(d["actiepunten"]):
+            punten = None                       # een vorm die we niet kennen: onbekend, nooit stil minder
+            reden = "actiepunten van Fathom in een onbekende vorm"
+    return samenvatting, punten, reden
+
+
+def gespreksinhoud(g):
+    """ANGEL-2 en VOL-5 (T-0120): de inhoud van een werkgesprek voor de bundel (dagvaststelling.werkgesprekken vraagt ze
+    alleen voor een rij die niet privé is). Privé ({'prive': True}, dan wordt verder niets gelezen): het record van De
+    Gespreksanalist zegt privé, of het label van De Archivaris is Prive. Firma en dossier: uit het record, anders zoals De
+    Gespreksanalist ze afleidt (herkomst: het label, of de afdeling en het dossier van de wacht). Fathom: samenvatting en
+    actiepunten uit de archiefmap (fathom_inhoud). Plaud en Zoom: het record van De Gespreksanalist (gespreksanalist.lees);
+    zonder record 'nog niet geanalyseerd', nooit een lege lijst."""
+    import gespreksanalist as GA
+    rec = GA.lees(g["uniek"])
+    if rec is not None and rec.get("prive") is not False:
+        return {"prive": True}
+    map_, reden = archiefmap(g, GA)
+    d = _json_van(os.path.join(map_, "gesprek.json")) if map_ else None
+    label = str(((d or {}).get("archivaris") or {}).get("label") or "") if isinstance((d or {}).get("archivaris"), dict) else ""
+    if label.lower() in ("prive", "privé"):
+        return {"prive": True}
+    herk = ({k: str(rec.get(k) or "") for k in ("firma", "soort", "dossier", "dossier_bewijs")} if rec else
+            GA.herkomst({"label": label, "afdeling": g.get("afdeling"), "project": g.get("project"),
+                         "zekerheid": g.get("zekerheid")}))
+    uit = {k: herk.get(k, "") for k in ("firma", "soort", "dossier", "dossier_bewijs")}
+    if g.get("bron") == "fathom":
+        if not map_:
+            return {**uit, "samenvatting": None, "actiepunten": None, "van": "Fathom", "reden": reden}
+        samenvatting, punten, reden = fathom_inhoud(map_, g["uniek"], GA)
+        return {**uit, "samenvatting": samenvatting, "actiepunten": punten, "van": "Fathom", "reden": reden}
+    if rec is None:
+        return {**uit, "samenvatting": None, "actiepunten": None, "van": "De Gespreksanalist",
+                "reden": "nog niet geanalyseerd" + ("" if GA.ANALYSE_AAN else " (De Gespreksanalist staat uit)")}
+    punten = [{"wat": str(p.get("wat") or "").strip(), "wie": str(p.get("wie") or "").strip(),
+               "tegen": str(p.get("tegen_wanneer") or "").strip(), "voor": str(p.get("voor_wie") or "").strip()}
+              for p in rec.get("actiepunten") or [] if isinstance(p, dict) and str(p.get("wat") or "").strip()]
+    return {**uit, "samenvatting": str(rec.get("samenvatting") or ""), "actiepunten": punten,
+            "van": "Fathom" if rec.get("samenvatting_van") == "fathom" else "De Gespreksanalist", "reden": ""}
 
 
 def lees_json(pad):
@@ -1014,6 +1154,27 @@ def lees_mail(dagen):
     return _lees_mail(dagen)
 
 
+def prive_postvakken_van(cfgs):
+    """Privé is een postvak van een wacht van firma PRIV of afdeling privé (F1), en ook een adres waaruit zo'n wacht
+    antwoordt (H1). Een plek voor de telling (_lees_mail) en de mails die wachten (DB-6, lees_wachtende_mail)."""
+    return {a for c in cfgs if c.get("firma") == "PRIV" or str(c.get("afdeling") or "").startswith("prive")
+            for a in list(c.get("postvakken") or []) + list(c.get("antwoord_vanuit") or [])}
+
+
+def lees_wachtende_mail():
+    """DB-6 (T-0081): (punten, privépostvakken). De open mailpunten van het bord (/api/mail/open): de enige telling, die
+    De Mailregisseur, /mail en het werkverslag van de mailwachten ook lezen (mail_regisseur.lees_open), met de
+    privépostvakken uit dezelfde configuratie als de telling. None: onbekend (geen lijst, een ander aantal dan het bord
+    zegt, of de configuratie niet te lezen); nooit 'niets wacht'. Alleen koppen; nooit de tekst van een mail."""
+    import postvak as PV
+    prive = prive_postvakken_van([c for c in PV.wachten().values() if isinstance(c, dict)])
+    antw = bord.call("/api/mail/open")
+    punten = antw.get("punten") if isinstance(antw, dict) else None
+    if not isinstance(punten, list) or antw.get("aantal", len(punten)) != len(punten):
+        return None
+    return punten, prive
+
+
 def _lees_mail(dagen):
     """Rechtstreeks uit de mappen (Codex E4): zo is de leesdekking van deze ronde gekend. Alleen koppen, nooit inhoud.
     Ontvangen: de postvakken van de mailwachten, in de mappen die zij lezen. Verzonden: die postvakken en ook de adressen
@@ -1025,8 +1186,7 @@ def _lees_mail(dagen):
     afzenders = [a for a in dict.fromkeys(a for c in cfgs for a in c.get("antwoord_vanuit") or []) if a not in postvakken]
     # H1: ook de adressen waaruit een privéwacht antwoordt (mch@ antwoordt uit info@, light@, standaard@): van daaruit kan
     # privépost vertrekken, dus geen ontvangers bij naam
-    prive = {a for c in cfgs if c.get("firma") == "PRIV" or str(c.get("afdeling") or "").startswith("prive")
-             for a in c["postvakken"] + list(c.get("antwoord_vanuit") or [])}
+    prive = prive_postvakken_van(cfgs)
     ontvangen, verzonden = {}, {}
 
     def mis(waar, soort, reden, detail=""):
@@ -1149,23 +1309,32 @@ def zoomstand(inhoud, dag=None, vandaag=None):
     return stand, (_telling(chat.get("telling")) if isinstance(chat, dict) else "onbekend")
 
 
-def vastleggen(r, dagen, zoom_gelezen=None):
+def vastleggen(r, dagen, zoom_gelezen=None, voorlopig=False, nu=None):
     """De dagvaststelling van elke dag in `dagen` (ontwerp dagvaststelling v1.7). Leest agenda, locatie, gesprekkentabel,
     Zoom-dagregels, mail en de hartslag van de WhatsApp-wacht en de Belwacht; schrijft per dag het bestand (de vorige
     versie blijft in versies/, nooit overschreven), de staat en het klaarzet-item voor Mehdi, en leest bestand en item
     letterlijk terug (F8). zoom_gelezen: slaagde (True) of faalde (False) De Zoomwacht in deze keten, of liep ze niet mee
     (None); alleen voor het werkverslag. De Zoom-stand van een dag komt uit zijn dagregel (zoomstand, G3). Geeft het
-    detail."""
-    nu = datetime.now(timezone.utc)
+    detail.
+    T-0120 (ANGEL-2, DB-6): elke dag draagt ook de blokken voor Ai Angel (dagvaststelling.bundel_regels): per werkgesprek
+    samenvatting, actiepunten en verwijzing (gespreksinhoud), de gemiste oproepen zonder terugbellen (daarvoor leest de
+    ronde de gesprekkentabel tot vandaag), de mails die op antwoord wachten (lees_wachtende_mail) en de afspraken van de
+    dag erna (de agenda tot een dag na de laatste dag).
+    voorlopig (ANGEL-7): alleen vandaag, als voorlopige bundel in VOORLOPIG (mijnagents-data, nooit in de map dagboek die
+    naar Dropbox gaat): geen versie, geen staat, geen klaarzet-item en geen nood; de nachtronde blijft de vaststelling."""
+    nu = nu or datetime.now(timezone.utc)
     eerste, laatste = min(dagen), max(dagen)
     gisteren = V.gisteren(nu)
-    per_dag, ongelezen, prive_afspraak = lees_agenda(dagen)
+    vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
+    per_dag, ongelezen, prive_afspraak = lees_agenda(sorted(set(dagen) | {volgende_dag(laatste)}))
+    # DB-6: de rijen tot vandaag, zodat een terugbelpoging na de dag zelf meetelt; vaststellen kiest per dag zijn rijen
     rijen = bord.db_lees("SELECT uniek, datum, start, minuten, personen, afdeling, thema, prive, bron, "
-                         "COALESCE(dubbel_van, '') AS dubbel_van FROM gesprek_log WHERE datum BETWEEN ? AND ?", (eerste, laatste))
+                         "COALESCE(dubbel_van, '') AS dubbel_van, COALESCE(archief, '') AS archief, "
+                         "COALESCE(project, '') AS project, COALESCE(zekerheid, '') AS zekerheid FROM gesprek_log "
+                         "WHERE datum BETWEEN ? AND ?", (eerste, max(laatste, vandaag)))
     gedekt = gedekte_dagen(rijen)
     dagregels = {x["uniek"][9:]: x["inhoud"] or "" for x in bord.db_lees(
         "SELECT uniek, inhoud FROM klaarzet WHERE uniek BETWEEN ? AND ?", (f"zoom:dag:{eerste}", f"zoom:dag:{max(laatste, gisteren)}"))}
-    vandaag = (date.fromisoformat(gisteren) + timedelta(days=1)).isoformat()
     zoom = {d: zoomstand(i, d, vandaag) for d, i in dagregels.items()}
     # MAIL-4 (T-0120): ook een rij zonder message_id (van voor 19-10-2026) telt, met de vaste sleutel (V.mail_sleutel)
     gezien_door_wachten = []
@@ -1210,6 +1379,21 @@ def vastleggen(r, dagen, zoom_gelezen=None):
                 if p.get("onvolledig"):
                     ag.log("mail", "bron", f"{adres} {richting} onvolledig: " + "; ".join(p["onvolledig"])
                            + (f" ({'; '.join(p['details'])})" if p.get("details") else ""))
+    try:
+        mail_open = lees_wachtende_mail()
+    except Exception as e:  # noqa: BLE001  onbekend, nooit 'niets wacht'
+        ag.log("mail", "bron", f"open mail niet gelezen ({type(e).__name__})")
+        mail_open = None
+    inhoud = {}
+
+    def inhoud_van(g):
+        if g["uniek"] not in inhoud:
+            try:
+                inhoud[g["uniek"]] = gespreksinhoud(g)
+            except Exception as e:  # noqa: BLE001  onbekend, nooit 'geen actiepunten'
+                ag.log("gesprekken", "bron", f"inhoud van een gesprek niet gelezen ({type(e).__name__})")
+                inhoud[g["uniek"]] = {"samenvatting": None, "actiepunten": None, "reden": "niet te lezen"}
+        return inhoud[g["uniek"]]
     r.bron("kanaalstand", json.dumps(kanalen, sort_keys=True))
     try:
         staat = json.loads(_lees(STAAT) or "{}")
@@ -1229,7 +1413,27 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         zoomdag, chatdag = zoom.get(dag, ("onbekend", "onbekend"))
         v = V.vaststellen(dag, afspraken, ongelezen, rijen, per_id, bezoeken, zoomdag, mail, kanalen_dag,
                           prive_afspraak, locatiestand, chatstand=chatdag, eigen=eigen_van(dag),
-                          fotos=fotos_van.get(dag))
+                          fotos=fotos_van.get(dag),
+                          bundel={"inhoud_van": inhoud_van, "morgen": per_dag.get(volgende_dag(dag), []),
+                                  "mail_open": None if mail_open is None else mail_open[0],
+                                  "prive_postvakken": set(prive_postvakken) | (set() if mail_open is None else mail_open[1])})
+        if voorlopig:
+            # ANGEL-7: alleen in de datamap op de VM, nooit in DAGBOEK; geen versie, staat, klaarzet of nood
+            uur = f"{nu.astimezone(V.BRUSSEL):%H:%M}"
+            over = [f"voorlopig, gemaakt {nu.astimezone(V.BRUSSEL):%d-%m-%Y %H:%M}; de nachtronde stelt de dag vast",
+                    f"agenda: {v['agenda']['stand']}", f"Zoom: {v['zoom']['stand']}",
+                    "locatie: " + (locatiestand if bezoeken is not None else f"niet gelezen ({lf})"),
+                    "mail: " + ("alleen de mappen die de mailwachten lezen" if mail is not None else "niet gelezen"),
+                    f"WhatsApp: {kanalen_dag['whatsapp']}", f"telefoon: {kanalen_dag['telefoon']}",
+                    f"sms: {kanalen_dag['sms']}", f"Xelion: {kanalen_dag['xelion']}"]
+            tekst = ag.maskeer(V.tekst(v, prive_postvakken, over, voorlopig=uur))
+            telling = json.dumps(WO.dag_samenvatting(dag, v), ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+            _schrijf(VOORLOPIG_MD, tekst)
+            _schrijf(VOORLOPIG_JSON, telling)
+            if _lees(VOORLOPIG_MD) != tekst or _lees(VOORLOPIG_JSON) != telling:
+                raise RuntimeError("voorlopige bundel niet teruggelezen")
+            nieuw.append(f"{dag} voorlopig {uur}")
+            continue
         oud = _lees(dagpad(dag))
         # Het masker van het bord al voor het schrijven: bord, bestand en Dropbox dragen dezelfde tekst (E6)
         concept = ag.maskeer(V.tekst(v, prive_postvakken))
@@ -1286,6 +1490,8 @@ def vastleggen(r, dagen, zoom_gelezen=None):
         op_bord = next((x.get("inhoud") for x in terug if x.get("uniek") == f"vaststelling:{dag}"), None)
         if op_bord != tekst:
             fouten.append(f"{dag}: bord")
+    if voorlopig:
+        return f"voorlopige bundel: {', '.join(nieuw) or 'geen dag'}"
     if fouten:
         ag.log("teruglezen", "fout", "; ".join(fouten))
         raise RuntimeError("dagvaststelling niet teruggelezen: " + "; ".join(fouten[:5]))

@@ -190,8 +190,9 @@ def test_agenda_en_standen():
     wa = [rij("whatsapp:abc:2026-10-22", "08:01", 0, "Broer Ali", bron="whatsapp", thema="14 berichten (5 van Mehdi)")]
     eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"})), "rijen alleen")
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "stil sinds 2026-10-20 09:00"}))
-    eis("WhatsApp: 14 berichten in 1 gesprekken, 0 oproepen, 0 min gezien (stil sinds 2026-10-20 09:00)" in t,
-        f"stille wacht\n{t}")
+    # WA-6 (T-0120): op een dag die niet gelezen is, is een nul onbekend; wat gezien is, blijft een ondergrens
+    eis("WhatsApp: gezien 14 berichten in 1 gesprekken; oproepen en minuten onbekend (stil sinds 2026-10-20 09:00)" in t
+        and "0 oproepen" not in t and "0 min gezien" not in t, f"stille wacht\n{t}")
     t = V.tekst(vast(kanalen={"whatsapp": "onbekend voor deze dag", "telefoon": "stil sinds 25-10 08:00"}))
     eis("WhatsApp: onbekend (onbekend voor deze dag)" in t and "telefoon: onbekend (stil sinds 25-10 08:00)" in t,
         f"F5: zonder dekking van de dag geen nul\n{t}")
@@ -310,6 +311,156 @@ def test_goud_22_10():
     eis(v["gesprekken"]["aantal"] == 14 and v["gesprekken"]["minuten"] == 137, f"goud: 14 gesprekken, 137 min ({v['gesprekken']})")
     eis(len(v["niet_gepland"]["gesprekken"]) == 13, "goud: 13 niet gepland (een sessie van 1 min telt niet)")
     eis("project HARC 9004" in V.tekst(v), "goud: projectbezoek zonder afspraak")
+
+
+# ------------------------------------------------------------------- de bundel voor Ai Angel (T-0120) ---
+INHOUD = {
+    "fathom:701": {"firma": "UNABO", "soort": "project", "dossier": "9405", "dossier_bewijs": "agendatitel, niet bevestigd",
+                   "samenvatting": "Het ontwerp van de keuken is besproken. De klant wacht op de offerte.", "van": "Fathom",
+                   "actiepunten": [{"wat": "Offerte keuken sturen", "wie": "Mehdi", "tijd": "00:12:30", "klaar": False},
+                                   {"wat": "Plannen [v2]; nakijken", "wie": "Klant Omega", "tijd": "", "klaar": True}]},
+    "fathom:702": {"firma": "HA", "soort": "sales", "dossier": "", "samenvatting": "Kennismaking. Geen afspraak.",
+                   "van": "Fathom", "actiepunten": []},
+    "fathom:703": {"samenvatting": None, "actiepunten": None, "van": "Fathom", "reden": "Fathom leverde ze nog niet"},
+    "plaud:p1": {"samenvatting": None, "actiepunten": None, "van": "De Gespreksanalist",
+                 "reden": "nog niet geanalyseerd (De Gespreksanalist staat uit)"},
+    "plaud:p2": {"prive": True},
+}
+
+
+def test_angel2_werkgesprekken_per_gesprek_met_verwijzing():
+    """ANGEL-2 en VOL-5 (T-0120): per werkgesprek titel, firma en dossier, samenvatting, actiepunten en verwijzing.
+    Onbekend (geen bestand van Fathom, geen uitvoer van De Gespreksanalist) is nooit 'geen actiepunten'; een
+    privégesprek (vlag van de rij, of privé volgens De Gespreksanalist) is alleen 'privégesprek, N min', en voor een rij
+    die privé is wordt de inhoud niet eens gevraagd."""
+    gevraagd = []
+
+    def inhoud_van(g):
+        gevraagd.append(g["uniek"])
+        return INHOUD.get(g["uniek"])
+    rijen = [rij("fathom:701", "09:00", 45, "Klant Omega", bron="fathom", thema="Keuken ontwerp"),
+             rij("fathom:702", "10:00", 20, "Klant Zeta", bron="fathom", thema="Kennismaking"),
+             rij("fathom:703", "11:00", 15, "Klant Eta", bron="fathom", thema="Nazorg"),
+             rij("plaud:p1", "13:00", 30, "", bron="plaud", thema="Werfbezoek"),
+             rij("plaud:p2", "15:00", 12, "", bron="plaud", thema="Geheim onderwerp"),
+             rij("fathom:704", "16:00", 50, "Broer Ali", bron="fathom", prive=1, thema="Familie"),
+             rij("plaud:p3", "09:05", 40, "", bron="plaud", thema="Dubbel van Fathom"),       # valt in fathom:701
+             rij("zoom:meeting:kort", "18:00", 1, "Ruben", thema="kort")]
+    v = V.vaststellen(DAG, [], set(), rijen, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
+                      bundel={"inhoud_van": inhoud_van, "morgen": [], "mail_open": [], "prive_postvakken": set()})
+    eis("fathom:704" not in gevraagd and "plaud:p3" not in gevraagd and "zoom:meeting:kort" not in gevraagd,
+        f"privé, Plaud-dubbel en korter dan 2 min: niets gevraagd ({gevraagd})")
+    t = V.tekst(v)
+    blok = t.split("## Werkgesprekken", 1)[1].split("\n## ", 1)[0]
+    eis("- 09:00 Fathom, 45 min: Keuken ontwerp, met Klant Omega (ook opgenomen met Plaud) [fathom:701]" in blok, f"titel\n{blok}")
+    eis("  - firma: UNABO project; dossier: 9405 (agendatitel, niet bevestigd)" in blok, f"firma en dossier\n{blok}")
+    eis("  - samenvatting (Fathom): Het ontwerp van de keuken is besproken. De klant wacht op de offerte." in blok, blok)
+    eis("  - actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: Offerte keuken sturen" in blok, blok)
+    eis("  - actiepunt [fathom:701; UNABO 9405; wie: Klant Omega; klaar in Fathom]: Plannen [v2]; nakijken" in blok,
+        f"een tekst met haken blijft na de haken staan\n{blok}")
+    eis("  - firma: HA sales; dossier: onbekend" in blok and "  - actiepunten: geen (Fathom vond er geen)" in blok,
+        f"geen actiepunt is 'geen'\n{blok}")
+    eis("[fathom:703]\n  - firma: onbekend; dossier: onbekend\n  - samenvatting en actiepunten: Fathom leverde ze nog niet" in blok,
+        f"onbekend bij Fathom\n{blok}")
+    eis("[plaud:p1]\n  - firma: onbekend; dossier: onbekend\n  - samenvatting en actiepunten: nog niet geanalyseerd" in blok,
+        f"Plaud zonder uitvoer\n{blok}")
+    eis("- 15:00 privégesprek, 12 min" in blok and "Geheim onderwerp" not in t, f"privé volgens De Gespreksanalist\n{blok}")
+    eis("- 16:00 privégesprek, 50 min" in blok and "Familie" not in t and "Broer Ali" not in t, f"privé van de rij\n{blok}")
+    eis("actiepunten: geen" not in blok.split("[fathom:703]")[1].split("\n- ")[0], "onbekend is nooit geen")
+    eis("Werkgesprekken" in V.wijzigingen(V.tekst(vast()), t), "het blok telt in de wijzigingen")
+    # zonder bundel (oude aanroep) geen nieuwe blokken
+    eis(all(f"## {k}" not in V.tekst(vast()) for k in V.BUNDELKOPPEN), "oude aanroep zonder blokken")
+
+
+def test_db6_gemist_zonder_terugbellen_zonder_naam():
+    """DB-6 (T-0081): de gemiste inkomende oproepen van de dag zonder latere oproep met dezelfde persoon (ook de dag
+    erna telt); alleen uur en kanaal, nooit een naam (privé, X8); een verborgen nummer: terugbellen onbekend; een dag die
+    niet gelezen is: onbekend, nooit 'geen'."""
+    morgen = "2026-10-23"
+    rijen = [rij("telefoon:a-1", "10:12", 0, "Proef Een", bron="telefoon", prive=1, dubbel_van="buiten:gemist",
+                 thema="iPhone, inkomend, gemist"),
+             rij("telefoon:b-1", "11:00", 0, "Proef Twee", bron="telefoon", prive=1, dubbel_van="buiten:gemist",
+                 thema="iPhone, inkomend, gemist"),
+             rij("telefoon:b-2", "09:00", 0, "Proef Twee", bron="telefoon", prive=1, dubbel_van="buiten:gemist",
+                 thema="iPhone, uitgaand, niet beantwoord", datum=morgen),                 # een poging de dag erna
+             rij("telefoon:c-1", "12:00", 0, "nummer verborgen", bron="telefoon", prive=1, dubbel_van="buiten:gemist",
+                 thema="iPhone, inkomend, gemist"),
+             rij("whatsapp-oproep:d", "13:00", 0, "Proef Drie", bron="whatsapp", prive=1, dubbel_van="buiten:gemist",
+                 thema="WhatsApp-oproep, inkomend, gemist"),
+             rij("whatsapp-oproep:e", "13:30", 4, "Proef Drie", bron="whatsapp", prive=1, thema="WhatsApp-oproep, inkomend"),
+             rij("xelion:f", "14:00", 0, "Proef Vier", bron="xelion", prive=1, dubbel_van="buiten:gemist",
+                 thema="Xelion, inkomend, gemist"),
+             rij("telefoon:g", "15:00", 0, "Proef Vijf", bron="telefoon", prive=1, dubbel_van="buiten:gemist",
+                 thema="iPhone, uitgaand, niet beantwoord")]
+    bundel = {"inhoud_van": lambda g: None, "morgen": [], "mail_open": [], "prive_postvakken": set()}
+    alle = {"whatsapp": "aangesloten", "telefoon": "aangesloten", "xelion": "aangesloten"}
+    v = V.vaststellen(DAG, [], set(), rijen, {}, [], "volledig", V.mail_telling(DAG, {}, {}), alle, is_prive, bundel=bundel)
+    blok = V.tekst(v).split("## Gemist zonder terugbellen", 1)[1].split("\n## ", 1)[0]
+    eis([x["tijd"] for x in v["gemist_open"]] == ["10:12", "12:00", "14:00"], f"teruggebeld valt weg ({v['gemist_open']})")
+    eis("- 10:12 telefoon (privé): geen terugbelpoging gezien" in blok and "- 14:00 Xelion (privé): geen terugbelpoging gezien"
+        in blok and "- 12:00 telefoon (privé): terugbellen onbekend (nummer onbekend of verborgen)" in blok, blok)
+    eis(not any(n in V.tekst(v) for n in ("Proef Een", "Proef Twee", "Proef Drie", "Proef Vier")), "geen naam")
+    eis("onvolledig" not in blok, blok)
+    leeg = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", None, {}, is_prive, bundel=bundel))
+    eis("- onbekend (telefoon, WhatsApp en Xelion niet gelezen voor deze dag)" in leeg, f"niet gelezen is onbekend\n{leeg}")
+    half = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", None, {"telefoon": "aangesloten"}, is_prive,
+                                 bundel=bundel))
+    eis("- geen gezien (WhatsApp en Xelion niet gelezen voor deze dag)" in half, half)
+
+
+def test_db6_mail_wacht_en_morgen():
+    """DB-6: de mails van de dag die nog wachten (uit /api/mail/open), zonder werkdagen en zonder tekst, een privépostvak
+    alleen als aantal; niet gelezen is onbekend. Morgen: de afspraken van de dag erna, privé zonder titel."""
+    punten = [{"postvak": "info@h-architects.be", "soort": "hoog", "soort_label": "belangrijk", "van": "a@voorbeeld.be",
+               "van_naam": "Klant Omega", "onderwerp": "Vraag over de offerte", "datum_iso": f"{DAG}T09:00:00+02:00",
+               "werkdagen": 3, "orde": 0, "opvolging": "open"},
+              {"postvak": "info@h-architects.be", "soort": "actie", "van": "b@voorbeeld.be", "onderwerp": "Plannen",
+               "datum_iso": f"{DAG}T23:30:00+02:00", "orde": 1, "opvolging": "onzeker", "werkdagen": 3},
+              {"postvak": "privé@voorbeeld.be", "soort": "hoog", "van_naam": "Broer Ali", "onderwerp": "Familiefeest",
+               "datum_iso": f"{DAG}T10:00:00+02:00"},
+              {"postvak": "info@h-architects.be", "soort": "hoog", "van_naam": "Klant Zeta", "onderwerp": "Andere dag",
+               "datum_iso": "2026-10-21T10:00:00+02:00"}]
+    punten = punten[1:2] + punten[:1] + punten[2:]
+    morgen = [afspraak("m1", "09:00", "10:00", "!! Mehdi: [HA] 9003 Werfbezoek"),
+              afspraak("m2", "11:00", "12:00", "!! Mehdi: [PR] Tandarts Zeta")]
+    for a in morgen:
+        a["start"] = a["start"].replace(DAG, "2026-10-23")
+    bundel = {"inhoud_van": lambda g: None, "morgen": morgen, "mail_open": punten, "prive_postvakken": {"privé@voorbeeld.be"}}
+    t = V.tekst(vast(kanalen=AAN) if False else V.vaststellen(DAG, [], set(), [], {}, [], "volledig", None, AAN, is_prive,
+                                                              bundel=bundel))
+    mail = t.split("## Mail wacht op antwoord", 1)[1].split("\n## ", 1)[0]
+    eis("- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte" in mail, mail)
+    eis("- info@h-architects.be: actie, van b@voorbeeld.be: Plannen (mogelijk al beantwoord)" in mail, mail)
+    eis(mail.index("Vraag over de offerte") < mail.index("Plannen"), f"belangrijk eerst (orde 0 voor 1)\n{mail}")
+    eis("- privé@voorbeeld.be: 1 mail (privé)" in mail and "Broer Ali" not in t and "Familiefeest" not in t, mail)
+    eis("Andere dag" not in mail and "werkdag" not in mail, f"alleen die dag, geen werkdagen\n{mail}")
+    t2 = V.tekst(V.vaststellen(DAG, [], set(), [], {}, [], "volledig", None, AAN, is_prive, bundel=dict(bundel, mail_open=None)))
+    eis("- niet gelezen (de lijst van de mailwachten was niet te lezen)" in t2, "niet gelezen is onbekend")
+    mo = t.split("## Morgen, 2026-10-23", 1)[1].split("\n## ", 1)[0]
+    eis("- 09:00 !! Mehdi: [HA] 9003 Werfbezoek" in mo and "- 11:00 (privé)" in mo and "Tandarts" not in t, mo)
+    t3 = V.tekst(V.vaststellen(DAG, [], None, [], {}, [], "volledig", None, AAN, is_prive, bundel=dict(bundel, morgen=[])))
+    eis("## Morgen, 2026-10-23 (agenda niet gelezen: onbekend)" in t3 and "- geen afspraken gelezen" in t3, t3)
+    eis(V.wijzigingen(t3, t) == ["Gepland", "Mail wacht op antwoord", "Morgen"] or "Morgen" in V.wijzigingen(t3, t),
+        f"Morgen telt in de wijzigingen ({V.wijzigingen(t3, t)})")
+
+
+def test_wa3_en_onbekend_is_nooit_nul():
+    """WA-3 (T-0120): 'waarvan K zonder gekende duur' bij de WhatsApp-oproepen die WhatsApp niet gemist noemt maar zonder
+    duur. WA-6: op een dag die niet gelezen is, is een nul onbekend (WhatsApp, telefoon en Xelion), wat gezien is blijft."""
+    wa = [rij("whatsapp-oproep:a", "09:00", 0, "Proef Een", bron="whatsapp", prive=1,
+              thema="WhatsApp-oproep, inkomend, niet gemist, duur onbekend"),
+          rij("whatsapp-oproep:b", "10:00", 5, "Proef Een", bron="whatsapp", prive=1, thema="WhatsApp-oproep, uitgaand")]
+    t = V.tekst(vast(rijen=wa, kanalen=AAN))
+    eis("- WhatsApp: 0 berichten in 0 gesprekken, 2 oproepen (waarvan 1 zonder gekende duur), 5 min gezien" in t, t)
+    t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "onbekend voor deze dag"}))
+    eis("- WhatsApp: gezien 2 oproepen (waarvan 1 zonder gekende duur), 5 min; berichten onbekend (onbekend voor deze dag)"
+        in t, t)
+    xel = [rij("xelion:a", "09:00", 0, "Proef Twee", bron="xelion", prive=1, dubbel_van="buiten:gemist",
+               thema="Xelion, inkomend, gemist")]
+    v = V.vaststellen(DAG, [], set(), xel, {}, [], "volledig", None, {"xelion": "stil sinds 21-10 08:00"}, is_prive)
+    eis("- Xelion: gezien 1 gemist; oproepen en minuten onbekend (stil sinds 21-10 08:00)" in V.tekst(v), V.tekst(v))
+    eis(V.kanaalregel("telefoon", "aangesloten", [(0, "0 oproepen", "oproepen")]) == "- telefoon: 0 oproepen gezien",
+        "een gelezen dag toont 0")
 
 
 if __name__ == "__main__":

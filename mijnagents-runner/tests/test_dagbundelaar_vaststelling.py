@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
 _argv, sys.argv = sys.argv, [sys.argv[0]]
 import bord  # noqa: E402
 import dagbundelaar as D  # noqa: E402
+import gespreksanalist as GA  # noqa: E402
 sys.argv = _argv
 
 DAG = "2026-10-22"
@@ -60,6 +61,8 @@ class Wereld:
                        "belwacht": {"naam": "belwacht", "status": "rust", "taak": "", "ts": NU.isoformat()}}
         self.items, self.vervals = {}, None
         self.mailberichten, self.mailsql = None, ""                  # None: de twee rijen hieronder (db_lees)
+        self.mail_open = None                                         # /api/mail/open; None: niet te lezen (DB-6)
+        self.andere_dagen, self.agendadagen = {}, []                  # afspraken van andere dagen (Morgen, DB-6)
         self.dagregel = json.dumps({"telling": "volledig", "stand": "definitief", "bronnen": {"rapport": "ok", "chat": "ok"},
                                     "chat": {"telling": "ondergrens"}})
 
@@ -85,6 +88,10 @@ class Wereld:
         return {"nieuw": len(items)}
 
     def call(self, pad, payload=None, method=None):
+        if pad == "/api/mail/open":
+            if self.mail_open is None:
+                raise OSError("bord niet bereikbaar")
+            return {"aantal": len(self.mail_open), "punten": [dict(p) for p in self.mail_open]}
         assert pad.startswith("/api/klaarzet?uniek=vaststelling"), pad
         uniek = pad.split("uniek=")[1].split("&")[0].replace("%3A", ":")
         it = self.items.get(uniek)
@@ -98,11 +105,16 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_
     eigen lees_mail; logboek: een lijst die de regels van ag.log krijgt; open_noden: wat het bord als open noden geeft
     (None: onbekend); doe: in plaats van vastleggen, in dezelfde wereld (bv. main())."""
     oud = (D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren)
+    oud_ga = (GA.UITVOER, GA.FATHOM_DATA, GA.PLAUD_INVOER)
+    # T-0120: De Gespreksanalist en de archiefmappen in de proefmap, nooit de echte datamap (testagents nooit op echte data)
+    GA.UITVOER, GA.FATHOM_DATA, GA.PLAUD_INVOER = (os.path.join(w.map, "gespreksanalist"), os.path.join(w.map, "fathom-data"),
+                                                   os.path.join(w.map, "plaud-invoer"))
     D.V.gisteren = lambda nu: gisteren
     D.DAGBOEK = os.path.join(w.map, "dagboek")
     D.STAAT = os.path.join(w.map, "staat.json")
     D.ONTVANGST = os.path.join(w.map, "ontvangst.txt")
-    D.lees_agenda = lambda dagen_: ({DAG: list(w.afspraken)}, set(), lambda a: "[LA]" in a["titel"])
+    D.lees_agenda = lambda dagen_: (w.agendadagen.append(list(dagen_)) or {**w.andere_dagen, DAG: list(w.afspraken)}, set(),
+                                    lambda a: "[LA]" in a["titel"])
     D.lees_locatie = lambda dag, afspraken: ({"t": {"uitkomst": "doorgegaan", "tekst": "auto ter plaatse 14:31-16:07"}}, [],
                                              "afgesloten", "")
     D.lees_mail = mail or (lambda dagen_: ({"info@h-architects.be": {"berichten": [
@@ -118,6 +130,7 @@ def ronde(w, dagen=(DAG,), gisteren="2026-11-10", mail=None, logboek=None, open_
         return r, detail
     finally:
         D.DAGBOEK, D.STAAT, D.ONTVANGST, D.lees_agenda, D.lees_locatie, D.lees_mail, bord.db_lees, bord.call, D.V.gisteren = oud
+        GA.UITVOER, GA.FATHOM_DATA, GA.PLAUD_INVOER = oud_ga
         for naam in ("klaarzet", "log", "open_noden"):
             D.ag.__dict__.pop(naam, None)
 
@@ -148,7 +161,7 @@ def test_versies_teruglezen_en_dropbox():
         w.rijen.append(dict(w.rijen[0], uniek="zoom:meeting:b", start="20:00", minuten=30))
         r, detail = ronde(w)
         tweede = lees(pad)
-        assert "versie 2" in tweede and "herzien: Niet gepland, Communicatie" in tweede, tweede
+        assert "versie 2" in tweede and "herzien: Niet gepland, Werkgesprekken, Communicatie" in tweede, tweede
         assert lees(os.path.join(m, "dagboek", "2026", "versies", f"{DAG} v1.md")) == eerste
         assert w.items[f"vaststelling:{DAG}"]["inhoud"] == tweede and "(versie 2)" in w.items[f"vaststelling:{DAG}"]["titel"]
         # ontvangstbewijs van de Mac met dezelfde sha256: de Dropbox-nood sluit
@@ -287,7 +300,9 @@ def test_tel5_gemiste_iphone_oproepen_in_het_dagbestand():
         w.rijen = [x for x in w.rijen if x["uniek"] not in (f"dekking:telefoon:{DAG}", "telefoon:A-1")]
         ronde(w)
         t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
-        assert "- telefoon: 0 oproepen, 0 min, 2 gemist gezien (onbekend voor deze dag)" in t, t
+        # WA-6 (T-0120): zonder dekking is een nul onbekend, geen '0 oproepen'
+        assert "- telefoon: gezien 2 gemist; oproepen en minuten onbekend (onbekend voor deze dag)" in t, t
+        assert "0 oproepen" not in t.split("## Over")[0], t
 
 
 class Module:
@@ -1689,6 +1704,272 @@ def test_fase2_alarm_tijdens_het_uitzetten():
     finally:
         signal.setitimer = echt
     assert signal.getsignal(signal.SIGALRM) == vorige, "de vorige alarmafhandeling kwam niet terug"
+
+
+# ------------------------------------------------------------------- de bundel voor Ai Angel (T-0120) ---
+def _schrijf_json(pad, data):
+    os.makedirs(os.path.dirname(pad), exist_ok=True)
+    with open(pad, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+def _schrijf_tekst(pad, tekst):
+    os.makedirs(os.path.dirname(pad), exist_ok=True)
+    with open(pad, "w", encoding="utf-8") as f:
+        f.write(tekst)
+
+
+def _fathom_map(m, naam, rid, samenvatting=None, punten=None, rid_in_punten=None, label="UNABO project"):
+    """Een archiefmap zoals De Fathomwacht ze schrijft (contract fathom-samenvatting-en-actiepunten.md v1.0)."""
+    map_ = os.path.join(m, "fathom-data", naam)
+    _schrijf_json(os.path.join(map_, "gesprek.json"), {"recording_id": rid, "archivaris": {"label": label}})
+    if samenvatting is not None:
+        _schrijf_tekst(os.path.join(map_, "samenvatting.md"), "# Samenvatting van Fathom (niet als bron voor contract of "
+                       "verslag; het transcript telt)\n\n" + samenvatting + "\n")
+    if punten is not None:
+        _schrijf_json(os.path.join(map_, "actiepunten.json"), {"bron": "fathom", "recording_id": rid_in_punten or rid,
+                                                               "actiepunten": punten})
+    return map_
+
+
+def _gesprek(uniek, start, minuten, bron, archief="", prive=0, afdeling="", thema="", personen="", datum=DAG, **x):
+    return dict({"uniek": uniek, "datum": datum, "start": start, "minuten": minuten, "personen": personen,
+                 "afdeling": afdeling, "thema": thema, "prive": prive, "bron": bron, "dubbel_van": "", "archief": archief,
+                 "project": "", "zekerheid": ""}, **x)
+
+
+def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
+    """ANGEL-2 en VOL-5 (T-0120): het dagbestand draagt per werkgesprek samenvatting, actiepunten, firma, dossier en
+    verwijzing. Fathom volgens het contract van de groep fathom (samenvatting.md en actiepunten.json in de archiefmap,
+    alleen als die bij het gesprek hoort en in fathom-data ligt); Plaud en Zoom uit De Gespreksanalist (lees); zonder
+    uitvoer 'nog niet geanalyseerd'. Een privégesprek: niets gelezen, alleen 'privégesprek, N min'."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        goed = _fathom_map(m, "2026-10-22 0900 Keuken", 701, "## Doel\n\n- Het **ontwerp** van de keuken.\n- De offerte volgt.",
+                           [{"tekst": "Offerte keuken sturen", "wie": "Mehdi", "tijd": "00:12:30", "klaar": False}])
+        leeg = _fathom_map(m, "2026-10-22 1000 Kennis", 702, "Kennismaking.", [], label="HA sales")
+        zonder = _fathom_map(m, "2026-10-22 1100 Nazorg", 703)                      # Fathom leverde nog niets
+        ander = _fathom_map(m, "2026-10-22 1200 Ander", 799, "Ander gesprek.",
+                            [{"tekst": "Geheim punt van een ander gesprek", "wie": "", "tijd": "", "klaar": False}])
+        prive = _fathom_map(m, "2026-10-22 1600 Familie", 704, "PRIVEMERKTEKEN in de samenvatting.",
+                            [{"tekst": "PRIVEMERKTEKEN actie", "wie": "", "tijd": "", "klaar": False}])
+        label_prive = _fathom_map(m, "2026-10-22 1700 Label", 705, "LABELMERKTEKEN samenvatting.", [], label="Prive")
+        buiten = os.path.join(m, "elders", "map")
+        _schrijf_tekst(os.path.join(buiten, "samenvatting.md"), "BUITENMERKTEKEN")
+        rec = {"versie": 3, "uniek": "plaud:p1", "bron": "plaud", "datum": DAG, "start": "13:00", "minuten": 30,
+               "prive": False, "label": "", "firma": "HA", "soort": "", "dossier": "9003", "dossier_bewijs": "bevestigd",
+               "label_van": "afdeling van de wacht", "samenvatting": "De werf is bezocht. De vloer moet opnieuw.",
+               "samenvatting_van": "model", "actiepunten": [{"wat": "Aannemer bellen over de vloer", "wie": "Mehdi",
+                                                              "tegen_wanneer": "vrijdag", "voor_wie": "mehdi",
+                                                              "citaat": "CITAATMERKTEKEN bel de aannemer"}],
+               "weggegooid": 0, "tokens": 10, "ts": NU.isoformat()}
+        GA.bewaar(rec, os.path.join(m, "gespreksanalist"))
+        GA.bewaar({"versie": 3, "uniek": "plaud:p2", "bron": "plaud", "datum": DAG, "start": "15:00", "minuten": 12,
+                   "prive": True, "regel": "privégesprek, 12 min", "ts": NU.isoformat()}, os.path.join(m, "gespreksanalist"))
+        w.rijen = [_gesprek("fathom:701", "09:00", 45, "fathom", goed, thema="Keuken", personen="Klant Omega"),
+                   _gesprek("fathom:702", "10:00", 20, "fathom", leeg, thema="Kennismaking"),
+                   _gesprek("fathom:703", "11:00", 15, "fathom", zonder, thema="Nazorg"),
+                   _gesprek("fathom:706", "12:00", 15, "fathom", ander, thema="Verkeerde map"),
+                   _gesprek("fathom:707", "12:30", 15, "fathom", buiten, thema="Buiten de datamap"),
+                   _gesprek("plaud:p1", "13:00", 30, "plaud", "Data uit Mehdi/Plaud/2026-10-22 1300 Werf/x.md", thema="Werf"),
+                   _gesprek("plaud:p2", "15:00", 12, "plaud", thema="GESPREKMERKTEKEN"),
+                   _gesprek("plaud:p4", "15:30", 25, "plaud", thema="Overleg"),
+                   _gesprek("fathom:704", "16:00", 50, "fathom", prive, prive=1, thema="Familie"),
+                   _gesprek("fathom:705", "17:00", 20, "fathom", label_prive, thema="LABELTITEL"),
+                   _gesprek("zoom:meeting:z1", "18:00", 30, "zoom", thema="Zoom-overleg")]
+        ronde(w)
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        blok = t.split("## Werkgesprekken", 1)[1].split("\n## ", 1)[0]
+        assert "[fathom:701]\n  - firma: UNABO project; dossier: onbekend\n  - samenvatting (Fathom): Het ontwerp van de " \
+               "keuken. De offerte volgt." in blok, blok
+        assert "  - actiepunt [fathom:701; UNABO, zonder dossier; wie: Mehdi; op 00:12:30]: Offerte keuken sturen" in blok, blok
+        assert "[fathom:702]\n  - firma: HA sales; dossier: onbekend\n  - samenvatting (Fathom): Kennismaking.\n" \
+               "  - actiepunten: geen (Fathom vond er geen)" in blok, blok
+        assert "[fathom:703]\n  - firma: UNABO project; dossier: onbekend\n  - samenvatting en actiepunten: Fathom leverde ze " \
+               "nog niet" in blok, blok
+        assert "[fathom:706]" in blok and "archiefmap hoort niet bij dit gesprek" in blok and "Geheim punt" not in t, blok
+        assert "[fathom:707]" in blok and "BUITENMERKTEKEN" not in t, "nooit een bestand buiten de datamap"
+        assert "[plaud:p1]\n  - firma: HA; dossier: 9003 (bevestigd)\n  - samenvatting (De Gespreksanalist): De werf is bezocht." \
+               in blok, blok
+        assert "  - actiepunt [plaud:p1; HA 9003; wie: Mehdi; tegen: vrijdag; voor: mehdi]: Aannemer bellen over de vloer" in blok
+        assert "CITAATMERKTEKEN" not in t, "het letterlijke citaat blijft bij De Gespreksanalist, niet in Dropbox"
+        assert "- 15:00 privégesprek, 12 min" in blok and "GESPREKMERKTEKEN" not in t, blok
+        assert "[plaud:p4]" in blok and "nog niet geanalyseerd (De Gespreksanalist staat uit)" in blok, blok
+        assert "- 16:00 privégesprek, 50 min" in blok and "PRIVEMERKTEKEN" not in t, "privé: niets gelezen"
+        assert "- 17:00 privégesprek, 20 min" in blok and "LABELMERKTEKEN" not in t and "LABELTITEL" not in t, \
+            "het label Prive van De Archivaris is privé"
+        assert "[zoom:meeting:z1]" in blok and "Zoom-overleg" in blok, blok
+        assert "actiepunten: geen" not in blok.split("[plaud:p4]", 1)[1].split("\n- ", 1)[0], "onbekend is nooit geen"
+
+
+def test_angel2_contract_met_ai_angel():
+    """ANGEL-2: wat De Dagbundelaar als actiepunt schrijft, leest Ai Angel (mehdi_agent.actiepunten) letterlijk terug, met
+    dossier en verwijzing; een gesprek zonder actiepunt geeft niets. Zo blijven de twee kanten van het contract samen."""
+    import mehdi_agent as M
+    V = D.V
+    w = {"uniek": "fathom:701", "tijd": "09:00", "prive": False, "minuten": 45, "bron": "Fathom", "titel": "Keuken",
+         "personen": "Klant Omega", "opname": "", "firma": "UNABO", "soort": "project", "dossier": "9405",
+         "dossier_bewijs": "", "van": "Fathom", "reden": "", "samenvatting": "Kort.",
+         "actiepunten": [{"wat": "Offerte sturen", "wie": "Klant Omega", "tegen": "vrijdag", "klaar": False},
+                         {"wat": "Al gedaan", "wie": "", "klaar": True}]}
+    leeg = dict(w, uniek="plaud:p9", actiepunten=[], titel="Zonder actie")
+    onbekend = dict(w, uniek="plaud:p8", actiepunten=None, samenvatting=None, reden="nog niet geanalyseerd")
+    tekst = "# Dag x vastgesteld\n\n## Werkgesprekken\n\n" + "\n".join(
+        V.werkgesprek_regels(w) + V.werkgesprek_regels(leeg) + V.werkgesprek_regels(onbekend)) + "\n\n## Communicatie\n\n- x\n"
+    punten = M.actiepunten([{"dag": DAG, "dagbestand": tekst, "telling": {}}])
+    assert [(p["verwijzing"], p["dossier"], p["wat"], p["wie"], p["tegen"], p["klaar"]) for p in punten] == [
+        ("fathom:701", "UNABO 9405", "Offerte sturen", "Klant Omega", "vrijdag", False),
+        ("fathom:701", "UNABO 9405", "Al gedaan", "", "", True)], punten
+    assert all(M.bron_in(p["bron"], M.corpus_van([{"dag": DAG, "dagbestand": tekst, "telling": {}}], [])) for p in punten)
+    assert V.ACTIEPUNT == "actiepunt [" and M.WERKGESPREKKEN == "Werkgesprekken" and "Werkgesprekken" in V.BUNDELKOPPEN
+
+
+def test_db6_mail_open_met_privepostvak_uit_de_configuratie():
+    """DB-6: de mails die wachten komen van /api/mail/open (zoals De Mailregisseur); een privépostvak (wacht van firma PRIV)
+    alleen als aantal, ook als de mailtelling zelf niet gelezen werd. Een bord dat niet antwoordt: 'niet gelezen'."""
+    import postvak
+    oud = postvak.wachten
+    postvak.wachten = lambda: {"mail-werk": {"postvakken": ["info@h-architects.be"], "firma": "HARC"},
+                               "mail-proef": {"postvakken": ["proef@voorbeeld.be"], "firma": "PRIV"}}
+    try:
+        with tempfile.TemporaryDirectory() as m:
+            w = Wereld(m)
+            w.mail_open = [{"postvak": "info@h-architects.be", "soort": "hoog", "soort_label": "belangrijk",
+                            "van_naam": "Klant Omega", "onderwerp": "Vraag offerte", "datum_iso": f"{DAG}T09:00:00+02:00"},
+                           {"postvak": "proef@voorbeeld.be", "soort": "hoog", "van_naam": "Broer Ali",
+                            "onderwerp": "Familiefeest", "datum_iso": f"{DAG}T10:00:00+02:00"}]
+            ronde(w, mail=lambda dagen_: (_ for _ in ()).throw(OSError("postbus")))
+            t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+            assert "- info@h-architects.be: belangrijk, van Klant Omega: Vraag offerte" in t, t
+            assert "- proef@voorbeeld.be: 1 mail (privé)" in t and "Broer Ali" not in t and "Familiefeest" not in t, t
+            w.mail_open = None
+            ronde(w)
+            assert "- niet gelezen (de lijst van de mailwachten was niet te lezen)" in lees(
+                os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+    finally:
+        postvak.wachten = oud
+
+
+def test_db6_terugbellen_en_morgen_uit_de_runner():
+    """DB-6: de runner leest de gesprekkentabel tot vandaag (een terugbelpoging na de dag telt) en de agenda tot de dag
+    erna (Morgen)."""
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        w.rijen += [_gesprek("telefoon:a-1", "10:12", 0, "telefoon", prive=1, dubbel_van="buiten:gemist",
+                             thema="iPhone, inkomend, gemist", personen="Proef Een"),
+                    _gesprek("telefoon:b-1", "11:00", 0, "telefoon", prive=1, dubbel_van="buiten:gemist",
+                             thema="iPhone, inkomend, gemist", personen="Proef Twee"),
+                    _gesprek("telefoon:b-2", "08:00", 3, "telefoon", prive=1, thema="iPhone, uitgaand",
+                             personen="Proef Twee", datum="2026-11-10")]
+        vragen = []
+
+        def db_lees(sql, args=()):
+            vragen.append((sql, args))
+            return Wereld.db_lees(w, sql, args)
+        w.db_lees = db_lees
+        w.andere_dagen = {"2026-10-23": [{"id": "m", "titel": "!! Mehdi: [HA] 9003 Werfbezoek", "kalender": "werk",
+                                          "start": "2026-10-23T09:00:00+02:00", "einde": "2026-10-23T10:00:00+02:00",
+                                          "deelnemers": []}]}
+        ronde(w)
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert any("FROM gesprek_log" in sql and args == (DAG, "2026-11-11") for sql, args in vragen), vragen
+        assert w.agendadagen == [[DAG, "2026-10-23"]], w.agendadagen
+        blok = t.split("## Gemist zonder terugbellen", 1)[1].split("\n## ", 1)[0]
+        assert "- 10:12 telefoon (privé): geen terugbelpoging gezien" in blok and "11:00" not in blok, blok
+        assert "Proef Een" not in t and "Proef Twee" not in t, t
+        assert "## Morgen, 2026-10-23\n\n- 09:00 !! Mehdi: [HA] 9003 Werfbezoek" in t, t
+
+
+def test_angel7_voorlopig_alleen_met_de_vlag_en_nooit_in_dropbox():
+    """ANGEL-7 (T-0120, P5): de voorlopige bundel van vandaag staat achter VOORLOPIG_AAN (standaard uit: niets, geen ronde,
+    geen bestand). Aan, op een uur van Ai Angel: een bestand in VOORLOPIG (mijnagents-data, niet in de map dagboek die naar
+    Dropbox gaat) met 'voorlopig' in de kop, zonder versie, staat, klaarzet-item of nood. Buiten die uren: niets."""
+    assert D.VOORLOPIG_AAN is False, "de vlag staat standaard uit"
+    assert os.path.dirname(D.VOORLOPIG) == D.DATA and not D.VOORLOPIG.startswith(D.DAGBOEK + os.sep)
+    with tempfile.TemporaryDirectory() as m:
+        w = Wereld(m)
+        vandaag = "2026-11-11"
+        w.rijen.append(_gesprek("fathom:801", "09:00", 30, "fathom", thema="Ochtendoverleg", datum=vandaag))
+        oud = (D.VOORLOPIG_AAN, D.VOORLOPIG_MD, D.VOORLOPIG_JSON, D.ag.__dict__.get("ronde"))
+        D.VOORLOPIG_MD, D.VOORLOPIG_JSON = os.path.join(m, "voorlopig", "vandaag.md"), os.path.join(m, "voorlopig", "vandaag.json")
+        rondes = []
+
+        def nep_ronde(taak, **k):
+            rondes.append(HartRonde(taak))
+            return rondes[-1]
+        D.ag.ronde = nep_ronde
+        tien = datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)          # 10:00 in Brussel (winteruur)
+        try:
+            ronde(w, gisteren="2026-11-10", doe=lambda: D.voorlopig_main(tien))
+            assert not rondes and not os.path.exists(D.VOORLOPIG_MD), "uit: geen ronde en geen bestand"
+            D.VOORLOPIG_AAN = True
+            ronde(w, gisteren="2026-11-10", doe=lambda: D.voorlopig_main(tien.replace(hour=10)))     # 11:00: geen uur
+            assert not rondes and not os.path.exists(D.VOORLOPIG_MD), "buiten de uren van Ai Angel: niets"
+            ronde(w, gisteren="2026-11-10", doe=lambda: D.voorlopig_main(tien), open_noden=[])
+            assert len(rondes) == 1 and rondes[0].taak.startswith("dagvaststelling") and not rondes[0].noden, \
+                (rondes[0].taak, rondes[0].noden)
+            t = lees(D.VOORLOPIG_MD)
+            assert t.startswith("# Dag 2026-11-11 voorlopig (stand 10:00)") and "[fathom:801]" in t, t
+            assert "- voorlopig, gemaakt 11-11-2026 10:00; de nachtronde stelt de dag vast" in t, t
+            assert json.loads(lees(D.VOORLOPIG_JSON))["dag"] == vandaag
+            assert not os.path.exists(os.path.join(m, "dagboek")) and not os.path.exists(os.path.join(m, "staat.json")), \
+                "niets in de map dagboek en geen staat"
+            assert not w.items, "geen klaarzet-item"
+            # een fout geeft haar eigen nood, en alleen die
+            ronde(w, gisteren="2026-11-10", doe=lambda: D.voorlopig_main(tien), open_noden=[],
+                  mail=lambda dagen_: (_ for _ in ()).throw(OSError("postbus")))
+            assert not rondes[-1].noden, "een postvak dat niet leest, is geen nood van de voorlopige bundel"
+            oud_vl = D.vastleggen
+            D.vastleggen = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stuk"))
+            try:
+                ronde(w, gisteren="2026-11-10", doe=lambda: D.voorlopig_main(tien), open_noden=[])
+            finally:
+                D.vastleggen = oud_vl
+            assert rondes[-1].noden == [D.VOORLOPIG_NOOD], rondes[-1].noden
+        finally:
+            D.VOORLOPIG_AAN, D.VOORLOPIG_MD, D.VOORLOPIG_JSON = oud[:3]
+            D.ag.__dict__.pop("ronde", None)
+    # de ochtend en de nacht kijken de voorlopige bundel niet na: ze laten haar nood open
+    assert D.VOORLOPIG_NOOD.startswith(D.VOORLOPIG_NOOD) and not D.VOORLOPIG_NOOD.startswith(D.VASTSTELLING_NODEN + D.KETEN_NODEN)
+    import inspect
+    bron = inspect.getsource(D.main)
+    assert "alleen_nacht(t) or t.startswith(VOORLOPIG_NOOD)" in bron and "(WEEKNOOD, VOORLOPIG_NOOD)" in bron
+
+
+def test_angel7_planning_en_niet_in_dropbox():
+    """ANGEL-7: de cronregel draait elk uur op :00, twintig minuten voor Ai Angel (:20), met een eigen ingang
+    (dagbundel_voorlopig.py) zodat de planning van de gesprekkenketen niet weigert; de uren zijn die van Ai Angel. De map
+    van de voorlopige bundel gaat niet mee met de Mac-sync naar Dropbox."""
+    import importlib.util
+    import re
+    import mehdi_agent as M
+    planning = os.path.join(RUNNER, "planning")
+    regels = [r for r in lees(os.path.join(planning, "dagbundel-voorlopig.cron")).splitlines() if r.strip() and not r.startswith("#")]
+    assert len(regels) == 1 and "%" not in regels[0], regels
+    (regel,) = regels
+    ai = [r for r in lees(os.path.join(planning, "mehdi-agent.cron")).splitlines() if r.strip() and not r.startswith("#")][0]
+    assert int(ai.split()[0]) - int(regel.split()[0]) == 20 and regel.split()[1:5] == ["*", "*", "*", "*"], (regel, ai)
+    assert "/usr/bin/flock -n /tmp/dagbundel-voorlopig.lock /usr/bin/timeout 1200 " in regel, regel
+    assert "mijnagents-runner/dagbundel_voorlopig.py" in regel and "mijnagents-runner/dagbundelaar.py" not in regel, regel
+    assert D.VOORLOPIG_UREN == M.UREN, (D.VOORLOPIG_UREN, M.UREN)
+    assert os.path.normpath(M.voorlopig_map(D.DAGBOEK)) == os.path.normpath(D.VOORLOPIG), M.voorlopig_map(D.DAGBOEK)
+    # de planning van de gesprekkenketen aanvaardt de regel naast haar blok
+    spec = importlib.util.spec_from_file_location("gesprekken_cron_zetten", os.path.join(planning, "gesprekken_cron_zetten.py"))
+    G = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(G)
+    gesprekken = lees(os.path.join(planning, "gesprekken.cron")).splitlines()
+    G.samenvoegen(G.blok(gesprekken) + [regel], gesprekken)
+    # de ingang zelf: zonder de vlag geen ronde (een eigen proces, zoals de cron)
+    p = subprocess.run([sys.executable, "-c", "import sys; sys.argv=['dagbundel_voorlopig.py']; "
+                        f"sys.path.insert(0, {RUNNER!r}); import dagbundelaar as D; "
+                        "D.ag.ronde = lambda *a, **k: (_ for _ in ()).throw(SystemExit(9)); "
+                        "sys.exit(D.voorlopig_main())"], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr[-500:]
+    assert "dagbundelaar.voorlopig_main()" in lees(os.path.join(RUNNER, "dagbundel_voorlopig.py"))
+    # niet in Dropbox: de Mac-sync haalt alleen deze mappen van de VM
+    sync = lees(os.path.join(planning, "mac", "data_uit_mehdi_sync.sh"))
+    gehaald = set(re.findall(r"^haal (\S+) ", sync, re.M)) | {"export"}
+    assert "dagboek" in gehaald and os.path.basename(D.VOORLOPIG) not in gehaald, gehaald
 
 
 if __name__ == "__main__":
