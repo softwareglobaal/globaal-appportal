@@ -12,7 +12,7 @@ from . import scheiding as S
 HB_PROJECTEN = "/Work All/04. Harmoniebouw/10. PROJECTEN ◀︎◀︎"
 STAPPEN = {S.HA: (("implementation",), ("quotes",), ("offerte",)),
            S.HB: (("offerte in+out", "offerte in + out"), ("offerte in",))}
-OVERSLAAN = ("oude versies", "documentatie", "niet weerhouden", "_mag weg")
+OVERSLAAN = ("oude versies", "documentatie", "niet weerhouden", "_mag weg", "archief")
 
 
 class MapFout(Exception):
@@ -75,15 +75,19 @@ def offertemap(v, lijst_fn, projectmap_fn):
     return kies_lot(lots, v.get("lot")), lots
 
 
-def offertebestanden(pad, lijst_fn):
-    """De PDF's direct in de lotmap, zonder eerdere vergelijkingen; oude versies en documentatie staan in submappen en
-    tellen niet mee."""
+def offertebestanden(pad, lijst_fn, diep=True):
+    """De PDF's in de lotmap, zonder eerdere vergelijkingen, en een map diep: bij H-Architects staat elke inschrijver in
+    een eigen submap (lot/inschrijver/offerte.pdf, proefbank 02-11-2026; Codex X6, overleg 28). Oude versies,
+    documentatie en archief tellen niet mee. De naam van een bestand in een submap begint met die submap."""
     uit = []
     for e in lijst_fn(pad, recursief=False) or []:
         naam = e.get("name", "")
         if e.get(".tag") == "file" and naam.lower().endswith(".pdf") and "vergelijking" not in naam.lower():
             uit.append({"naam": naam, "pad": e.get("path_display") or e.get("path_lower"),
                         "gewijzigd": e.get("client_modified", ""), "grootte": e.get("size")})
+        elif (diep and e.get(".tag") == "folder" and e.get("path_display")
+              and not any(o in naam.lower() for o in OVERSLAAN)):
+            uit += [dict(b, naam=f"{naam}/{b['naam']}") for b in offertebestanden(e["path_display"], lijst_fn, diep=False)]
     return sorted(uit, key=lambda b: b["naam"].lower())
 
 
@@ -97,7 +101,9 @@ def projectmap(firma, project, zoek=None):
         p = projectadressen.index().get(str(project))
         return p["map"] if p else None
     zoek = zoek or E._dropbox_zoek
-    for t in zoek(str(project), HB_PROJECTEN) or []:
-        if t.get("soort") == "folder" and str(project).lower() in t.get("naam", "").lower():
-            return t["pad"]
-    return None
+    # Proefbank 02-11-2026: de zoekopdracht gaf ook een fotomap "... (ontvangen van U82)" diep in het project; alleen een
+    # map waarvan de naam met de code begint ("17. U82_Jachtlaan ..."), en dan de minst diepe, is de projectmap
+    code = re.compile(rf"^\s*(?:\d+\.\s*)?{re.escape(str(project).strip())}(?![0-9a-z])", re.I)
+    mappen = [t["pad"] for t in zoek(str(project), HB_PROJECTEN) or []
+              if t.get("soort") == "folder" and t.get("pad") and code.match(t.get("naam", ""))]
+    return min(mappen, key=lambda p: (p.count("/"), p.lower())) if mappen else None

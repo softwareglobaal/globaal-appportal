@@ -24,8 +24,9 @@ def onvolledig(agent, firma, ontbreekt):
 
 
 def tegengehouden(soorten):
-    return ("**Niet gestart:** in het werk staat iets dat lijkt op " + ", ".join(soorten) + ". Naar buiten gaan alleen "
-            "het werk en de gemeente, nooit een naam, adres of nummer van de bouwheer. Stel de vraag opnieuw zonder.")
+    return ("**Niet gestart:** in het werk staat iets dat lijkt op " + ", ".join(soorten) + ". Naar het zoeken op het web "
+            "gaan alleen het werk en de gemeente, nooit een naam, adres of nummer van de bouwheer. Stel de vraag opnieuw "
+            "zonder.")
 
 
 def _firma_regel(i, f, firma, eerder, boekhouding_bekend):
@@ -117,7 +118,7 @@ def lotkeuze(v, lots):
             "\n\nStel de vraag opnieuw met `lot:`, bijvoorbeeld het nummer vooraan de map.")
 
 
-def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan, overgeslagen=0):
+def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vandaag, ai_aan, overgeslagen=0, oudere=()):
     """Het verslag van De Offertevergelijker. letters: [(letter, bestand, sleutelregel)]; uit: offertes.vergelijk();
     per_post: [{onderwerp, cellen}] of None. Geen gunning: de laagste prijs is een feit, geen advies (X4)."""
     from .offertes import datumtekst
@@ -127,9 +128,10 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     geen = [r for r in rijen if r.get("soort") == "geen offerte"]
     niet = [r for r in rijen if r.get("soort") not in ("offerte", "geen offerte")]
     kop = f"**Vergelijking {lotnaam} ({S.FIRMANAMEN[firma]}):** {len(gelezen)} offertes gelezen"
-    kop += f", {len(niet)} niet (scan of onleesbaar)" if niet else ""
+    kop += f", {len(niet)} niet gelezen (scan, onleesbaar of te veel: zie de redenen)" if niet else ""
     andere = len(geen) + (overgeslagen or 0)
-    kop += f", {andere} documenten die geen offerte zijn (fiche of brochure) tellen niet mee." if andere else "."
+    kop += f", {andere} documenten die geen offerte zijn (fiche of brochure) tellen niet mee" if andere else ""
+    kop += f", {len(oudere)} oudere versies van dezelfde offerte tellen niet mee." if oudere else "."
     if uit.get("laagste") and uit.get("verschil") is not None:
         kop += (f" Laagste totaal exclusief btw: Inschrijver {uit['laagste']['letter']}, {euro(uit['laagste']['excl'])}; "
                 f"verschil met de hoogste {euro(uit['verschil'])} ({uit['verschil_pct']} procent).")
@@ -141,6 +143,8 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     stap += ("de vergelijking per post staat hieronder." if per_post else
              "de vergelijking per post komt pas als de offerte-inhoud naar de AI mag." if not ai_aan else
              "er is minder dan twee leesbare offertes, dus niets om per post te vergelijken." if len(gelezen) < 2 else
+             "er zijn minder dan twee offertes met een totaal exclusief btw, dus niets om per post te vergelijken."
+             if sum(1 for r in gelezen if r.get("excl") is not None) < 2 else
              "een vergelijking per post was niet betrouwbaar (zie de redenen).")
     regels = [kop, "", stap, "", "## Totalen",
               "| Inschrijver | Datum | Excl. btw | Btw | Incl. btw | Geldig tot |", "|---|---|---|---|---|---|"]
@@ -161,6 +165,7 @@ def vergelijkingsverslag(v, lotnaam, letters, uit, per_post, post_redenen, vanda
     letop = list(uit["letop"]) + [f"Inschrijver {l}: {r}" for l, rs in (post_redenen or {}).items() for r in rs]
     regels += ["", "## Om op te letten"] + ([f"- {x}" for x in letop] or ["- niets bijzonders gevonden in de totalen"])
     regels += ["", "## Welke offerte is welke letter (alleen voor jou)"] + [f"- Inschrijver {l}: {s}" for l, _, s in letters]
+    regels += [f"- Oudere versie van inschrijver {l}, telt niet mee: {s}" for l, s in oudere]
     regels += ["", f"Gelezen op {vandaag}. Ik aanvaardde, tekende of verstuurde niets en schreef niets in Dropbox."]
     return "\n".join(regels)
 

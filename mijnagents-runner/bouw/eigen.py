@@ -24,6 +24,7 @@ NIET_ZOEKEN = ("/0 archive/", "/_mag weg", "/nog te sorteren")
 # Offerte IN per post.
 OFFERTEMAP = re.compile(r"\b(?:offerte\w*|quotes?|onderaannem\w*|prijsaanbieding\w*|prijsvragen?)\b", re.I)
 UITGANG = ("", "en", "s", "e", "te", "ten")
+GELUID_BEELD = re.compile(r"\.(?:mp3|m4a|wav|aac|ogg|mp4|mov|avi|mkv|heic|jpe?g|png)$", re.I)
 
 
 def zoekwoorden(werk, maximum=2):
@@ -122,6 +123,8 @@ def in_mappen(firma, werk, zoek=None, maximum=12, deadline=None):
                 continue
             if not woord_in(woord, t.get("naam") or pad.rsplit("/", 1)[-1]) or not in_offertemap(pad):
                 continue
+            if t.get("soort") == "file" and GELUID_BEELD.search(pad):
+                continue        # een opname van een vergadering is geen eerdere offerte (proefbank 02-11-2026)
             ouder = pad.rsplit("/", 1)[0] if t.get("soort") == "file" else pad
             if ouder.lower() in gezien:
                 continue

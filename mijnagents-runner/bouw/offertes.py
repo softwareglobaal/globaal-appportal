@@ -45,8 +45,10 @@ OFFERTEWOORD = re.compile(r"offerte|prijsofferte|prijsopgave|prijsaanbod|aanbied
 
 
 def fiche_naam(naam):
-    """Zegt de bestandsnaam dat het een fiche, brochure of attest is, en niet dat het een offerte is?"""
-    return bool(FICHE_NAAM.search(naam or "")) and not OFFERTEWOORD.search(naam or "")
+    """Zegt de bestandsnaam dat het een fiche, brochure of attest is, en niet dat het een offerte is? Alleen de naam van
+    het bestand telt, niet die van de submap ("Nieuwe offerte/... technische fiche.pdf", proefbank 02-11-2026)."""
+    naam = str(naam or "").rsplit("/", 1)[-1]
+    return bool(FICHE_NAAM.search(naam)) and not OFFERTEWOORD.search(naam)
 # Een bedrag als los stuk tekst: duizendtallen met punt, komma of spatie, decimalen met komma of punt (Codex X8).
 BEDRAG = re.compile(r"(?<![\d.,])-?(?:\d{1,3}(?:[.,\u00a0 ]\d{3})+|\d+)(?:[.,]\d{2})?(?![\d%])")
 EINDTOTAAL = re.compile(r"eindtota|algemeen\s+tota|tota\w*\s+generaal|\bna\b.{0,20}korting|netto\s+tota|tota\w*\s+netto|"
@@ -55,7 +57,8 @@ SUBTOTAAL = re.compile(r"sub\s*-?\s*tota|tussentota|totaal\s+(?:hoofdstuk|post|l
 RAMING = re.compile(r"\b(?:raming|kostenraming|budgetraming|schatting|prijsindicatie|kostenindicatie|budgetprijs|richtprijs|"
                     r"indicatie(?:f|ve)\s+(?:prijs|prijzen|kost|kosten|bedrag|bedragen|raming|offerte|budget)|"
                     r"globale\s+prijs|onder\s+voorbehoud\s+van\s+opmeting)\b", re.I)
-VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|art(?:ikel)?\.?\s*20", re.I)
+# Proefbank 02-11-2026: "29 maart 2026" gaf "btw verlegd" (m-aart 20-26); artikel 20 alleen als los woord en getal
+VERLEGD = re.compile(r"btw\s+verlegd|medecontractant|autoliquidatie|\bart(?:ikel)?\.?\s*20\b", re.I)
 
 
 ONTKENNING = re.compile(r"\b(?:niet|geen|nooit|vervangt|vervangen|eerdere|vorige|ipv|in\s+plaats\s+van)\b", re.I)
@@ -110,9 +113,10 @@ def _eindtotaal(kandidaten):
     return [b for v, b in kandidaten if v == hoogste][-1]
 
 
-EXCL = re.compile(r"excl|exclusief|zonder\s+btw|htva|hors\s+tva|netto|excluding", re.I)
-INCL = re.compile(r"incl|inclusief|tvac|te\s+betalen|met\s+btw|including", re.I)
-BTW = re.compile(r"\b(?:btw|tva|vat)\b", re.I)
+# "Totaal zonder B.T.W." (proefbank 02-11-2026): btw ook met punten geschreven
+EXCL = re.compile(r"excl|exclusief|zonder\s+(?:btw|b\.t\.w)|htva|hors\s+tva|netto|excluding", re.I)
+INCL = re.compile(r"incl|inclusief|tvac|te\s+betalen|met\s+(?:btw|b\.t\.w)|including", re.I)
+BTW = re.compile(r"\b(?:btw|b\.t\.w\.?|tva|vat)(?![a-z])", re.I)
 
 
 def bedragen_met_label(regel):
@@ -126,7 +130,8 @@ def bedragen_met_label(regel):
     for m in geld:
         b = bedrag(m.group(0))
         # "excl. btw" en "incl. btw" zijn een label, geen btw-bedrag
-        stuk = re.sub(r"(excl\w*|incl\w*|zonder|met)\.?\s*(?:btw|tva|vat)\b", r"\1", regel[vorige:m.start()], flags=re.I)
+        stuk = re.sub(r"(excl\w*|incl\w*|zonder|met)\.?\s*(?:btw|b\.t\.w\.?|tva|vat)(?![a-z])", r"\1",
+                      regel[vorige:m.start()], flags=re.I)
         vorige = m.end()
         if b is None or re.fullmatch(r"\s*\d{1,2}\s*", m.group(0)) and "%" in regel[m.end():m.end() + 2]:
             continue
@@ -174,13 +179,70 @@ def _datum(tekst):
 
 
 def paginas(data):
-    """[tekst per pagina] van een PDF, of None als de PDF niet te openen is."""
+    """[tekst per pagina] van een PDF, of None als de PDF niet te openen is. Ontbreekt pypdf, dan een fout en nooit
+    "niet te openen": zo zag de proefbank op 02-11-2026 elke PDF als kapot met de verkeerde Python."""
+    from pypdf import PdfReader
     try:
-        from pypdf import PdfReader
         lezer = PdfReader(io.BytesIO(data))
         return [(p.extract_text() or "") for p in lezer.pages[:MAX_BLZ]]
     except Exception:  # noqa: BLE001  een kapotte of beveiligde PDF: niet leesbaar, nooit half
         return None
+
+
+# Een totaal staat in dezelfde zin als het woord totaal (of te betalen, eindbedrag). Proefbank 02-11-2026: in "... kosten
+# te betalen. Deze kosten betreffen 50 euro" werd 50 euro het totaal inclusief btw; "totale bedragen" is geen totaal.
+TOTAALWOORD = re.compile(r"\btota(?:al\w*|l|len)\b|te\s+betalen|eindbedrag", re.I)
+ZINSEINDE = re.compile(r"(?<=[a-zà-ÿ)])[.!?]\s+(?=[A-ZÀ-Ý])")
+# Na een afkorting eindigt geen zin: "Totaal excl. BTW 10.000,00" is een zin (zelf gevonden 02-11-2026)
+AFKORTING = re.compile(r"(?:\b(?:excl|incl|art|nr|ca|bv|bvb|bijv|max|min|tel|gsm|st|vb|enz|ref|blz|resp|dhr|mevr|mr|tav|"
+                       r"afz|ex|ing|ir|zgn|evt|exkl|inkl|tov|o\.a|m\.a\.w))$", re.I)
+
+
+def _zinnen(regel):
+    """De zinnen van een regel; een punt na een gekende afkorting is geen zinseinde (Codex 29: een kort woord als 'af'
+    wel)."""
+    uit, begin = [], 0
+    for m in ZINSEINDE.finditer(regel):
+        if AFKORTING.search(regel[begin:m.start()]):
+            continue
+        uit.append(regel[begin:m.start() + 1])
+        begin = m.end()
+    return uit + [regel[begin:]]
+BTW_TARIEVEN = (21, 6, 12)
+
+
+def _woorden(regel):
+    return len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", regel))
+
+
+# Codex 29: "Optie 1.210,00 EUR" of "Transport incl. BTW 50,00 EUR" is geen totaal; alleen deze woorden mogen naast het bedrag
+KAAL_WOORD = {"eur", "euro", "incl", "inclusief", "btw", "tvac", "totaal", "total", "bedrag", "te", "betalen"}
+
+
+def alleen_bedrag(regel):
+    """Draagt de regel niets dan een bedrag? B.T.W. telt als btw en E als euro (729,40 E); elk ander woord, ook van een
+    letter, maakt er geen totaal van (Codex 30: "X 1.210,00 EUR")."""
+    regel = re.sub(r"\bb\.\s?t\.\s?w\.?", " btw ", regel, flags=re.I)
+    return all(w.lower() in KAAL_WOORD or w in ("E", "e") for w in re.findall(r"[A-Za-zÀ-ÿ]+", regel))
+
+
+def _losse_bedragen(regel):
+    """De geldbedragen van een regel zonder excl of incl erbij, groter dan nul; een datum is nooit een bedrag."""
+    regel = re.sub(r"\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b", lambda m: " " * len(m.group(0)), regel)
+    uit = [bedrag(m.group(0)) for m in BEDRAG.finditer(regel) if is_geld(regel, m)]
+    return [b for b in uit if b]
+
+
+def btw_paar(kale, incl=()):
+    """(excl, incl, tarief) als een totaal zonder label en een ander totaal precies een btw-tarief verschillen
+    (2.069,35 en 2.503,92 is 21 procent); de rekensom is dan het bewijs. Anders None."""
+    paren = []
+    for x in kale:
+        for y in list(kale) + list(incl):
+            for t in BTW_TARIEVEN:
+                if y > x and abs(y - x * (1 + t / 100)) <= max(0.02, x * 0.0002):
+                    paren.append((x, y, t))
+    return max(paren) if paren else None
 
 
 def lees(tekst_paginas):
@@ -195,15 +257,32 @@ def lees(tekst_paginas):
     uit = {"soort": "offerte", "excl": None, "incl": None, "btw_tarief": None, "verlegd": verlegd(tekst),
            "datum": _offertedatum(tekst), "geldig_tot": None, "geldig_dagen": None, "raming": is_raming(tekst),
            "redenen": []}
-    excl, incl = [], []
-    for regel in tekst.splitlines():
+    excl, incl, kale, nul_btw, kale_eigen = [], [], [], False, []
+    regels = tekst.splitlines()
+    for i, regel in enumerate(regels):
         laag = regel.lower()
-        sub = SUBTOTAAL.search(laag) and not re.search(r"\bna\b.{0,20}korting", laag)
-        if ("totaal" in laag or "total" in laag or "te betalen" in laag) and not sub:
-            voorrang = 1 if EINDTOTAAL.search(laag) else 0
-            for soort, b in bedragen_met_label(regel):
-                if b > 0:
-                    (excl if soort == "excl" else incl).append((voorrang, b))
+        # "Incl B.T.W. 5 786,21": een korte regel met incl en btw is ook een totaalregel (proefbank 02-11-2026)
+        btw_regel = INCL.search(laag) and re.search(r"b\.?\s?t\.?\s?w|\btva\b|\bvat\b", laag) and alleen_bedrag(regel)
+        zinnen = [z for z in _zinnen(regel) if TOTAALWOORD.search(z)] or ([regel] if btw_regel else [])
+        for zin in zinnen:
+            zlaag = zin.lower()
+            if SUBTOTAAL.search(zlaag) and not re.search(r"\bna\b.{0,20}korting", zlaag):
+                continue
+            voorrang = 1 if EINDTOTAAL.search(zlaag) else 0
+            gelabeld = [(soort, b) for soort, b in bedragen_met_label(zin) if b > 0]
+            for soort, b in gelabeld:
+                (excl if soort == "excl" else incl).append((voorrang, b))
+            nul_btw = nul_btw or bool(re.search(r"(?<![\d,.])0\s?%", zin))
+            kale_eigen += _losse_bedragen(zin) if not gelabeld else []
+            los = _losse_bedragen(zin) if not gelabeld else []
+            if len(los) <= 1:
+                # "Totaal  2.069,35€", dan "BTW", "Totaal (Incl. BTW)", "434,57", "2.503,92€" onder elkaar: de korte
+                # regels erna met een bedrag zijn kandidaten; alleen de btw-som maakt er een totaal van
+                kale += los
+                for volgende in [r for r in regels[i + 1:i + 6] if r.strip()][:4]:
+                    nog = _losse_bedragen(volgende)
+                    if len(nog) == 1 and alleen_bedrag(volgende):
+                        kale.append(nog[0])
         m = re.search(r"\b(6|12|21)\s?%", regel)
         if m and "btw" in laag and uit["btw_tarief"] is None:
             uit["btw_tarief"] = int(m.group(1))
@@ -214,6 +293,25 @@ def lees(tekst_paginas):
         if m and not uit["geldig_dagen"]:
             uit["geldig_dagen"] = int(m.group(1))
     uit["excl"], uit["incl"] = _eindtotaal(excl), _eindtotaal(incl)
+    if uit["excl"] is not None and uit["incl"] is None and kale:
+        # "Totaal zonder B.T.W. : 4.750,20" en daarna "Totaal : EUR 5.747,74": de btw-som bewijst het inclusief
+        paar = btw_paar([uit["excl"]], kale)
+        if paar and paar[0] == uit["excl"]:
+            uit["incl"] = paar[1]
+            uit["btw_tarief"] = uit["btw_tarief"] if uit["btw_tarief"] is not None else paar[2]
+    if uit["excl"] is None and kale:
+        paar = btw_paar(kale, [b for _, b in incl])
+        if paar:
+            uit["excl"], uit["incl"] = paar[0], uit["incl"] if uit["incl"] is not None else paar[1]
+            uit["btw_tarief"] = uit["btw_tarief"] if uit["btw_tarief"] is not None else paar[2]
+            uit["redenen"].append(f"totaal zonder 'excl' of 'incl' erbij; bevestigd door de btw-som ({paar[2]} procent)")
+        elif len(set(kale)) == 1 and uit["incl"] is None and (uit["verlegd"] or nul_btw) and kale_eigen:
+            # "729,40 E 0% Totaal": een enkel totaal bij 0 procent btw of verlegd is exclusief en inclusief hetzelfde
+            uit["excl"] = kale[0]
+            uit["redenen"].append("totaal zonder 'excl' of 'incl' erbij, bij 0 procent btw of verlegd: kijk het na")
+        elif uit["incl"] is None and kale_eigen:
+            uit["redenen"].append(f"een totaal zonder 'excl' of 'incl' erbij ({_euro(kale_eigen[-1])}): niet gebruikt, "
+                                  "kijk het na")
     if uit["excl"] is None and uit["incl"] is None and (FICHE.search(tekst) or not OFFERTEWOORD.search(tekst)):
         return {"soort": "geen offerte", "redenen": ["geen offerte (technische fiche of ander document zonder totaal): "
                                                      "telt niet mee"]}
@@ -320,7 +418,11 @@ def ocr(data, timeout=OCR_TIMEOUT):
             return f.read()
 
 
-def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None):
+def _euro(b):
+    return f"{b:,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".") + " euro"
+
+
+def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None, maximum=None):
     """([{letter, lees}], {letter: tekst}) voor de bestanden van een lot. Na de deadline wordt niets meer gedownload: die
     offertes staan erbij als niet gelezen (Codex X11). download(pad) -> bytes; een fout maakt de offerte onleesbaar. Met
     OCR_AAN gaat een scan door OCR (ocr_fn, standaard ocr()) als er nog tijd is; de bedragen zijn dan na te kijken."""
@@ -328,7 +430,12 @@ def lees_bestanden(letters, download, deadline=None, klok=None, ocr_fn=None):
     klok = klok or time.monotonic
     ocr_fn = ocr_fn or ocr
     gelezen, teksten = [], {}
-    for letter, b, _ in letters:
+    for i, (letter, b, _) in enumerate(letters):
+        if maximum is not None and i >= maximum:
+            # Codex X7 (overleg 28): nooit stil weglaten; het bestand staat erbij als niet gelezen
+            gelezen.append({"letter": letter, "lees": {"soort": "onleesbaar", "redenen": [
+                f"niet gelezen: meer dan {maximum} PDF's in de map; vraag dit bestand apart met map:"]}})
+            continue
         if deadline and klok() > deadline:
             gelezen.append({"letter": letter, "lees": {"soort": "onleesbaar",
                                                        "redenen": ["niet gelezen: de tijd van de ronde was op"]}})
@@ -381,16 +488,18 @@ def per_post(rijen_model, posten_per_letter):
     """De vergelijking per post uit de groepering van het model, nagerekend door de code. rijen_model:
     [{"onderwerp", "posten": {letter: [postnummers]}}]; posten_per_letter: {letter: {nr: totaal}} uit de extractie.
     Een lege lijst of een onbekend postnummer is "ontbreekt", nooit nul (X4)."""
-    uit = []
+    uit, gebruikt = [], set()
     for rij in rijen_model or []:
         cellen = {}
         for letter, posten in posten_per_letter.items():
             nrs = [str(n) for n in ((rij.get("posten") or {}).get(letter) or [])]
             bedragen = [posten.get(n) for n in nrs]
-            if not nrs or any(b is None for b in bedragen):
+            # Proefbank 02-11-2026: een post van een inschrijver stond in twee onderdelen en telde zo twee keer
+            if not nrs or any(b is None for b in bedragen) or any((letter, n) in gebruikt for n in nrs):
                 cellen[letter] = None
             else:
                 cellen[letter] = round(sum(bedragen), 2)
+                gebruikt.update((letter, n) for n in nrs)
         uit.append({"onderwerp": str(rij.get("onderwerp") or ""), "cellen": cellen})
     return uit
 
@@ -405,11 +514,67 @@ Regels: neem bedragen letterlijk over, verzin niets; een onderdeel dat een insch
 Opties en stelposten zet je met optie true. Geen advies over wie de opdracht krijgt."""
 
 
+DATUM_IN_NAAM = re.compile(r"(?<!\d)(?:(?:19|20)\d{2}[-_.]?[01]\d[-_.]?[0-3]\d|[0-3]\d[-_.][01]\d[-_.](?:19|20)\d{2})(?!\d)")
+OFFERTENUMMER = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z]{1,5}[_-])?\d{2}[_-]\d{5,}(?!\d)|(?<!\d)\d{6,}(?!\d)")
+
+
+def offertenummers(naam):
+    """De offertenummers in een bestandsnaam (670010486, OF_26_1098155, 2026013), zonder datums."""
+    kaal = DATUM_IN_NAAM.sub(" ", str(naam or "").rsplit("/", 1)[-1])
+    return {m.group(0).upper().replace("-", "_") for m in OFFERTENUMMER.finditer(kaal)}
+
+
+VERSIEWOORD = {"tweede": 2, "derde": 3, "vierde": 4, "vijfde": 5}
+
+
+def versie(naam):
+    """De versie volgens de bestandsnaam: getekend gaat voor, dan 'tweede versie', 'versie 3' of 'v2'; anders 1. De datum
+    van het bestand in Dropbox zegt niet altijd welke versie de laatste is (proefbank 02-11-2026)."""
+    laag = str(naam or "").rsplit("/", 1)[-1].lower()
+    m = re.search(r"\b(tweede|derde|vierde|vijfde)\s+versie\b", laag) or re.search(r"\b(?:versie\s*|v)(\d{1,2})\b", laag)
+    nr = (VERSIEWOORD.get(m.group(1)) or int(m.group(1))) if m else 1
+    return nr + (100 if re.search(r"\bgetekend\b|\bondertekend\b", laag) else 0)
+
+
+def zelfde_bron(a, b):
+    """Zelfde map, of dezelfde bestandsnaam op een kopienummer of versiewoord na."""
+    def kern(naam):
+        n = str(naam).rsplit("/", 1)[-1].lower()
+        n = re.sub(r"\.pdf$", "", n)
+        n = re.sub(r"\s*\((?:\d+|tweede|derde|vierde|vijfde)(?:\s+versie)?\)\s*$|\s+\d{1,2}$|\s+v\d{1,2}$", "", n)
+        return n.strip()
+    map_a, map_b = (str(x).rsplit("/", 1)[0] if "/" in str(x) else "" for x in (a, b))
+    # Codex 29: twee verschillende submappen zijn twee inschrijvers; alleen de lotmap zelf en een submap kunnen een kopie delen
+    return map_a == map_b or ("" in (map_a, map_b) and kern(a) == kern(b))
+
+
+def versies(bestanden):
+    """(tellen, oudere): bestanden die een offertenummer delen zijn versies van dezelfde offerte en alleen de nieuwste
+    telt (proefbank 02-11-2026: versie 1 en 2 van een offerte stonden als twee inschrijvers naast elkaar).
+    oudere: [(ouder bestand, het bestand dat telt)]."""
+    tellen, oudere, nummer = [], [], {}
+    for b in sorted(bestanden, key=lambda b: (versie(b["naam"]), b.get("gewijzigd") or "", b["naam"].lower()),
+                    reverse=True):
+        nrs = offertenummers(b["naam"])
+        # Twee inschrijvers met toevallig hetzelfde nummer in de naam vallen nooit samen: een versie staat in dezelfde map,
+        # of heeft dezelfde naam op een kopienummer na ("Nieuwe offerte/Kosztorys X.pdf" en "Kosztorys X 2.pdf")
+        nieuwer = next((nummer[n] for n in sorted(nrs) if n in nummer and zelfde_bron(b["naam"], nummer[n]["naam"])), None)
+        if nieuwer is not None:
+            oudere.append((b, nieuwer))
+            continue
+        tellen.append(b)
+        for n in nrs:
+            nummer[n] = b
+    return sorted(tellen, key=lambda b: b["naam"].lower()), oudere
+
+
 def voor_claude(gelezen, teksten):
     """{letter: tekst} van de echte, leesbare offertes; alleen bij minstens twee gaat iets naar Claude. Live gemeten
     01-11-2026: een fiche of een scan met een stukje tekst telde mee, dus kreeg Claude een enkele offerte."""
-    soort = {g["letter"]: (g.get("lees") or {}).get("soort") for g in gelezen or []}
-    uit = {l: t for l, t in (teksten or {}).items() if soort.get(l) == "offerte"}
+    lees_ = {g["letter"]: (g.get("lees") or {}) for g in gelezen or []}
+    # Proefbank 02-11-2026: zonder totaal exclusief btw verwerpt keur_posten de posten toch; Claude vragen is dan verspild
+    uit = {l: t for l, t in (teksten or {}).items()
+           if lees_.get(l, {}).get("soort") == "offerte" and lees_.get(l, {}).get("excl") is not None}
     return uit if len(uit) >= 2 else {}
 
 

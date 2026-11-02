@@ -343,6 +343,12 @@ def keur(firmas, gelezen, centrum, straal_km, lokaliseer, kbo=None):
     kandidaten = []
     for f in met_tekst:
         eigen = eigen_paginas(f, gelezen)
+        # Proefbank 02-11-2026: "tel. 0788.811.819" was het ondernemingsnummer; een geldig nummer in de vorm 0123.456.789
+        # is nooit een telefoonnummer
+        tel = str(f.get("telefoon") or "").strip()
+        if re.fullmatch(r"[01]\d{3}[.\s]\d{3}[.\s]\d{3}", tel) and btw_geldig(tel):
+            f["ondernemingsnummer"] = f.get("ondernemingsnummer") or tel
+            f["telefoon"] = None
         f["ondernemingsnummer"] = btw_geldig(f.get("ondernemingsnummer"))
         door_code = f["ondernemingsnummer"] in (kbo or {})      # Codex 15, punt 1: dan telt alleen wat de code las
         zelf = (kbo or {}).get(f["ondernemingsnummer"]) or {}

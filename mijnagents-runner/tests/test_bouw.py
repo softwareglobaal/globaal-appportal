@@ -523,7 +523,7 @@ print("\nRegressie na controle 8 van Codex (X1 tot X8)")
 tooltekst = next(t["description"] for t in RG.TOOLS if t["name"] == "agent_ronde")
 check("X1 de tooltekst van De Regisseur noemt geen firma", not S.noemt(tooltekst, S.HA) and not S.noemt(tooltekst, S.HB))
 x2 = F.lees(pdf("Totaal excl. btw: nog te bepalen, geldig tot 30.10.2026", "btw 21%"))
-check("X2 een datum is nooit een bedrag", x2["excl"] is None, x2)
+check("X2 een datum is nooit een bedrag", x2.get("excl") is None, x2)
 fant = Z.keur([{"naam": "Dakwerken Fantasio", "url": "https://dak-een.voorbeeld.com", "postcode": "3020", "gemeente": "Herent",
                 "ondernemingsnummer": "0537.405.239", "bewijs": "Dakwerken, platte daken, EPDM, renovatie"}],
               GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
@@ -1222,8 +1222,10 @@ _gl = [{"letter": "A", "lees": {"soort": "offerte"}}, {"letter": "B", "lees": {"
        {"letter": "C", "lees": {"soort": "scan"}}]
 check("controle 25: een offerte met een fiche en een scan gaat niet naar Claude", F.voor_claude(
     _gl, {"A": "offerte", "B": "fiche", "C": "stukje scan"}) == {})
+_gl[0]["lees"]["excl"] = 100.0
 check("controle 25: twee echte offertes wel, zonder de fiche", F.voor_claude(
-    _gl + [{"letter": "D", "lees": {"soort": "offerte"}}], {"A": "a", "B": "fiche", "D": "d"}) == {"A": "a", "D": "d"})
+    _gl + [{"letter": "D", "lees": {"soort": "offerte", "excl": 200.0}}], {"A": "a", "B": "fiche", "D": "d"})
+    == {"A": "a", "D": "d"})
 _ov = open(_hier / "offertevergelijker.py", encoding="utf-8").read()
 check("controle 25: de vergelijker roept Claude alleen via voor_claude aan", "F.voor_claude(gelezen, teksten)" in _ov
       and "len(teksten) >= 2" not in _ov)
@@ -1260,6 +1262,170 @@ for _naam, _tekst in (("De Offertevergelijker", _wv), ("De Aannemerszoeker", _ww
           "gaf geen grenzen)", bool(_nooit) and bool(_mehdi), f"{len(_nooit)} {len(_mehdi)}")
 check("werkwijzen zeggen: abonnement, nooit een API-sleutel", "nooit met een" in _wv and "API-sleutel" in _wv
       and "Of een scan met OCR gelezen mag worden." in _wv and "API-sleutel" in _ww and "Versie 1.2" in _ww)
+
+print("\nProefbank 02-11-2026 (overleg 28): wat de proeven op echte lotmappen vonden")
+_p = F.lees(pdf("Offerte 670010001", "Artikel 7,00 PCE 293,38", "Totaal  2.069,35€", "2.503,92€", "Deze offerte wordt een bestelling na betaling."))
+check("totaal zonder label, inclusief op de volgende regel: bewezen door de btw-som", _p["excl"] == 2069.35
+      and _p["incl"] == 2503.92 and _p["btw_tarief"] == 21 and any("btw-som" in r for r in _p["redenen"]), _p)
+_p = F.lees(pdf("Meerwerk MW 1", "Totaal € 5 458,69", "6% (6) Totalen", "Incl B.T.W. 5 786,21 € 5 786,21",
+                "Eindbedrag (geldig tot 27/10/2026) € 5 786,21"))
+check("'Incl B.T.W.' en eindbedrag: exclusief en inclusief gelezen", _p["excl"] == 5458.69 and _p["incl"] == 5786.21, _p)
+_p = F.lees(pdf("Offerte ramen", "729,40 E Totaal", "Totaal gewicht: 127,4 Kg", "Voorwaarden volgen."))
+check("een kaal totaal zonder bewijs wordt niet gebruikt, wel gemeld", _p["excl"] is None and _p["incl"] is None
+      and any("niet gebruikt" in r for r in _p["redenen"]), _p)
+_p = F.lees(pdf("Offerte ramen", "Bij afwijkend adres bent u verplicht extra kosten te betalen. Deze kosten betreffen 50 "
+                "euro per levering.", "Bij totale bedragen boven de 10.000,00 euro vragen wij een voorschot."))
+check("'te betalen' in een zin en 'totale bedragen' zijn geen totaal (gemeten: 50 euro inclusief btw)",
+      _p["excl"] is None and _p["incl"] is None, _p)
+_p = F.lees(pdf("TOTAAL BEDRAG EXCL.BTW.  69800,00Euro", "BTW  6%         4188,00Euro", "TOTAAL BEDRAG INCL.BTW.  73988,00Euro"))
+check("hoofdletters met plakkende Euro blijven gelezen", _p["excl"] == 69800.0 and _p["incl"] == 73988.0, _p)
+check("geen totaal: niet naar Claude, ook met twee offertes", F.voor_claude(
+    [{"letter": "A", "lees": {"soort": "offerte", "excl": None}}, {"letter": "B", "lees": {"soort": "offerte", "excl": None}}],
+    {"A": "a", "B": "b"}) == {})
+_boom = {"/L": [{".tag": "file", "name": "los.pdf", "path_display": "/L/los.pdf"},
+                {".tag": "folder", "name": "Dak Een BV", "path_display": "/L/Dak Een BV"},
+                {".tag": "folder", "name": "archief", "path_display": "/L/archief"},
+                {".tag": "folder", "name": "Oude versies", "path_display": "/L/Oude versies"}],
+         "/L/Dak Een BV": [{".tag": "file", "name": "offerte.pdf", "path_display": "/L/Dak Een BV/offerte.pdf"},
+                           {".tag": "folder", "name": "ouder", "path_display": "/L/Dak Een BV/ouder"}],
+         "/L/Dak Een BV/ouder": [{".tag": "file", "name": "v1.pdf", "path_display": "/L/Dak Een BV/ouder/v1.pdf"}],
+         "/L/archief": [{".tag": "file", "name": "oud.pdf", "path_display": "/L/archief/oud.pdf"}],
+         "/L/Oude versies": [{".tag": "file", "name": "v0.pdf", "path_display": "/L/Oude versies/v0.pdf"}]}
+_b = MP.offertebestanden("/L", lambda p, recursief=False: _boom.get(p, []))
+check("X6: een submap per inschrijver telt mee, een map diep; archief en oude versies niet",
+      [x["naam"] for x in _b] == ["Dak Een BV/offerte.pdf", "los.pdf"], [x["naam"] for x in _b])
+_l = [(chr(65 + i), {"pad": f"/{i}"}, str(i)) for i in range(10)]
+_gl, _ = F.lees_bestanden(_l, lambda p: b"x", maximum=8)
+check("X7: boven de acht staat elk bestand erbij als niet gelezen, niets valt stil weg",
+      len(_gl) == 10 and all("niet gelezen" in g["lees"]["redenen"][0] for g in _gl[8:]))
+import offertevergelijker as OV  # noqa: E402
+_namen = [OV.lotnaam(f"/P/Offerte/{n}", S.HA) for n in ("01 Harmonie Bouw - ruwbouw", "02 Dak Een - dakwerken")]
+_lk = V.lotkeuze({"firma": S.HA, "project": "2999"}, _namen)
+check("X8: de keuzelijst toont geen naam van de andere firma, de grendel laat ze door", not S.kruis(_lk, S.HA)
+      and "lot 01" in _lk and "02 Dak Een - dakwerken" in _lk, _lk)
+check("X8: de vergelijker geeft de keuzelijst alleen veilige lotnamen", "V.lotkeuze(v, [lotnaam(l, firma) for l in lots])"
+      in open(_hier / "offertevergelijker.py", encoding="utf-8").read())
+check("A4: een gemeente zonder postcode is een onvolledige vraag, geen persoonsgegeven",
+      Q.naar_buiten_fouten(Q.ontleed("firma: HB; werk: tegelwerk; gemeente: Atlantis")) == [Q.GEMEENTE_FOUT]
+      and "gemeente zonder postcode" in open(_hier / "aannemerszoeker.py", encoding="utf-8").read())
+_hits = [{"soort": "folder", "naam": "2026-06-16 Dakwerken (ontvangen van U82)", "pad": "/H/P/17. U82_X/0/1/2026-06-16 D"},
+         {"soort": "folder", "naam": "17. U82_Jachtlaan 2", "pad": "/H/P/17. U82_X"},
+         {"soort": "folder", "naam": "18. U820_Ander", "pad": "/H/P/18. U820_Ander"}]
+check("HB: de projectmap is de map die met de code begint, niet een fotomap met de code erin",
+      MP.projectmap(S.HB, "U82", zoek=lambda q, p: _hits) == "/H/P/17. U82_X"
+      and MP.projectmap(S.HB, "U82", zoek=lambda q, p: _hits[:1]) is None)
+_p = F.lees(pdf("Offerte OFR 1", "Totaal zonder B.T.W. :                          4.750,20",
+                "Totaal :                               EUR      5.747,74", "Betaling binnen 30 dagen."))
+check("'zonder B.T.W.' met punten is exclusief; het kale totaal erna is inclusief door de btw-som",
+      _p["excl"] == 4750.2 and _p["incl"] == 5747.74 and _p["btw_tarief"] == 21, _p)
+_p = F.lees(pdf("Offerte ramen", "729,40 E 0% Totaal elementen", "729,40 E Totaal", "Voorwaarden volgen."))
+check("een totaal bij 0 procent btw is exclusief, met de vraag het na te kijken", _p["excl"] == 729.4
+      and any("0 procent" in r for r in _p["redenen"]), _p)
+_vb = [{"naam": "Klantofferte 670010001 (Dak Een).pdf", "gewijzigd": "2026-02-19T10:00:00Z"},
+       {"naam": "Klantofferte 670010001 - tweede versie.pdf", "gewijzigd": "2026-02-20T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-08-25_offerte 2026013.pdf", "gewijzigd": "2026-08-25T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-10-20_offerte 2026013 en overeenkomst 2026006.pdf", "gewijzigd": "2026-10-20T10:00:00Z"},
+       {"naam": "Dak Twee/2999_Dak Twee_2026-09-28_meerwerk MW 2026022.pdf", "gewijzigd": "2026-09-28T10:00:00Z"},
+       {"naam": "2999 20260904 RAMENPLAN.pdf", "gewijzigd": "2026-09-04T10:00:00Z"},
+       {"naam": "2999 20260904 RAMENPLAN v2.pdf", "gewijzigd": "2026-09-05T10:00:00Z"}]
+_tel, _oud = F.versies(_vb)
+check("versies van dezelfde offerte: alleen de nieuwste telt, een meerwerk en een datum zijn geen offertenummer",
+      [b["naam"] for b in _tel] == ["2999 20260904 RAMENPLAN v2.pdf", "2999 20260904 RAMENPLAN.pdf",
+                                    "Dak Twee/2999_Dak Twee_2026-09-28_meerwerk MW 2026022.pdf",
+                                    "Dak Twee/2999_Dak Twee_2026-10-20_offerte 2026013 en overeenkomst 2026006.pdf",
+                                    "Klantofferte 670010001 - tweede versie.pdf"]
+      and len(_oud) == 2, [b["naam"] for b in _tel])
+_vs2 = V.vergelijkingsverslag({"firma": S.HB}, "40. POST", [("A", {}, "a.pdf")], F.vergelijk(
+    [{"letter": "A", "lees": F.lees(["Offerte" + VUL2 + "\nTotaal excl. btw 10.000,00\n"])}], date(2026, 11, 1)),
+    None, {}, "2026-11-01", True, 0, [("A", "a-v1.pdf")])
+check("het verslag noemt een oudere versie, zonder letter", "1 oudere versies van dezelfde offerte tellen niet mee" in _vs2
+      and "- Oudere versie van inschrijver A, telt niet mee: a-v1.pdf" in _vs2, _vs2.splitlines()[0])
+_tel, _oud = F.versies([{"naam": "Offerte 670010001 (Dak Een).pdf", "gewijzigd": "2026-03-01T10:00:00Z"},
+                        {"naam": "Offerte 670010001 - (tweede versie).pdf", "gewijzigd": "2026-02-20T10:00:00Z"}])
+check("de tweede versie volgens de naam telt, ook als Dropbox de eerste later bewaarde",
+      [b["naam"] for b in _tel] == ["Offerte 670010001 - (tweede versie).pdf"])
+_pp = F.per_post([{"onderwerp": "metselwerk", "posten": {"B": ["1"]}}, {"onderwerp": "ramen", "posten": {"B": ["1"]}}],
+                 {"B": {"1": 69800.0}})
+check("een post van een inschrijver telt in een onderdeel, niet in twee", _pp[0]["cellen"]["B"] == 69800.0
+      and _pp[1]["cellen"]["B"] is None, _pp)
+check("een datum in maart is geen verlegde btw, artikel 20 wel", not F.verlegd("Open zondag 29 maart 2026.")
+      and F.verlegd("Btw te voldoen door de medecontractant, art. 20 van het KB nr. 1."))
+_p = F.lees(pdf("Klantofferte 670010002", "Totaal  2.069,35€", "BTW", "Totaal (Incl. BTW)", "434,57", "2.503,92€", "€",
+                "Deze offerte wordt een bestelling na betaling van een voorschot."))
+check("totalen onder elkaar in een kolom: de btw-som vindt exclusief en inclusief", _p["excl"] == 2069.35
+      and _p["incl"] == 2503.92 and _p["btw_tarief"] == 21, _p)
+check("hydrofoberen is een vakwoord; een los 'en' op het einde valt weg",
+      W.filter_tekst("gevelreiniging en hydrofoberen")[0] == "gevelreiniging en hydrofoberen"
+      and W.filter_tekst("gevelreiniging en Peeters")[0] == "gevelreiniging")
+_f = {"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com", "telefoon": "0537.405.239", "ondernemingsnummer": None,
+      "bewijs": "Dakwerken, platte daken, EPDM, renovatie", "adres": "Dorpstraat 1", "postcode": "3020", "gemeente": "Herent"}
+_r = Z.keur([_f], GELEZEN, PUNTEN["3000 Leuven"], 25, lambda p: PUNTEN.get(p))
+_alle = _r["goed"] + _r["na_te_kijken"] + _r["buiten"]
+check("een ondernemingsnummer in het telefoonveld wordt het nummer, nooit een telefoonnummer",
+      _alle and _alle[0]["ondernemingsnummer"] == "0537.405.239" and _alle[0]["telefoon"] is None, _r)
+_zk = lambda q, p: [{"soort": "file", "naam": "06-17 Vergadering dakwerken.mp3", "pad": E.BASIS[S.HA] + "/2999 X/Quotes/06-17 Vergadering dakwerken.mp3"},
+                    {"soort": "file", "naam": "offerte dakwerken.pdf", "pad": E.BASIS[S.HA] + "/2998 Y/Quotes/offerte dakwerken.pdf"}]
+check("een opname of foto in een offertemap is geen eerdere offerte", [t["naam"] for t in E.in_mappen(S.HA, "dakwerken", zoek=_zk)]
+      == ["offerte dakwerken.pdf"])
+for _t, _e, _i in (("Totaal excl. BTW 10.000,00", 10000.0, None), ("Totaal incl. BTW: 12.100,00", None, 12100.0),
+                   ("TOTAAL EXCL. BTW 9.000,00 EUR", 9000.0, None), ("Totaal excl. Btw 9.000,00 EUR", 9000.0, None)):
+    _p = F.lees(pdf("Offerte", _t))
+    check(f"'{_t}': de punt na de afkorting is geen zinseinde", _p["excl"] == _e and _p["incl"] == _i, _p)
+_tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026050.pdf", "gewijzigd": "2026-05-01"},
+                        {"naam": "Dak Twee/Offerte 2026050 dakwerken.pdf", "gewijzigd": "2026-05-02"},
+                        {"naam": "Kosztorys OF_26_1098155.pdf", "gewijzigd": "2026-09-01"},
+                        {"naam": "Nieuwe offerte/Kosztorys OF_26_1098155 2.pdf", "gewijzigd": "2026-09-20"}])
+check("twee inschrijvers met toevallig hetzelfde nummer blijven apart; een kopie in een andere map is een versie",
+      len(_tel) == 3 and [o[0]["naam"] for o in _oud] == ["Kosztorys OF_26_1098155.pdf"], [b["naam"] for b in _tel])
+check("een fiche in een submap 'Nieuwe offerte' is een fiche", F.fiche_naam("Nieuwe offerte/U84 ramen technische_fiche SVK2.pdf")
+      and not F.fiche_naam("Fiches/offerte ramen.pdf"))
+_p = F.lees(pdf("Offerte schilderwerken, muren: 1.500, geldig 30 dagen."))
+check("Codex 32: een offerte met een prijs zonder decimalen blijft een offerte (nooit wegzetten)", _p["soort"] == "offerte", _p)
+from bouw import proefbank as PB  # noqa: E402
+_p = F.lees(pdf("Offerte 12", "Totaal 1.000,00 EUR", "Optie 1.210,00 EUR", "Voorwaarden volgen."))
+check("Codex 29: een optie op de regel na een kaal totaal is geen inclusief", _p["incl"] is None and _p["excl"] is None, _p)
+_p = F.lees(pdf("Offerte 12b", "Totaal 1.000,00 EUR", "X 1.210,00 EUR", "Voorwaarden volgen."))
+check("Codex 30: ook een woord van een letter naast het bedrag maakt er geen totaal van", _p["incl"] is None, _p)
+_p = F.lees(pdf("Offerte 13", "Transport incl. BTW 50,00 EUR", "Voorwaarden volgen."))
+check("Codex 29: 'Transport incl. BTW 50,00' is geen totaal", _p["incl"] is None, _p)
+_p = F.lees(pdf("Offerte 14", "De vorige som 210,00 EUR is af. Totaal 1.000,00 EUR", "Incl. BTW 1.210,00 EUR", "Einde."))
+check("Codex 29: na een kort woord als 'af' eindigt de zin wel", _p["excl"] == 1000.0 and _p["incl"] == 1210.0, _p)
+_tel, _oud = F.versies([{"naam": "Dak Een/Offerte 2026001.pdf", "gewijzigd": "2026-05-01"},
+                        {"naam": "Dak Twee/Offerte 2026001.pdf", "gewijzigd": "2026-05-02"}])
+check("Codex 29: dezelfde naam in twee inschrijversmappen is geen versie", len(_tel) == 2 and not _oud)
+import urllib.request as _ur  # noqa: E402
+_echt_open = _ur.urlopen
+_gezien = []
+_ur.urlopen = lambda *a, **k: _gezien.append(a) or "doorgelaten"
+PB.afschermen()
+try:
+    _ur.urlopen(PB.bord.PLATFORM + "/api/klaarzet", b"{}")
+    check("Codex 29: een gewone URL met data naar het bord wordt geweigerd", False)
+except PermissionError:
+    check("Codex 29: een gewone URL met data naar het bord wordt geweigerd", not _gezien)
+finally:
+    _ur.urlopen = _echt_open
+
+_o = PB.Opname(lambda *a, **k: {"gelezen": True})
+check("proefbank: schrijven naar het bord wordt opgevangen, lezen gaat door",
+      _o.call("/api/klaarzet", {"items": [{"titel": "t"}]}) == {"nieuw": 1, "bestaand": 0} and len(_o.schrijf) == 1
+      and _o.call("/api/agent/x/werkwijze") == {"gelezen": True} and len(_o.schrijf) == 1)
+_t = PB.Teller(lambda *a, **k: (_ for _ in ()).throw(AssertionError("echt Claude")))
+_t.vast = {"firmas": [{"naam": "Dak Een", "url": "https://dak-een.voorbeeld.com"}]}
+_a = _t.vraag("s", "g", tools=("WebSearch",))
+check("proefbank: een vast modelantwoord vraagt Claude niet", "Dak Een" in _a["tekst"] and _t.vragen[0]["vast"])
+_pypdf = sys.modules.get("pypdf")
+sys.modules["pypdf"] = None
+try:
+    F.paginas(b"%PDF")
+    check("zonder pypdf een fout, nooit 'PDF niet te openen' (proefbank met de verkeerde Python)", False)
+except ImportError:
+    check("zonder pypdf een fout, nooit 'PDF niet te openen' (proefbank met de verkeerde Python)", True)
+finally:
+    if _pypdf is not None:
+        sys.modules["pypdf"] = _pypdf
+    else:
+        sys.modules.pop("pypdf", None)
 
 print(f"\n{ok} goed, {fout} fout")
 sys.exit(1 if fout else 0)

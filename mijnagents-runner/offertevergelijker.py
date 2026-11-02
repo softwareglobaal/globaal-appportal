@@ -121,12 +121,15 @@ def een_vraag(r, tekst, vandaag, deadline=None):
         zet_klaar(tekst, "Offertevergelijking niet gestart", f"**Niet gestart:** {e}. Ik las geen offerte.", vandaag, firma)
         return 0
     if not pad:
-        zet_klaar(tekst, "Offertevergelijking: kies een lot", V.lotkeuze(v, lots), vandaag, firma)
+        # Codex X8 (overleg 28): ook in de keuzelijst alleen veilige lotnamen, anders weigert de grendel het verslag
+        zet_klaar(tekst, "Offertevergelijking: kies een lot", V.lotkeuze(v, [lotnaam(l, firma) for l in lots]), vandaag,
+                  firma)
         return 0
     naam = lotnaam(pad, firma)
     alle = MP.offertebestanden(pad, bronnen.lijst)
-    # Een fiche of brochure volgens de bestandsnaam neemt geen plaats van een offerte in (gemeten 01-11-2026)
-    bestanden = [b for b in alle if not F.fiche_naam(b["naam"])][:MAX_OFFERTES]
+    # Een fiche of brochure volgens de bestandsnaam neemt geen plaats van een offerte in (gemeten 01-11-2026). Boven
+    # MAX_OFFERTES krijgt elk bestand toch een letter en staat het erbij als niet gelezen (Codex X7, overleg 28).
+    bestanden, oudere = F.versies([b for b in alle if not F.fiche_naam(b["naam"])])
     overgeslagen = sum(1 for b in alle if F.fiche_naam(b["naam"]))
     r.bron(f"lotmap {S.FIRMANAMEN[firma]}", f"{len(bestanden)} PDF's, {overgeslagen} fiches volgens de naam overgeslagen")
     if not bestanden:
@@ -134,7 +137,11 @@ def een_vraag(r, tekst, vandaag, deadline=None):
                   vandaag, firma)
         return 0
     letters = F.letters(bestanden, firma)
-    gelezen, teksten = F.lees_bestanden(letters, bronnen.download, deadline)
+    letter_van = {id(b): l for l, b, _ in letters}
+    # een oudere versie van dezelfde offerte telt niet mee; de naam alleen als het niet de andere firma is
+    ouder = [(letter_van.get(id(nieuwer), "?"), "een oudere versie" if S.is_andere_firma(b["naam"], firma) else b["naam"])
+             for b, nieuwer in oudere]
+    gelezen, teksten = F.lees_bestanden(letters, bronnen.download, deadline, maximum=MAX_OFFERTES)
     uit = F.vergelijk(gelezen, vandaag)
     per_post, post_redenen = None, {}
     offerte_teksten = F.voor_claude(gelezen, teksten)     # minstens twee echte offertes, anders leeg
@@ -159,7 +166,7 @@ def een_vraag(r, tekst, vandaag, deadline=None):
             ag.log("offertes", "fout", f"vraag {va}: posten niet uitgelezen: {type(e).__name__}: {str(e)[:200]}")
             r.nood("Offerteposten niet uitgelezen door het model", wie="claude-code")
     inhoud = V.vergelijkingsverslag(v, naam, letters, uit, per_post, post_redenen, vandaag.isoformat(),
-                                    F.OFFERTE_NAAR_AI, overgeslagen)
+                                    F.OFFERTE_NAAR_AI, overgeslagen, ouder)
     try:
         zet_klaar(tekst, V.vergelijkingstitel(v, naam), inhoud, vandaag, firma)
     except ValueError as e:
