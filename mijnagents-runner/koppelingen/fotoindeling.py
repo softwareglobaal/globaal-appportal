@@ -271,8 +271,9 @@ def indeel(dag, fotos, plekken, afspraken, verblijven):
         # Zeker alleen als Photos het weet: geen mensen, geen gezicht (ook geen klein), geen schermafbeelding, geen app-foto
         # (Codex 2 en 3). Alleen zo'n foto staat met id en tijd in de indeling en mag een voorvertoning krijgen.
         zeker = all(f.get(k) is False for k in ("mensen", "gezicht", "scherm", "app"))
-        g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")), "mensen": f.get("mensen"),
-                           "zeker": zeker})
+        # nazorg-mac: een klein gezicht (mensen False, gezicht True) is een foto met mensen, geen onbekende vlag
+        g["fotos"].append({"id": f["id"], "t": t, "gps": _gps(f), "video": bool(f.get("video")),
+                           "mensen": True if f.get("gezicht") is True else f.get("mensen"), "zeker": zeker})
 
     for f in fotos:
         try:
