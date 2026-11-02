@@ -37,6 +37,24 @@ TERUG_DAGEN = 14
 ZONDER_NOOD = "Calendly-boeking zonder afspraak in de agenda"
 # De server draait in UTC; de agenda van Mehdi is altijd Brusselse tijd.
 BRUSSEL = ZoneInfo("Europe/Brussels")
+# Het kenmerk van Calendly in een omschrijving: een link waarvan de host calendly.com of een subdomein ervan is, niet een
+# domein dat alleen zo eindigt (notcalendly.com) of zo begint (calendly.com.proef.test), en niet calendly.com als
+# gebruikersnaam voor een andere host (https://calendly.com@proef.test/). Nazorg Codex-toetsen 1 en 2, T-0120 CL-2.
+URL_IN_TEKST = re.compile(r"https?://[^\s<>\"'()\[\]{}]+", re.I)
+
+
+def calendly_link(tekst):
+    """Staat er in de tekst een geldige link waarvan de host (urlsplit) calendly.com of een subdomein ervan is? Een
+    ongeldige poort (https://calendly.com:geenpoort/x) maakt de link ongeldig (nazorg Codex-toets 3)."""
+    for url in URL_IN_TEKST.findall(tekst or ""):
+        try:
+            delen = urllib.parse.urlsplit(url)
+            host, _poort = (delen.hostname or "").rstrip(".").lower(), delen.port   # .port: ValueError bij een foute poort
+        except ValueError:
+            continue
+        if host == "calendly.com" or host.endswith(".calendly.com"):
+            return True
+    return False
 
 # Welke Google-agenda een account beschrijft, gemeten 19-09-2026. Leeg = nog niet
 # vastgesteld. Dit is alleen voor het verslag; ik leid er niets uit af.
@@ -225,7 +243,7 @@ def agenda_bewijs(van_dagen, tot_dagen):
     for x in ruw + archief:
         if not x.get("fout"):
             bewijs[(x.get("start") or "")[:16]].append({"id": x.get("id") or "",
-                                                        "calendly": "calendly.com" in (x.get("omschrijving") or "").lower()})
+                                                        "calendly": calendly_link(x.get("omschrijving"))})
     return dict(bewijs), sorted(ongelezen)
 
 
@@ -243,7 +261,9 @@ def zonder_afspraak(boekingen, bewijs, nu, terug=TERUG_DAGEN, vooruit=VOORUIT_DA
         if lok < nu - datetime.timedelta(days=terug) or lok > nu + datetime.timedelta(days=vooruit):
             continue
         minuut, eigen = lok.strftime("%Y-%m-%dT%H:%M"), (b.get("calendar_event") or {}).get("external_id") or ""
-        i = next((i for i, x in enumerate(bewijs.get(minuut, [])) if eigen and x["id"] == eigen), None)
+        # ook de exacte afspraak bewijst hoogstens een boeking (nazorg Codex-toets 1: twee boekingen met dezelfde Google-id)
+        i = next((i for i, x in enumerate(bewijs.get(minuut, []))
+                  if eigen and x["id"] == eigen and (minuut, i) not in gebruikt), None)
         if i is None:
             open_.append((lok, minuut, b))
         else:

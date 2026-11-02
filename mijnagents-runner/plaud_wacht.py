@@ -460,8 +460,9 @@ def reden_uit_staat(st, herk, b, deals, tekst):
     """PLAUD-12: de reden zonder dossierkopie voor één opname, uit haar staat: een geplande kopie die mislukte (met de
     fout), anders reden_zonder_dossierkopie. Dezelfde keuze van de deal als in verwerk."""
     kopie = [x for x in st.get("opdrachten", []) if x.get("soort") == "dossierkopie"]
-    if any(x.get("gedaan") for x in kopie):
+    if any(x.get("gedaan") and not x.get("ingetrokken") for x in kopie):
         return None            # Codex-toets 3: er staat al een kopie in het dossier (staat.plan bewaart wat gedaan is)
+    # een kopie die een nieuwe beslissing introk (staat.trek_in), telt niet als geleverd: dan zegt de regel waarom niet
     mislukt = [x for x in kopie if x.get("fout")]
     if mislukt:
         return f"de kopie mislukte ({mislukt[0]['fout'][:120]})"

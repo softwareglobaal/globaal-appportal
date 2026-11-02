@@ -846,6 +846,41 @@ def test_nepmail_nooit_uitschrijven_ook_niet_na_helemaal_weg():
         postvak.postvak = oud_pv
 
 
+def test_een_aanvraag_wordt_ook_na_helemaal_weg_nooit_uitgeschreven():
+    """MAIL-1, Codex-toets 3 (nazorg): Helemaal weg gaat voor soort, terugkeer, rol en klantenlijst (Mehdi, 20-10-2026),
+    maar een aanvraag ("Aanvraag: barsten en scheuren") schrijft ook dan niemand uit: de knop van een formulierdienst kan
+    de volgende aanvragen stoppen. Een nieuwsbrief van dezelfde afzender zonder aanvraagwoord schrijft hem nog altijd uit,
+    en een antwoord gaat na Helemaal weg nog altijd (test_helemaal_weg_gaat_voor_de_automatische_voorwaarden...)."""
+    import uitschrijven as U
+    eigen, leeg = ("h-architects.be",), frozenset()
+    nu = datetime.fromisoformat("2026-10-20T10:00:00+02:00")
+    inst = {"aan": True, "per_ronde": 5, "extra_mappen": ["INBOX.Opgeruimd"]}
+    cfg = {"postvakken": ["p@h-architects.be"], "eigen_domeinen": ["h-architects.be"]}
+    regels = {("p@h-architects.be", "news@brand.be"): "uitschrijven"}
+    for ond in ("Aanvraag: barsten en scheuren", "Offerteaanvraag renovatie", "Plaatsbezoek gevraagd"):
+        assert U.beoordeel(_nieuwsbrief(onderwerp=ond), "rommel", "uitschrijven", eigen, leeg, leeg, True) == \
+            (None, "aanvraag: ook na Helemaal weg nooit uitschrijven"), ond
+    assert U.beoordeel(_nieuwsbrief(), "rommel", "uitschrijven", eigen, leeg, leeg, True)[0], "nieuwsbrief: wel"
+    oud = datetime.fromisoformat("2026-10-01T10:00:00+02:00")
+    aanvragen = [_nieuwsbrief(onderwerp="Aanvraag: barsten en scheuren"),
+                 _nieuwsbrief(onderwerp="Aanvraag: barsten en scheuren", message_id="<o@brand.be>", datum=oud)]
+    oud_pv = postvak.postvak
+    postvak.postvak = lambda a: {"adres": a, "imap_host": "imap.one.com"}
+    try:
+        assert all(postvak.trieer(b, eigen, leeg, "uitschrijven")[0] == "rommel" for b in aanvragen), \
+            "Helemaal weg ruimt de aanvraag wel op (trieer), alleen de knop blijft onaangeroerd"
+        uit, redenen = U.kandidaten(cfg, nu, leeg, leeg, regels, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: aanvragen, inst=inst)
+        assert not uit and redenen.get("aanvraag: ook na Helemaal weg nooit uitschrijven") == 2, redenen
+        gemengd = aanvragen + [_nieuwsbrief(message_id="<n2@brand.be>")]
+        uit, redenen = U.kandidaten(cfg, nu, leeg, leeg, regels, U.staat_per_sleutel([]),
+                                    lezen=lambda mb, mappen, sinds: gemengd, inst=inst)
+        assert {b["van"] for b, _u, _p in uit.values()} == {"news@brand.be"}, redenen
+        assert all("aanvraag" not in (b["onderwerp"] or "").lower() for b, _u, _p in uit.values()), uit
+    finally:
+        postvak.postvak = oud_pv
+
+
 def test_zonder_oplichtingslijst_niemand_uitschrijven():
     """MAIL-1, Codex-toets 3: is de [oplichting]-lijst niet leesbaar, dan kan het uitschrijven nepmail niet herkennen
     (een ondertekende mail die een merk claimt). Dan schrijft het die ronde in dat postvak niemand uit."""

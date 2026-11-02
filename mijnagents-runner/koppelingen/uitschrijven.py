@@ -28,6 +28,7 @@ Wanneer (ontwerptoets 19/20-10-2026, elke regel heeft een test in tests/test_pos
   - hoogstens per_ronde pogingen per wacht per ronde; geen doorverwijzing gevolgd; tijdslimiet 10 seconden.
   - nooit uit een map die alleen gelezen wordt (mailwachten.json, 'alleen_lezen'; VOL-3, 01-11-2026).
   - nooit bij nepmail (postvak.nepmail), ook niet na Helemaal weg (T-0120, MAIL-1).
+  - nooit bij een aanvraag (postvak.AANVRAAG of sorteren.AANVRAAG_ONDERWERP), ook niet na Helemaal weg (T-0120, MAIL-1).
 Resultaattoets 20-10-2026 (run 20261020-001828, 3-0 of 2-0-1), daarom ook:
   - de geslaagde handtekening is dezelfde die de knop dekt: domein, selector en het begin van b= uit Authentication-Results
     horen bij precies een DKIM-Signature, en geen enkel ander resultaat met die sleutel faalde (X1); Gmail schrijft
@@ -358,6 +359,14 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
     # gaat voor soort, terugkeer, rol en klantenlijst; eigen domein, gratis maildienst en alle controles op de knop zelf
     # (precies een kop, one-click, ondertekend door de afzender, knop bij de afzender of een verzendbedrijf) blijven.
     expliciet = regel == "uitschrijven"
+    aanvraag = (any(w in onderwerp.lower() for w in postvak.AANVRAAG)
+                or postvak._sorteren().AANVRAAG_ONDERWERP.search(onderwerp))  # ook "Aanvraag: barsten" (Codex-toets 2)
+    # Een aanvraag schrijft ook na Helemaal weg niemand uit (Codex-toets 3 MAIL-1, T-0120): de knop van een formulierdienst
+    # kan de volgende aanvragen stoppen. Helemaal weg ruimt zo'n bericht wel op (trieer); een nieuwsbrief van dezelfde
+    # afzender zonder aanvraagwoord schrijft hem nog altijd uit, dus het uitschrijven blijft effectief. Te veel uitsluiten
+    # is veilig (K2). Een antwoord of doorgestuurd bericht gaat na Helemaal weg wel (Mehdi, 20-10-2026, test_postvak.py).
+    if expliciet and aanvraag:
+        return None, "aanvraag: ook na Helemaal weg nooit uitschrijven"
     if not expliciet:
         if soort not in ("rommel", "koud"):
             return None, f"soort {soort}"
@@ -365,8 +374,7 @@ def beoordeel(b, soort, regel, eigen, bekend, veilig, terugkerende=False):
             return None, f"{soort} en geen terugkerende verzender"  # ook rommel: een klant mailt een eerste keer (K2)
         if regel in ("belangrijk", "houden"):
             return None, f"regel {regel} van Mehdi"
-        if (ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or any(w in onderwerp.lower() for w in postvak.AANVRAAG)
-                or postvak._sorteren().AANVRAAG_ONDERWERP.search(onderwerp)):  # ook "Aanvraag: barsten" (Codex-toets 2)
+        if ANTWOORD_OF_DOORGESTUURD.match(onderwerp) or aanvraag:
             return None, "antwoord, doorgestuurd of aanvraag"
         knophost = (urllib.parse.urlsplit(knop(b.get("list_unsubscribe"), b.get("list_unsubscribe_post")) or "").hostname or "")
         reden = rol_of_dringend(van, b.get("van_naam") or "", onderwerp, knophost)

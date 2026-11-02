@@ -155,6 +155,19 @@ try:
     check("AG-4 regel_afspraak herkent de afspraak ook met 'VR ' ervoor",
           W.regel_afspraak(vr_regel, [vr_a]) == (vr_a["kalender"], "id-vr", vr_a["start"])
           and teksten(W.adres_noden({"geen adres in de agenda": [vr_regel]}, vr_onv, [], [vr_a])) == [TEKST["rit"]])
+    # Nazorg Codex-toets 1: B&S-grendel voor de koppeling. Een bezoek barsten en scheuren zonder adres krijgt dezelfde
+    # noden, of vragen_in_agenda na de reistijdregel 'VR ' voor de titel zet of niet; met en zonder adresvraag.
+    def bs_noden(met_vr, gevraagd_ook):
+        a = dict(bs_zonder, id="id-bs-vr")
+        regels = {"geen adres in de agenda": [f"{a['start'][:16]} {W._toon(a, 50)}"]}
+        onv = W.onvolledig_per_afspraak([a], MORGEN)             # zoals in _ronde: voor de reistijd en de vraag
+        kop = W.rit_koppeling(regels, [a])                        # zoals in _ronde: meteen na de reistijd
+        if met_vr:
+            a["titel"] = "VR " + a["titel"]                       # vragen_in_agenda, later in dezelfde ronde
+        return W.adres_noden(regels, onv, [a] if gevraagd_ook else [], [a], kop)
+    check("AG-4 B&S: een bezoek zonder adres houdt na een VR-vraag in dezelfde ronde dezelfde noden",
+          bs_noden(True, False) == bs_noden(False, False) and teksten(bs_noden(False, False)) == [TEKST["rit"]]
+          and bs_noden(True, True) == bs_noden(False, True) == [], (bs_noden(True, False), bs_noden(True, True)))
     zelfde = dict(kort_a, id="id-zelfde", kalender="andere@proef.test")
     check("AG-4 twee afspraken met dezelfde titel op dezelfde minuut: onzeker, dus geen van beide verborgen",
           W.regel_afspraak(f"{kort_a['start'][:16]} {W._toon(kort_a, 50)}", [kort_a, zelfde]) is None
