@@ -188,7 +188,11 @@ def test_agenda_en_standen():
         "voorlopig")
     # D2: rijen zonder aangesloten wacht tellen niet als aangesloten; een stille wacht is onvolledig
     wa = [rij("whatsapp:abc:2026-10-22", "08:01", 0, "Broer Ali", bron="whatsapp", thema="14 berichten (5 van Mehdi)")]
-    eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"})), "rijen alleen")
+    # Codex-toets 1 (T-0120): een wacht die nu niet aangesloten is, verbergt nooit wat al gezien is; het blijft een
+    # ondergrens met de stand erbij, nooit 'aangesloten'
+    t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "niet aangesloten"}))
+    eis("WhatsApp: gezien 14 berichten in 1 gesprekken; oproepen en minuten onbekend (niet aangesloten)" in t, f"rijen alleen\n{t}")
+    eis("WhatsApp: nog niet aangesloten" in V.tekst(vast(kanalen={"whatsapp": "niet aangesloten"})), "zonder rijen")
     t = V.tekst(vast(rijen=wa, kanalen={"whatsapp": "stil sinds 2026-10-20 09:00"}))
     # WA-6 (T-0120): op een dag die niet gelezen is, is een nul onbekend; wat gezien is, blijft een ondergrens
     eis("WhatsApp: gezien 14 berichten in 1 gesprekken; oproepen en minuten onbekend (stil sinds 2026-10-20 09:00)" in t
@@ -348,8 +352,7 @@ def test_angel2_werkgesprekken_per_gesprek_met_verwijzing():
              rij("zoom:meeting:kort", "18:00", 1, "Ruben", thema="kort")]
     v = V.vaststellen(DAG, [], set(), rijen, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
                       bundel={"inhoud_van": inhoud_van, "morgen": [], "mail_open": [], "prive_postvakken": set()})
-    eis("fathom:704" not in gevraagd and "plaud:p3" not in gevraagd and "zoom:meeting:kort" not in gevraagd,
-        f"privé, Plaud-dubbel en korter dan 2 min: niets gevraagd ({gevraagd})")
+    eis("fathom:704" not in gevraagd, f"privé: niets gevraagd ({gevraagd})")
     t = V.tekst(v)
     blok = t.split("## Werkgesprekken", 1)[1].split("\n## ", 1)[0]
     eis("- 09:00 Fathom, 45 min: Keuken ontwerp, met Klant Omega (ook opgenomen met Plaud) [fathom:701]" in blok, f"titel\n{blok}")
@@ -368,6 +371,17 @@ def test_angel2_werkgesprekken_per_gesprek_met_verwijzing():
     eis("- 16:00 privégesprek, 50 min" in blok and "Familie" not in t and "Broer Ali" not in t, f"privé van de rij\n{blok}")
     eis("actiepunten: geen" not in blok.split("[fathom:703]")[1].split("\n- ")[0], "onbekend is nooit geen")
     eis("Werkgesprekken" in V.wijzigingen(V.tekst(vast()), t), "het blok telt in de wijzigingen")
+    # Codex-toets 1: wat privé is volgens de inhoud, is privé in de hele dagtekst (ook Niet gepland en Gepland)
+    rijen2 = rijen + [rij("plaud:p5", "17:00", 25, "Klant Privaat", bron="plaud", thema="Geheim")]
+    INHOUD["plaud:p5"] = {"prive": True}
+    afs = [afspraak("a", "16:55", "17:30", "!! Mehdi: [HA] 9003 Bespreking", personen="Klant Privaat")]
+    v2 = V.vaststellen(DAG, afs, set(), rijen2, {}, [], "volledig", V.mail_telling(DAG, {}, {}), AAN, is_prive,
+                       bundel={"inhoud_van": lambda g: INHOUD.get(g["uniek"]), "morgen": [], "mail_open": [],
+                               "prive_postvakken": set()})
+    t2 = V.tekst(v2)
+    eis("Klant Privaat" not in t2 and "- 17:00 Plaud, 25 min, privé" in t2 and "- 17:00 privégesprek, 25 min" in t2,
+        f"privé volgens de inhoud: nergens een naam\n{t2}")
+    eis("Klant Omega" in t2, "een werkgesprek houdt zijn naam")
     # zonder bundel (oude aanroep) geen nieuwe blokken
     eis(all(f"## {k}" not in V.tekst(vast()) for k in V.BUNDELKOPPEN), "oude aanroep zonder blokken")
 

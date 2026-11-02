@@ -534,52 +534,68 @@ def _binnen(pad, map_):
     return echt == basis or echt.startswith(basis + os.sep)
 
 
-def _json_van(pad):
+def _lees_in(pad, basis):
+    """Een bestand uit een archiefmap, alleen als het een gewoon bestand is (geen symbolische koppeling) dat echt in
+    basis ligt (Codex-toets 1: een koppeling in de map mocht anders een bestand van elders laten lezen). Anders None."""
     try:
-        d = json.loads(_lees(pad) or "")
+        if not pad or os.path.islink(pad) or not os.path.isfile(pad) or not _binnen(pad, basis):
+            return None
+    except (OSError, TypeError, ValueError):
+        return None
+    return _lees(pad)
+
+
+def _json_van(pad, basis):
+    try:
+        d = json.loads(_lees_in(pad, basis) or "")
     except ValueError:
         return None
     return d if isinstance(d, dict) else None
 
 
 def archiefmap(g, GA):
-    """(map, reden): de archiefmap van een werkgesprek op de VM, of ('', reden). Fathom: kolom archief, alleen in
-    fathom-data en alleen als gesprek.json bij dit gesprek hoort (het recording_id of de url; zonder id telt ze, zoals bij De
-    Archivaris). Plaud: De Plaudwacht noemt de map op de Mac (Data uit Mehdi/Plaud/<map>/); op de VM staat ze in
-    plaud-invoer. Zoom: geen archiefmap (De Gespreksanalist leest zoom-data zelf)."""
+    """(map, basis, reden): de archiefmap van een werkgesprek op de VM, de datamap waarin ze moet liggen, of ('', '',
+    reden). Fathom: kolom archief, alleen in fathom-data, en alleen als gesprek.json er bewijst dat ze bij dit gesprek
+    hoort (het recording_id of de url). Codex-toets 1: zonder gesprek.json of zonder id lees ik niets, ook niet zoals De
+    Archivaris ('zonder id: ja'): een oude map kon zo de samenvatting van een ander gesprek geven. Plaud: De Plaudwacht
+    noemt de map op de Mac (Data uit Mehdi/Plaud/<map>/); op de VM staat ze in plaud-invoer. Zoom: geen archiefmap (De
+    Gespreksanalist leest zoom-data zelf)."""
     archief = str(g.get("archief") or "")
     if g.get("bron") == "fathom":
-        if not archief or not _binnen(archief, GA.FATHOM_DATA):
-            return "", "archiefmap niet gevonden"
-        map_ = os.path.expanduser(archief)
-        d = _json_van(os.path.join(map_, "gesprek.json"))
+        map_ = os.path.expanduser(archief) if archief else ""
+        if not map_ or os.path.islink(map_.rstrip(os.sep)) or not _binnen(map_, GA.FATHOM_DATA) or not os.path.isdir(map_):
+            return "", "", "archiefmap niet gevonden"
+        d = _json_van(os.path.join(map_, "gesprek.json"), GA.FATHOM_DATA)
         sleutel = str(g["uniek"]).split(":", 1)[-1]
-        ids = {str(d[k]) for k in ("recording_id",) if d and d.get(k) not in (None, "")}
+        ids = {str(d["recording_id"])} if d and d.get("recording_id") not in (None, "") else set()
         if d and d.get("url"):
             ids.add(str(d["url"]).rstrip("/").rsplit("/", 1)[-1])
-        if ids and sleutel not in ids:
-            return "", "archiefmap hoort niet bij dit gesprek"
-        return map_, ""
+        if sleutel not in ids:
+            return "", "", "archiefmap hoort niet bewezen bij dit gesprek"
+        return map_, GA.FATHOM_DATA, ""
     if g.get("bron") == "plaud":
         deel = archief[len(GA.PLAUD_OP_MAC):].split("/")[0] if archief.startswith(GA.PLAUD_OP_MAC) else ""
         map_ = os.path.join(GA.PLAUD_INVOER, deel) if deel and deel not in (".", "..") else ""
-        return (map_, "") if map_ and _binnen(map_, GA.PLAUD_INVOER) else ("", "archiefmap niet gevonden")
-    return "", ""
+        if map_ and not os.path.islink(map_) and _binnen(map_, GA.PLAUD_INVOER):
+            return map_, GA.PLAUD_INVOER, ""
+        return "", "", "archiefmap niet gevonden"
+    return "", "", ""
 
 
-def fathom_inhoud(map_, uniek, GA):
+def fathom_inhoud(map_, uniek, GA, basis=None):
     """(samenvatting, actiepunten, reden) uit de archiefmap van De Fathomwacht, volgens het contract van de groep fathom
     (docs/dagbundelaar/naslag/fathom-samenvatting-en-actiepunten.md v1.0): samenvatting.md (kopregel, lege regel,
     markdown; een oude str() van het object leest ook), actiepunten.json {bron, recording_id, actiepunten: [{tekst, wie,
     tijd, klaar}]}. Geen bestand, een ander recording_id of een onbekende vorm: None (onbekend, nooit 0). Een lege lijst:
     Fathom vond er geen. De samenvatting: twee zinnen (zoals De Gespreksanalist)."""
     reden = "Fathom leverde ze nog niet"
-    ruw = _lees(os.path.join(map_, "samenvatting.md")) if map_ else None
+    basis = basis or GA.FATHOM_DATA
+    ruw = _lees_in(os.path.join(map_, "samenvatting.md"), basis) if map_ else None
     samenvatting = None
     if ruw is not None:
         lichaam = ruw.split("\n", 1)[1] if ruw.startswith("# Samenvatting van Fathom") and "\n" in ruw else ruw
         samenvatting = GA.twee_zinnen(GA._markdown(lichaam)) or None
-    d = _json_van(os.path.join(map_, "actiepunten.json")) if map_ else None
+    d = _json_van(os.path.join(map_, "actiepunten.json"), basis) if map_ else None
     punten = None
     if d is not None and str(d.get("recording_id")) == str(uniek).split(":", 1)[-1] and isinstance(d.get("actiepunten"), list):
         punten = [{"wat": str(p.get("tekst") or "").strip(), "wie": str(p.get("wie") or "").strip(),
@@ -602,8 +618,8 @@ def gespreksinhoud(g):
     rec = GA.lees(g["uniek"])
     if rec is not None and rec.get("prive") is not False:
         return {"prive": True}
-    map_, reden = archiefmap(g, GA)
-    d = _json_van(os.path.join(map_, "gesprek.json")) if map_ else None
+    map_, basis, reden = archiefmap(g, GA)
+    d = _json_van(os.path.join(map_, "gesprek.json"), basis) if map_ else None
     label = str(((d or {}).get("archivaris") or {}).get("label") or "") if isinstance((d or {}).get("archivaris"), dict) else ""
     if label.lower() in ("prive", "privé"):
         return {"prive": True}
@@ -614,7 +630,7 @@ def gespreksinhoud(g):
     if g.get("bron") == "fathom":
         if not map_:
             return {**uit, "samenvatting": None, "actiepunten": None, "van": "Fathom", "reden": reden}
-        samenvatting, punten, reden = fathom_inhoud(map_, g["uniek"], GA)
+        samenvatting, punten, reden = fathom_inhoud(map_, g["uniek"], GA, basis)
         return {**uit, "samenvatting": samenvatting, "actiepunten": punten, "van": "Fathom", "reden": reden}
     if rec is None:
         return {**uit, "samenvatting": None, "actiepunten": None, "van": "De Gespreksanalist",

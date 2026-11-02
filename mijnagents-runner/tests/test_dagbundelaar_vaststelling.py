@@ -1756,6 +1756,11 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
         label_prive = _fathom_map(m, "2026-10-22 1700 Label", 705, "LABELMERKTEKEN samenvatting.", [], label="Prive")
         buiten = os.path.join(m, "elders", "map")
         _schrijf_tekst(os.path.join(buiten, "samenvatting.md"), "BUITENMERKTEKEN")
+        # Codex-toets 1: een map zonder gesprek.json (geen bewijs van het gesprek) en een koppeling naar een bestand elders
+        zonder_id = os.path.join(m, "fathom-data", "2026-10-22 1230 Zonder id")
+        _schrijf_tekst(os.path.join(zonder_id, "samenvatting.md"), "IDMERKTEKEN samenvatting.")
+        koppel = _fathom_map(m, "2026-10-22 1240 Koppeling", 708)
+        os.symlink(os.path.join(buiten, "samenvatting.md"), os.path.join(koppel, "samenvatting.md"))
         rec = {"versie": 3, "uniek": "plaud:p1", "bron": "plaud", "datum": DAG, "start": "13:00", "minuten": 30,
                "prive": False, "label": "", "firma": "HA", "soort": "", "dossier": "9003", "dossier_bewijs": "bevestigd",
                "label_van": "afdeling van de wacht", "samenvatting": "De werf is bezocht. De vloer moet opnieuw.",
@@ -1771,6 +1776,8 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
                    _gesprek("fathom:703", "11:00", 15, "fathom", zonder, thema="Nazorg"),
                    _gesprek("fathom:706", "12:00", 15, "fathom", ander, thema="Verkeerde map"),
                    _gesprek("fathom:707", "12:30", 15, "fathom", buiten, thema="Buiten de datamap"),
+                   _gesprek("fathom:709", "12:35", 15, "fathom", zonder_id, thema="Zonder id"),
+                   _gesprek("fathom:708", "12:40", 15, "fathom", koppel, thema="Koppeling"),
                    _gesprek("plaud:p1", "13:00", 30, "plaud", "Data uit Mehdi/Plaud/2026-10-22 1300 Werf/x.md", thema="Werf"),
                    _gesprek("plaud:p2", "15:00", 12, "plaud", thema="GESPREKMERKTEKEN"),
                    _gesprek("plaud:p4", "15:30", 25, "plaud", thema="Overleg"),
@@ -1787,8 +1794,10 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
                "  - actiepunten: geen (Fathom vond er geen)" in blok, blok
         assert "[fathom:703]\n  - firma: UNABO project; dossier: onbekend\n  - samenvatting en actiepunten: Fathom leverde ze " \
                "nog niet" in blok, blok
-        assert "[fathom:706]" in blok and "archiefmap hoort niet bij dit gesprek" in blok and "Geheim punt" not in t, blok
+        assert "[fathom:706]" in blok and "archiefmap hoort niet bewezen bij dit gesprek" in blok and "Geheim punt" not in t, blok
         assert "[fathom:707]" in blok and "BUITENMERKTEKEN" not in t, "nooit een bestand buiten de datamap"
+        assert "[fathom:709]" in blok and "IDMERKTEKEN" not in t, "zonder gesprek.json met het id lees ik niets"
+        assert "[fathom:708]" in blok and "BUITENMERKTEKEN" not in t, "nooit een symbolische koppeling volgen"
         assert "[plaud:p1]\n  - firma: HA; dossier: 9003 (bevestigd)\n  - samenvatting (De Gespreksanalist): De werf is bezocht." \
                in blok, blok
         assert "  - actiepunt [plaud:p1; HA 9003; wie: Mehdi; tegen: vrijdag; voor: mehdi]: Aannemer bellen over de vloer" in blok
@@ -1798,6 +1807,13 @@ def test_angel2_fathom_en_gespreksanalist_in_het_dagbestand():
         assert "- 16:00 privégesprek, 50 min" in blok and "PRIVEMERKTEKEN" not in t, "privé: niets gelezen"
         assert "- 17:00 privégesprek, 20 min" in blok and "LABELMERKTEKEN" not in t and "LABELTITEL" not in t, \
             "het label Prive van De Archivaris is privé"
+        # Codex-toets 1: ook onder Niet gepland geen naam van een gesprek dat volgens zijn inhoud privé is
+        w.rijen.append(_gesprek("plaud:p2b", "19:00", 30, "plaud", thema="Avond", personen="Klant Privaat"))
+        GA.bewaar({"versie": 3, "uniek": "plaud:p2b", "bron": "plaud", "datum": DAG, "start": "19:00", "minuten": 30,
+                   "prive": True, "regel": "privégesprek, 30 min", "ts": NU.isoformat()}, os.path.join(m, "gespreksanalist"))
+        ronde(w)
+        t = lees(os.path.join(m, "dagboek", "2026", f"{DAG}.md"))
+        assert "Klant Privaat" not in t and "- 19:00 Plaud, 30 min, privé" in t, t
         assert "[zoom:meeting:z1]" in blok and "Zoom-overleg" in blok, blok
         assert "actiepunten: geen" not in blok.split("[plaud:p4]", 1)[1].split("\n- ", 1)[0], "onbekend is nooit geen"
 

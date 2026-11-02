@@ -272,6 +272,10 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     (niet gelezen)}. gesprekken draagt dan ook de rijen van de dagen erna, tot vandaag (voor het terugbellen). Zonder
     bundel (oude aanroep) blijven de blokken Werkgesprekken, Gemist zonder terugbellen, Mail wacht op antwoord en Morgen
     weg."""
+    if bundel is not None:
+        # Codex-toets 1 (T-0120): wat De Gespreksanalist of het label van De Archivaris privé noemt, is privé in de hele
+        # dagtekst, ook onder Gepland en Niet gepland; anders stond de naam daar naast 'privégesprek' in Werkgesprekken.
+        gesprekken = prive_volgens_inhoud(dag, gesprekken, bundel.get("inhoud_van") or (lambda g: None))
     alle_rijen = gesprekken                # 'gesprekken' wordt hieronder de telling
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
@@ -358,6 +362,19 @@ def prive_regel(minuten):
     except (TypeError, ValueError):
         m = 0
     return f"privégesprek, {m} min" if m > 0 else "privégesprek, duur onbekend"
+
+
+def prive_volgens_inhoud(dag, rijen, inhoud_van):
+    """De rijen, met prive 1 voor elk opgenomen gesprek van de dag (leidend, Fathom, Plaud of Zoom, niet al privé) dat
+    volgens zijn inhoud privé is (inhoud_van(rij)['prive']: het record van De Gespreksanalist of het label Prive van De
+    Archivaris). Zo is zo'n gesprek overal in de dagtekst privé: nooit een naam, ook niet onder Gepland of Niet gepland."""
+    uit = []
+    for g in rijen:
+        if str(g.get("datum") or "")[:10] == dag and is_leidend(g) and g.get("bron") in WERKBRONNEN \
+                and soort(g) == "gesprek" and not is_prive(g) and (inhoud_van(g) or {}).get("prive"):
+            g = dict(g, prive=1)
+        uit.append(g)
+    return uit
 
 
 def werkgesprekken(dag, rijen, inhoud_van):
@@ -755,7 +772,9 @@ def tekst(v, prive_postvakken=(), over=None, voorlopig=None):
     else:
         r.append(f"- Zoom-chat: {z['chats']} chatgesprek(ken) gezien")
     w = v["whatsapp"]
-    if w["stand"] == "niet aangesloten":
+    # Codex-toets 1: een wacht die nu niet aangesloten is, verbergt nooit wat al gezien is (ondergrens); alleen zonder
+    # een enkele rij is het kanaal 'nog niet aangesloten'
+    if w["stand"] == "niet aangesloten" and not (w["gesprekken"] or w["oproepen"]):
         r.append("- WhatsApp: nog niet aangesloten")
     else:
         # WA-3: de oproepen die WhatsApp niet gemist noemt maar zonder duur, staan apart (ze tellen als oproep, 0 min)
@@ -765,14 +784,14 @@ def tekst(v, prive_postvakken=(), over=None, voorlopig=None):
             (w["oproepen"], f"{w['oproepen']} oproepen" + (f" (waarvan {k} zonder gekende duur)" if k else ""), "oproepen"),
             (w["minuten"], f"{w['minuten']} min", "minuten")]))
     t = v["telefoon"]
-    if t["stand"] == "niet aangesloten":
+    if t["stand"] == "niet aangesloten" and not (t["oproepen"] or t.get("gemist")):
         r.append("- telefoon: nog niet aangesloten")
     else:
         r.append(kanaalregel("telefoon", t["stand"], [(t["oproepen"], f"{t['oproepen']} oproepen", "oproepen"),
                                                       (t["minuten"], f"{t['minuten']} min", "minuten"),
                                                       (t.get("gemist", 0), f"{t.get('gemist', 0)} gemist", "gemiste oproepen")]))
     sm = v.get("sms") or {"stand": "niet aangesloten", "gesprekken": 0, "berichten": 0}
-    if sm["stand"] == "niet aangesloten":
+    if sm["stand"] == "niet aangesloten" and not sm["gesprekken"]:
         r.append("- sms en iMessage: nog niet aangesloten")
     elif sm["stand"] != "aangesloten" and not sm["gesprekken"]:
         r.append(f"- sms en iMessage: onbekend ({sm['stand']})")
@@ -780,7 +799,7 @@ def tekst(v, prive_postvakken=(), over=None, voorlopig=None):
         r.append(f"- sms en iMessage: {sm['berichten']} berichten in {sm['gesprekken']} gesprekken gezien"
                  + ("" if sm["stand"] == "aangesloten" else f" ({sm['stand']})"))
     x = v.get("xelion") or {"stand": "niet aangesloten", "oproepen": 0, "minuten": 0, "gemist": 0}
-    if x["stand"] == "niet aangesloten":
+    if x["stand"] == "niet aangesloten" and not (x["oproepen"] or x["gemist"]):
         r.append("- Xelion: nog niet aangesloten")
     else:
         r.append(kanaalregel("Xelion", x["stand"], [(x["oproepen"], f"{x['oproepen']} oproepen", "oproepen"),

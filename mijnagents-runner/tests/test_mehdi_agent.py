@@ -1054,7 +1054,7 @@ def test_angel2_actiepunten_uit_de_bundel_in_de_to_do_per_dossier_met_verwijzing
         assert "[HA 9003] Aannemer bellen over de vloer" in lijst, lijst
         assert "Zolder" not in lijst and "Analyse" not in lijst, "een gesprek zonder actiepunt geeft geen taak"
         assert "Plannen doormailen" not in lijst, "afgevinkt in Fathom"
-        assert "3 actiepunten uit de bundel" in r.detail and "2 zonder bron geweigerd" in r.detail, r.detail
+        assert "3 actiepunten en 0 opvolgpunten uit de bundel" in r.detail and "2 zonder bron geweigerd" in r.detail, r.detail
         # het model zag de actiepunten al in open_taken (en maakt ze dus niet opnieuw)
         _, inhoud = o.claude_oproepen[-1]
         assert {t["tekst"] for t in inhoud["open_taken"]} >= {"Offerte keuken sturen"}, inhoud["open_taken"]
@@ -1125,6 +1125,82 @@ def test_angel2_droog_met_nepmodel_haalt_een_taak_uit_een_actiepunt():
         o.weg()
 
 
+def test_codex1_model_maakt_geen_dubbel_en_niet_gepland_geeft_geen_taak():
+    """Codex-toets 1: het model maakt een actiepunt niet opnieuw als aparte taak (bron in de actiepuntregel), en een
+    opgenomen gesprek zonder actiepunt geeft ook via zijn regel onder Niet gepland geen taak. Een telefoonregel onder Niet
+    gepland blijft een bron (dat is geen opgenomen gesprek)."""
+    o = _werkbundel(WERKBUNDEL.replace("- 09:00 Fathom, 45 min, Klant Omega",
+                                       "- 09:00 Fathom, 45 min, Klant Omega\n- 11:00 Fathom, 20 min, Klant Zeta\n"
+                                       "- 16:10 telefoon, 12 min, privé"))
+    try:
+        dubbel = taak("Offerte sturen naar de klant", "actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: "
+                      "Offerte keuken sturen")
+        via_niet_gepland = taak("Zolderplan maken", "11:00 Fathom, 20 min, Klant Zeta")
+        telefoon = taak("Terugbellen om 16:10", "16:10 telefoon, 12 min, privé")
+        r, staat = o.ronde(uit=antwoord([dubbel, via_niet_gepland, telefoon]))
+        teksten = sorted(t["tekst"] for t in staat["taken"].values())
+        assert "Offerte sturen naar de klant" not in teksten and "Zolderplan maken" not in teksten, teksten
+        assert "Terugbellen om 16:10" in teksten, teksten
+        assert "1 dubbel geweigerd" in r.detail and "1 zonder bron geweigerd" in r.detail, r.detail
+    finally:
+        o.weg()
+
+
+def test_codex1_volle_lijst_laat_een_actiepunt_wachten_in_plaats_van_vervallen():
+    """Codex-toets 1: met MAX_OPEN open taken wordt een nieuw actiepunt niet meteen als vervallen bewaard; het komt de
+    volgende ronde, als er plaats is."""
+    staat = M.laad_staat("/bestaat/niet/staat.json")
+    for i in range(M.MAX_OPEN):
+        staat["taken"][f"t-{i:07d}"] = {"id": f"t-{i:07d}", "tekst": f"taak {i}", "voor": "mehdi", "wie": "", "waarom": "",
+                                        "bron": "", "dag": GISTEREN, "prioriteit": "normaal", "status": "open",
+                                        "sinds": "2026-10-30T08:00:00+00:00", "bijgewerkt": "2026-10-30T08:00:00+00:00"}
+    bundel = [{"dag": GISTEREN, "dagbestand": WERKBUNDEL, "telling": {}}]
+    nieuw, tel = M.neem_actiepunten(staat, M.actiepunten(bundel), bundel, KERN, OCHTEND_UTC, opvolg=[])
+    assert tel["actiepunt"] == 0 and tel["actiepunt_later"] == 3 and not nieuw["afgerond"], tel
+    # komt er een plaats vrij, dan komt het punt erbij
+    del nieuw["taken"]["t-0000000"]
+    nieuw, tel = M.neem_actiepunten(nieuw, M.actiepunten(bundel), bundel, KERN, OCHTEND_UTC, opvolg=[])
+    assert tel["actiepunt"] == 1 and len(nieuw["taken"]) == M.MAX_OPEN, tel
+    # en het inkorten na het model maakt een net genomen actiepunt nooit 'vervallen'
+    na, tel2, _ = M.verwerk(antwoord([taak("Nog een taak", "mail: 2 binnen, 0 verzonden")]), nieuw, bundel, [], KERN, AGENTS,
+                            OCHTEND_UTC)
+    assert not any(str(t.get("id", "")).startswith("a-") for t in na["afgerond"]), na["afgerond"]
+
+
+def test_db6_opvolgpunten_blijven_staan_en_sluiten_als_ze_weg_zijn():
+    """DB-6 met Codex-toets 1: een gemiste oproep en een mail die wacht, worden zonder model een taak voor Mehdi (privé
+    blijft privé). Valt de dag na drie dagen uit de invoer, dan blijft de taak staan; staat de regel niet meer in een
+    gelezen blok van zijn dag (teruggebeld, beantwoord), dan gaat ze naar afgerond. Een blok dat niet gelezen werd,
+    sluit niets."""
+    tekst = WERKBUNDEL.replace("## Communicatie", "## Communicatie\n\n- x\n\n## Gemist zonder terugbellen\n\n"
+                               "- 10:12 telefoon (privé): geen terugbelpoging gezien\n\n## Mail wacht op antwoord\n\n"
+                               "- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte\n\n"
+                               "## Morgen, 2026-10-31\n\n- geen afspraken", 1)
+    bundel = [{"dag": GISTEREN, "dagbestand": tekst, "telling": {}}]
+    staat, tel = M.neem_actiepunten(M.laad_staat("/bestaat/niet"), M.actiepunten(bundel), bundel, KERN, OCHTEND_UTC,
+                                    opvolg=M.opvolgpunten(bundel))
+    o = {t["tekst"]: t for t in staat["taken"].values() if t["id"].startswith("o-")}
+    assert set(o) == {"Terugbellen: 10:12 telefoon (privé): geen terugbelpoging gezien",
+                      "Mail beantwoorden: info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte"}, o
+    terug = o["Terugbellen: 10:12 telefoon (privé): geen terugbelpoging gezien"]
+    assert terug["voor"] == "mehdi" and terug.get("prive") is True and tel["opvolgpunt"] == 2, terug
+    # de dag valt uit de invoer: de taken blijven
+    staat2, _ = M.neem_actiepunten(staat, [], [], KERN, MIDDAG_UTC, opvolg=[])
+    assert len([t for t in staat2["taken"] if t.startswith("o-")]) == 2
+    # mail niet gelezen: niets sluit; beantwoord (een gelezen blok zonder de regel): de mailtaak gaat naar afgerond
+    ongelezen = tekst.replace("- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte",
+                              "- niet gelezen (de lijst van de mailwachten was niet te lezen)")
+    b2 = [{"dag": GISTEREN, "dagbestand": ongelezen, "telling": {}}]
+    staat3, tel3 = M.neem_actiepunten(staat, M.actiepunten(b2), b2, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b2))
+    assert not tel3["opvolg_af"] and len([t for t in staat3["taken"] if t.startswith("o-")]) == 2, tel3
+    beantwoord = tekst.replace("- info@h-architects.be: belangrijk, van Klant Omega: Vraag over de offerte",
+                               "- geen mail van deze dag wacht nog")
+    b3 = [{"dag": GISTEREN, "dagbestand": beantwoord, "telling": {}}]
+    staat4, tel4 = M.neem_actiepunten(staat, M.actiepunten(b3), b3, KERN, MIDDAG_UTC, opvolg=M.opvolgpunten(b3))
+    assert tel4["opvolg_af"] == 1 and staat4["afgerond"][-1]["reden"] == "staat niet meer open in de dagbundel", tel4
+    assert any("Terugbellen" in t["tekst"] for t in staat4["taken"].values()), "de oproep staat er nog"
+
+
 def test_angel7_voorlopige_bundel_van_vandaag_en_de_nacht_gaat_voor():
     """ANGEL-7 (T-0120, P5): zonder dagbestand van vandaag leest Ai Angel de voorlopige bundel (dagbundel-voorlopig naast
     de map dagboek), alleen als die van vandaag is; een nieuwe voorlopige versie verandert de vingerafdruk, zodat de ronde
@@ -1143,8 +1219,8 @@ def test_angel7_voorlopige_bundel_van_vandaag_en_de_nacht_gaat_voor():
             with open(os.path.join(voorlopig, "vandaag.json"), "w", encoding="utf-8") as f:
                 json.dump({"dag": dag, "vastgesteld": True}, f)
         zet_voorlopig("2026-10-30", "22:00")
-        assert M.lees_bundels(M.dagen_terug(nu), dagboek) == [] or all(b["dag"] != vandaag for b in
-                                                                       M.lees_bundels(M.dagen_terug(nu), dagboek))
+        # Codex-toets 1: een voorlopige bundel van gisteren telt nooit, ook niet als het dagbestand van gisteren ontbreekt
+        assert M.lees_bundels(M.dagen_terug(nu), dagboek) == [], M.lees_bundels(M.dagen_terug(nu), dagboek)
         zet_voorlopig(vandaag, "10:00", "- 09:00 Fathom, 30 min: Ochtendoverleg [fathom:801]\n"
                       "  - actiepunt [fathom:801; HA, zonder dossier]: Verslag sturen")
         b = M.lees_bundels(M.dagen_terug(nu), dagboek)
