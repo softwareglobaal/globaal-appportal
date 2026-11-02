@@ -9,7 +9,9 @@ dagbundel, en gaat alleen via de verwijzing in de bundel naar de bron. Ontwerp: 
 
 Wat ik lees:
   1. de dagbundel: het dagbestand van vandaag en de twee dagen ervoor, zoals De Dagbundelaar het schrijft
-     (mijnagents-data/dagboek/JJJJ/JJJJ-MM-DD.md en .json; de Dropbox-map Dagbundelaar is daar een kopie van);
+     (mijnagents-data/dagboek/JJJJ/JJJJ-MM-DD.md en .json; de Dropbox-map Dagbundelaar is daar een kopie van). Is er van
+     vandaag nog geen dagbestand, dan de voorlopige bundel van vandaag (mijnagents-data/dagbundel-voorlopig/vandaag.md en
+     .json, ANGEL-7), die De Dagbundelaar twintig minuten voor mijn ronde maakt; het dagbestand van de nacht gaat voor;
   2. om te dispatchen en te leren: wat Mehdi tegen mij zei (tabel gesprek, aan mehdi-agent, alleen lezend), de collega's
      uit kern (naam, functie, afdeling, firma) en de agents op het bord (r.collegas).
 Ik lees nooit zelf een wacht, een mailbox, WhatsApp of een transcript.
@@ -20,7 +22,9 @@ Wat ik doe, op de uren van UREN (Brussel; de cron draait elk uur op :20, plannin
      taken terug: wat, voor wie (Mehdi, een collega of een agent), waarom, de bron, prioriteit en waar nuttig een concept;
   3. ik controleer elke taak zonder model: een nieuwe taak zonder bron die letterlijk in de bundel of in Mehdi's woorden
      staat, valt weg; een collega die niet in kern staat of een agent die niet op het bord staat, wordt Mehdi; wat privé
-     is, blijft bij Mehdi;
+     is, blijft bij Mehdi. Elk actiepunt uit het blok Werkgesprekken van de bundel (Fathom, Plaud, Zoom: ANGEL-2) komt
+     zonder model in mijn lijst, een keer, met het dossier en de verwijzing naar het gesprek; een gesprek zonder actiepunt
+     geeft geen taak, ook niet van het model;
   4. ik bewaar de taken (mijnagents-data/mehdi-agent/staat.json) en zet ze klaar voor Mehdi: de lijst van de dag (soort
      taken), 's ochtends "Te doen vandaag" en 's avonds "Avondoverzicht" (soort verslag; De Bode bundelt die), en lees
      elk item terug van het bord.
@@ -64,6 +68,8 @@ ag = bord.Agent(NAAM)
 BRUSSEL = ZoneInfo("Europe/Brussels")
 DATA = os.path.expanduser("~/appportal/mijnagents-data")
 DAGBOEK = os.environ.get("MEHDI_AGENT_DAGBOEK", os.path.join(DATA, "dagboek"))
+# ANGEL-7: de voorlopige bundel van vandaag (dagbundelaar.VOORLOPIG), naast de map dagboek; leeg: afgeleid van die map
+VOORLOPIG = os.environ.get("MEHDI_AGENT_VOORLOPIG", "")
 STAAT = os.environ.get("MEHDI_AGENT_STAAT", os.path.join(DATA, "mehdi-agent", "staat.json"))
 MODEL = os.environ.get("MEHDI_AGENT_MODEL", "claude-opus-5-5")
 # "api" (wat nu draait) of "abonnement": Claude op het abonnement van Mehdi, zoals De Prijsonderzoeker (ANGEL-3 en VOL-17
@@ -78,6 +84,7 @@ TERUG = 3               # vandaag en de twee dagen ervoor
 DAGBESTAND_MAX = 60000  # tekens per dagbestand naar het model
 GESPREK_DAGEN = 14      # zo ver terug lees ik wat Mehdi tegen mij zei
 MAX_NIEUW = 12          # nieuwe taken per ronde
+MAX_NIEUW_ACTIE = 20    # nieuwe taken uit de actiepunten van de bundel per ronde (ANGEL-2); de rest komt de volgende ronde
 MAX_OPEN = 40           # open taken die ik bijhoud
 OUD_DAGEN = 14          # een open taak die zo lang niet bijgewerkt werd, vervalt
 MAX_AFGEROND = 100
@@ -101,6 +108,10 @@ VELDEN = ("id", "tekst", "voor", "wie", "waarom", "bron", "dag", "prioriteit", "
 PRIVE = re.compile(r"priv[eé]", re.I)
 PRIVE_KOPPEN = ("eigen werk en gezondheid",)   # een blok van de dagbundel dat privé is, ook zonder het woord per regel
 DAGNAMEN = ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag")
+# ANGEL-2 (T-0120): een actiepunt in het blok Werkgesprekken van de dagbundel (dagvaststelling.actiepunt_regel):
+#   "  - actiepunt [<uniek>; <dossier>; wie: ...; tegen: ...; voor: ...; op UU:MM:SS; klaar in Fathom]: <wat>"
+WERKGESPREKKEN = "Werkgesprekken"
+ACTIEPUNT_RE = re.compile(r"^\s*- actiepunt \[(?P<velden>[^\]]*)\]: (?P<wat>.+?)\s*$")
 
 _TEKST = {"type": "string"}
 SCHEMA = {
@@ -135,7 +146,8 @@ UITVOER = ("Geef in taken elke taak die nieuw is of verandert (status, prioritei
            "een stuk van de regel uit de dagbundel, of van Mehdi's woorden. wie: bij een collega de naam zoals in "
            "collegas, bij een agent de naam van de agent, bij Mehdi leeg. Maak een taak uit onlangs_afgerond niet "
            "opnieuw. geleerd: alleen nieuwe regels uit wat Mehdi zei, anders leeg. ontbreekt: wat je in de dagbundel "
-           "miste om goed werk te doen, kort.")
+           "miste om goed werk te doen, kort. De actiepunten uit het blok Werkgesprekken staan al in open_taken (id begint "
+           "met a-): maak ze niet opnieuw. Een gesprek zonder actiepunt geeft geen taak, ook niet uit zijn samenvatting.")
 
 
 class Weigering(RuntimeError):
@@ -178,22 +190,40 @@ def _lees(pad):
         return None
 
 
-def lees_bundels(dagen, map_=None):
+def voorlopig_map(map_=None):
+    """De map van de voorlopige bundel (ANGEL-7): MEHDI_AGENT_VOORLOPIG, anders dagbundel-voorlopig naast de map dagboek
+    (zoals dagbundelaar.VOORLOPIG: mijnagents-data/dagbundel-voorlopig)."""
+    return VOORLOPIG or os.path.join(os.path.dirname(os.path.normpath(map_ or DAGBOEK)), "dagbundel-voorlopig")
+
+
+def lees_bundels(dagen, map_=None, voorlopig=None):
     """De dagbestanden van deze dagen (.md en .json), zoals De Dagbundelaar ze schrijft. Een dag zonder bestand ontbreekt
-    gewoon: vandaag bestaat pas na de eerste ronde van de dag. Geeft [{dag, dagbestand, telling}], in de volgorde van
-    dagen."""
+    gewoon. Geeft [{dag, dagbestand, telling, voorlopig}], in de volgorde van dagen.
+    ANGEL-7: heeft een dag geen dagbestand, dan de voorlopige bundel (vandaag.md en vandaag.json in voorlopig_map) als die
+    van die dag is (de kop '# Dag <dag> voorlopig' en de dag in de telling). Het dagbestand van de nacht gaat altijd voor:
+    het vervangt de voorlopige, die alleen vandaag draagt."""
     map_ = map_ or DAGBOEK
+    voorlopig = voorlopig or voorlopig_map(map_)
     uit = []
     for dag in dagen:
         md = _lees(os.path.join(map_, dag[:4], f"{dag}.md"))
         js = _lees(os.path.join(map_, dag[:4], f"{dag}.json"))
+        is_voorlopig = False
         if md is None and js is None:
-            continue
+            vmd, vjs = _lees(os.path.join(voorlopig, "vandaag.md")), _lees(os.path.join(voorlopig, "vandaag.json"))
+            try:
+                vtelling = json.loads(vjs) if vjs else None
+            except ValueError:
+                vtelling = None
+            if not (vmd or "").startswith(f"# Dag {dag} voorlopig") or not isinstance(vtelling, dict) \
+                    or vtelling.get("dag") != dag:
+                continue
+            md, js, is_voorlopig = vmd, vjs, True
         try:
             telling = json.loads(js) if js else None
         except ValueError:
             telling = None
-        uit.append({"dag": dag, "dagbestand": (md or "")[:DAGBESTAND_MAX], "telling": telling})
+        uit.append({"dag": dag, "dagbestand": (md or "")[:DAGBESTAND_MAX], "telling": telling, "voorlopig": is_voorlopig})
     return uit
 
 
@@ -264,8 +294,10 @@ def bewaar_staat(staat, pad=None):
 
 
 def open_taken(staat):
+    """Hoog eerst, dan de oudste; bij gelijke stand per dossier (ANGEL-2: de actiepunten van een ronde staan zo samen)."""
     rang = {p: i for i, p in enumerate(PRIORITEIT)}
-    return sorted(staat.get("taken", {}).values(), key=lambda t: (rang.get(t.get("prioriteit"), 1), t.get("sinds", "")))
+    return sorted(staat.get("taken", {}).values(), key=lambda t: (rang.get(t.get("prioriteit"), 1), t.get("sinds", ""),
+                                                                  t.get("dossier", ""), t.get("id", "")))
 
 
 # ------------------------------------------------------------------------------------------------ model ---
@@ -299,7 +331,8 @@ def invoer(nu, m, bundels, staat, gezegd, kern):
         "vandaag": b.date().isoformat(),
         "moment": m,
         "opdracht": OPDRACHT[m] + " " + UITVOER,
-        "dagbundel": [{"dag": x["dag"], "dagbestand": x["dagbestand"], "telling": x["telling"]} for x in bundels],
+        "dagbundel": [{"dag": x["dag"], "dagbestand": x["dagbestand"], "telling": x["telling"],
+                       **({"voorlopig": True} if x.get("voorlopig") else {})} for x in bundels],
         "open_taken": open_,
         "onlangs_afgerond": afgerond,
         "wat_mehdi_zei": gezegd,
@@ -409,6 +442,96 @@ def corpus_van(bundels, gezegd):
                                + [g["tekst"] for g in gezegd or []]))
 
 
+def zonder_gesprekken_zonder_actie(dagbestand):
+    """Het dagbestand zonder de regels van het blok Werkgesprekken die geen actiepunt zijn (titel, firma, samenvatting,
+    'nog niet geanalyseerd'). Een nieuwe taak van het model moet haar bron hierin vinden: zo geeft een gesprek zonder
+    actiepunt nooit een taak (ANGEL-2), ook niet uit zijn samenvatting."""
+    uit, blok = [], False
+    for regel in dagbestand.splitlines():
+        if regel.startswith("## "):
+            blok = regel[3:].startswith(WERKGESPREKKEN)
+            uit.append(regel)
+        elif not blok or ACTIEPUNT_RE.match(regel):
+            uit.append(regel)
+    return "\n".join(uit)
+
+
+def corpus_voor_nieuw(bundels, gezegd):
+    """Waar de bron van een nieuwe taak van het model letterlijk in moet staan (zie zonder_gesprekken_zonder_actie)."""
+    return corpus_van([dict(b, dagbestand=zonder_gesprekken_zonder_actie(b["dagbestand"])) for b in bundels], gezegd)
+
+
+def actiepunten(bundels):
+    """ANGEL-2 (T-0120): de actiepunten uit het blok Werkgesprekken van de dagbundel, zonder model. Per punt de dag, de
+    verwijzing naar het gesprek (fathom:<id>, plaud:<id>, zoom:meeting:<uuid>), het dossier, wie, tegen wanneer, voor wie,
+    of het in Fathom al afgevinkt is, en de regel zelf als bron (die staat letterlijk in de bundel). Een gesprek zonder
+    actiepunt geeft niets; een privégesprek heeft er geen in de bundel."""
+    uit = []
+    for b in bundels:
+        blok = False
+        for regel in b["dagbestand"].splitlines():
+            if regel.startswith("## "):
+                blok = regel[3:].startswith(WERKGESPREKKEN)
+                continue
+            m = ACTIEPUNT_RE.match(regel) if blok else None
+            if not m:
+                continue
+            velden = [v.strip() for v in m.group("velden").split(";")]
+            if len(velden) < 2 or ":" not in velden[0]:
+                continue
+            p = {"dag": b["dag"], "verwijzing": velden[0], "dossier": velden[1], "wat": m.group("wat").strip(), "wie": "",
+                 "tegen": "", "voor": "", "klaar": False, "bron": regel.strip()[2:].strip()}
+            for v in velden[2:]:
+                for sleutel in ("wie", "tegen", "voor"):
+                    if v.startswith(sleutel + ": "):
+                        p[sleutel] = v[len(sleutel) + 2:].strip()
+                if v == "klaar in Fathom":
+                    p["klaar"] = True
+            uit.append(p)
+    return uit
+
+
+def actie_id(p):
+    """Een vaste id per actiepunt: hetzelfde gesprek en dezelfde tekst, ook in een volgende versie van de bundel."""
+    return "a-" + hashlib.sha1(f"{p['verwijzing']}|{normaal(p['wat'])}".encode()).hexdigest()[:8]
+
+
+def neem_actiepunten(staat, punten, bundels, kern, nu):
+    """ANGEL-2: elk open actiepunt uit de bundel wordt een taak in de lijst, zonder model en een keer (actie_id). Staat ze
+    al open, dan blijft ze zoals ze is (het model of Mehdi kan ze bijwerken); is ze afgerond, dan komt ze niet terug; is
+    ze in Fathom afgevinkt, dan gaat een open taak naar afgerond (gedaan). Voor wie: een collega uit kern als wie die naam
+    draagt, anders Mehdi. Een privéstuk in de bron houdt de taak bij Mehdi. Geeft (nieuwe staat, telling)."""
+    staat = json.loads(json.dumps(staat))
+    taken, telling = staat["taken"], Counter()
+    al_af = {t.get("id") for t in staat["afgerond"]}
+    nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
+    for p in sorted(punten, key=lambda p: (p["dossier"], p["dag"], p["verwijzing"])):
+        tid = actie_id(p)
+        if p["klaar"]:
+            if tid in taken:
+                staat["afgerond"].append(dict(taken.pop(tid), status="gedaan", afgerond=nu_s, reden="afgevinkt in Fathom"))
+                telling["gedaan"] += 1
+            continue
+        if tid in taken or tid in al_af:
+            continue
+        if telling["actiepunt"] >= MAX_NIEUW_ACTIE:
+            telling["actiepunt_later"] += 1
+            continue
+        collega = zoek_collega(p["wie"], kern)
+        prive = bool(PRIVE.search(p["bron"])) or bron_prive(p["bron"], bundels)
+        voor, wie = ("collega", collega) if collega and not prive else ("mehdi", "")
+        waarom = (f"actiepunt uit het gesprek [{p['verwijzing']}], dossier {p['dossier']}"
+                  + (f", wie: {p['wie']}" if p["wie"] and voor == "mehdi" else "")
+                  + (f", tegen {p['tegen']}" if p["tegen"] else ""))
+        taken[tid] = {"id": tid, "tekst": p["wat"][:300], "voor": voor, "wie": wie, "waarom": waarom[:300],
+                      "bron": p["bron"][:300], "dag": p["dag"], "prioriteit": "normaal", "status": "open", "concept": "",
+                      "sinds": nu_s, "bijgewerkt": nu_s, "dossier": p["dossier"], "verwijzing": p["verwijzing"],
+                      **({"prive": True} if prive else {})}
+        telling["actiepunt"] += 1
+    staat["afgerond"] = staat["afgerond"][-MAX_AFGEROND:]
+    return staat, telling
+
+
 def bron_in(bron, corpus):
     """Staat de bron letterlijk in de bundel of in Mehdi's woorden? Een datum vooraan (de dag staat al apart) en een
     lijstteken tellen niet mee. Een weglating (... of het teken voor drie puntjes) mag: dan moet elk stuk van minstens
@@ -508,7 +631,7 @@ def verwerk(uit, staat, bundels, gezegd, kern, agents, nu):
     staat = json.loads(json.dumps(staat))
     taken, afgerond = staat["taken"], staat["afgerond"]
     nummers = staat.get("nummers") or {}
-    corpus = corpus_van(bundels, gezegd)
+    corpus = corpus_voor_nieuw(bundels, gezegd)        # ANGEL-2: een gesprek zonder actiepunt geeft geen nieuwe taak
     nu_s = nu.astimezone(timezone.utc).isoformat(timespec="seconds")
     laatste_dag = bundels[0]["dag"] if bundels else brussel(nu).date().isoformat()
     al_af = {t.get("id") for t in afgerond}
@@ -623,7 +746,8 @@ def lijst(staat, nu, ontbreekt=()):
             nr += 1
             nummers[str(nr)] = t["id"]
             wie = f"{t['wie']}: " if voor != "mehdi" and t.get("wie") else ""
-            regels.append(f"{nr}. {wie}{t['tekst']} ({t.get('prioriteit', 'normaal')})")
+            dossier = f"[{t['dossier']}] " if t.get("dossier") else ""          # ANGEL-2: per dossier
+            regels.append(f"{nr}. {dossier}{wie}{t['tekst']} ({t.get('prioriteit', 'normaal')})")
             if t.get("waarom"):
                 regels.append(f"   Waarom: {_inspring(t['waarom'])}")
             regels.append(f"   Bron: {t.get('dag', '')}, {_inspring(t.get('bron', ''))}")
@@ -835,6 +959,9 @@ def werkverslag(m, bundels, telling, staat, meta, overgeslagen=False):
         return f"{m}: niets nieuw in de dagbundel ({dagen}); {len(open_)} taken open"
     doorgegeven = (f"; {telling.get('doorgegeven', 0)} doorgegeven, {telling.get('terug_naar_mehdi', 0)} terug naar Mehdi"
                    if telling.get("doorgegeven") or telling.get("terug_naar_mehdi") else "")
+    if telling.get("actiepunt") or telling.get("actiepunt_later"):
+        doorgegeven += (f"; {telling.get('actiepunt', 0)} actiepunten uit de bundel"
+                        + (f", {telling['actiepunt_later']} voor de volgende ronde" if telling.get("actiepunt_later") else ""))
     return (f"{m}: dagbundel {dagen}; {telling.get('nieuw', 0)} nieuw, {telling.get('bijgewerkt', 0)} bijgewerkt, "
             f"{telling.get('gedaan', 0)} gedaan, {telling.get('vervallen', 0)} vervallen, {telling.get('zonder_bron', 0)} "
             f"zonder bron geweigerd, {telling.get('onbekend_wie', 0)} naar Mehdi omdat de ontvanger onbekend was; "
@@ -878,6 +1005,9 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         ag.log("ronde", "melding", "overgeslagen: niets nieuw in de dagbundel")   # anders alleen een hartslag (ANGEL-10)
         r.detail = werkverslag(m, bundels, Counter(), staat, {}, overgeslagen=True)
         return staat
+    # ANGEL-2: de actiepunten van de bundel zonder model in de lijst, voor Claude ze ziet (in open_taken); ook als Claude
+    # straks niet bereikbaar is, staan ze erin
+    staat, actie = neem_actiepunten(staat, actiepunten(bundels), bundels, kern_lijst, nu)
     inhoud = invoer(nu, m, bundels, staat, gezegd_lijst, kern_lijst)
     uit, meta, telling, ontbreekt = None, {}, Counter(), []
     try:
@@ -906,6 +1036,7 @@ def werk(r, nu=None, map_=None, gezegd=None, kern=None, claude=None, zet=None, l
         if ontbreekt:
             # alleen het aantal: de tekst kan een naam dragen, en die hoort niet in het werkverslag (werkwijze, nooit)
             ag.log("dagbundel", "bron", f"{len(ontbreekt)} punten gemist in de dagbundel; ze staan onderaan de takenlijst")
+    telling.update(actie)
     _, door = (doorgeef or doorgeven)(staat, nu, r.collegas, bundels, gezegd_lijst)   # De Doorgever (ANGEL-9)
     telling.update(door)
     if door.get("niet_gelezen") or door.get("niet_gezet"):

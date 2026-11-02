@@ -975,6 +975,195 @@ def test_droog_toont_per_taak_waar_ze_heen_zou_gaan():
         shutil.rmtree(d, ignore_errors=True)
 
 
+# ------------------------------------------------------------------- ANGEL-2 en ANGEL-7 (T-0120) ---
+WERKBUNDEL = """# Dag 2026-10-30 vastgesteld
+
+## Gepland
+
+- geen afspraken
+
+## Niet gepland
+
+- 09:00 Fathom, 45 min, Klant Omega
+
+## Werkgesprekken
+
+Samenvatting en actiepunten van Fathom of De Gespreksanalist, niet als bron voor contract of verslag (het transcript telt); tussen haken de verwijzing naar het gesprek.
+
+- 09:00 Fathom, 45 min: Keuken ontwerp, met Klant Omega [fathom:701]
+  - firma: UNABO project; dossier: 9405 (bevestigd)
+  - samenvatting (Fathom): Het ontwerp van de keuken is besproken. De klant wacht op de offerte.
+  - actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: Offerte keuken sturen
+  - actiepunt [fathom:701; UNABO 9405; wie: Proefpersoon Zeta]: Snede tekenen voor de keuken
+  - actiepunt [fathom:701; UNABO 9405; wie: Klant Omega; klaar in Fathom]: Plannen doormailen
+- 11:00 Fathom, 20 min: Kennismaking nieuwe klant, met Klant Zeta [fathom:702]
+  - firma: HA sales; dossier: onbekend
+  - samenvatting (Fathom): De klant wil een verbouwing van de zolder laten tekenen.
+  - actiepunten: geen (Fathom vond er geen)
+- 13:00 Plaud, 30 min: Werfbezoek [plaud:p1]
+  - firma: HA; dossier: 9003 (bevestigd)
+  - samenvatting (De Gespreksanalist): De werf is bezocht.
+  - actiepunt [plaud:p1; HA 9003; wie: Mehdi; tegen: vrijdag; voor: mehdi]: Aannemer bellen over de vloer
+- 15:00 Plaud, 25 min: Overleg [plaud:p4]
+  - firma: onbekend; dossier: onbekend
+  - samenvatting en actiepunten: nog niet geanalyseerd (De Gespreksanalist staat uit)
+- 16:00 privégesprek, 50 min
+
+## Communicatie
+
+- mail: 2 binnen, 0 verzonden (uniek over alle postvakken)
+
+## Over deze vaststelling
+
+- versie 1, gemaakt 31-10-2026 00:31
+"""
+
+
+def _werkbundel(tekst=WERKBUNDEL):
+    o = Omgeving(bundel=False)
+    os.makedirs(os.path.join(o.map, "2026"))
+    with open(os.path.join(o.map, "2026", f"{GISTEREN}.md"), "w", encoding="utf-8") as f:
+        f.write(tekst)
+    with open(os.path.join(o.map, "2026", f"{GISTEREN}.json"), "w", encoding="utf-8") as f:
+        json.dump(TELLING, f)
+    return o
+
+
+def test_angel2_actiepunten_uit_de_bundel_in_de_to_do_per_dossier_met_verwijzing():
+    """ANGEL-2 (T-0120): elk open actiepunt uit het blok Werkgesprekken wordt een taak, zonder model, per dossier en met
+    de verwijzing naar het gesprek; een collega uit kern krijgt zijn actiepunt; wat in Fathom al afgevinkt is, niet. Een
+    gesprek zonder actiepunt (of nog niet geanalyseerd) geeft geen taak, ook niet als het model er een verzint uit de
+    samenvatting; een volgende ronde maakt niets dubbel, en wat afgerond is, komt niet terug."""
+    o = _werkbundel()
+    try:
+        verzonnen = taak("Zolderplan tekenen", "De klant wil een verbouwing van de zolder laten tekenen")
+        niets = taak("Analyse vragen", "nog niet geanalyseerd (De Gespreksanalist staat uit)")
+        r, staat = o.ronde(uit=antwoord([verzonnen, niets]))
+        open_ = {t["id"]: t for t in staat["taken"].values()}
+        assert sorted(t["tekst"] for t in open_.values()) == ["Aannemer bellen over de vloer", "Offerte keuken sturen",
+                                                              "Snede tekenen voor de keuken"], open_
+        assert all(t["id"].startswith("a-") for t in open_.values()), open_
+        offerte = next(t for t in open_.values() if t["tekst"] == "Offerte keuken sturen")
+        assert offerte["voor"] == "mehdi" and offerte["dossier"] == "UNABO 9405" and offerte["verwijzing"] == "fathom:701"
+        assert offerte["bron"] == "actiepunt [fathom:701; UNABO 9405; wie: Mehdi; op 00:12:30]: Offerte keuken sturen"
+        assert M.bron_in(offerte["bron"], M.corpus_van(M.lees_bundels([GISTEREN], o.map), [])), "de bron staat in de bundel"
+        snede = next(t for t in open_.values() if t["tekst"] == "Snede tekenen voor de keuken")
+        assert snede["voor"] == "collega" and snede["wie"] == "Proefpersoon Zeta", snede
+        lijst = o.bord[f"mehdi-agent:taken:{OCHTEND_UTC.astimezone(M.BRUSSEL).date().isoformat()}"]["inhoud"]
+        assert "[UNABO 9405] Offerte keuken sturen" in lijst and "Bron: 2026-10-30, actiepunt [fathom:701;" in lijst, lijst
+        assert "[HA 9003] Aannemer bellen over de vloer" in lijst, lijst
+        assert "Zolder" not in lijst and "Analyse" not in lijst, "een gesprek zonder actiepunt geeft geen taak"
+        assert "Plannen doormailen" not in lijst, "afgevinkt in Fathom"
+        assert "3 actiepunten uit de bundel" in r.detail and "2 zonder bron geweigerd" in r.detail, r.detail
+        # het model zag de actiepunten al in open_taken (en maakt ze dus niet opnieuw)
+        _, inhoud = o.claude_oproepen[-1]
+        assert {t["tekst"] for t in inhoud["open_taken"]} >= {"Offerte keuken sturen"}, inhoud["open_taken"]
+        assert "Een gesprek zonder actiepunt geeft geen taak" in inhoud["opdracht"]
+        # tweede ronde, zelfde bundel: niets dubbel; Mehdi zet de offerte op gedaan: ze komt niet terug
+        offerte_id = offerte["id"]
+        o.gezegd = [{"id": 1, "ts": "", "tekst": "de offerte is weg", "antwoord": ""}]   # anders slaat de ronde over
+        r, staat = o.ronde(uit=antwoord([taak("Offerte keuken sturen", offerte["bron"], status="gedaan", tid=offerte_id)]),
+                           nu=MIDDAG_UTC, moment="tussendoor")
+        assert len(staat["taken"]) == 2 and offerte_id not in staat["taken"], staat["taken"]
+        o.gezegd = o.gezegd + [{"id": 2, "ts": "", "tekst": "nog iets", "antwoord": ""}]
+        r, staat = o.ronde(uit=antwoord(), nu=NAMIDDAG_UTC, moment="tussendoor")
+        assert len(staat["taken"]) == 2 and offerte_id not in staat["taken"], "afgerond komt niet terug"
+    finally:
+        o.weg()
+
+
+def test_angel2_afgevinkt_in_fathom_sluit_de_taak_en_prive_blijft_bij_mehdi():
+    """ANGEL-2: een actiepunt dat later in Fathom afgevinkt is, gaat van open naar gedaan; een actiepunt met een privéstuk
+    in de regel gaat nooit naar een collega."""
+    nu = OCHTEND_UTC
+    staat = M.laad_staat("/bestaat/niet/staat.json")
+    bundel = [{"dag": GISTEREN, "dagbestand": WERKBUNDEL, "telling": {}}]
+    staat, tel = M.neem_actiepunten(staat, M.actiepunten(bundel), bundel, KERN, nu)
+    assert tel["actiepunt"] == 3 and len(staat["taken"]) == 3, tel
+    afgevinkt = WERKBUNDEL.replace("Mehdi; op 00:12:30]", "Mehdi; op 00:12:30; klaar in Fathom]")
+    bundel2 = [{"dag": GISTEREN, "dagbestand": afgevinkt, "telling": {}}]
+    staat, tel = M.neem_actiepunten(staat, M.actiepunten(bundel2), bundel2, KERN, nu)
+    assert tel["gedaan"] == 1 and len(staat["taken"]) == 2 and staat["afgerond"][-1]["reden"] == "afgevinkt in Fathom", tel
+    prive = WERKBUNDEL.replace("Snede tekenen voor de keuken", "Snede tekenen voor de privé-keuken")
+    bundel3 = [{"dag": GISTEREN, "dagbestand": prive, "telling": {}}]
+    staat3, _ = M.neem_actiepunten(M.laad_staat("/bestaat/niet/staat.json"), M.actiepunten(bundel3), bundel3, KERN, nu)
+    snede = next(t for t in staat3["taken"].values() if "Snede" in t["tekst"])
+    assert snede["voor"] == "mehdi" and snede.get("prive") is True, snede
+    # begrensd per ronde: de rest komt de volgende ronde
+    veel = WERKBUNDEL.replace("  - actiepunt [plaud:p1", "\n".join(
+        f"  - actiepunt [plaud:p1; HA 9003]: punt nummer {i}" for i in range(30)) + "\n  - actiepunt [plaud:p1")
+    bundel4 = [{"dag": GISTEREN, "dagbestand": veel, "telling": {}}]
+    staat4, tel4 = M.neem_actiepunten(M.laad_staat("/bestaat/niet/staat.json"), M.actiepunten(bundel4), bundel4, KERN, nu)
+    assert tel4["actiepunt"] == M.MAX_NIEUW_ACTIE and tel4["actiepunt_later"] == 33 - M.MAX_NIEUW_ACTIE, tel4
+
+
+def test_angel2_droog_met_nepmodel_haalt_een_taak_uit_een_actiepunt():
+    """ANGEL-2, proef in de droge stand (X3: nooit een echt model): met een nepmodel dat niets terugzegt, staat het
+    actiepunt toch in de lijst en doorstaat het bron_in; --stil toont geen namen."""
+    import contextlib
+    import io
+    o = Omgeving(bundel=False)
+    gisteren = M.dagen_terug(datetime.now(timezone.utc))[1]
+    os.makedirs(os.path.join(o.map, gisteren[:4]))
+    with open(os.path.join(o.map, gisteren[:4], f"{gisteren}.md"), "w", encoding="utf-8") as f:
+        f.write(WERKBUNDEL.replace(GISTEREN, gisteren))
+    oud = (M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas)
+    M.DAGBOEK, M.STAAT = o.map, os.path.join(o.map, "staat.json")
+    M.collegas_kern, M.wat_mehdi_zei, bord.collegas = (lambda: list(KERN)), (lambda nu: []), (lambda zonder=None: AGENTS)
+    M.vraag_claude = lambda system, inhoud: (antwoord(), {})
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = M.droog(["mehdi_agent.py", "--droog", "--zaad", "--moment", "ochtend", "--stil"])
+        tekst = buf.getvalue()
+        assert code == 0 and "Omega" not in tekst and "Zeta" not in tekst, tekst
+        assert "begint met 'Offerte'" in tekst and "begint met 'Aannemer'" in tekst, tekst
+        assert not os.path.exists(M.STAAT), "droog: geen staat"
+    finally:
+        M.DAGBOEK, M.STAAT, M.vraag_claude, M.collegas_kern, M.wat_mehdi_zei, bord.collegas = oud
+        M.ag._log.clear()
+        o.weg()
+
+
+def test_angel7_voorlopige_bundel_van_vandaag_en_de_nacht_gaat_voor():
+    """ANGEL-7 (T-0120, P5): zonder dagbestand van vandaag leest Ai Angel de voorlopige bundel (dagbundel-voorlopig naast
+    de map dagboek), alleen als die van vandaag is; een nieuwe voorlopige versie verandert de vingerafdruk, zodat de ronde
+    van :20 niet overslaat. Het dagbestand van de nacht vervangt de voorlopige."""
+    wortel = tempfile.mkdtemp(prefix="mehdi-agent-voorlopig-")
+    try:
+        dagboek, voorlopig = os.path.join(wortel, "dagboek"), os.path.join(wortel, "dagbundel-voorlopig")
+        os.makedirs(voorlopig)
+        assert M.voorlopig_map(dagboek) == voorlopig
+        nu = datetime(2026, 10, 31, 9, 20, tzinfo=timezone.utc)            # 10:20 in Brussel
+        vandaag = "2026-10-31"
+
+        def zet_voorlopig(dag, uur, extra=""):
+            with open(os.path.join(voorlopig, "vandaag.md"), "w", encoding="utf-8") as f:
+                f.write(f"# Dag {dag} voorlopig (stand {uur})\n\n## Werkgesprekken\n\n{extra}\n")
+            with open(os.path.join(voorlopig, "vandaag.json"), "w", encoding="utf-8") as f:
+                json.dump({"dag": dag, "vastgesteld": True}, f)
+        zet_voorlopig("2026-10-30", "22:00")
+        assert M.lees_bundels(M.dagen_terug(nu), dagboek) == [] or all(b["dag"] != vandaag for b in
+                                                                       M.lees_bundels(M.dagen_terug(nu), dagboek))
+        zet_voorlopig(vandaag, "10:00", "- 09:00 Fathom, 30 min: Ochtendoverleg [fathom:801]\n"
+                      "  - actiepunt [fathom:801; HA, zonder dossier]: Verslag sturen")
+        b = M.lees_bundels(M.dagen_terug(nu), dagboek)
+        assert [x["dag"] for x in b] == [vandaag] and b[0]["voorlopig"] is True, b
+        assert [p["wat"] for p in M.actiepunten(b)] == ["Verslag sturen"]
+        v1 = M.vingerafdruk(b, [])
+        zet_voorlopig(vandaag, "13:00", "- 09:00 Fathom, 30 min: Ochtendoverleg [fathom:801]")
+        assert M.vingerafdruk(M.lees_bundels(M.dagen_terug(nu), dagboek), []) != v1, "een nieuwe versie is nieuws"
+        # de nacht: het dagbestand gaat voor
+        os.makedirs(os.path.join(dagboek, "2026"))
+        with open(os.path.join(dagboek, "2026", f"{vandaag}.md"), "w", encoding="utf-8") as f:
+            f.write(f"# Dag {vandaag} vastgesteld\n")
+        b = M.lees_bundels(M.dagen_terug(nu), dagboek)
+        assert b[0]["dagbestand"].startswith(f"# Dag {vandaag} vastgesteld") and b[0]["voorlopig"] is False, b
+        assert "voorlopig" not in M.invoer(nu, "tussendoor", b, M.laad_staat("/bestaat/niet"), [], [])["dagbundel"][0]
+    finally:
+        shutil.rmtree(wortel, ignore_errors=True)
+
+
 def test_cronregel_elk_uur_met_slot_en_tijdslimiet():
     regels = [r for r in open(os.path.join(RUNNER, "planning", "mehdi-agent.cron"), encoding="utf-8").read().splitlines()
               if r.strip() and not r.startswith("#")]
