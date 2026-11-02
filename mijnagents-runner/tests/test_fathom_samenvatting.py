@@ -144,6 +144,10 @@ def test_inhaalronde_droog_en_een():
     uit = subprocess.run([sys.executable, pad], capture_output=True, text=True, env=omgeving, cwd=os.path.join(RUNNER, "koppelingen"))
     assert uit.returncode == 0 and "bijgewerkt 1" in uit.stdout and "niets_nieuws 1" in uit.stdout, uit.stdout
     assert os.path.exists(os.path.join(m21, "samenvatting.md")) and os.path.exists(os.path.join(m22, "samenvatting.md"))
+    # de droge telling na de volle ronde bewijst dat niets meer ontbreekt (Codex 02-11 ronde 5)
+    uit = subprocess.run([sys.executable, pad, "--droog"], capture_output=True, text=True, env=omgeving,
+                         cwd=os.path.join(RUNNER, "koppelingen"))
+    assert uit.returncode == 0 and "bijgewerkt 0" in uit.stdout and "niets_nieuws 2" in uit.stdout, uit.stdout
 
 
 if __name__ == "__main__":

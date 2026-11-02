@@ -48,7 +48,8 @@ def main():
             tel["zonder_map"] += 1
             continue
         if a.droog:
-            tel["bijgewerkt"] += 1
+            # Telt wat er echt ontbreekt (Codex 02-11 ronde 5): na een volle ronde hoort hier bijgewerkt 0 te staan.
+            tel["bijgewerkt" if FW.samenvatting_nieuw(map_, g)[1] else "niets_nieuws"] += 1
             continue
         if FW.samenvatting_aanvullen(map_, g):
             tel["bijgewerkt"] += 1

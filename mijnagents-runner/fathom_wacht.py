@@ -256,25 +256,33 @@ def schrijf_heel(pad, tekst):
         raise
 
 
-def samenvatting_aanvullen(map_, g):
-    """Een gesprek dat al in het archief staat (bewaar slaat het over) krijgt alsnog de samenvatting en de actiepunten
-    als Fathom ze nu wel heeft en gesprek.json ze nog mist (overleg T-0154 X2: bestaande gesprekken bijwerken, de
-    herkenning en al het andere in gesprek.json blijven staan). Geeft of er iets bijgeschreven is."""
+def samenvatting_nieuw(map_, g):
+    """Alleen lezen: (meta, nieuw) met wat samenvatting_aanvullen in gesprek.json zou bijschrijven; nieuw is leeg als er
+    niets te vullen is, bij een onleesbaar gesprek.json, en bij een ander of ontbrekend recording_id (Codex 02-11: twee
+    lege nummers zijn niet gelijk). De droge telling van de inhaalronde telt hiermee wat er echt ontbreekt."""
     gj = os.path.join(map_, "gesprek.json")
     try:
         meta = json.load(open(gj, encoding="utf-8"))
     except (OSError, ValueError):
-        return False
-    # Alleen dezelfde opname, en alleen als beide een nummer hebben (Codex 02-11: twee lege nummers zijn niet gelijk).
+        return None, {}
     if not isinstance(meta, dict) or not meta.get("recording_id") or meta.get("recording_id") != g.get("recording_id"):
-        return False
+        return None, {}
     nieuw = {}
     if not meta.get("default_summary") and fathom.samenvatting_md(g).strip():
         nieuw["default_summary"] = g["default_summary"]
     if not meta.get("action_items") and g.get("action_items"):
         nieuw["action_items"] = g["action_items"]
+    return meta, nieuw
+
+
+def samenvatting_aanvullen(map_, g):
+    """Een gesprek dat al in het archief staat (bewaar slaat het over) krijgt alsnog de samenvatting en de actiepunten
+    als Fathom ze nu wel heeft en gesprek.json ze nog mist (overleg T-0154 X2: bestaande gesprekken bijwerken, de
+    herkenning en al het andere in gesprek.json blijven staan). Geeft of er iets bijgeschreven is."""
+    meta, nieuw = samenvatting_nieuw(map_, g)
     if not nieuw:
         return False
+    gj = os.path.join(map_, "gesprek.json")
     samenvatting_bewaren(map_, dict(meta, **nieuw))
     meta.update(nieuw)
     schrijf_heel(gj, json.dumps(meta, ensure_ascii=False, indent=1))
