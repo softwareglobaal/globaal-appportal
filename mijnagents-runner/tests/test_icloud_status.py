@@ -459,10 +459,12 @@ class ICloudStatus(unittest.TestCase):
         m = self.module
         m.coord = lambda adres: (50.0, 4.0)
         afspraak = {"titel": "Plaatsbezoek 9999", "start": "10:00", "einde": "11:00", "adres": "Proefstraat 1, 9999 Proefdorp"}
-        zeker = {"mensen": False, "scherm": False, "app": False}
+        zeker = {"mensen": False, "gezicht": False, "scherm": False, "app": False}
+        # nazorg-mac (FOTO-8): ook een klein gezicht (mensen False, gezicht True) of een onbekend gezicht is nooit werk
         fotos = [dict(self.foto(uid, lat=50.0, lon=4.0), tijd="10:15", **dict(zeker, **vlag)) for uid, vlag in (
             ("mens", {"mensen": True}), ("onbekend", {"mensen": None}), ("scherm", {"scherm": True}), ("app", {"app": True}),
-            ("scherm-onbekend", {"scherm": None}), ("werf", {}))]
+            ("scherm-onbekend", {"scherm": None}), ("klein-gezicht", {"gezicht": True}), ("gezicht-onbekend", {"gezicht": None}),
+            ("werf", {}))]
         self.assertEqual(m.koppel_werk(fotos, [afspraak]), 1)
         self.assertEqual([f["uuid"] for f in fotos if f["werk"]], ["werf"])
         inhoud = lambda **k: json.dumps(dict({"datum": "2026-10-31", "start": "2026-10-31T10:00:00+01:00",
@@ -541,7 +543,78 @@ class ICloudStatus(unittest.TestCase):
         self.assertEqual(uit, {"werf": (False, False, False, True), "portret": (False, False, True, True),
                                "groep": (False, False, True, True), "scherm": (True, False, False, False),
                                "app": (False, True, False, False), "nieuw": (False, False, None, None),
-                               "verborgen": (False, False, False, False), "kleine-gezichten": (False, False, False, True)})
+                               "verborgen": (False, False, False, True), "kleine-gezichten": (False, False, False, True)})
+
+    def test_nazorg_gezicht_onbekend_zonder_gezichtentabel_en_verborgen_gezicht_telt(self):
+        # nazorg-mac (Mehdi: open nooit een foto van mensen): zonder leesbare gezichtentabel is 'geen gezicht' niet gekend,
+        # ook al analyseerde Photos de foto; en een verborgen gezicht (ZHIDDEN) staat nog op de foto. In beide gevallen
+        # opent voorvertoningen() het beeld niet.
+        m = self.module
+        m.DB = str(Path(self.home.name) / "Photos.sqlite")
+        t = datetime.fromisoformat("2026-10-14T11:30:00+02:00").timestamp() - m.APPLE_EPOCH
+        con = sqlite3.connect(m.DB)
+        con.execute("CREATE TABLE ZASSET (Z_PK INTEGER, ZUUID TEXT, ZFILENAME TEXT, ZDATECREATED REAL, ZLATITUDE REAL, "
+                    "ZLONGITUDE REAL, ZKIND INTEGER, ZTRASHEDSTATE INTEGER, ZISDETECTEDSCREENSHOT INTEGER)")
+        con.execute("CREATE TABLE ZADDITIONALASSETATTRIBUTES (ZASSET INTEGER, ZORIGINALFILENAME TEXT, ZIMPORTEDBY INTEGER, "
+                    "ZFACEANALYSISVERSION INTEGER, ZHASPEOPLESCENEMIDORGREATERCONFIDENCE INTEGER)")
+        uid = "bbbbbbb1-0000-4000-8000-000000000000"
+        con.execute("INSERT INTO ZASSET VALUES (1, ?, 'X.HEIC', ?, 50, 4, 0, 0, 0)", (uid, t))
+        con.execute("INSERT INTO ZADDITIONALASSETATTRIBUTES VALUES (1, 'IMG.HEIC', 1, 12, 0)")
+        con.commit()
+        # geen tabel ZDETECTEDFACE: Photos' vlag zegt geen mensen, maar een gezicht is niet gekend
+        self.assertEqual([(f["mensen"], f["gezicht"]) for f in m.fotos_van("2026-10-14")], [(False, None)])
+        con.execute("UPDATE ZADDITIONALASSETATTRIBUTES SET ZHASPEOPLESCENEMIDORGREATERCONFIDENCE = NULL")
+        con.commit()
+        # ook Photos' vlag ontbreekt: mensen is dan evenmin gekend
+        self.assertEqual([(f["mensen"], f["gezicht"]) for f in m.fotos_van("2026-10-14")], [(None, None)])
+        con.execute("UPDATE ZADDITIONALASSETATTRIBUTES SET ZHASPEOPLESCENEMIDORGREATERCONFIDENCE = 0")
+        con.execute("CREATE TABLE ZDETECTEDFACE (ZASSETFORFACE INTEGER, ZSIZE REAL, ZHIDDEN INTEGER)")
+        con.execute("INSERT INTO ZDETECTEDFACE VALUES (1, 0.02, 1)")
+        con.commit()
+        con.close()
+        self.assertEqual([(f["mensen"], f["gezicht"]) for f in m.fotos_van("2026-10-14")], [(False, True)])
+        # de voorvertoning: geen van beide wordt geopend
+        bib = Path(self.home.name) / "Bibliotheek.photoslibrary"
+        m.LIB = str(bib / "originals")
+        afgeleid = bib / "resources/derivatives/b" / f"{uid}_1_105_c.jpeg"
+        afgeleid.parent.mkdir(parents=True)
+        afgeleid.write_bytes(b"fictieve afgeleide")
+        m.bord_lees = lambda pad: {"items": [{"van": "icloud-wacht", "soort": "fotoindeling", "inhoud": json.dumps(
+            {"datum": "2026-10-14", "voorbeeld_nodig": [uid]})}]}
+        m.bord = lambda *a: self.fail("geen voorvertoning van een foto met een gezicht")
+        with patch.object(m.subprocess, "run", lambda *a, **k: self.fail("een foto met een gezicht wordt nooit geopend")):
+            self.assertEqual(m.voorvertoningen(), {"verstuurd": 0, "zonder_beeld": 0, "niet_toegelaten": 1, "fouten": []})
+            con = sqlite3.connect(m.DB)
+            con.execute("DROP TABLE ZDETECTEDFACE")
+            con.commit()
+            con.close()
+            self.assertEqual(m.voorvertoningen(), {"verstuurd": 0, "zonder_beeld": 0, "niet_toegelaten": 1, "fouten": []})
+
+    def test_nazorg_dag_is_die_van_brussel_ook_op_een_mac_elders(self):
+        # nazorg-mac (FOTO-8): de dag van de avondronde zonder --dag is de Brusselse, niet die van de klok van de Mac.
+        import time
+        oud = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Paramaribo"
+            time.tzset()
+            laat = datetime(2026, 11, 1, 22, 30, tzinfo=ZoneInfo("America/Paramaribo"))   # in Brussel al 02-11, 02:30
+            spec = importlib.util.spec_from_file_location("icloud_dag_proef", Path(__file__).resolve().parents[1] / "mac/icloud_wacht.py")
+            mod = importlib.util.module_from_spec(spec)
+
+            class Klok(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return laat.astimezone(tz) if tz else laat.replace(tzinfo=None)
+            with patch.dict(os.environ, {"HOME": self.home.name}), patch.object(sys, "argv", ["icloud_wacht.py"]), \
+                    patch("datetime.datetime", Klok):
+                spec.loader.exec_module(mod)
+            self.assertEqual(mod.DAG, "2026-11-02")
+        finally:
+            if oud is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = oud
+            time.tzset()
 
     def test_foto8_tijd_is_die_van_brussel_ook_op_een_mac_elders(self):
         # Codex 3: de tijd per foto kwam uit de tijdzone van de Mac; een Mac in Suriname zette een privéfoto zo bij een
