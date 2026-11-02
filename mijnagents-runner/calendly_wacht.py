@@ -37,9 +37,22 @@ TERUG_DAGEN = 14
 ZONDER_NOOD = "Calendly-boeking zonder afspraak in de agenda"
 # De server draait in UTC; de agenda van Mehdi is altijd Brusselse tijd.
 BRUSSEL = ZoneInfo("Europe/Brussels")
-# Het kenmerk van Calendly in een omschrijving: een link op calendly.com of een subdomein ervan, niet een domein dat
-# alleen zo eindigt (notcalendly.com) of zo begint (calendly.com.proef.test). Nazorg Codex-toets 1, T-0120 CL-2.
-CALENDLY_LINK = re.compile(r"https?://(?:[a-z0-9-]+\.)*calendly\.com(?![a-z0-9.-])", re.I)
+# Het kenmerk van Calendly in een omschrijving: een link waarvan de host calendly.com of een subdomein ervan is, niet een
+# domein dat alleen zo eindigt (notcalendly.com) of zo begint (calendly.com.proef.test), en niet calendly.com als
+# gebruikersnaam voor een andere host (https://calendly.com@proef.test/). Nazorg Codex-toetsen 1 en 2, T-0120 CL-2.
+URL_IN_TEKST = re.compile(r"https?://[^\s<>\"'()\[\]{}]+", re.I)
+
+
+def calendly_link(tekst):
+    """Staat er in de tekst een link waarvan de host (urlsplit) calendly.com of een subdomein ervan is?"""
+    for url in URL_IN_TEKST.findall(tekst or ""):
+        try:
+            host = (urllib.parse.urlsplit(url).hostname or "").rstrip(".").lower()
+        except ValueError:
+            continue
+        if host == "calendly.com" or host.endswith(".calendly.com"):
+            return True
+    return False
 
 # Welke Google-agenda een account beschrijft, gemeten 19-09-2026. Leeg = nog niet
 # vastgesteld. Dit is alleen voor het verslag; ik leid er niets uit af.
@@ -228,7 +241,7 @@ def agenda_bewijs(van_dagen, tot_dagen):
     for x in ruw + archief:
         if not x.get("fout"):
             bewijs[(x.get("start") or "")[:16]].append({"id": x.get("id") or "",
-                                                        "calendly": bool(CALENDLY_LINK.search(x.get("omschrijving") or ""))})
+                                                        "calendly": calendly_link(x.get("omschrijving"))})
     return dict(bewijs), sorted(ongelezen)
 
 

@@ -164,11 +164,13 @@ check("CL-2 twee boekingen met dezelfde Google-id en een afspraak: een blijft ge
 noden, signaal = ronde(EEN, [b_een, b_zes], ({_uur: [{"id": "g-een", "calendly": True}, {"id": "g-een", "calendly": True}]}, []))
 check("CL-2 twee boekingen met dezelfde Google-id en twee zulke afspraken: geen nood",
       not any(n["tekst"] == CW.ZONDER_NOOD for n in noden), (noden, signaal))
-check("CL-2 het kenmerk is een link op calendly.com of een subdomein, geen domein dat er alleen op lijkt",
-      all(CW.CALENDLY_LINK.search(t) for t in ("Annuleren: https://calendly.com/cancellations/x",
-                                                 "HTTPS://Calendly.com/proef", "https://assets.calendly.com/x"))
-      and not any(CW.CALENDLY_LINK.search(t) for t in ("https://notcalendly.com/x", "https://calendly.com.proef.test/x",
-                                                         "calendly.com zonder link", "")))
+check("CL-2 het kenmerk is een link met als host calendly.com of een subdomein, geen domein dat er alleen op lijkt",
+      all(CW.calendly_link(t) for t in ("Annuleren: https://calendly.com/cancellations/x", "HTTPS://Calendly.com/proef",
+                                        "https://assets.calendly.com/x", '<a href="https://calendly.com/reschedulings/x">',
+                                        "https://calendly.com:443/x"))
+      and not any(CW.calendly_link(t) for t in ("https://notcalendly.com/x", "https://calendly.com.proef.test/x",
+                                                "https://calendly.com@proef.test/x", "https://x:calendly.com@proef.test/",
+                                                "calendly.com zonder link", "", None)))
 noden, signaal = ronde(EEN, [b_gisteren], ({}, []))
 check("CL-2 een boeking van gisteren zonder afspraak wordt ook gezien",
       {"tekst": CW.ZONDER_NOOD, "wie": "mehdi"} in noden and b_gisteren["_lok"][:10] in signaal, (noden, signaal))
@@ -217,6 +219,8 @@ _gelezen = []
 _nep.afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("afspraken", van, tot, alleen_lezen)) or [
     {"kalender": "werk@proef.test", "id": "g1", "start": "2026-11-06T13:00:00+01:00", "omschrijving": "https://calendly.com/x"},
     {"kalender": "werk@proef.test", "id": "g3", "start": "2026-11-08T10:00:00+01:00", "omschrijving": "https://notcalendly.com/x"},
+    {"kalender": "werk@proef.test", "id": "g4", "start": "2026-11-08T11:00:00+01:00",
+     "omschrijving": "https://calendly.com@proef.test/x"},
     {"kalender": "kind@proef.test", "fout": "403"}])
 _nep.archief_afspraken = lambda van, tot, alleen_lezen=False: (_gelezen.append(("archief", van, tot, alleen_lezen)) or [
     {"kalender": "archief@proef.test", "id": "g2", "start": "2026-11-07T09:00:00+01:00", "_archief": "ZZ ARCHIEF proef"}])
@@ -228,7 +232,8 @@ try:
     check("CL-2 agenda_bewijs leest de agenda's en het archief van De Agendawacht, alleen lezend, ook terug, met kenmerk",
           _gelezen == [("afspraken", -15, 15, True), ("archief", -15, 15, True)]
           and st == {"2026-11-06T13:00": [{"id": "g1", "calendly": True}], "2026-11-07T09:00": [{"id": "g2", "calendly": False}],
-                     "2026-11-08T10:00": [{"id": "g3", "calendly": False}]},   # notcalendly.com is geen kenmerk (nazorg)
+                     "2026-11-08T10:00": [{"id": "g3", "calendly": False}],    # notcalendly.com is geen kenmerk (nazorg)
+                     "2026-11-08T11:00": [{"id": "g4", "calendly": False}]},   # host proef.test, niet calendly.com
           (_gelezen, st))
     check("CL-2 een niet gelezen privé-agenda heet 'een privé-agenda', zonder haar naam", ong == ["een privé-agenda"], ong)
     _nep.ARCHIEF_FOUT = "archiefagenda niet gelezen: proef"
