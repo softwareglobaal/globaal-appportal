@@ -59,7 +59,8 @@ def _beste(res):
                                  "kandidaat": res.get("kandidaat"), "soort": res.get("soort"),
                                  "bewezen": sorted(res.get("context") or {})}
 # Zonder aanbeveling moet het verslag zeggen waarom (overleg 39, X1: B).
-REDEN = re.compile(r"niet bevestigd|niet bewezen|## Niet gevonden|\*\*Vraag aan jou:\*\*|niet verstuurd|persoonsgegevens", re.I)
+REDEN = re.compile(r"niet bevestigd|niet bewezen|## Niet gevonden|\*\*Vraag aan jou:\*\*|niet verstuurd|persoonsgegevens"
+                   r"|geen aanbod dat compatibel is en een volledige totaalprijs heeft", re.I)     # verslag.maak (Codex 41)
 
 
 def keur(proef, uit):

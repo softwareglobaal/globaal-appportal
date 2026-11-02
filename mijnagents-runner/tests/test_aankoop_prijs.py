@@ -1226,6 +1226,9 @@ check("een vraag met persoonsgegevens gaat in de proefbank ook niet naar het mod
       str(PB.keur({"uitkomst": "N", "automatisch": {"model": False}}, uit)))
 check("zonder aanbeveling en zonder reden in het verslag faalt een B-proef", not all(ok for ok, _ in PB.keur(
       {"uitkomst": "B"}, dict(uit, verslag="**Geen aanbeveling:** niets."))))
+check("de vaste reden van het verslag zonder aanbieding telt als reden (Codex controle 41)", all(ok for ok, _ in PB.keur(
+      {"uitkomst": "B"}, dict(uit, verslag=V.maak("v", {}, {"goed": [], "niet_compatibel": [], "afgewezen": []},
+                                                    "2026-10-30", "2026-10-30")))))
 reeks = json.load(open(os.path.join(PB.HIER, "docs", "aankoop", "proeven", "prijsonderzoeker.json"), encoding="utf-8"))
 check("de reeks van overleg 39 heeft twintig proeven P01 tot P20, zonder echte persoonsgegevens buiten P18 en P19",
       [p["id"] for p in reeks] == [f"P{i:02d}" for i in range(1, 21)]
