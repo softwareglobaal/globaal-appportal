@@ -65,7 +65,7 @@ con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,br
 con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,ts) "
             "VALUES('whatsapp:2','2026-10-30','10:00',0,'Oud',1,'whatsapp','x')")
 con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,datum,dag,van,van_naam,onderwerp,soort,ts) VALUES"
-            "('m1','mail-mch','mch@h-architects.be','2026-10-31T08:02:00+00:00','2026-10-31','a@b.be','Klant A',"
+            "('m1','mail-mch','postvak@voorbeeld.test','2026-10-31T08:02:00+00:00','2026-10-31','a@b.be','Klant A',"
             "'Offerte dak','klant','x')")
 con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('sms-wacht','','fout','kopie niet leesbaar',"
             "'2026-10-31T10:00:00+00:00')")
@@ -95,7 +95,7 @@ for uniek, wacht, soort, opv, besluit, mp, naar, opg in (
         ("m4", "mail-hinv", "midden", "open", "afgehandeld", "INBOX", "INBOX.Bank en verzekering", 0),
         ("m5", "mail-hinv", "midden", "beantwoord", "", "INBOX", "", 0)):
     con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,opvolging,besluit,"
-                "naar,opgeruimd) VALUES(?,?,'proef@h-invest.be',?,'2026-10-31T09:00:00+00:00','2026-10-31','p@voorbeeld.test',"
+                "naar,opgeruimd) VALUES(?,?,'proef@voorbeeld.test',?,'2026-10-31T09:00:00+00:00','2026-10-31','p@voorbeeld.test',"
                 "'Proef',?,?,'x',?,?,?,?)", (uniek, wacht, mp, f"Onderwerp {uniek}", soort, opv, besluit, naar, opg))
 for wacht, stap in (("mail-melo", "ronde"), ("mail-info-harc", "ronde"), ("mail-info-harc", "bron")):
     con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES(?,'dag 2026-10-31',?,'laatste 24 u: hoog 0',"
@@ -325,8 +325,10 @@ with open(WD.ZOOM_ARCHIEF, "w", encoding="utf-8") as f:
         "verdwenen": [{"uur": "16:00", "mb": 20.0}]}}}, f)
 WD.ANGEL_STAAT = os.path.join(ZA, "staat.json")
 with open(WD.ANGEL_STAAT, "w", encoding="utf-8") as f:
-    json.dump({"taken": {"t3": {"id": "t3", "tekst": "Bel de proefaannemer over de offerte", "prive": True}},
-               "afgerond": []}, f)
+    json.dump({"taken": {"t3": {"id": "t3", "tekst": "Bel de proefaannemer over de offerte", "prive": True},
+                         **{f"t{i}": {"id": f"t{i}", "tekst": f"Proeftaak nummer {i}", "prive": False}
+                            for i in (1, 2, 4, 5, 6, 7, 8, 9, 10, 11)}},
+               "afgerond": [{"id": "t12", "tekst": "Proeftaak nummer 12", "prive": False, "status": "gedaan"}]}, f)
 TAKEN = ["Bijgewerkt 27-10-2026 10:20. Bijsturen kan op het bord.", "", "## Voor jou", ""]
 for i in range(1, 15):
     tekst = {3: "Bel de proefaannemer over de offerte"}.get(i, f"Proeftaak nummer {i}")
@@ -485,6 +487,130 @@ check("P41 (PLAUD-7) het transcript van een werkopname, met tijd en spreker", (t
 check("P41 Plaud privé, een map met '..', Fathom als transcript of Plaud als Fathom-link: 404",
       [open_("plaud:pw2", "transcript").status_code, open_("plaud:pw3", "transcript").status_code,
        open_("fathom:f1", "transcript").status_code, open_("plaud:pw1", "fathom").status_code] == [404] * 4)
+
+# Codex-toets 1 (groep pagina): symlink, privé in elke schrijfwijze, lang onderwerp, onvolledig overzicht, Ai Angel zonder
+# staat, een fotodag met alleen de telling.
+os.symlink(os.path.join(INV, "2026-10-27 1000 Proefopname"), os.path.join(INV, "2026-10-26 0900 Wijst elders"))
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,link,archief,ts) VALUES("
+            "'plaud:pw4','2026-10-26','09:00',3,'Proef Persoon','Proefonderwerp','regie',0,'plaud','',"
+            "'Data uit Mehdi/Plaud/2026-10-26 0900 Wijst elders/transcript.md','x')")
+for uniek, titel in (("communicatie:dag:2026-10-26", "Communicatie 26-10 (Prive)"),
+                     ("vaststelling:2026-10-26", "Dagvaststelling 2026-10-26 privé")):
+    con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,sleutel,ts) VALUES(?,'mehdi',?,?,'',?,"
+                "'2026-10-26','2026-10-26T20:00:00+00:00')", ("communicatie-bundelaar" if "communicatie" in uniek else
+                                                                "dagbundelaar", "communicatie" if "communicatie" in uniek
+                                                                else "dagvaststelling", titel, uniek))
+con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,sleutel,ts) VALUES('icloud-wacht','mehdi','foto',"
+            "'2026-10-26: geen werk: privé 7, met mensen 2, scherm of app 1, onbeslist 0 (alleen geteld, geen plaats)',?,"
+            "'fotos:2026-10-26:telling','2026-10-26','2026-10-26T20:00:00+00:00')",
+            (json.dumps({"datum": "2026-10-26", "aantal": 10, "prive": 7, "mensen": 2}),))
+con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,bijlagen,bijlagen_info,"
+            "opvolging,naar) VALUES('m40','mail-mch','proef@voorbeeld.test','INBOX','2026-10-26T09:00:00+00:00','2026-10-26',"
+            "'p@voorbeeld.test','Proef',?,'klant','x',2,?,'open','INBOX.Proefmap')",
+            ("Proef " * 40, '[{"soort":"pdf","bytes":2000},{"soort":"dwg","bytes":3000}]'))
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('plaud-wacht','','bron','proefronde',"
+            "'2026-10-26T08:00:00+00:00')")
+con.commit()
+con.close()
+w26 = wachten("2026-10-26")
+check("P42 (Codex 1) een Plaud-map die een symlink is (ook binnen de invoer) geeft geen link en geen transcript",
+      not any(x.get("link") for x in w26["plaud-wacht"]["items"]) and open_("plaud:pw4", "transcript").status_code == 404,
+      w26["plaud-wacht"]["items"])
+check("P42 privé in elke schrijfwijze in de titel geeft geen link (Prive, privé)",
+      not any(x.get("link") for n in ("dagbundelaar", "communicatie-bundelaar") for x in w26[n]["items"])
+      and len(w26["dagbundelaar"]["items"]) == 1, (w26["dagbundelaar"]["items"], w26["communicatie-bundelaar"]["items"]))
+check("P42 een fotodag met alleen de telling: geen link, geen plaats",
+      [x.get("link") for x in w26["icloud-wacht"]["items"]] == [None] and "alleen geteld, geen plaats" in
+      w26["icloud-wacht"]["items"][0]["wat"], w26["icloud-wacht"]["items"])
+lang = w26["mail-mch"]["items"][0]["wat"]
+check("P43 (Codex 1) bij een lang onderwerp blijven de bijlagen en de rest staan; het onderwerp wordt korter",
+      lang.endswith("· 2 bijlagen (pdf, dwg), 5 kB · klant · op te volgen · naar Proefmap") and len(lang) <= WD.KORT
+      and lang.startswith("Proef Proef"), lang)
+MANIFEST = os.path.join(INV, "00 manifest.json")
+os.rename(MANIFEST, MANIFEST + ".weg")
+p26 = wachten("2026-10-26")["plaud-wacht"]
+os.rename(MANIFEST + ".weg", MANIFEST)
+check("P44 (Codex 1) Plaud met een ronde maar zonder manifest: onvolledig, niet 'gelezen tot'",
+      p26["gelezen"]["stand"] == "onvolledig" and "is niet gelezen" in p26["gelezen"]["tekst"] and p26["plaud"] is None,
+      p26["gelezen"])
+check("P44 met een manifest van na die dag en geen opname: alle opnames bekend",
+      w26["plaud-wacht"]["gelezen"]["stand"] == "gelezen", w26["plaud-wacht"]["gelezen"])
+os.rename(WD.ZOOM_ARCHIEF, WD.ZOOM_ARCHIEF + ".weg")
+w27z = wachten("2026-10-27")["zoom-archief"]
+os.rename(WD.ZOOM_ARCHIEF + ".weg", WD.ZOOM_ARCHIEF)
+check("P44 De Zoomarchivaris met een ronde maar zonder overzicht: onvolledig, geen items, geen telling",
+      w27z["gelezen"]["stand"] == "onvolledig" and w27z["archief"] is None and w27z["aantal"] == 0, w27z["gelezen"])
+w25 = wachten("2026-10-25")["zoom-archief"]
+check("P44 met een overzicht dat de dag kent, zonder kopie en zonder ronde op die dag: oranje, alles bekend",
+      w25["kleur"] == "oranje" and w25["gelezen"]["tekst"] == "alle kopieën van deze dag bekend, niets gebeurd",
+      (w25["kleur"], w25["gelezen"]))
+LIJST = "## Voor jou\n\n1. Proeftaak nummer 1 (normaal)\n2. Oude taak die niet meer in de staat staat (hoog)\n" \
+        "\n## Voor een collega\n\n3. Proef Collega: Proeftaak nummer 4 (laag)\n"
+check("P45 (Codex 1) Ai Angel zonder leesbare staat: geen enkele taaktekst",
+      WD.angel_taken(LIJST, (None, None)) == [f"{n}. niet meer na te gaan of dit privé was: zie het bord" for n in (1, 2, 3)])
+check("P45 een taak die niet meer in de staat staat, blijft verborgen; een werktaak van een collega staat er wel",
+      WD.angel_taken(LIJST, WD.angel_prive_teksten()) == ["1. Proeftaak nummer 1 (normaal)",
+                                                          "2. niet meer na te gaan of dit privé was: zie het bord",
+                                                          "3. Proef Collega: Proeftaak nummer 4 (laag)"],
+      WD.angel_taken(LIJST, WD.angel_prive_teksten()))
+check("P45 exact vergeleken: 'Proeftaak nummer 1' maakt 'Proeftaak nummer 13' geen werktaak",
+      WD.angel_taken("13. Proeftaak nummer 13 (normaal)", WD.angel_prive_teksten())
+      == ["13. niet meer na te gaan of dit privé was: zie het bord"])
+check("P45 de taak uit 'afgerond' van de staat staat er met haar tekst", regels[11] == "12. Proeftaak nummer 12 (normaal)",
+      regels)
+
+# P46 (Codex 1): bord en Dagboek samen, zoals op de VM: het Dagboek vraagt het echte bord (test client). Alleen in de repo
+# (de Docker-build kopieert alleen mijnagents/); daar staat 'overgeslagen'.
+DAGBOEK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dagboek")
+if os.path.isfile(os.path.join(DAGBOEK, "app.py")):
+    import importlib.util  # noqa: E402
+    from datetime import date as _date  # noqa: E402
+    con = sqlite3.connect(os.environ["AGENTS_DB"])
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,link,ts) VALUES("
+                "'fathom:f9','2026-10-01','09:00',7,'Geheim Proefpersoon','Geheim proefonderwerp','regie',1,'fathom',"
+                "'https://fathom.video/calls/9','x')")
+    con.commit()
+    con.close()
+    os.environ.setdefault("DAGBOEK_MAP", tempfile.mkdtemp())
+    os.environ["DAGBOEK_GROUPS"] = "dagboek"
+    sys.path.append(DAGBOEK)                    # achteraan: app en wachten_dag van het bord blijven die van het bord
+    spec = importlib.util.spec_from_file_location("dagboek_app", os.path.join(DAGBOEK, "app.py"))
+    DB_ = importlib.util.module_from_spec(spec)
+    sys.modules["dagboek_app"] = DB_            # Flask zoekt zijn sjablonen bij de module
+    spec.loader.exec_module(DB_)
+    DB_.vandaag = lambda: _date(2026, 10, 31)
+    DB_.haal_locatie = lambda pad: None
+    DB_.haal_wachten = lambda dag, *a: C.get(f"/api/wachten/dag?dag={dag}", headers=K).get_json()
+
+    def _gesprek(uniek, wat):
+        r = C.get(f"/api/wachten/gesprek?uniek={uniek}&wat={wat}", headers=K)
+        return r.get_json() if r.status_code == 200 else {} if r.status_code == 404 else None
+    DB_.haal_gesprek = _gesprek
+    CD = DB_.app.test_client()
+    MD = {"X-authentik-groups": "dagboek"}
+    html = CD.get("/wachten/fathom-wacht?dag=2026-10-27", headers=MD).get_data(as_text=True)
+    r = CD.get("/wachten/gesprek/fathom:f1/fathom", headers=MD)
+    check("P46 bord en Dagboek samen: 'open in Fathom' via de route, en die stuurt door naar de deellink",
+          'href="/wachten/gesprek/fathom:f1/fathom"' in html and "fathom.video" not in html and r.status_code == 302
+          and r.headers["Location"] == "https://fathom.video/share/PROEF1", html[-3000:])
+    check("P46 samen: privé en een link buiten fathom.video geven 404",
+          [CD.get(f"/wachten/gesprek/{u}/fathom", headers=MD).status_code for u in ("fathom:f2", "fathom:f3", "fathom:f9")]
+          == [404] * 3)
+    html = CD.get("/wachten/fathom-wacht?dag=2026-10-01", headers=MD).get_data(as_text=True)
+    check("P46 samen, op precies 01-10 (archieflink): het privégesprek alleen 'privégesprek, N min', zonder link",
+          "privégesprek" in html and "Geheim" not in html and "fathom:f9" not in html, html[-3000:])
+    html = CD.get("/wachten/gesprek/plaud:pw1/transcript", headers=MD).get_data(as_text=True)
+    check("P46 samen: het transcript van een werkopname, en 404 voor de privéopname",
+          "Tweede proefzin." in html and CD.get("/wachten/gesprek/plaud:pw2/transcript", headers=MD).status_code == 404)
+    html = CD.get("/wachten/mehdi-agent?dag=2026-10-27", headers=MD).get_data(as_text=True)
+    check("P46 samen: de taken van Ai Angel met de link naar het bord", "<li>1. Proeftaak nummer 1 (normaal)</li>" in html
+          and 'href="https://mijnagents.globaal.be/agent/mehdi-agent"' in html and "proefaannemer" not in html)
+    html = CD.get("/wachten/whatsapp-wacht?dag=2026-10-27", headers=MD).get_data(as_text=True)
+    check("P46 samen: WhatsApp zonder link", 'class="open"' not in html)
+    check("P46 samen: voor 01-10 404", CD.get("/wachten/fathom-wacht?dag=2026-09-30", headers=MD).status_code == 404)
+else:
+    print("overgeslagen P46: bord en Dagboek samen (alleen in de repo, niet in de Docker-build)")
 
 print("klaar" if not fout else f"{fout} fout(en)")
 sys.exit(1 if fout else 0)

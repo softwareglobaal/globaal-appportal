@@ -427,6 +427,7 @@ GESPREK_WAT = {"fathom": "fathom:", "transcript": "plaud:"}
 GESPREK_UNIEK = re.compile(r"(?:fathom|plaud):[A-Za-z0-9_.-]{1,80}")
 FATHOM_LINK = re.compile(r"https://fathom\.video/[A-Za-z0-9/_.~%?=&+-]{1,400}")
 BORD_PAD = re.compile(r"/agent/[a-z0-9-]{1,40}")
+PRIVE_RE = re.compile(r"priv[eé]", re.I)
 
 
 def haal_wachten(dag, naam=None, blad=None):
@@ -483,9 +484,11 @@ def wachten_dag(dag, naam=None, blad=None):
             w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)
             w["fouten_kort"] = fouten_kort(w.get("fouten") or [])
-            # VOL-13: geen items en niet gelezen (of niet te lezen) is onbekend, nooit 0
-            w["onbekend"] = bool(w.get("leesfout")) or (not w.get("aantal") and (w.get("gelezen") or {}).get("stand")
-                                                        in ("niet", "onbekend"))
+            # VOL-13: geen items en niet gelezen (of niet te lezen) is onbekend, nooit 0; met items maar zonder het eigen
+            # overzicht van de wacht (Plaud, De Zoomarchivaris) is het aantal een ondergrens
+            stand = (w.get("gelezen") or {}).get("stand")
+            w["onbekend"] = bool(w.get("leesfout")) or (not w.get("aantal") and stand in ("niet", "onbekend", "onvolledig"))
+            w["minstens"] = bool(w.get("aantal")) and stand == "onvolledig"
             for it in w.get("items") or []:
                 link = item_link(w, it)
                 if link:
@@ -494,7 +497,7 @@ def wachten_dag(dag, naam=None, blad=None):
     gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
     gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
     # Eén wacht niet gelezen: dan is het dagtotaal niet volledig (Codex 01-11): "minstens" in plaats van een vol getal.
-    gegevens["onvolledig"] = any(w.get("leesfout") or w.get("onbekend") for w in alle)
+    gegevens["onvolledig"] = any(w.get("leesfout") or w.get("onbekend") or w.get("minstens") for w in alle)
     return gegevens
 
 
@@ -504,7 +507,7 @@ def item_link(w, it):
     item zelf. Geen link bij privé, bij een privégesprek of bij een Mac-kanaal en Xelion, ook als het bord er een gaf."""
     link = it.get("link")
     if not isinstance(link, dict) or w.get("naam") in GEEN_LINK or it.get("wie") == "privégesprek" \
-            or it.get("label") == "privé":
+            or it.get("label") == "privé" or PRIVE_RE.search(f"{it.get('wie')} {it.get('wat')}"):
         return None
     soort, tekst = link.get("soort"), str(link.get("tekst") or "openen")[:60]
     if soort in ("dag", "fotos"):

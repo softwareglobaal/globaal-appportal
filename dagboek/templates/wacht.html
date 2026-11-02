@@ -26,7 +26,7 @@
   <div class="kaart samen">
     <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
-      <div><span class="groot">{{ 'onbekend' if w['leesfout'] or w['onbekend'] else w['aantal'] }}</span> items binnen</div>
+      <div><span class="groot">{{ 'onbekend' if w['leesfout'] or w['onbekend'] else ('minstens ' if w['minstens'] else '') ~ w['aantal'] }}</span> items binnen</div>
       <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
       {% if is_vandaag and w['status'] and w['status']['laatste'] %}<div>laatste ronde <span class="groot">{{ w['status']['laatste'] }}</span></div>{% endif %}
       {% if w['gelezen'] %}<div class="gelezen gelezen-{{ w['gelezen']['stand'] }}">{{ w['gelezen']['tekst'] }}{% if w['gelezen']['bewijs'] %} <span class="zacht klein">({{ w['gelezen']['bewijs'] }})</span>{% endif %}</div>

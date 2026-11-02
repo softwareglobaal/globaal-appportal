@@ -199,8 +199,9 @@ def plaud_transcript_pad(r, mappen=None):
     if not map_ or "/" in map_ or "\\" in map_ or "\x00" in map_ or map_.strip(".") == "":
         return ""
     basis = os.path.realpath(PLAUD_INVOER)
-    pad = os.path.realpath(os.path.join(basis, map_, "transcript.json"))
-    return pad if os.path.dirname(os.path.dirname(pad)) == basis and os.path.isfile(pad) else ""
+    pad = os.path.join(basis, map_, "transcript.json")
+    # Codex-toets 1: geen symlink, ook niet binnen de invoer (dan wijst de map naar het transcript van een andere opname)
+    return pad if os.path.realpath(pad) == pad and os.path.isfile(pad) else ""
 
 
 def _klok(ms):
@@ -452,11 +453,13 @@ def lees_mail(conn, wacht, dag):
         opv = r.get("besluit") or OPVOLGING.get(r.get("opvolging") or "", "")
         waar = ("naar Opgeruimd" if r.get("opgeruimd") else f"naar {_map_kort(r['naar'])}" if r.get("naar")
                 else f"in {_map_kort(r['map'])}" if r.get("map") and r["map"] != "INBOX" else "")
-        # de bijlagen direct na het onderwerp: zo vallen ze niet weg als de regel te lang is
-        bij = bijlagen_tekst(r.get("bijlagen"), r.get("bijlagen_info"))
+        # Codex-toets 1: bij een lang onderwerp viel de rest (bijlagen, opvolging, waarheen) weg na KORT tekens; nu wordt
+        # het onderwerp korter, zodat de bijlagen en de rest altijd te zien zijn
+        rest = " · ".join(x for x in (bijlagen_tekst(r.get("bijlagen"), r.get("bijlagen_info")), r.get("soort") or "",
+                                      opv, waar) if x)
+        onderwerp = kort(r.get("onderwerp") or "(geen onderwerp)", max(30, KORT - len(rest) - 3))
         items.append(_item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend",
-                           " · ".join(x for x in (r.get("onderwerp") or "(geen onderwerp)", bij, r.get("soort") or "",
-                                                  opv, waar) if x)))
+                           " · ".join(x for x in (onderwerp, rest) if x)))
     return items
 
 
@@ -473,7 +476,7 @@ def lees_klaarzet(conn, wacht, dag, van, tot, zonder_gesprekken=False):
         + "ORDER BY ts LIMIT ?",
         (wacht, van, tot, dag, f"%:{dag}", f"%:{dag}:%", f"{dag} %", MAX_ITEMS)).fetchall()
     items = []
-    angel_prive = angel_prive_teksten() if wacht == "mehdi-agent" else ()
+    angel_prive = angel_prive_teksten() if wacht == "mehdi-agent" else (None, None)
     for r in rijen:
         inhoud = _json(r["inhoud"])
         wat = r["titel"] or ""
@@ -514,12 +517,12 @@ def foto_zonder_plaats(tekst):
 
 def klaarzet_link(wacht, r, inhoud, dag):
     """VOL-19 en DB-5: de link van een klaargezet item, als soort, of None. Nooit bij een privé-item (inhoud.prive of
-    PRIVÉ in de titel) en nooit bij een wacht uit GEEN_LINK.
+    privé in de titel, in elke schrijfwijze) en nooit bij een wacht uit GEEN_LINK.
     - De Dagbundelaar (dagvaststelling, dagbundel) en De Communicatiebundelaar: de dag op /dag/<dag>.
     - De Fotowacht: een werfgroep of kandidaat (FOTO-5) naar de foto's per project op /fotos/<dag>; de telling van wat
       geen werk is, krijgt geen link.
     - Ai Angel: zijn takenlijst en verslag naar zijn pagina op het bord."""
-    if wacht in GEEN_LINK or (isinstance(inhoud, dict) and inhoud.get("prive")) or "PRIVÉ" in str(r["titel"] or ""):
+    if wacht in GEEN_LINK or (isinstance(inhoud, dict) and inhoud.get("prive")) or PRIVE_RE.search(str(r["titel"] or "")):
         return None
     soort = r["soort"] or ""
     if soort in DAG_LINK.get(wacht, ()):
@@ -535,23 +538,28 @@ def klaarzet_link(wacht, r, inhoud, dag):
 
 
 def angel_prive_teksten():
-    """De teksten van de privétaken van Ai Angel uit zijn staat (mehdi-agent/staat.json, op het bord /data): ook een
-    taak die alleen door haar herkomst privé is (mehdi_agent.bron_prive), zonder het woord privé. Onleesbaar: leeg, dan
-    telt alleen het woord."""
+    """De taken van Ai Angel uit zijn staat (mehdi-agent/staat.json, op het bord /data), als (privé, werk): de teksten
+    van de privétaken (ook een taak die alleen door haar herkomst privé is, mehdi_agent.bron_prive, zonder het woord
+    privé) en van de werktaken. Onleesbaar: (None, None), dan is geen enkele taak na te gaan."""
     try:
         with open(ANGEL_STAAT, encoding="utf-8") as f:
             staat = json.load(f)
         taken = list((staat.get("taken") or {}).values()) + list(staat.get("afgerond") or [])
     except (OSError, ValueError, AttributeError, TypeError):
-        return ()
-    return tuple({str(t.get("tekst") or "").strip()[:300] for t in taken
-                  if isinstance(t, dict) and t.get("prive") and len(str(t.get("tekst") or "").strip()) >= 4})
+        return None, None
+    teksten = [(bool(t.get("prive")), str(t.get("tekst") or "").strip()[:300]) for t in taken if isinstance(t, dict)]
+    return frozenset(x for p, x in teksten if p and x), frozenset(x for p, x in teksten if not p and x)
 
 
-def angel_taken(inhoud, prive_teksten=()):
+def angel_taken(inhoud, staat=(None, None)):
     """ANGEL-6: de genummerde taken uit de takenlijst van Ai Angel, kort en hoogstens ANGEL_MAX, met hun nummer (zo
     noemt Mehdi ze: 'Ai Angel, 2 is gedaan'). Een taak is privé als het woord privé in haar blok staat (tekst, waarom,
-    bron, concept, zoals mehdi_agent) of als ze in de staat privé is: dan alleen 'N. privé'."""
+    bron, concept, zoals mehdi_agent) of als ze in de staat privé is: dan alleen 'N. privé'. Codex-toets 1: de tekst
+    staat er alleen als de staat de taak als werktaak kent; een taak die niet meer in de staat staat (een oude lijst,
+    afgerond en opgeschoond) of een staat die niet te lezen is, kan privé geweest zijn: dan 'N. niet meer na te gaan'.
+    staat: (privé, werk) uit angel_prive_teksten."""
+    prive_teksten, werk_teksten = staat
+    prive_teksten, werk_teksten = frozenset(prive_teksten or ()), frozenset(werk_teksten or ())
     taken, huidig = [], None
     for regel in str(inhoud or "").splitlines():
         m = TAAK_RE.fullmatch(regel.strip()) if not regel.startswith(" ") else None
@@ -564,8 +572,16 @@ def angel_taken(inhoud, prive_teksten=()):
             huidig = None
     uit = []
     for t in taken[:ANGEL_MAX]:
-        prive = PRIVE_RE.search(" ".join(t["blok"])) or any(p in t["tekst"] for p in prive_teksten)
-        uit.append(f"{t['nr']}. privé" if prive else f"{t['nr']}. {kort(t['tekst'], 140)}")
+        # de tekst van de taak zoals de staat hem bewaart: zonder '(prioriteit)' achteraan en, bij een collega of een
+        # agent, misschien met 'Naam: ' vooraan (mehdi_agent.lijst); exact vergeleken, nooit een stuk van een tekst
+        kern = re.sub(r" \((?:hoog|normaal|laag)\)$", "", t["tekst"]).strip()
+        kandidaten = {kern[:300], kern.split(": ", 1)[-1].strip()[:300]}
+        if PRIVE_RE.search(" ".join(t["blok"])) or kandidaten & prive_teksten:
+            uit.append(f"{t['nr']}. privé")
+        elif kandidaten & werk_teksten:
+            uit.append(f"{t['nr']}. {kort(t['tekst'], 140)}")
+        else:
+            uit.append(f"{t['nr']}. niet meer na te gaan of dit privé was: zie het bord")
     if len(taken) > ANGEL_MAX:
         uit.append(f"en nog {len(taken) - ANGEL_MAX} op het bord")
     return uit
@@ -626,7 +642,8 @@ def gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout, cadans, rondes_g
     van De Dagbundelaar. Alleen lezen: deze pagina schrijft nooit een dekkingsrij (elke dekkingsrij laat De Dagbundelaar
     inhalen, dagbundelaar.py). Onbekend is nooit 0.
     stand: gelezen (de hele dag), deels (nog niet helemaal), tot (rondes op die dag), items (iets binnen zonder ronde
-    op die dag), rust (geen ronde gepland), niet (niet gelezen), onbekend (het bord kon het niet lezen)."""
+    op die dag), rust (geen ronde gepland), niet (niet gelezen), onvolledig (het eigen overzicht van de wacht is niet
+    te lezen: wat er was, is onbekend), onbekend (het bord kon het niet lezen)."""
     def uit(stand, tekst, bewijs=""):
         return {"stand": stand, "tekst": tekst, "bewijs": bewijs}
     if leesfout:
@@ -644,6 +661,13 @@ def gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout, cadans, rondes_g
     if isinstance(archief, dict) and archief.get("na_de_dag"):
         return uit("gelezen", "alle kopieën van deze dag bekend" + leeg,
                    f"het overzicht van De Zoomarchivaris van {_moment(archief.get('overzicht_van'))}")
+    if (wacht == "plaud-wacht" and plaud is None) or (wacht == "zoom-archief" and archief is None):
+        # Codex-toets 1: zonder het eigen overzicht (manifest van de Mac, overzicht van De Zoomarchivaris) is niet te
+        # zeggen wat er die dag was, ook niet met een ronde in het werkverslag: onvolledig, nooit 0
+        return uit("onvolledig", ("het manifest van de Mac" if wacht == "plaud-wacht" else
+                                  "het overzicht van De Zoomarchivaris") + " is niet gelezen: wat er op deze dag was, is "
+                   "onbekend" + (f" (laatste ronde {laatste})" if laatste else ""),
+                   "niet te lezen, ontbreekt of is van voor deze dag")
     if wacht == "dagbundelaar":
         try:
             r = conn.execute("SELECT ts FROM klaarzet WHERE van='dagbundelaar' AND uniek=? AND status!='vervallen' "
@@ -711,7 +735,8 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
             leesfout = f"niet gelezen ({type(e).__name__})"
     # VOL-19, tweede slot: wat een lezer hierboven ook gaf, nooit een link bij privé of bij de Mac-kanalen en Xelion
     for it in items:
-        if wacht in GEEN_LINK or it.get("wie") == "privégesprek" or it.get("label") == "privé":
+        if wacht in GEEN_LINK or it.get("wie") == "privégesprek" or it.get("label") == "privé" \
+                or PRIVE_RE.search(f"{it.get('wie')} {it.get('wat')}"):
             it.pop("link", None)
     items.sort(key=lambda x: x["tijd"] or "99")
     fouten = [x for x in log if x["fout"]]
@@ -730,7 +755,9 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
     elif gedekt:
         # TEL-8: de wacht las de dag helemaal en er was niets (een lijn met een oproep per maand): geen grijs of oranje
         oordeel, kleur = "gelezen, niets gebeurd", "groen"
-    elif log:
+    elif log or archief is not None:
+        # ARCH-2 (Codex-toets 1): het overzicht van De Zoomarchivaris kende deze dag en er was geen kopie: oranje, ook
+        # zonder ronde op die dag zelf
         oordeel, kleur = "draaide, niets binnen", "oranje"
     elif alleen_werkdagen(cadans) and date.fromisoformat(dag).weekday() >= 5:
         # T-0120 CL-4: in het weekend heeft een werkdagwacht geen ronde gepland; dat is het schema, geen grijs gat en
