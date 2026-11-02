@@ -11,7 +11,8 @@
       <div class="zacht">Daardoor kan het Dagboek deze tekst nu niet lezen. Dat is onbekend, niet leeg.</div></div>
   {% else %}
   <div class="kaart">
-    <div class="zacht">{{ t.get('datum') or dag }} {{ t.get('tijd') or '' }} · {{ t.get('bron') or '' }}{% if t.get('label') %} · <span class="etiket">{{ t['label'] }}</span>{% endif %}</div>
+    <div class="zacht">{{ t.get('datum') or dag }} {{ t.get('tijd') or '' }} · {{ t.get('bron') or '' }}{% if t.get('label') %} · <span class="etiket {{ 'twijfel' if t['label'] == 'twijfel' else 'prive' if t['label'] == 'privé' else '' }}">{{ t['label'] }}</span>{% endif %}</div>
+    {% if t.get('reden') %}<p class="zacht klein">{{ t['label'] }}: {{ t['reden'] }}</p>{% endif %}
     {% if t.get('wat') %}<div><b>{{ t['wat'] }}</b></div>{% endif %}
     <div class="zacht klein">Zoals de wacht de tekst bewaarde; het Dagboek verandert er niets aan.</div>
   </div>
@@ -29,7 +30,9 @@
   {% endif %}
 </main>
 <style>
-  .etiket{background:#2b2f3a;color:var(--oranje);border-radius:8px;padding:0 7px;font-size:12px}
+  .etiket{background:#2b2f3a;color:var(--zacht);border-radius:8px;padding:0 7px;font-size:12px}
+  .etiket.twijfel{color:var(--oranje)}
+  .etiket.prive{color:#c9a7ff}
   pre.tekst{white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
   .regel{padding:5px 0;border-top:1px solid var(--rand);overflow-wrap:anywhere}
   .regel:first-child{border-top:0}

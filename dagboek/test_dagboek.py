@@ -216,11 +216,13 @@ check("D14 item met tekst wijst naar de tekstpagina", 'href="/dag/2026-10-31/tek
       and html.count("de volledige tekst lezen") == 2, html[-6000:])
 # D15: de tekstpagina leest de tekst via het bord.
 A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom Proef", "wat": "Kort gesprek", "bron": "zoom", "datum": "2026-10-31",
-                              "tijd": "10:02", "label": "priv\u00e9", "regels": [{"tijd": "00:00:05", "wie": "Tom", "tekst": "Hallo."}]}
+                              "tijd": "10:02", "label": "priv\u00e9", "reden": "de wacht zette het bewust op priv\u00e9",
+                              "regels": [{"tijd": "00:00:05", "wie": "Tom", "tekst": "Hallo."}]}
 r = C.get("/dag/2026-10-31/tekst?gesprek=zoom:meeting:ABC==", headers=MET)
 ht = r.get_data(as_text=True)
 check("D15 tekstpagina met regels", r.status_code == 200 and "<b>Tom:</b> Hallo." in ht and "00:00:05" in ht
-      and '<span class="etiket">priv\u00e9</span>' in ht and 'href="/dag/2026-10-31">terug naar za 31 okt 2026' in ht, ht[-2500:])
+      and '<span class="etiket prive">priv\u00e9</span>' in ht and "priv\u00e9: de wacht zette het bewust op priv\u00e9" in ht
+      and 'href="/dag/2026-10-31">terug naar za 31 okt 2026' in ht, ht[-2500:])
 check("D07 geen gedachtestreepje (tekst)", "\u2014" not in ht and "\u2013" not in ht)
 A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom Proef", "md": "# Kop\n\nMehdi: tekst."}
 check("D15 tekst als md", '<pre class="tekst"># Kop' in C.get("/dag/2026-10-31/tekst?gesprek=f:1", headers=MET).get_data(as_text=True))

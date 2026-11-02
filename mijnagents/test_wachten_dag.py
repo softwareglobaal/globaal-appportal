@@ -123,6 +123,9 @@ con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) V
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('zoom-wacht','regisseur','zoom-tekst',"
             "'2026-10-31 16:00 Zoom-gesprek, 5 min, alleen in Zoom','{\"stand\": \"opname zonder tekst\", \"minuten\": 5}','zoom-tekst:LOS==','2026-10-31T16:10:00+00:00','klaar')")
 con.execute("INSERT OR REPLACE INTO status(naam,status,detail,ts) VALUES('zoom-wacht','ok','ronde klaar','2026-10-31T20:00:00+00:00')")
+# Codex 02-11 ronde 2: een oproep die Mehdi werk noemde (prive 0, afdeling leeg) krijgt geen twijfel.
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
+            "'telefoon:3','2026-10-31','15:00',2,'Leverancier','telefoon, inkomend','',0,'','werk volgens Mehdi (T-0141)','telefoon','x')")
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('agenda-wacht','mehdi','signaal',"
             "'Oud signaal','','signaal:0','2026-10-31T06:11:00+00:00','opgepakt')")
 lang = "regel 1\n" + "x" * 59990
@@ -228,8 +231,10 @@ check("W20 klaarzet-inhoud (json) leesbaar in laag 2, ruw achter technisch", zo[
       and dict(zo["zoom-tekst"]["oordeel"])["titel"].startswith("2026-10-31 16:00") and "stand" in dict(zo["zoom-tekst"]["technisch"])["inhoud"], zo["zoom-tekst"])
 check("W21 chatrij zonder hartslag, de echte agent wel", w["zoom-chat"]["status"] is None and w["zoom-wacht"]["status"]["status"] == "ok",
       (w["zoom-chat"]["status"], w["zoom-wacht"]["status"]))
-check("W16 telefoon: vaste regel gaat voor", all(x["label"] == "privé" and x["reden"].startswith("vaste regel") for x in tel) and len(tel) == 2, tel)
-check("W19 telregels", w["belwacht"]["samen"] == "2 oproepen, 1 gemist, 3 min"
+check("W16 telefoon: vaste regel gaat voor; zonder vlag geen label en geen twijfel",
+      [(x["label"], x["reden"][:11]) for x in tel] == [("privé", "vaste regel"), ("privé", "vaste regel"), ("", "")] and len(tel) == 3, tel)
+check("W19 belwacht telregel telt de drie", w["belwacht"]["samen"] == "3 oproepen, 1 gemist, 5 min", w["belwacht"]["samen"])
+check("W19 telregels", w["belwacht"]["samen"] == "3 oproepen, 1 gemist, 5 min"
       and wa["samen"] == "20 berichten (18 in, 2 uit), 2 gesprekken, 1 groepen", (w["belwacht"]["samen"], wa["samen"]))
 fk = fa_items["Mehdi, Collega"]
 check("W17 fathom kern uit de samenvatting", [k["kop"] for k in fk["kern"]] == ["Doel van de Vergadering", "Belangrijkste Conclusies", "Volgende Stappen"]

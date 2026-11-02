@@ -17,6 +17,7 @@ import os
 import re
 import signal
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 BE = ZoneInfo("Europe/Brussels")
@@ -241,10 +242,18 @@ def samenvatting_bewaren(map_, g):
 def schrijf_heel(pad, tekst):
     """Eerst naast het doel, dan in één keer op zijn plaats (Codex 02-11): een afgebroken ronde laat nooit een half
     bestand achter."""
-    tmp = pad + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(tekst)
-    os.replace(tmp, pad)
+    # Een eigen tijdelijk bestand per schrijver: twee rondes tegelijk (de keten en de inhaalronde) raken elkaar niet.
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(pad) + ".", suffix=".tmp", dir=os.path.dirname(pad) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(tekst)
+        os.replace(tmp, pad)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def samenvatting_aanvullen(map_, g):
