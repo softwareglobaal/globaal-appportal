@@ -406,6 +406,38 @@ BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
 # Mehdi, 01-11-2026: de knoppen voor vandaag en de drie dagen ervoor; een oudere dag blijft via vorige dag bereikbaar.
 WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
+# Eén regel per wacht: wat ze doet en waar ze leest (Mehdi 01-11-2026: "Zoom archivaris, dat weet ik niet wat dat
+# is"; overleg T-0154 X5: menselijk, zonder interne paden). Een wacht zonder regel krijgt een algemene zin.
+WACHT_UITLEG = {
+    "dagbundelaar": "legt elke nacht de dag samen uit alle wachten: het dagbestand en de dagvaststelling",
+    "mehdi-agent": "leest de dagbundel en zet jouw taken klaar",
+    "levenscoach": "legt per dag alles over jou samen: de dagspiegel, op maandag de weekspiegel",
+    "mail-regisseur": "bundelt wat de vijf mailwachten klaarzetten en zegt wat dringend is",
+    "mail-prive": "leest je hotmail: wie mailde, waarover, wat dringend is; nooit de tekst op het bord",
+    "mail-mch": "leest mch@: wie mailde, waarover, wat dringend is",
+    "mail-info-harc": "leest info@ H-Architects: wie mailde, waarover, wat dringend is",
+    "mail-hinv": "leest info@ H-Invest: wie mailde, waarover, wat dringend is",
+    "mail-melo": "leest de mailbox van Melodie: wie mailde, waarover, wat dringend is",
+    "belwacht": "telt de oproepen van je iPhone: wie, wanneer, hoe lang; nooit een opname",
+    "xelion-wacht": "telt de oproepen van de Xelion-centrale: wie, wanneer, hoe lang, gemist",
+    "sms-wacht": "telt sms en iMessage per gesprek per dag: met wie, hoeveel; nooit de tekst",
+    "whatsapp-wacht": "telt WhatsApp per gesprek per dag: met wie, hoeveel in en uit; nooit de tekst",
+    "zoom-wacht": "telt elk Zoom-gesprek, koppelt het aan Fathom en bewaart de tekst als Fathom het miste",
+    "zoom-chat": "telt de Zoom-chatberichten per kanaal en per persoon per dag; nooit de tekst",
+    "zoom-archief": "kopieert elke Zoom-opname naar je eigen Dropbox zodat je niets verliest; geen gesprekken hier",
+    "fathom-wacht": "haalt elke Fathom-opname binnen, herkent wie en waarover, met de samenvatting en de taken",
+    "plaud-wacht": "haalt elke Plaud-opname binnen en herkent wie en waarover",
+    "communicatie-bundelaar": "legt per persoon samen hoe vaak en hoe lang je contact had, langs welk kanaal",
+    "agenda-wacht": "leest je agenda's: afspraken, codes, reistijd, botsingen",
+    "calendly-wacht": "bewaakt je boekingskanalen in Calendly",
+    "locatie-wacht": "je bewegingslogboek uit de tracker in de auto: ritten en plekken",
+    "icloud-wacht": "leest 's avonds de foto's van de dag op je Mac: tijd en plaats, de foto zelf nog niet",
+    "browser-wacht": "telt welke websites je op de Mac bezocht; alleen namen en aantallen",
+    "youtube-wacht": "telt wat je op YouTube keek",
+    "wispr-wacht": "telt wat je met Wispr Flow dicteerde: dictaten, woorden, minuten; nooit de tekst",
+    "gezondheid-wacht": "leest stappen, hartslag en slaap van je Apple Watch",
+}
+WACHT_UITLEG_ANDERS = "een wacht van De Dagbundelaar"
 
 
 def haal_wachten(dag):
@@ -463,11 +495,21 @@ def wachten_dag(dag, lb=None):
             w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)
             w["fouten_kort"] = fouten_kort(w.get("fouten") or [])
+            w["uitleg"] = WACHT_UITLEG.get(w.get("naam"), WACHT_UITLEG_ANDERS)
+            w["labels"] = {k: sum(1 for it in w.get("items") or [] if it.get("label") == k) for k in ("twijfel", "privé", "dringend")}
     alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
     gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
     gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
     # Eén wacht niet gelezen: dan is het dagtotaal niet volledig (Codex 01-11): "minstens" in plaats van een vol getal.
     gegevens["onvolledig"] = any(w.get("leesfout") for w in alle)
+    vj = gegevens.get("voor_jou") if isinstance(gegevens.get("voor_jou"), dict) else {}
+    agents = {w.get("naam"): w.get("label") for w in alle}
+    for sg in vj.get("signalen") or []:
+        sg["label"] = agents.get(sg.get("van")) or str(sg.get("van") or "")
+    gegevens["voor_jou"] = {"taken_mij": vj.get("taken_mij") or [], "taken_anderen": vj.get("taken_anderen") or [],
+                            "signalen": vj.get("signalen") or []}
+    for t in gegevens["voor_jou"]["taken_mij"] + gegevens["voor_jou"]["taken_anderen"]:
+        t["wacht_label"] = agents.get(t.get("wacht")) or str(t.get("wacht") or "")
     return gegevens
 
 
@@ -504,6 +546,8 @@ def wacht_kort(w):
         return "fout: " + str(w["fouten"][-1].get("tekst") or "")
     if w.get("stand_fout"):
         return w["stand_fout"]
+    if w.get("samen"):
+        return str(w["samen"])
     if w.get("items"):
         it = w["items"][0]
         return " ".join(x for x in (it.get("tijd") or "", it.get("wie") or "", it.get("wat") or "") if x)

@@ -14,7 +14,16 @@
 - W13: de tekst van een gesprek: Zoom uit zoom-data/<map [sha1]>/transcript.json, Fathom uit het archief (transcript.md),
   Plaud uit plaud-invoer; een gesprek zonder tekst zegt dat; het item weet of er tekst is;
 - W14: De Mailregisseur en De Levenscoach staan op de dagpagina (organogram bij De Dagbundelaar);
-- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd.
+- W09: een fototitel met een tijdsbereik krijgt de eerste tijd als tijd en de rest als wat, zonder losse streep; '20:25pizza' en '99:99' zijn geen tijd;
+- W15 (T-0154): De Zoomwacht staat als twee rijen (gesprekken en chat), elk item in precies een rij; een chatitem leest als
+  aantallen, niet als een gesprek met een duur; de chatrij heeft geen eigen werkverslag;
+- W16 (T-0154): twijfel is geen privé: 'bij twijfel privé', zekerheid laag of middel of afdeling onbekend geeft het label
+  twijfel met de reden; privé alleen bij hoge zekerheid of de vaste regel van de telefoon (met die regel als reden);
+- W17 (T-0154): een Fathom-gesprek draagt de kern (doel, conclusies, volgende stappen uit de samenvatting van Fathom) en
+  de taken (actiepunten, voor jou of voor anderen); zonder samenvatting zegt het item dat; Plaud en Zoom met tekst
+  zeggen dat de samenvatting op De Gespreksanalist wacht;
+- W18 (T-0154): bovenaan de dag staat wat voor Mehdi is: de taken uit de gesprekken en de signalen per agent;
+- W19 (T-0154): elke wacht heeft een telregel (WhatsApp: berichten, gesprekken, groepen; telefoon: oproepen en gemist).
 
 Draait in de Docker-build: faalt dit, dan blijft de vorige container staan.
 """
@@ -55,7 +64,7 @@ con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,datum,dag,van,van_naam,
             "'Offerte dak','klant','x')")
 con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('sms-wacht','','fout','kopie niet leesbaar',"
             "'2026-10-31T10:00:00+00:00')")
-con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('belwacht','','bron','0 oproepen',"
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('communicatie-bundelaar','','bron','0 personen',"
             "'2026-10-31T11:00:00+00:00')")
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('wispr-wacht','mehdi','telling',"
             "'Wispr Flow','{\"per_dag\":{\"2026-10-31\":{\"dictaten\":12,\"woorden\":840}}}','wispr:Mehdi:2026-10-31',"
@@ -82,6 +91,30 @@ con.execute("UPDATE gesprek_log SET archief='/home/ubuntu/appportal/mijnagents-d
 con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts,archief) VALUES("
             "'fathom:10','2026-10-31','20:00',5,'Leeg','Zonder transcript','it',0,'fathom','x',"
             "'/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-31 2000 Leeg')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
+            "'zoom:chat:abc:2026-10-31','2026-10-31','09:59',0,'Sales_Won','Zoom-chat: 4 bericht(en), 1 van Mehdi, 09:59 tot 15:54',"
+            "'onbekend',1,'middel','kanaal; afdeling niet uit de naam af te leiden: bij twijfel privé','zoom','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
+            "'zoom:chat:def:2026-10-31','2026-10-31','11:45',0,'Collega','Zoom-chat: 2 bericht(en), 2 van Mehdi, 11:45 tot 11:45',"
+            "'it',0,'hoog','1:1; bekend op e-mailadres uit de personentabel','zoom','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts,archief) VALUES("
+            "'plaud:of_2','2026-10-31','13:20',9,'Speaker 1, Speaker 2','Levertermijn ramen','onbekend',0,'laag','geen sprekers herkend',"
+            "'plaud','x','Data uit Mehdi/Plaud/2026-10-31 1320 Ramen/transcript.md')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
+            "'telefoon:1','2026-10-31','08:38',0,'Installateur','telefoon, inkomend, gemist','',1,'','','telefoon','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
+            "'telefoon:2','2026-10-31','12:14',3,'Installateur','telefoon, uitgaand','',1,'','','telefoon','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,ts) "
+            "VALUES('whatsapp:3','2026-10-31','10:00',0,'groep: Proefgroep','20 berichten (18 in, 2 uit), 10:00 tot 17:35','',1,'whatsapp','x')")
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts,archief) VALUES("
+            "'fathom:11','2026-10-31','11:52',9,'Mehdi, Collega','Automatisering','elevait',0,'hoog','intern',"
+            "'fathom','x','/home/ubuntu/appportal/mijnagents-data/fathom-data/2026-10-31 1152 Overleg')")
+con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('mail-regisseur','mehdi','oproep',"
+            "'Dringende mail van Klant A','','oproep:1','2026-10-31T08:10:00+00:00','klaar')")
+con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('agenda-wacht','mehdi','signaal',"
+            "'3 afspraken zonder code','','signaal:1','2026-10-31T06:10:00+00:00','klaar')")
+con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('agenda-wacht','mehdi','signaal',"
+            "'Oud signaal','','signaal:0','2026-10-31T06:11:00+00:00','opgepakt')")
 lang = "regel 1\n" + "x" * 59990
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts) VALUES('dagbundelaar','mehdi','dagplan',"
             "'lang','" + lang + "','lang:1','2026-10-31T20:17:00+00:00')")
@@ -100,6 +133,18 @@ os.makedirs(fl)
 open(os.path.join(fl, "transcript.md"), "w").write("# Leeg\n\nHerkenning: {}\n\n")
 open(os.path.join(fl, "transcript.json"), "w").write("[]")
 open(os.path.join(fl, "geen-transcript.txt"), "w").write("Fathom heeft voor dit gesprek geen transcript.\n")
+fs = os.path.join(MAP, "fathom-data", "2026-10-31 1152 Overleg")
+os.makedirs(fs)
+open(os.path.join(fs, "transcript.md"), "w").write("# Overleg\n\nMehdi: tekst.\n")
+json.dump({"recording_id": 11, "default_summary": {"template_name": "Enhanced", "markdown_formatted":
+           "## Doel van de Vergadering\n\n[Afstemmen over de aanpak.](https://fathom.video/share/x?timestamp=0.0)\n\n"
+           "## Belangrijkste Conclusies\n\n  - [**Keuze:** eerst de kleinste proef.](https://fathom.video/share/x?timestamp=10.0)\n\n"
+           "## Volgende Stappen\n\n  - [Collega stuurt de lijst door.](https://fathom.video/share/x?timestamp=20.0)\n"},
+           "action_items": [{"description": "Lijst doorsturen", "assignee": {"name": "Collega (IT)"}, "completed": False,
+                             "recording_playback_url": "https://fathom.video/calls/1?timestamp=20"},
+                            {"description": "Proef goedkeuren", "assignee": {"name": "Mehdi Chegini"}, "completed": False,
+                             "recording_playback_url": "https://fathom.video/calls/1?timestamp=30"}]},
+          open(os.path.join(fs, "gesprek.json"), "w"))
 pm = os.path.join(MAP, "plaud-invoer", "2026-10-31 0816 Werfvergadering")
 os.makedirs(pm)
 json.dump([{"start_time": 61000, "content": "Eerste zin.", "speaker": "Speaker 1"}], open(os.path.join(pm, "transcript.json"), "w"))
@@ -111,12 +156,12 @@ d = r.get_json()
 w = {x["naam"]: x for v in d["vakken"] for x in v["wachten"]}
 namen = [x["naam"] for v in d["vakken"] for x in v["wachten"]]
 check("W02 alle wachten", set(namen) == set(A.DAGBOEK_AGENTS), set(A.DAGBOEK_AGENTS) ^ set(namen))
-check("W14 Mailregisseur en Levenscoach erbij", set(namen) - set(A.DAGBUNDELAAR_AGENTS) == {"mail-regisseur", "levenscoach"}
+check("W14 Mailregisseur en Levenscoach erbij", set(namen) - set(A.DAGBUNDELAAR_AGENTS) == {"mail-regisseur", "levenscoach", "zoom-chat"}
       and d["vakken"][0]["wachten"][-1]["label"] == "De Levenscoach" and [x["naam"] for v in d["vakken"] if v["vak"] == "Mail"
       for x in v["wachten"]][0] == "mail-regisseur", namen)
 check("W02 elk een keer", len(namen) == len(set(namen)))
 wa = w["whatsapp-wacht"]
-check("W03 whatsapp een item", wa["aantal"] == 1 and wa["items"][0]["wie"] == "Sara" and wa["items"][0]["tijd"] == "09:15",
+check("W03 whatsapp twee items", wa["aantal"] == 2 and wa["items"][0]["wie"] == "Sara" and wa["items"][0]["tijd"] == "09:15",
       wa["items"])
 check("W03 dag gedekt", wa["gedekt"] is True)
 check("W03 groen", wa["kleur"] == "groen")
@@ -124,8 +169,8 @@ m = w["mail-mch"]
 check("W04 mail", m["aantal"] == 1 and m["items"][0]["wie"] == "Klant A" and "Offerte dak" in m["items"][0]["wat"]
       and m["items"][0]["tijd"] == "09:02", m["items"])
 check("W05 fout is rood", w["sms-wacht"]["kleur"] == "rood" and w["sms-wacht"]["fouten"])
-check("W06 draaide zonder items oranje", w["belwacht"]["kleur"] == "oranje", w["belwacht"]["kleur"])
-check("W06 geen ronde grijs", w["belwacht"]["kleur"] != "grijs" and w["calendly-wacht"]["kleur"] == "grijs", w["calendly-wacht"]["kleur"])
+check("W06 draaide zonder items oranje", w["communicatie-bundelaar"]["kleur"] == "oranje", w["communicatie-bundelaar"]["kleur"])
+check("W06 geen ronde grijs", w["calendly-wacht"]["kleur"] == "grijs", w["calendly-wacht"]["kleur"])
 wi = w["wispr-wacht"]
 check("W07 wispr telling", wi["aantal"] == 1 and "dictaten 12" in wi["items"][0]["wat"], wi["items"])
 d30 = C.get("/api/wachten/dag?dag=2026-11-01", headers=K).get_json()
@@ -140,19 +185,57 @@ check("W09 geen tijd: titel blijft heel", fo["items"][2]["wat"] == "20:25pizza b
       and fo["items"][3]["wat"] == "99:99: geen tijd" and fo["items"][3]["tijd"] == "21:17", fo["items"][2:])
 
 fa = w["fathom-wacht"]
-check("W11 privégesprek leesbaar met label privé", fa["aantal"] == 2 and fa["items"][0]["wie"] == "Geheim Persoon"
-      and fa["items"][0]["label"] == "privé" and "Geheim onderwerp" in fa["items"][0]["wat"], fa["items"])
-check("W11 whatsapp prive=1: naam blijft, label privé zoals De Dagbundelaar telt", wa["items"][0]["wie"] == "Sara"
-      and wa["items"][0]["label"] == "privé")
-zo = {x["uniek"] if False else x["wie"]: x for x in w["zoom-wacht"]["items"]}
+fa_items = {x["wie"]: x for x in fa["items"]}
+check("W11 privégesprek leesbaar met label privé", fa["aantal"] == 3 and fa_items["Geheim Persoon"]["label"] == "privé"
+      and "Geheim onderwerp" in fa_items["Geheim Persoon"]["wat"], fa["items"])
+check("W16 whatsapp prive=1: naam blijft, label privé door de vaste regel", wa["items"][0]["wie"] == "Sara"
+      and wa["items"][0]["label"] == "privé" and wa["items"][0]["reden"].startswith("vaste regel"), wa["items"][0])
+zo = {x["wie"]: x for x in w["zoom-wacht"]["items"]}
 check("W11 zoom zonder privé: geen label", zo["Angela, Mehdi"]["label"] == "" and zo["Tom"]["label"] == "")
+zc = {x["wie"]: x for x in w["zoom-chat"]["items"]}
+check("W15 zoom in twee rijen, elk item in een rij", set(zo) == {"Angela, Mehdi", "Tom"} and set(zc) == {"Sales_Won", "Collega"}
+      and w["zoom-wacht"]["label"] == "De Zoomwacht: gesprekken" and w["zoom-chat"]["label"] == "De Zoomwacht: chat"
+      and w["zoom-chat"]["agent"] == "zoom-wacht", (list(zo), list(zc)))
+check("W15 chatitem leest als aantallen", zc["Sales_Won"]["wat"] == "4 berichten, 1 van jou, tussen 09:59 en 15:54 · kanaal"
+      and zc["Collega"]["wat"] == "2 berichten, 2 van jou, om 11:45 · 1:1" and zc["Sales_Won"]["soort"] == "chat", zc)
+check("W15 chatrij zonder eigen werkverslag, telregel", w["zoom-chat"]["rondes"] == 0 and w["zoom-chat"]["log"] == []
+      and w["zoom-chat"]["samen"] == "6 berichten in 2 gesprekken, 1 kanalen", w["zoom-chat"]["samen"])
+check("W16 bij twijfel privé is twijfel met reden", zc["Sales_Won"]["label"] == "twijfel"
+      and "bij twijfel privé" in zc["Sales_Won"]["reden"] and zc["Sales_Won"]["reden"].endswith("Wat moet het zijn?"), zc["Sales_Won"])
+check("W16 hoog en werk: geen label", zc["Collega"]["label"] == "" and zc["Collega"]["reden"] == "")
+pl = {x["wie"]: x for x in w["plaud-wacht"]["items"]}
+check("W16 zekerheid laag en onbekend zonder privé: twijfel", pl["Speaker 1, Speaker 2"]["label"] == "twijfel"
+      and "geen sprekers herkend" in pl["Speaker 1, Speader 2".replace("d", "k")]["reden"], pl)
+check("W16 bewust privé (afdeling prive, geen twijfel) blijft privé", fa_items["Geheim Persoon"]["label"] == "privé")
+tel = w["belwacht"]["items"]
+check("W16 telefoon: vaste regel gaat voor", all(x["label"] == "privé" and x["reden"].startswith("vaste regel") for x in tel) and len(tel) == 2, tel)
+check("W19 telregels", w["belwacht"]["samen"] == "2 oproepen, 1 gemist, 3 min"
+      and wa["samen"] == "20 berichten (18 in, 2 uit), 2 gesprekken, 1 groepen", (w["belwacht"]["samen"], wa["samen"]))
+fk = fa_items["Mehdi, Collega"]
+check("W17 fathom kern uit de samenvatting", [k["kop"] for k in fk["kern"]] == ["Doel van de Vergadering", "Belangrijkste Conclusies", "Volgende Stappen"]
+      and fk["kern"][1]["regels"] == [{"tekst": "Keuze: eerst de kleinste proef.", "link": "https://fathom.video/share/x?timestamp=10.0"}]
+      and fk["kern_ontbreekt"] == "", fk["kern"])
+check("W17 fathom taken voor jou en anderen", fk["taken"] == [
+      {"wat": "Lijst doorsturen", "wie": "Collega (IT)", "mij": False, "klaar": False, "link": "https://fathom.video/calls/1?timestamp=20"},
+      {"wat": "Proef goedkeuren", "wie": "Mehdi Chegini", "mij": True, "klaar": False, "link": "https://fathom.video/calls/1?timestamp=30"}], fk["taken"])
+check("W17 fathom zonder samenvatting zegt dat", fa_items["Geheim Persoon"]["kern"] == [] and "geen samenvatting" in fa_items["Geheim Persoon"]["kern_ontbreekt"])
+check("W17 zoom met tekst wacht op De Gespreksanalist", "T-0122" in zo["Angela, Mehdi"]["kern_ontbreekt"] and zo["Tom"]["kern_ontbreekt"] == "")
+check("W19 fathom telregel", fa["samen"] == "3 gesprekken, 24 min, 1 taken voor jou", fa["samen"])
+vj = d["voor_jou"]
+check("W18 voor jou: taken uit gesprekken", [t["wat"] for t in vj["taken_mij"]] == ["Proef goedkeuren"] and vj["taken_mij"][0]["gesprek"] == "Mehdi, Collega"
+      and vj["taken_mij"][0]["wacht"] == "fathom-wacht" and [t["wat"] for t in vj["taken_anderen"]] == ["Lijst doorsturen"], vj)
+check("W18 voor jou: signalen per agent, alleen open en van die dag", [(x["van"], x["aantal"]) for x in vj["signalen"]] ==
+      [("agenda-wacht", 1), ("dagbundelaar", 1), ("icloud-wacht", 4), ("mail-regisseur", 1), ("wispr-wacht", 1)]
+      and vj["signalen"][0]["titels"][0]["titel"] == "3 afspraken zonder code", vj["signalen"])
 check("W13 item weet of er tekst is", zo["Angela, Mehdi"]["tekst"] == "zoom:meeting:ABC==" and zo["Tom"]["tekst"] == ""
-      and fa["items"][0]["tekst"] == "fathom:9" and w["plaud-wacht"]["items"][0]["tekst"] == "plaud:of_1", w["zoom-wacht"]["items"])
-fl_item = [x for x in fa["items"] if x["wie"] == "Leeg"][0]
+      and fa_items["Geheim Persoon"]["tekst"] == "fathom:9" and w["plaud-wacht"]["items"][0]["tekst"] == "plaud:of_1", w["zoom-wacht"]["items"])
+fl_item = fa_items["Leeg"]
 check("W13 fathom zonder transcript: geen tekst", fl_item["tekst"] == "" and "geen tekst bewaard" in
       C.get("/api/wachten/tekst?uniek=fathom:10", headers=K).get_json().get("fout", ""), fl_item)
-li = dict(w["dagbundelaar"]["items"][0]["detail"])
-check("W12 lange inhoud letterlijk en heel", li.get("inhoud") == lang and "\n" in li["inhoud"], len(li.get("inhoud", "")))
+li = w["dagbundelaar"]["items"][0]
+check("W12 lange inhoud letterlijk en heel, als kern", li["kern"] == [{"kop": "", "tekst": lang}] and "\n" in li["kern"][0]["tekst"]
+      and dict(li["technisch"]).get("inhoud") is None and dict(li["oordeel"]).get("soort") == "dagplan", (len(li["kern"]), li["oordeel"]))
+check("W12 telling als technisch, niet als kern", wi["items"][0]["kern"] == [] and "per_dag" in dict(wi["items"][0]["technisch"])["inhoud"])
 check("W13 zonder token", C.get("/api/wachten/tekst?uniek=zoom:meeting:ABC==").status_code == 403)
 t = C.get("/api/wachten/tekst?uniek=zoom:meeting:ABC%3D%3D", headers=K).get_json()
 check("W13 zoomtekst", t.get("wie") == "Angela, Mehdi" and t.get("regels") == [{"tijd": "00:00:05", "wie": "Angela", "tekst": "Hallo Mehdi."},
@@ -165,11 +248,14 @@ t = C.get("/api/wachten/tekst?uniek=zoom:meeting:ZONDER%3D%3D", headers=K).get_j
 check("W13 zonder tekst zegt dat", "geen tekst bewaard" in t.get("fout", "") and t.get("wie") == "Tom", t)
 check("W13 onbekend gesprek", C.get("/api/wachten/tekst?uniek=niks", headers=K).get_json().get("fout") == "onbekend gesprek"
       and C.get("/api/wachten/tekst", headers=K).status_code == 400)
-fd = dict(fa["items"][0]["detail"])
-check("W12 detail van een gesprek", fd.get("wie") == "Geheim Persoon" and fd.get("afdeling") == "prive"
-      and fd.get("thema") == "Geheim onderwerp" and fd.get("minuten") == "10" and "firma" not in fd, fd)
-md = dict(m["items"][0]["detail"])
-check("W12 detail van een mail", md.get("van") == "Klant A" and md.get("adres") == "a@b.be" and "onderwerp" in md, md)
+fo_ = dict(fa_items["Geheim Persoon"]["oordeel"])
+ft_ = dict(fa_items["Geheim Persoon"]["technisch"])
+check("W12 oordeel en technisch van een gesprek", fo_.get("afdeling") == "prive" and "firma" not in fo_ and ft_.get("minuten") == "10"
+      and ft_.get("nummer") == "fathom:9" and "nummer" not in fo_, (fo_, ft_))
+mo_ = dict(m["items"][0]["oordeel"])
+mt_ = dict(m["items"][0]["technisch"])
+check("W12 oordeel en technisch van een mail", mo_.get("soort") == "klant" and mt_.get("adres") == "a@b.be" and "adres" not in mo_
+      and m["items"][0]["soort"] == "mail", (mo_, mt_))
 check("W10 leesfout en logfout apart in het antwoord", wa.get("logfout") == "" and wa.get("leesfout") == "")
 
 print("klaar" if not fout else f"{fout} fout(en)")

@@ -72,13 +72,20 @@ def _haal(sleutel, pad, params=None):
             wacht *= 2
 
 
-def gesprekken(sinds_iso, met_transcript=False):
-    """Alle gesprekken sinds een ISO-tijdstip, over alle sleutels; met transcript als gevraagd."""
+def gesprekken(sinds_iso, met_transcript=False, tot_iso=None):
+    """Alle gesprekken sinds een ISO-tijdstip (tot tot_iso als gegeven), over alle sleutels; met transcript als
+    gevraagd. Altijd met de samenvatting en de actiepunten van Fathom (overleg T-0154, 02-11-2026, 3-0): die zijn de
+    kern en de taken die Mehdi per gesprek wil zien, en ze kosten geen extra aanroep. default_summary is dan
+    {template_name, markdown_formatted} of None, action_items een lijst {description, assignee{name}, completed,
+    recording_timestamp, recording_playback_url} of leeg."""
     uit = []
     for s in sleutels():
         cursor = None
         while True:
-            params = {"created_after": sinds_iso, "include_transcript": "true" if met_transcript else "false"}
+            params = {"created_after": sinds_iso, "include_transcript": "true" if met_transcript else "false",
+                      "include_summary": "true", "include_action_items": "true"}
+            if tot_iso:
+                params["created_before"] = tot_iso
             if cursor:
                 params["cursor"] = cursor
             d = _haal(s, "/meetings", params)
@@ -89,6 +96,15 @@ def gesprekken(sinds_iso, met_transcript=False):
             if met_transcript:
                 time.sleep(PAUZE)
     return uit
+
+
+def samenvatting_md(g):
+    """De samenvatting van Fathom als markdown (default_summary.markdown_formatted), of '' (ook als het veld een
+    tekst is: dan die tekst)."""
+    ds = g.get("default_summary")
+    if isinstance(ds, dict):
+        return str(ds.get("markdown_formatted") or "")
+    return str(ds or "")
 
 
 def transcript_tekst(g):

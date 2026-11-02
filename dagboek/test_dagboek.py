@@ -128,19 +128,42 @@ A.haal_wachten = lambda dag: None
 A.haal_locatie = lambda pad: None
 html = C.get("/dag/2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 bord onbereikbaar: zin, dagbestand blijft", "Het bord antwoordt niet" in html
-      and "Dagbestand van De Dagbundelaar" in html and "Nog niet vastgesteld" in html, html[-1500:])
-WACHTEN = {"dag": "2026-10-31", "items": 2, "telling": {}, "vakken": [
+      and "Dagbestand van De Dagbundelaar" in html and "Nog niet vastgesteld" in html and "Voor jou" not in html, html[-1500:])
+WACHTEN = {"dag": "2026-10-31", "items": 2, "telling": {}, "voor_jou": {
+    "taken_mij": [{"wat": "Proef goedkeuren", "wie": "Mehdi", "mij": True, "klaar": False, "link": "https://voorbeeld.test/moment/30",
+                   "gesprek": "Mehdi, Collega Proef", "tijd": "11:52", "wacht": "fathom-wacht"}],
+    "taken_anderen": [{"wat": "Lijst doorsturen", "wie": "Collega Proef", "mij": False, "klaar": False, "link": "",
+                       "gesprek": "Mehdi, Collega Proef", "tijd": "11:52", "wacht": "fathom-wacht"}],
+    "signalen": [{"van": "sms-wacht", "aantal": 2, "titels": [{"tijd": "07:10", "soort": "signaal", "titel": "3 afspraken zonder code"},
+                                                                 {"tijd": "07:10", "soort": "signaal", "titel": "Link nakijken"}]},
+                 {"van": "archivaris", "aantal": 1, "titels": [{"tijd": "02:00", "soort": "signaal", "titel": "Archivaris: 1 gesprek waar ik twijfel"}]}]},
+    "vakken": [
     {"vak": "De Dagbundelaar en Ai Angel", "wachten": [
         {"naam": "dagbundelaar", "label": "De Dagbundelaar", "kleur": "oranje", "oordeel": "draaide, niets binnen", "aantal": 0,
          "rondes": 1, "gedekt": None, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": None, "items": [],
          "log": [{"tijd": "00:30", "stap": "klaar", "tekst": "dag vastgesteld", "fout": False}]}]},
     {"vak": "Communicatie", "wachten": [
+        {"naam": "zoom-chat", "label": "De Zoomwacht: chat", "agent": "zoom-wacht", "kleur": "groen", "oordeel": "binnen", "aantal": 1,
+         "rondes": 0, "gedekt": None, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": None, "log": [],
+         "samen": "4 berichten in 1 gesprekken, 1 kanalen",
+         "items": [{"tijd": "09:59", "wie": "Kanaal Proef", "wat": "4 berichten, 1 van jou, tussen 09:59 en 15:54 · kanaal", "fout": False,
+                    "label": "twijfel", "reden": "de wacht zette het op privé omdat ze twijfelde: bij twijfel privé. Wat moet het zijn?",
+                    "soort": "chat", "kern": [], "kern_ontbreekt": "", "taken": [], "oordeel": [["afdeling", "onbekend"]], "technisch": []}]},
+        {"naam": "fathom-wacht", "label": "De Fathomwacht", "kleur": "groen", "oordeel": "binnen", "aantal": 1, "rondes": 1,
+         "gedekt": None, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": None, "log": [], "samen": "1 gesprekken, 9 min, 1 taken voor jou",
+         "items": [{"tijd": "11:52", "wie": "Mehdi, Collega Proef", "wat": "9 min, Automatisering", "fout": False, "label": "", "reden": "",
+                    "soort": "gesprek", "kern": [{"kop": "Doel van de Vergadering", "regels": [{"tekst": "Afstemmen over de aanpak.", "link": "https://voorbeeld.test/moment/0"}]},
+                                                 {"kop": "Volgende Stappen", "regels": [{"tekst": "Collega stuurt de lijst door.", "link": ""}]}],
+                    "kern_ontbreekt": "", "taken": [{"wat": "Proef goedkeuren", "wie": "Mehdi", "mij": True, "klaar": False, "link": "https://voorbeeld.test/moment/30"},
+                                                    {"wat": "Lijst doorsturen", "wie": "Collega Proef", "mij": False, "klaar": False, "link": ""}],
+                    "oordeel": [["afdeling", "elevait"], ["zekerheid", "hoog"]], "technisch": [["minuten", "9"], ["nummer", "fathom:11"]], "tekst": "fathom:11"}]},
         {"naam": "whatsapp-wacht", "label": "De WhatsApp-wacht", "kleur": "groen", "oordeel": "binnen", "aantal": 2,
          "rondes": 3, "gedekt": True, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": {"laatste": "21:37"},
          "items": [{"tijd": "09:15", "wie": "Sara Proef", "wat": "3 berichten", "fout": False, "label": "",
-                    "detail": [["wie", "Sara Proef"], ["thema", "Proefthema"], ["link", "https://voorbeeld.test/opname/1"]]},
-                   {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False, "label": "priv\u00e9", "detail": [],
-                    "tekst": "zoom:meeting:ABC=="}],
+                    "oordeel": [["thema", "Proefthema"], ["link", "https://voorbeeld.test/opname/1"]], "technisch": [["nummer", "whatsapp:1"]]},
+                   {"tijd": "10:02", "wie": "Tom Proef", "wat": "1 oproep", "fout": False, "label": "priv\u00e9",
+                    "reden": "vaste regel: proef", "tekst": "zoom:meeting:ABC=="},
+                   {"tijd": "12:00", "wie": "Leeg Proef", "wat": "niks", "fout": False, "label": ""}],
          "log": [{"tijd": "21:37", "stap": "bron", "tekst": "2 gesprekken", "fout": False}]},
         {"naam": "sms-wacht", "label": "De Sms-wacht", "kleur": "rood", "oordeel": "fout", "aantal": 0, "rondes": 1,
          "gedekt": None, "leesfout": "", "logfout": "", "noden": ["Full Disk Access ontbreekt"], "status": None,
@@ -153,11 +176,11 @@ A.haal_wachten = lambda dag: json.loads(json.dumps(WACHTEN))
 r = C.get("/dag/2026-10-31", headers=MET)
 html = r.get_data(as_text=True)
 check("D14 dagpagina laadt", r.status_code == 200, r.status_code)
-check("D14 rij per wacht", html.count('<details class="wacht') == 4 and 'id="whatsapp-wacht"' in html
+check("D14 rij per wacht", html.count('<details class="wacht') == 6 and 'id="whatsapp-wacht"' in html
       and 'id="sms-wacht"' in html and 'id="dagbundelaar"' in html, html[-3000:])
 check("D14 rij toont het eerste item", "09:15 Sara Proef 3 berichten" in html)
 check("D14 rij toont de fout", "fout: kopie niet leesbaar" in html)
-check("D14 telling", "1</span> fout" in html and "2</span> items binnen" in html, html[:3000])
+check("D14 telling", "1</span> fout" in html and "4</span> items binnen" in html, html[:3000])
 with A.app.test_request_context():
     KZ = A.dagkeuze(A.vandaag())
 check("D14 dagknoppen: vier, de laatste is vandaag", html.count('class="dagkeuze"') == 1
@@ -167,10 +190,30 @@ check("D14 dagknoppen: vier, de laatste is vandaag", html.count('class="dagkeuze
 check("D14 rij toont open meldingen naast het item", "1 open nu</span>" in html)
 check("D14 items met detail", "Sara Proef" in html and "Tom Proef" in html and "<dt>thema</dt><dd>Proefthema</dd>" in html
       and 'href="https://voorbeeld.test/opname/1"' in html, html[-6000:])
-check("D14 priv\u00e9 is een label, naam blijft", '<b>Tom Proef</b> <span class="etiket">priv\u00e9</span>' in html)
+check("D14 priv\u00e9 is een label, naam blijft, met de reden", '<b>Tom Proef</b> <span class="etiket prive">priv\u00e9</span>' in html
+      and '<p class="reden prive">priv\u00e9: vaste regel: proef</p>' in html, html[-9000:])
+check("D16 twijfel is een oranje label met de reden en de vraag", '<span class="etiket twijfel">twijfel</span>' in html
+      and 'bij twijfel priv\u00e9. Wat moet het zijn?</p>' in html and '<span class="etiket twijfel">1 twijfel</span>' in html, html[-12000:])
+check("D16 zoom in twee rijen, chat als aantallen", 'id="zoom-chat"' in html and "De Zoomwacht: chat" in html
+      and "4 berichten, 1 van jou, tussen 09:59 en 15:54 · kanaal" in html and "4 berichten in 1 gesprekken, 1 kanalen" in html
+      and "zelfde agent als zoom-wacht" in html, html[-12000:])
+check("D16 uitleg per wacht", '<span class="uitleg">telt WhatsApp per gesprek per dag' in html
+      and "kopieert elke Zoom-opname" not in html and '<span class="uitleg">een wacht van De Dagbundelaar</span>' not in html, html[-12000:])
+check("D16 kern en taken van een Fathom-gesprek", "<h5>Doel van de Vergadering</h5>" in html and "Afstemmen over de aanpak." in html
+      and 'href="https://voorbeeld.test/moment/0"' in html and '<li class="mij"><b>voor jou:</b> Proef goedkeuren' in html
+      and "<b>voor Collega Proef:</b> Lijst doorsturen" in html, html[-14000:])
+check("D16 oordeel open, technisch achter een knop", "<h5>Oordeel van de wacht</h5>" in html and "<dt>afdeling</dt><dd>elevait</dd>" in html
+      and '<details class="technisch"><summary>technisch</summary>' in html and "<dt>nummer</dt><dd>fathom:11</dd>" in html, html[-14000:])
+check("D16 voor jou bovenaan", html.index("<h2>Voor jou</h2>") < html.index('class="wacht')
+      and "Taken voor jou uit de gesprekken van deze dag (1)" in html and "<b>Proef goedkeuren</b>" in html
+      and "uit het gesprek met Mehdi, Collega Proef om 11:52 (De Fathomwacht)" in html and "Taken voor anderen (1)" in html
+      and "<b>De Sms-wacht</b> <span class=\"zacht\">2</span>" in html and "<b>archivaris</b>" in html
+      and "3 afspraken zonder code" in html and "voor jou klaarzetten (3)" in html, html[:6000])
+check("D16 werkverslag achter technisch", 'summary>technisch: 1 regel in het werkverslag' in html and "Werkverslag van deze dag (3)" in html)
+check("D16 samen in de rij", '<span class="kort ">1 gesprekken, 9 min, 1 taken voor jou</span>' in html, html[-14000:])
 check("D14 item zonder detail zegt het", "Meer weet de wacht hier niet over." in html)
 check("D14 item met tekst wijst naar de tekstpagina", 'href="/dag/2026-10-31/tekst?gesprek=zoom:meeting:ABC%3D%3D"' in html
-      and html.count("de volledige tekst lezen") == 1, html[-6000:])
+      and html.count("de volledige tekst lezen") == 2, html[-6000:])
 # D15: de tekstpagina leest de tekst via het bord.
 A.haal_tekst = lambda uniek: {"uniek": uniek, "wie": "Tom Proef", "wat": "Kort gesprek", "bron": "zoom", "datum": "2026-10-31",
                               "tijd": "10:02", "label": "priv\u00e9", "regels": [{"tijd": "00:00:05", "wie": "Tom", "tekst": "Hallo."}]}
@@ -202,8 +245,8 @@ check("D14 oude pagina wacht stuurt door naar de rij", r.status_code == 302
 check("D14 doorsturen zonder groep 403", C.get("/wachten", headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
 ROOD = json.loads(json.dumps(WACHTEN))
 ROOD["dag"] = A.vandaag().isoformat()
-ROOD["vakken"][1]["wachten"][2].update(kleur="rood", oordeel="fout", status={"status": "fout", "detail": "Geen browsergeschiedenis", "laatste": "09:00"})
-ROOD["vakken"][1]["wachten"][1]["fouten"] = [{"tijd": "10:00", "stap": "fout", "tekst": "a", "fout": True},
+ROOD["vakken"][1]["wachten"][4].update(kleur="rood", oordeel="fout", status={"status": "fout", "detail": "Geen browsergeschiedenis", "laatste": "09:00"})
+ROOD["vakken"][1]["wachten"][3]["fouten"] = [{"tijd": "10:00", "stap": "fout", "tekst": "a", "fout": True},
                                             {"tijd": "11:00", "stap": "fout", "tekst": "b", "fout": True},
                                             {"tijd": "12:00", "stap": "fout", "tekst": "a", "fout": True}]
 A.haal_wachten = lambda dag: json.loads(json.dumps(ROOD))
@@ -215,15 +258,15 @@ html = C.get("/dag/2026-10-30", headers=MET).get_data(as_text=True)
 check("D14 hartslag telt niet voor een vorige dag, kleur van het bord blijft", "stand van nu" not in html
       and 'class="wacht kleur-rood" id="locatie-wacht"' in html and "vr 30 okt 2026: fout" in html, html[:2500])
 LEES = json.loads(json.dumps(WACHTEN))
-LEES["vakken"][1]["wachten"][2].update(leesfout="niet gelezen (OperationalError)", kleur="rood", oordeel="fout")
+LEES["vakken"][1]["wachten"][4].update(leesfout="niet gelezen (OperationalError)", kleur="rood", oordeel="fout")
 A.haal_wachten = lambda dag: json.loads(json.dumps(LEES))
 html = C.get("/dag/2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 leesfout is onbekend, niet leeg", "onbekend items binnen" in html and html.count("Niets binnengekomen") == 2
       and "Onbekend: het bord kon deze wacht niet lezen (niet gelezen (OperationalError))" in html, html[-3000:])
 check("D14 rij bij leesfout toont ?", '<span class="aantal">?</span>' in html and "kon niet lezen: niet gelezen (OperationalError)" in html)
-check("D14 dagtotaal is minstens als een wacht niet gelezen is", "minstens 2</span> items binnen" in html, html[:3000])
+check("D14 dagtotaal is minstens als een wacht niet gelezen is", "minstens 4</span> items binnen" in html, html[:3000])
 LOG = json.loads(json.dumps(WACHTEN))
-LOG["vakken"][1]["wachten"][0].update(logfout="werkverslag niet gelezen (OperationalError)", kleur="rood", log=[], rondes=0)
+LOG["vakken"][1]["wachten"][2].update(logfout="werkverslag niet gelezen (OperationalError)", kleur="rood", log=[], rondes=0)
 A.haal_wachten = lambda dag: json.loads(json.dumps(LOG))
 html = C.get("/dag/2026-10-31", headers=MET).get_data(as_text=True)
 check("D14 werkverslag niet gelezen: items blijven, werkverslag onbekend", "Sara Proef" in html and "2 items binnen" in html

@@ -222,6 +222,48 @@ def is_prive(herk, besl=None):
     return bool(herk.get("prive")) or afdeling in ("prive", "privé") or bool((besl or {}).get("prive"))
 
 
+def samenvatting_bewaren(map_, g):
+    """De samenvatting en de actiepunten van Fathom naast het transcript: samenvatting.md als de markdown van Fathom
+    (tot 02-11-2026 stond er str(dict), Gemini in overleg T-0120) en actiepunten.md als json. Geeft of er iets
+    geschreven is. Leeg of ontbrekend schrijft niets en wist niets."""
+    geschreven = False
+    md = fathom.samenvatting_md(g)
+    if md.strip():
+        open(os.path.join(map_, "samenvatting.md"), "w", encoding="utf-8").write(
+            "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n" + md)
+        geschreven = True
+    if g.get("action_items"):
+        open(os.path.join(map_, "actiepunten.md"), "w", encoding="utf-8").write(json.dumps(g["action_items"], ensure_ascii=False, indent=1))
+        geschreven = True
+    return geschreven
+
+
+def samenvatting_aanvullen(map_, g):
+    """Een gesprek dat al in het archief staat (bewaar slaat het over) krijgt alsnog de samenvatting en de actiepunten
+    als Fathom ze nu wel heeft en gesprek.json ze nog mist (overleg T-0154 X2: bestaande gesprekken bijwerken, de
+    herkenning en al het andere in gesprek.json blijven staan). Geeft of er iets bijgeschreven is."""
+    gj = os.path.join(map_, "gesprek.json")
+    try:
+        meta = json.load(open(gj, encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(meta, dict) or meta.get("recording_id") != g.get("recording_id"):
+        return False
+    nieuw = {}
+    if not meta.get("default_summary") and fathom.samenvatting_md(g).strip():
+        nieuw["default_summary"] = g["default_summary"]
+    if not meta.get("action_items") and g.get("action_items"):
+        nieuw["action_items"] = g["action_items"]
+    if not nieuw:
+        return False
+    samenvatting_bewaren(map_, dict(meta, **nieuw))
+    meta.update(nieuw)
+    tmp = gj + ".tmp"
+    open(tmp, "w", encoding="utf-8").write(json.dumps(meta, ensure_ascii=False, indent=1))
+    os.replace(tmp, gj)
+    return True
+
+
 def bewaar(g, tekst, herkenning):
     map_ = os.path.join(ARCHIEF, archiefmap(g))
     gj = os.path.join(map_, "gesprek.json")
@@ -247,11 +289,7 @@ def bewaar(g, tekst, herkenning):
            + ", ".join(f"{i.get('name', '')} <{i.get('email', '')}>" for i in (g.get("calendar_invitees") or []))
            + f"\n\nHerkenning: {json.dumps(herkenning, ensure_ascii=False)}\n\n")
     open(os.path.join(map_, "transcript.md"), "w", encoding="utf-8").write(kop + tekst)
-    if g.get("default_summary"):
-        open(os.path.join(map_, "samenvatting.md"), "w", encoding="utf-8").write(
-            "# Samenvatting van Fathom (niet als bron voor contract of verslag; het transcript telt)\n\n" + str(g["default_summary"]))
-    if g.get("action_items"):
-        open(os.path.join(map_, "actiepunten.md"), "w", encoding="utf-8").write(json.dumps(g["action_items"], ensure_ascii=False, indent=1))
+    samenvatting_bewaren(map_, g)
     if g.get("highlights"):
         open(os.path.join(map_, "hoogtepunten.md"), "w", encoding="utf-8").write(json.dumps(g["highlights"], ensure_ascii=False, indent=1))
     meta = {k: v for k, v in g.items() if k != "transcript"}
@@ -409,6 +447,11 @@ def _ronde(r):
             if al:
                 herk = json.load(open(os.path.join(al, "gesprek.json"))).get("herkenning", {})
                 map_, nieuw = al, False
+                # De samenvatting van Fathom komt soms pas na de eerste ronde: dan nu bijschrijven.
+                try:
+                    samenvatting_aanvullen(al, g)
+                except OSError:
+                    pass
             else:
                 herk = herken(g, tekst, personen, deal, hoe)
                 map_, nieuw = bewaar(g, tekst, herk)

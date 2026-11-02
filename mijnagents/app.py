@@ -118,8 +118,13 @@ DAGBUNDELAAR_VAKKEN = (
 # Op de dagpagina van het Dagboek (T-0138) staan ook de twee die op het organogram bij De Dagbundelaar horen maar in
 # een andere groep zitten (Codex 02-11): De Mailregisseur boven de mailwachten, De Levenscoach bovenaan.
 DAGBOEK_BOVEN = DAGBUNDELAAR_BOVEN + ("levenscoach",)
-DAGBOEK_VAKKEN = tuple((v, (("mail-regisseur",) + tuple(w)) if v == "Mail" else tuple(w)) for v, w in DAGBUNDELAAR_VAKKEN)
-DAGBOEK_AGENTS = dict(DAGBUNDELAAR_AGENTS, **{"mail-regisseur": "De Mailregisseur", "levenscoach": "De Levenscoach"})
+# Mehdi, 01-11-2026 (T-0154): "een verschil maken tussen Zoom-chats en Zoom-calls, dat zou echt handig zijn". De
+# dagpagina toont De Zoomwacht als twee rijen; zoom-chat is geen agent op het bord (wachten_dag.ECHTE_AGENT).
+DAGBOEK_VAKKEN = tuple((v, (("mail-regisseur",) + tuple(w)) if v == "Mail"
+                        else tuple(x for n in w for x in ((n, "zoom-chat") if n == "zoom-wacht" else (n,))))
+                       for v, w in DAGBUNDELAAR_VAKKEN)
+DAGBOEK_AGENTS = dict(DAGBUNDELAAR_AGENTS, **{"mail-regisseur": "De Mailregisseur", "levenscoach": "De Levenscoach",
+                                              "zoom-wacht": "De Zoomwacht: gesprekken", "zoom-chat": "De Zoomwacht: chat"})
 # Mehdi, 31-10-2026, op het voorstel: De Levenscoach staat naast Ai Angel, met het vak Gezondheid eronder; De
 # Mailregisseur staat boven de mailwachten. Alleen de plek op het organogram verandert, niet de groep van de agent.
 ORGANOGRAM_NAAST_ANGEL = "levenscoach"
