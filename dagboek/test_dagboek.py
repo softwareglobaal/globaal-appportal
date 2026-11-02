@@ -305,5 +305,186 @@ check("D15 mailwacht: postvak gelezen, 0 nieuwe mails", "Postvak gelezen, 0 nieu
 html = C.get("/wachten", headers=MET).get_data(as_text=True)
 check("D15 tegel zegt postvak gelezen", "postvak gelezen, 0 nieuwe mails" in html)
 
+# --- T-0120 groep pagina (verzonnen voorbeelden; het bord is nagebootst): VOL-14 (archieflink vanaf 01-10), VOL-19 en
+# DB-5 (elke link via een route achter Authentik, nooit bij privé of bij WhatsApp, sms, telefoon en Xelion), VOL-13
+# (gelezen tot, onbekend nooit 0), ANGEL-6 (de taken van Ai Angel), PLAUD-7 en ARCH-2 (de stand van Plaud en Zoom).
+A.vandaag = lambda: date(2026, 10, 31)
+A.haal_locatie = lambda pad: None
+A._cache.clear()
+
+
+def wacht_(naam, **extra):
+    w = {"naam": naam, "label": "De Proefwacht", "kleur": "groen", "oordeel": "binnen", "aantal": 1, "rondes": 1,
+         "gedekt": None, "leesfout": "", "logfout": "", "noden": [], "fouten": [], "status": None, "items": [], "log": []}
+    w.update(extra)
+    return w
+
+
+ITEMS = {
+    "fathom-wacht": [{"tijd": "10:00", "wie": "Proef Persoon", "wat": "12 min, proef", "fout": False,
+                      "link": {"soort": "fathom", "uniek": "fathom:f1", "tekst": "open in Fathom"}},
+                     {"tijd": "11:00", "wie": "privégesprek", "wat": "5 min", "fout": False,
+                      "link": {"soort": "fathom", "uniek": "fathom:f2", "tekst": "open in Fathom"}}],
+    "plaud-wacht": [{"tijd": "10:00", "wie": "Proef Persoon", "wat": "12 min", "fout": False,
+                     "link": {"soort": "transcript", "uniek": "plaud:pw1", "tekst": "transcript lezen"}}],
+    "whatsapp-wacht": [{"tijd": "09:00", "wie": "Sara Proef", "wat": "3 berichten", "fout": False,
+                        "link": {"soort": "dag", "dag": "2026-10-27", "tekst": "mag niet"}}],
+    "dagbundelaar": [{"tijd": "21:00", "wie": "dagvaststelling", "wat": "Dagvaststelling", "fout": False,
+                      "link": {"soort": "dag", "dag": "2026-10-27", "tekst": "de dag openen"}}],
+    "icloud-wacht": [{"tijd": "10:00", "wie": "foto", "wat": "HA 9001 Proefproject: 3 werkfoto's", "fout": False,
+                      "link": {"soort": "fotos", "dag": "2026-10-27", "tekst": "foto's per project"}},
+                     {"tijd": "11:00", "wie": "foto", "wat": "oud", "fout": False,
+                      "link": {"soort": "url", "href": "https://www.dropbox.com/s/proef", "tekst": "Dropbox"}}],
+    "mehdi-agent": [{"tijd": "10:20", "wie": "taken", "wat": "Te doen 27-10: 14 open", "fout": False,
+                     "regels": ["1. Proeftaak nummer 1 (normaal)", "2. privé", "en nog 2 op het bord"],
+                     "link": {"soort": "bord", "pad": "/agent/mehdi-agent", "tekst": "de volledige lijst op het bord"}}],
+}
+GELEZEN = {"stand": "tot", "tekst": "gelezen tot 16:30", "bewijs": "de laatste ronde in het werkverslag van deze dag"}
+PAGINA = {"dag": "2026-10-27", "items": 0, "telling": {}, "vakken": [{"vak": "Proef", "wachten": [
+    wacht_(n, items=i, aantal=len(i), gelezen=GELEZEN) for n, i in ITEMS.items()] + [
+    wacht_("gezondheid-wacht", kleur="grijs", oordeel="niets binnen, geen ronde", aantal=0, rondes=0,
+           gelezen={"stand": "niet", "tekst": "niet gelezen", "bewijs": "geen ronde, geen dekking en geen item van deze dag"},
+           uitleg={"rol": "Leest de proefgegevens van het horloge", "cadans": "elke ochtend"}),
+    wacht_("plaud-wacht-2", plaud=None)]}]}
+PAGINA["vakken"][0]["wachten"][-1]["naam"] = "zoom-archief"
+PAGINA["vakken"][0]["wachten"][-1].update(archief={"gekopieerd": 2, "verdwenen": 1, "overzicht_van": "x", "na_de_dag": True},
+                                          items=[], aantal=0)
+PAGINA["vakken"][0]["wachten"][1]["plaud"] = {"opnames": 2, "in_tabel": 1, "wacht_op_transcript": 0, "kort": 0,
+                                              "onvolledig": 0, "zonder_audio": 1, "manifest_van": "x", "na_de_dag": True}
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(PAGINA))
+r = C.get("/wachten?dag=2026-10-05", headers=MET)
+html = r.get_data(as_text=True)
+check("D40 (VOL-14) ?dag= werkt terug als archieflink: 05-10 laadt, de knop 'archief' staat aan",
+      r.status_code == 200 and '<a class="aan" href="/wachten?dag=2026-10-05">archief, ma 5 okt</a>' in html, html[:2500])
+check("D40 de vier dagknoppen blijven", html.count('href="/wachten?dag=2026-10-2') + html.count('href="/wachten?dag=2026-10-3') >= 4
+      and 'href="/wachten?dag=2026-10-28"' in html and 'href="/wachten?dag=2026-10-31"' in html)
+check("D40 de dagkiezer begint op 01-10 en de vorige dag is een link", 'min="2026-10-01"' in html and 'max="2026-10-31"' in html
+      and 'href="/wachten?dag=2026-10-04"' in html)
+check("D40 01-10 laadt, 30-09 en morgen zijn 404, ook op de pagina van een wacht",
+      C.get("/wachten?dag=2026-10-01", headers=MET).status_code == 200
+      and C.get("/wachten?dag=2026-09-30", headers=MET).status_code == 404
+      and C.get("/wachten/fathom-wacht?dag=2026-09-30", headers=MET).status_code == 404
+      and C.get("/wachten/fathom-wacht?dag=2026-10-02", headers=MET).status_code == 200
+      and C.get("/wachten?dag=2026-11-01", headers=MET).status_code == 404)
+html = C.get("/wachten/fathom-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D41 (VOL-19) Fathom: 'open in Fathom' via de route van het Dagboek, in een nieuw venster, nooit de url zelf",
+      '<a class="open" href="/wachten/gesprek/fathom:f1/fathom" target="_blank" rel="noopener noreferrer">open in Fathom</a>'
+      in html and "fathom.video" not in html, html[-4000:])
+check("D41 een privégesprek krijgt geen link, ook als het bord er een gaf (archiefdag: privé blijft verborgen)",
+      "fathom:f2" not in html and "privégesprek" in html)
+html = C.get("/wachten/whatsapp-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D41 WhatsApp krijgt nooit een link", 'class="open"' not in html and "Sara Proef" in html)
+html = C.get("/wachten/plaud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D41 Plaud: 'transcript lezen' via de route van het Dagboek, en de audio alleen geteld",
+      '<a class="open" href="/wachten/gesprek/plaud:pw1/transcript">transcript lezen</a>' in html
+      and "1 zonder audio" in html and "er is geen audiolink" in html, html[-4000:])
+html = C.get("/wachten/dagbundelaar?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D41 De Dagbundelaar: de dag op /dag/<dag>", '<a class="open" href="/dag/2026-10-27">de dag openen</a>' in html)
+html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D41 De Fotowacht: de foto's per project; een onbekende soort of een Dropbox-link wordt geen link",
+      '<a class="open" href="/fotos/2026-10-27">foto&#39;s per project</a>' in html and "dropbox.com" not in html, html[-4000:])
+html = C.get("/wachten/mehdi-agent?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D42 (ANGEL-6) Ai Angel: de genummerde taken en de link naar het bord; een privétaak alleen 'privé'",
+      "<li>1. Proeftaak nummer 1 (normaal)</li><li>2. privé</li><li>en nog 2 op het bord</li>" in html
+      and 'href="https://mijnagents.globaal.be/agent/mehdi-agent" target="_blank"' in html, html[-4000:])
+html = C.get("/wachten/fathom-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D43 (VOL-13) de pagina zegt tot waar de wacht las, met het bewijs",
+      "gelezen tot 16:30 <span" in html and "(de laatste ronde in het werkverslag van deze dag)" in html, html[:3000])
+html = C.get("/wachten/gezondheid-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D43 niet gelezen is onbekend, nooit 0, en de uitleg komt uit de agenttabel",
+      "onbekend</span> items binnen" in html and "Onbekend: deze wacht las deze dag niet" in html
+      and "Leest de proefgegevens van het horloge" in html and "<b>Wanneer:</b> elke ochtend" in html, html[-4000:])
+html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D43 de tegel van een wacht die niet las is een vraagteken, en het dagtotaal is minstens",
+      '<div class="groot">?</div>' in html and "minstens " in html and "(een wacht is niet gelezen)" in html, html[:3500])
+check("D43 de regel onderaan: nooit tekst, privé alleen geteld",
+      "Privéfoto's en privégesprekken worden alleen geteld." in html and "—" not in html and "–" not in html)
+html = C.get("/wachten/zoom-archief?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D44 (ARCH-2) De Zoomarchivaris zegt hoeveel bestanden gekopieerd en verdwenen zijn",
+      "2 bestanden op deze dag gekopieerd naar je Dropbox, 1 verdwenen in Zoom" in html, html[-3000:])
+
+# Codex-toets 2: de fotolink bovenaan alleen op een dag met een werfgroep; 'minstens' ook in het vak Wat binnenkwam.
+html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 (Codex 2 en 3) een werfgroep: de link naar de foto's per project staat ook bovenaan, naar de dag van het item",
+      '<a href="/fotos/2026-10-27">foto\'s per project van 27-10</a>' in html and 'href="/fotos/2026-10-05"' not in html,
+      html[:1500])
+TEL = json.loads(json.dumps(PAGINA))
+for w in TEL["vakken"][0]["wachten"]:
+    if w["naam"] == "icloud-wacht":
+        w["items"] = [{"tijd": "21:00", "wie": "foto", "fout": False,
+                       "wat": "geen werk: privé 7, met mensen 2 (alleen geteld, geen plaats)"}]
+    if w["naam"] == "plaud-wacht":
+        w["gelezen"] = {"stand": "onvolledig", "tekst": "het manifest van de Mac is niet gelezen", "bewijs": ""}
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(TEL))
+html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 een dag met alleen de telling van privé en mensen: geen fotolink, geen plaats", "/fotos/" not in html
+      and "alleen geteld, geen plaats" in html, html[:1500])
+html = C.get("/wachten/plaud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 zonder het eigen overzicht is het aantal een ondergrens, bovenaan en in Wat binnenkwam",
+      "minstens 1</span> items binnen" in html and "Wat binnenkwam (minstens 1)" in html, html[:3000])
+html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 de tegel toont de ondergrens en het dagtotaal is minstens", "&ge; 1" in html and "minstens " in html)
+# Codex-toets 3: een ronde maar geen eigen overzicht en geen item: de pagina zegt 'wat er was is onbekend', nooit 'niets'
+for w in TEL["vakken"][0]["wachten"]:
+    if w["naam"] == "zoom-archief":
+        w.update(kleur="oranje", oordeel="draaide, wat er was is onbekend", items=[], aantal=0, archief=None, rondes=1,
+                 log=[{"tijd": "07:00", "stap": "bron", "tekst": "proefronde", "fout": False}],
+                 gelezen={"stand": "onvolledig", "tekst": "het overzicht van De Zoomarchivaris is niet gelezen", "bewijs": ""})
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(TEL))
+html = C.get("/wachten/zoom-archief?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D49 (Codex 3) zonder overzicht en zonder item: de kop zegt 'wat er was is onbekend', het vak 'onbekend'",
+      "ma 5 okt 2026: draaide, wat er was is onbekend</h2>" in html and "Wat binnenkwam (onbekend)" in html
+      and "Onbekend: het eigen overzicht van deze wacht is niet gelezen" in html and "niets binnen" not in html.split("<main>")[1]
+      .split("Groen:")[0], html[-4000:])
+html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D49 de tegel is dan een vraagteken", "draaide, wat er was is onbekend" in html and '<div class="groot">?' in html)
+
+# De route naar een gesprek: het bord beslist, het Dagboek stuurt alleen naar fathom.video door.
+GEVRAAGD = []
+
+
+def bord_gesprek(antwoord):
+    def f(uniek, wat):
+        GEVRAAGD.append((uniek, wat))
+        return antwoord
+    return f
+
+
+A.haal_gesprek = bord_gesprek({"uniek": "fathom:f1", "link": "https://fathom.video/share/PROEF1"})
+r = C.get("/wachten/gesprek/fathom:f1/fathom", headers=MET)
+check("D45 (VOL-19) de route naar Fathom stuurt door naar de link van het bord, zonder referrer",
+      r.status_code == 302 and r.headers["Location"] == "https://fathom.video/share/PROEF1"
+      and r.headers.get("Referrer-Policy") == "no-referrer" and GEVRAAGD[-1] == ("fathom:f1", "fathom"), r.headers)
+check("D45 zonder de groep 403, ook voor een gesprek", C.get("/wachten/gesprek/fathom:f1/fathom",
+                                                         headers={"X-authentik-groups": "medewerkers"}).status_code == 403)
+A.haal_gesprek = bord_gesprek({"uniek": "fathom:f1", "link": "https://www.dropbox.com/s/proef"})
+check("D45 een link die niet naar fathom.video gaat: 404", C.get("/wachten/gesprek/fathom:f1/fathom", headers=MET).status_code == 404)
+A.haal_gesprek = bord_gesprek({})
+check("D45 het bord zegt nee (privé, andere bron, niets): 404", C.get("/wachten/gesprek/fathom:f2/fathom", headers=MET).status_code == 404)
+n = len(GEVRAAGD)
+check("D45 een andere bron of een verkeerde combinatie vraagt het bord niet eens: 404",
+      [C.get(p, headers=MET).status_code for p in ("/wachten/gesprek/whatsapp:1/fathom", "/wachten/gesprek/plaud:pw1/fathom",
+                                                   "/wachten/gesprek/fathom:f1/transcript", "/wachten/gesprek/fathom:f1/audio")]
+      == [404] * 4 and len(GEVRAAGD) == n, GEVRAAGD[n:])
+A.haal_gesprek = bord_gesprek(None)
+r = C.get("/wachten/gesprek/plaud:pw1/transcript", headers=MET)
+check("D45 het bord antwoordt niet: dat staat er, onbekend", r.status_code == 503 and "Het bord antwoordt niet" in r.get_data(as_text=True))
+A.haal_gesprek = bord_gesprek({"uniek": "plaud:pw1", "dag": "2026-10-27", "tijd": "10:00", "minuten": 12, "wie": "Proef Persoon",
+                               "thema": "Proefonderwerp", "meer": 0,
+                               "regels": [{"tijd": "00:00:00", "wie": "Spreker Proef", "tekst": "Goedemorgen <b>proef</b>."}]})
+r = C.get("/wachten/gesprek/plaud:pw1/transcript", headers=MET)
+html = r.get_data(as_text=True)
+check("D46 (PLAUD-7) het transcript van een werkopname, als tekst, niet bewaard, met de weg terug",
+      r.status_code == 200 and "Goedemorgen &lt;b&gt;proef&lt;/b&gt;." in html and "Spreker Proef" in html
+      and "no-store" in r.headers.get("Cache-Control", "") and 'href="/wachten/plaud-wacht?dag=2026-10-27"' in html
+      and "geen audiolink" in html, html[-2500:])
+A.haal_gesprek = bord_gesprek({})
+check("D46 een privéopname (het bord zegt nee): 404", C.get("/wachten/gesprek/plaud:pw2/transcript", headers=MET).status_code == 404)
+html = C.get("/dag/2026-10-22", headers=MET).get_data(as_text=True)
+check("D47 (VOL-14) de dagpagina linkt naar wat de wachten die dag kregen, vanaf 01-10",
+      'href="/wachten?dag=2026-10-22">wat de wachten kregen</a>' in html)
+html = C.get("/dag/2026-09-22", headers=MET).get_data(as_text=True)
+check("D47 voor 01-10 geen link naar de wachten", "wat de wachten kregen" not in html)
+
 print("dagboek:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)

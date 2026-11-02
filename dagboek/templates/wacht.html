@@ -5,24 +5,43 @@
   <h1>{{ w['label'] if w else naam }}</h1>
   <a href="{{ url_for('wachten_pagina', dag=dag) }}">alle wachten van {{ dagnaam_ }}</a>
   {% if vak %}<span class="zacht klein">vak {{ vak }}</span>{% endif %}
-  {% if naam == 'icloud-wacht' %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
+  {% if naam == 'icloud-wacht' and not w %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
+  {% if naam == 'icloud-wacht' and w %}{% for f in w['foto_link'] %}<a href="{{ f['href'] }}">foto's per project{% if f['andere'] %} van {{ f['dag'] }}{% endif %}</a>{% endfor %}{% endif %}
 </header>
 <main>
   <nav class="dagkeuze">
     {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ k['pad'] }}">{{ k['naam'] }}</a>{% endfor %}
   </nav>
+  {% if archief %}
+  <form class="archief klein" method="get" action="{{ url_for('wacht_pagina', naam=naam) }}">
+    {% if archief['vorige'] %}<a href="{{ url_for('wacht_pagina', naam=naam, dag=archief['vorige']) }}">← vorige dag</a>{% endif %}
+    {% if archief['volgende'] %}<a href="{{ url_for('wacht_pagina', naam=naam, dag=archief['volgende']) }}">volgende dag →</a>{% endif %}
+    <label class="zacht">een andere dag, vanaf 1 okt: <input type="date" name="dag" value="{{ dag }}" min="{{ archief['vanaf'] }}" max="{{ archief['tot'] }}"></label>
+    <button type="submit">toon</button>
+  </form>
+  {% endif %}
   {% if not g %}
     <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
       <div class="zacht">Daardoor weet het Dagboek nu niet wat deze wacht op {{ dagnaam_ }} kreeg. Dat is onbekend, niet leeg.</div></div>
   {% else %}
   <div class="kaart samen">
-    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
+    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ w['oordeel'] if w['oordeel'] in ('draaide, wat er was is onbekend', 'gelezen, niets gebeurd', 'postvak gelezen, 0 nieuwe mails') else uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
-      <div><span class="groot">{{ 'onbekend' if w['leesfout'] else w['aantal'] }}</span> items binnen</div>
+      <div><span class="groot">{{ 'onbekend' if w['leesfout'] or w['onbekend'] else ('minstens ' if w['minstens'] else '') ~ w['aantal'] }}</span> items binnen</div>
       <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
       {% if is_vandaag and w['status'] and w['status']['laatste'] %}<div>laatste ronde <span class="groot">{{ w['status']['laatste'] }}</span></div>{% endif %}
-      {% if w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
+      {% if w['gelezen'] %}<div class="gelezen gelezen-{{ w['gelezen']['stand'] }}">{{ w['gelezen']['tekst'] }}{% if w['gelezen']['bewijs'] %} <span class="zacht klein">({{ w['gelezen']['bewijs'] }})</span>{% endif %}</div>
+      {% elif w['gedekt'] is not none %}<div class="zacht">dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</div>{% endif %}
     </div>
+    {% if w['uitleg'] %}
+    <p class="uitleg klein">{% if w['uitleg']['rol'] %}<b>Wat deze wacht doet:</b> {{ w['uitleg']['rol'] }}{% endif %}{% if w['uitleg']['rol'] and w['uitleg']['cadans'] %}<br>{% endif %}{% if w['uitleg']['cadans'] %}<b>Wanneer:</b> {{ w['uitleg']['cadans'] }}{% endif %}</p>
+    {% endif %}
+    {% if naam == 'plaud-wacht' and 'plaud' in w %}
+    <p class="uitleg klein">{% if w['plaud'] %}Volgens het manifest van de Mac: {{ w['plaud']['opnames'] }} opnames op deze dag, {{ w['plaud']['in_tabel'] }} in de gesprekkentabel, {{ w['plaud']['wacht_op_transcript'] }} wachten op een transcript, {{ w['plaud']['zonder_audio'] }} zonder audio. De audio staat alleen op de Mac: er is geen audiolink.{% if not w['plaud']['na_de_dag'] %} De telling van deze dag is nog niet af.{% endif %}{% else %}Het manifest van de Mac is niet gelezen: het aantal opnames en de audio zijn onbekend.{% endif %}</p>
+    {% endif %}
+    {% if naam == 'zoom-archief' and 'archief' in w %}
+    <p class="uitleg klein">{% if w['archief'] %}Volgens het overzicht van De Zoomarchivaris: {{ w['archief']['gekopieerd'] }} bestanden op deze dag gekopieerd naar je Dropbox{% if w['archief']['verdwenen'] %}, {{ w['archief']['verdwenen'] }} verdwenen in Zoom voor de kopie{% endif %}. Geen onderwerp, geen link: de map staat erbij.{% else %}Het overzicht van De Zoomarchivaris is niet gelezen: wat er op deze dag gekopieerd werd, is onbekend.{% endif %}</p>
+    {% endif %}
   </div>
   {% if w['leesfout'] or w['logfout'] or w['fouten'] or w['stand_fout'] %}
   <div class="kaart">
@@ -41,18 +60,18 @@
   </div>
   {% endif %}
   <div class="kaart">
-    <h2>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] else w['aantal'] }})</h2>
+    <h2>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] or w['onbekend'] else ('minstens ' if w['minstens'] else '') ~ w['aantal'] }})</h2>
     {% if w['leesfout'] %}
     <p class="leeg">Onbekend: het bord kon deze wacht niet lezen ({{ w['leesfout'] }}). Dat is niet hetzelfde als leeg.</p>
     {% elif w['items'] %}
     <table class="lijst">
       <tr class="kop"><td>Tijd</td><td>Van wie of wat</td><td>Kort</td></tr>
       {% for it in w['items'] %}
-      <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}{% if it['regels'] %}<ul class="regels">{% for x in it['regels'] %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}</td></tr>
+      <tr{% if it['fout'] %} class="fout"{% endif %}><td class="tijd">{{ it['tijd'] or '-' }}</td><td>{{ it['wie'] }}</td><td class="zacht">{{ it['wat'] }}{% if it['open'] %} <a class="open" href="{{ it['open']['href'] }}"{% if it['open']['nieuw'] %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ it['open']['tekst'] }}</a>{% endif %}{% if it['regels'] %}<ul class="regels">{% for x in it['regels'] %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}</td></tr>
       {% endfor %}
     </table>
     {% else %}
-    <p class="leeg">{{ 'Postvak gelezen, 0 nieuwe mails op deze dag.' if w['oordeel'] == 'postvak gelezen, 0 nieuwe mails' else 'Niets binnengekomen op deze dag.' }}</p>
+    <p class="leeg">{{ 'Postvak gelezen, 0 nieuwe mails op deze dag.' if w['oordeel'] == 'postvak gelezen, 0 nieuwe mails' else 'Onbekend: het eigen overzicht van deze wacht is niet gelezen. Dat is niet hetzelfde als leeg.' if w['onbekend'] and w['gelezen'] and w['gelezen']['stand'] == 'onvolledig' else 'Onbekend: deze wacht las deze dag niet. Dat is niet hetzelfde als leeg.' if w['onbekend'] else 'Niets binnengekomen op deze dag.' }}</p>
     {% endif %}
   </div>
   <div class="kaart">
@@ -72,7 +91,8 @@
     {% endif %}
   </div>
   {% endif %}
-  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Nooit de tekst van een bericht.</p>
+  <p class="zacht klein">Groen: er kwam iets binnen, of de dag is helemaal gelezen en er gebeurde niets. Oranje: de wacht draaide, maar er kwam niets binnen, of wat er was is onbekend. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Een vraagteken of onbekend: niet gelezen, nooit nul.</p>
+  <p class="zacht klein">Nooit de tekst van een bericht. Privéfoto's en privégesprekken worden alleen geteld. Een link opent altijd via het Dagboek of het bord, achter je aanmelding; nooit een gedeelde Dropbox-link, nooit bij privé en nooit bij WhatsApp, sms, telefoon of Xelion.</p>
 </main>
 <style>
   .dagkeuze{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
@@ -92,6 +112,13 @@
   .nood{color:var(--oranje);margin:4px 0}
   ul.regels{margin:4px 0 0;padding-left:18px;color:var(--tekst)}
   ul.regels li{margin:2px 0}
+  form.archief{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
+  form.archief a{color:var(--accent);text-decoration:none}
+  form.archief input,form.archief button{background:var(--paper);color:var(--tekst);border:1px solid var(--rand);border-radius:8px;padding:4px 8px;font:inherit}
+  p.uitleg{margin:10px 0 0;color:var(--zacht)}
+  p.uitleg b{color:var(--tekst);font-weight:600}
+  .gelezen-niet,.gelezen-onbekend{color:var(--oranje)}
+  a.open{color:var(--accent);white-space:nowrap}
   @media (max-width:600px){table.lijst tr.kop{display:none} table.lijst td{font-size:14px;padding:5px 4px}}
 </style>
 {% endblock %}

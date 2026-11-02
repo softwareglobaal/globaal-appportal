@@ -10,6 +10,14 @@
   <nav class="dagkeuze">
     {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ k['pad'] }}">{{ k['naam'] }}</a>{% endfor %}
   </nav>
+  {% if archief %}
+  <form class="archief klein" method="get" action="{{ url_for('wachten_pagina') }}">
+    {% if archief['vorige'] %}<a href="{{ url_for('wachten_pagina', dag=archief['vorige']) }}">← vorige dag</a>{% endif %}
+    {% if archief['volgende'] %}<a href="{{ url_for('wachten_pagina', dag=archief['volgende']) }}">volgende dag →</a>{% endif %}
+    <label class="zacht">een andere dag, vanaf 1 okt: <input type="date" name="dag" value="{{ dag }}" min="{{ archief['vanaf'] }}" max="{{ archief['tot'] }}"></label>
+    <button type="submit">toon</button>
+  </form>
+  {% endif %}
   {% if not g %}
     <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
       <div class="zacht">Daardoor weet het Dagboek nu niet wat de wachten op {{ naam }} kregen. Dat is onbekend, niet leeg.</div></div>
@@ -29,14 +37,15 @@
     {% for w in vak['wachten'] %}
       <a class="tegel wacht kleur-{{ w['kleur'] }}" href="{{ url_for('wacht_pagina', naam=w['naam'], dag=dag) }}">
         <div class="kop"><span class="stip {{ w['kleur'] }}"></span><span class="naam">{{ w['label'] }}</span></div>
-        <div class="groot">{{ '?' if w['leesfout'] else w['aantal'] }}{% if w['noden'] %} <span class="open">{{ w['noden']|length }} open nu</span>{% endif %}</div>
+        <div class="groot">{{ '?' if w['leesfout'] or w['onbekend'] else ('&ge; ' | safe if w['minstens'] else '') ~ w['aantal'] }}{% if w['noden'] %} <span class="open">{{ w['noden']|length }} open nu</span>{% endif %}</div>
         <div class="klein regel {{ 'fouttekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</div>
       </a>
     {% endfor %}
     </div>
   {% endfor %}
   {% endif %}
-  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Nooit de tekst van een bericht.</p>
+  <p class="zacht klein">Groen: er kwam iets binnen, of de dag is helemaal gelezen en er gebeurde niets. Oranje: de wacht draaide, maar er kwam niets binnen, of wat er was is onbekend. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Een vraagteken: niet gelezen, nooit nul.</p>
+  <p class="zacht klein">Nooit de tekst van een bericht. Privéfoto's en privégesprekken worden alleen geteld.</p>
 </main>
 <style>
   .dagkeuze{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
@@ -44,6 +53,9 @@
   .dagkeuze a.aan{background:var(--accent);border-color:var(--accent);color:#0f1115;font-weight:700}
   .samen .cijfers{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
   .samen .groot{font-size:24px;font-weight:700}
+  form.archief{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px}
+  form.archief a{color:var(--accent);text-decoration:none}
+  form.archief input,form.archief button{background:var(--paper);color:var(--tekst);border:1px solid var(--rand);border-radius:8px;padding:4px 8px;font:inherit}
   h3.vak{margin:20px 4px 8px;font-size:13px;color:var(--zacht);text-transform:uppercase;letter-spacing:.08em}
   .wachttegels{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   a.tegel.wacht{display:block;color:inherit;text-decoration:none;border:1px solid var(--rand);min-height:104px}
