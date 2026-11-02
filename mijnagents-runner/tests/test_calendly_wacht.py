@@ -170,6 +170,7 @@ check("CL-2 het kenmerk is een link met als host calendly.com of een subdomein, 
                                         "https://calendly.com:443/x"))
       and not any(CW.calendly_link(t) for t in ("https://notcalendly.com/x", "https://calendly.com.proef.test/x",
                                                 "https://calendly.com@proef.test/x", "https://x:calendly.com@proef.test/",
+                                                "https://calendly.com:geenpoort/x", "https://calendly.com:99999/x",
                                                 "calendly.com zonder link", "", None)))
 noden, signaal = ronde(EEN, [b_gisteren], ({}, []))
 check("CL-2 een boeking van gisteren zonder afspraak wordt ook gezien",

@@ -44,10 +44,12 @@ URL_IN_TEKST = re.compile(r"https?://[^\s<>\"'()\[\]{}]+", re.I)
 
 
 def calendly_link(tekst):
-    """Staat er in de tekst een link waarvan de host (urlsplit) calendly.com of een subdomein ervan is?"""
+    """Staat er in de tekst een geldige link waarvan de host (urlsplit) calendly.com of een subdomein ervan is? Een
+    ongeldige poort (https://calendly.com:geenpoort/x) maakt de link ongeldig (nazorg Codex-toets 3)."""
     for url in URL_IN_TEKST.findall(tekst or ""):
         try:
-            host = (urllib.parse.urlsplit(url).hostname or "").rstrip(".").lower()
+            delen = urllib.parse.urlsplit(url)
+            host, _poort = (delen.hostname or "").rstrip(".").lower(), delen.port   # .port: ValueError bij een foute poort
         except ValueError:
             continue
         if host == "calendly.com" or host.endswith(".calendly.com"):
