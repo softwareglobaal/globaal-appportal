@@ -193,7 +193,7 @@ check("D14 items met detail", "Sara Proef" in html and "Tom Proef" in html and "
 check("D14 priv\u00e9 is een label, naam blijft, met de reden", '<b>Tom Proef</b> <span class="etiket prive">priv\u00e9</span>' in html
       and '<p class="reden prive">priv\u00e9: vaste regel: proef</p>' in html, html[-9000:])
 check("D16 twijfel is een oranje label met de reden en de vraag", '<span class="etiket twijfel">twijfel</span>' in html
-      and 'bij twijfel priv\u00e9. Wat moet het zijn?</p>' in html and '<span class="etiket twijfel">1 twijfel</span>' in html, html[-12000:])
+      and 'bij twijfel priv\u00e9. Wat moet het zijn?</p>' in html and '<span class="etiket twijfel tel">1 twijfel</span>' in html, html[-12000:])
 check("D16 zoom in twee rijen, chat als aantallen", 'id="zoom-chat"' in html and "De Zoomwacht: chat" in html
       and "4 berichten, 1 van jou, tussen 09:59 en 15:54 · kanaal" in html and "4 berichten in 1 gesprekken, 1 kanalen" in html
       and "zelfde agent als zoom-wacht" in html, html[-12000:])

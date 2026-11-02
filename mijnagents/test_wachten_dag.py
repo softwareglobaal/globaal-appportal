@@ -123,7 +123,7 @@ con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) V
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('zoom-wacht','regisseur','zoom-tekst',"
             "'2026-10-31 16:00 Zoom-gesprek, 5 min, alleen in Zoom','{\"stand\": \"opname zonder tekst\", \"minuten\": 5}','zoom-tekst:LOS==','2026-10-31T16:10:00+00:00','klaar')")
 con.execute("INSERT OR REPLACE INTO status(naam,status,detail,ts) VALUES('zoom-wacht','ok','ronde klaar','2026-10-31T20:00:00+00:00')")
-# Codex 02-11 ronde 2: een oproep die Mehdi werk noemde (prive 0, afdeling leeg) krijgt geen twijfel.
+# Codex 02-11 ronde 2 en 3: een oproep zonder vlag volgt dezelfde vaste regel als De Dagbundelaar (privé), nooit twijfel.
 con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,zekerheid,waarom,bron,ts) VALUES("
             "'telefoon:3','2026-10-31','15:00',2,'Leverancier','telefoon, inkomend','',0,'','werk volgens Mehdi (T-0141)','telefoon','x')")
 con.execute("INSERT INTO klaarzet(van,voor,soort,titel,inhoud,uniek,ts,status) VALUES('agenda-wacht','mehdi','signaal',"
@@ -218,7 +218,7 @@ check("W16 bij twijfel privé is twijfel met reden", zc["Sales_Won"]["label"] ==
 check("W16 hoog en werk: geen label", zc["Collega"]["label"] == "" and zc["Collega"]["reden"] == "")
 pl = {x["wie"]: x for x in w["plaud-wacht"]["items"]}
 check("W16 zekerheid laag en onbekend zonder privé: twijfel", pl["Speaker 1, Speaker 2"]["label"] == "twijfel"
-      and "geen sprekers herkend" in pl["Speaker 1, Speader 2".replace("d", "k")]["reden"], pl)
+      and "geen sprekers herkend" in pl["Speaker 1, Speaker 2"]["reden"], pl)
 check("W16 bewust privé (afdeling prive, geen twijfel) blijft privé", fa_items["Geheim Persoon"]["label"] == "privé")
 tel = w["belwacht"]["items"]
 check("W16 zonder privévlag telt twijfel ook (middel, 'bij twijfel')", pl["Mehdi, Klant B"]["label"] == "twijfel"
@@ -231,8 +231,8 @@ check("W20 klaarzet-inhoud (json) leesbaar in laag 2, ruw achter technisch", zo[
       and dict(zo["zoom-tekst"]["oordeel"])["titel"].startswith("2026-10-31 16:00") and "stand" in dict(zo["zoom-tekst"]["technisch"])["inhoud"], zo["zoom-tekst"])
 check("W21 chatrij zonder hartslag, de echte agent wel", w["zoom-chat"]["status"] is None and w["zoom-wacht"]["status"]["status"] == "ok",
       (w["zoom-chat"]["status"], w["zoom-wacht"]["status"]))
-check("W16 telefoon: vaste regel gaat voor; zonder vlag geen label en geen twijfel",
-      [(x["label"], x["reden"][:11]) for x in tel] == [("privé", "vaste regel"), ("privé", "vaste regel"), ("", "")] and len(tel) == 3, tel)
+check("W16 telefoon: vaste regel gaat voor, ook zonder vlag (zoals De Dagbundelaar telt), nooit twijfel",
+      [(x["label"], x["reden"][:11]) for x in tel] == [("privé", "vaste regel")] * 3 and len(tel) == 3, tel)
 check("W19 belwacht telregel telt de drie", w["belwacht"]["samen"] == "3 oproepen, 1 gemist, 5 min", w["belwacht"]["samen"])
 check("W19 telregels", w["belwacht"]["samen"] == "3 oproepen, 1 gemist, 5 min"
       and wa["samen"] == "20 berichten (18 in, 2 uit), 2 gesprekken, 1 groepen", (w["belwacht"]["samen"], wa["samen"]))

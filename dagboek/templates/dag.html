@@ -61,9 +61,9 @@
       <span class="stip {{ w['kleur'] }}"></span>
       <span class="label">{{ w['label'] }}</span>
       <span class="aantal">{{ '?' if w['leesfout'] else w['aantal'] }}</span>
-      {% if w['labels']['twijfel'] %}<span class="etiket twijfel">{{ w['labels']['twijfel'] }} twijfel</span>{% endif %}
-      {% if w['labels']['privé'] %}<span class="etiket prive">{{ w['labels']['privé'] }} privé</span>{% endif %}
-      {% if w['labels']['dringend'] %}<span class="etiket dringend">{{ w['labels']['dringend'] }} dringend</span>{% endif %}
+      {% if w['labels']['twijfel'] %}<span class="etiket twijfel tel">{{ w['labels']['twijfel'] }} twijfel</span>{% endif %}
+      {% if w['labels']['privé'] %}<span class="etiket prive tel">{{ w['labels']['privé'] }} privé</span>{% endif %}
+      {% if w['labels']['dringend'] %}<span class="etiket dringend tel">{{ w['labels']['dringend'] }} dringend</span>{% endif %}
       {% if w['noden'] %}<span class="open">{{ w['noden']|length }} open nu</span>{% endif %}
       <span class="kort {{ 'rood-tekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</span>
       <span class="uitleg">{{ w['uitleg'] }}</span>

@@ -149,9 +149,9 @@ def label_en_reden(r):
     waarom = str(r.get("waarom") or "").strip()
     prive = is_prive_gesprek(r)
     if str(r.get("bron") or "") in VASTE_PRIVE_BRON:
-        # De telefoonwachten lezen nooit de tekst en twijfelen dus nooit: privé door de vaste regel, of (na een keuze van
-        # Mehdi, T-0141) bewust werk zonder label. Nooit 'twijfel' op een lege afdeling (Codex 02-11, ronde 2).
-        return ("privé", VASTE_REGEL) if prive else ("", "")
+        # Dezelfde regel als De Dagbundelaar (dagvaststelling.is_prive, PRIVEBRONNEN): alles van de telefoon is privé tot
+        # Mehdi anders beslist (T-0141), ook zonder vlag. De wacht leest de tekst niet en twijfelt dus nooit (Codex 02-11).
+        return "privé", VASTE_REGEL
     # Twijfel gaat voor privé, met of zonder privévlag (Codex 02-11: zonder vlag telden 'twijfel', middel en een lege
     # afdeling niet mee); privé alleen als de wacht zeker was.
     if twijfelt(r):
