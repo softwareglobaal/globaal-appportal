@@ -5,7 +5,7 @@
   <h1>{{ w['label'] if w else naam }}</h1>
   <a href="{{ url_for('wachten_pagina', dag=dag) }}">alle wachten van {{ dagnaam_ }}</a>
   {% if vak %}<span class="zacht klein">vak {{ vak }}</span>{% endif %}
-  {% if naam == 'icloud-wacht' %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
+  {% if naam == 'icloud-wacht' and (not w or w['foto_link']) %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
 </header>
 <main>
   <nav class="dagkeuze">
@@ -59,7 +59,7 @@
   </div>
   {% endif %}
   <div class="kaart">
-    <h2>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] or w['onbekend'] else w['aantal'] }})</h2>
+    <h2>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] or w['onbekend'] else ('minstens ' if w['minstens'] else '') ~ w['aantal'] }})</h2>
     {% if w['leesfout'] %}
     <p class="leeg">Onbekend: het bord kon deze wacht niet lezen ({{ w['leesfout'] }}). Dat is niet hetzelfde als leeg.</p>
     {% elif w['items'] %}
@@ -90,7 +90,7 @@
     {% endif %}
   </div>
   {% endif %}
-  <p class="zacht klein">Groen: er kwam iets binnen, of de dag is helemaal gelezen en er gebeurde niets. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Een vraagteken of onbekend: niet gelezen, nooit nul.</p>
+  <p class="zacht klein">Groen: er kwam iets binnen, of de dag is helemaal gelezen en er gebeurde niets. Oranje: de wacht draaide, maar er kwam niets binnen, of wat er was is onbekend. Rood: fout. Grijs: de wacht draaide niet op deze dag. Open rondje: geen ronde gepland (een werkdagwacht in het weekend). Een vraagteken of onbekend: niet gelezen, nooit nul.</p>
   <p class="zacht klein">Nooit de tekst van een bericht. Privéfoto's en privégesprekken worden alleen geteld. Een link opent altijd via het Dagboek of het bord, achter je aanmelding; nooit een gedeelde Dropbox-link, nooit bij privé en nooit bij WhatsApp, sms, telefoon of Xelion.</p>
 </main>
 <style>

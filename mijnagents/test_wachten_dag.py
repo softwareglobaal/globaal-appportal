@@ -328,7 +328,9 @@ with open(WD.ANGEL_STAAT, "w", encoding="utf-8") as f:
     json.dump({"taken": {"t3": {"id": "t3", "tekst": "Bel de proefaannemer over de offerte", "prive": True},
                          **{f"t{i}": {"id": f"t{i}", "tekst": f"Proeftaak nummer {i}", "prive": False}
                             for i in (1, 2, 4, 5, 6, 7, 8, 9, 10, 11)}},
-               "afgerond": [{"id": "t12", "tekst": "Proeftaak nummer 12", "prive": False, "status": "gedaan"}]}, f)
+               "afgerond": [{"id": "t12", "tekst": "Proeftaak nummer 12", "prive": False, "status": "gedaan"},
+                            {"id": "c1", "tekst": "Proeftaak voor de collega", "voor": "collega", "wie": "Proef Collega",
+                             "prive": False, "status": "gedaan"}]}, f)
 TAKEN = ["Bijgewerkt 27-10-2026 10:20. Bijsturen kan op het bord.", "", "## Voor jou", ""]
 for i in range(1, 15):
     tekst = {3: "Bel de proefaannemer over de offerte"}.get(i, f"Proeftaak nummer {i}")
@@ -525,8 +527,8 @@ check("P42 een fotodag met alleen de telling: geen link, geen plaats",
       w26["icloud-wacht"]["items"][0]["wat"], w26["icloud-wacht"]["items"])
 lang = w26["mail-mch"]["items"][0]["wat"]
 check("P43 (Codex 1) bij een lang onderwerp blijven de bijlagen en de rest staan; het onderwerp wordt korter",
-      lang.endswith("· 2 bijlagen (pdf, dwg), 5 kB · klant · op te volgen · naar Proefmap") and len(lang) <= WD.KORT
-      and lang.startswith("Proef Proef"), lang)
+      lang.endswith("· 2 bijlagen (pdf, dwg), 5 kB · klant · op te volgen · naar Proefmap") and len(lang) <= WD.MAIL_KORT
+      and lang.startswith("Proef Proef") and len(lang) <= WD.MAIL_KORT, lang)
 MANIFEST = os.path.join(INV, "00 manifest.json")
 os.rename(MANIFEST, MANIFEST + ".weg")
 p26 = wachten("2026-10-26")["plaud-wacht"]
@@ -546,19 +548,66 @@ check("P44 met een overzicht dat de dag kent, zonder kopie en zonder ronde op di
       w25["kleur"] == "oranje" and w25["gelezen"]["tekst"] == "alle kopieën van deze dag bekend, niets gebeurd",
       (w25["kleur"], w25["gelezen"]))
 LIJST = "## Voor jou\n\n1. Proeftaak nummer 1 (normaal)\n2. Oude taak die niet meer in de staat staat (hoog)\n" \
-        "\n## Voor een collega\n\n3. Proef Collega: Proeftaak nummer 4 (laag)\n"
+        "\n## Voor een collega\n\n3. Proef Collega: Proeftaak voor de collega (laag)\n" \
+        "4. Geheime Proefklant: Proeftaak nummer 1 (normaal)\n5. Andere Collega: Proeftaak voor de collega (laag)\n"
 check("P45 (Codex 1) Ai Angel zonder leesbare staat: geen enkele taaktekst",
-      WD.angel_taken(LIJST, (None, None)) == [f"{n}. niet meer na te gaan of dit privé was: zie het bord" for n in (1, 2, 3)])
+      WD.angel_taken(LIJST, (None, None)) == [f"{n}. niet meer na te gaan of dit privé was: zie het bord"
+                                              for n in (1, 2, 3, 4, 5)])
 check("P45 een taak die niet meer in de staat staat, blijft verborgen; een werktaak van een collega staat er wel",
       WD.angel_taken(LIJST, WD.angel_prive_teksten()) == ["1. Proeftaak nummer 1 (normaal)",
                                                           "2. niet meer na te gaan of dit privé was: zie het bord",
-                                                          "3. Proef Collega: Proeftaak nummer 4 (laag)"],
+                                                          "3. Proef Collega: Proeftaak voor de collega (laag)",
+                                                          "4. niet meer na te gaan of dit privé was: zie het bord",
+                                                          "5. niet meer na te gaan of dit privé was: zie het bord"],
       WD.angel_taken(LIJST, WD.angel_prive_teksten()))
 check("P45 exact vergeleken: 'Proeftaak nummer 1' maakt 'Proeftaak nummer 13' geen werktaak",
       WD.angel_taken("13. Proeftaak nummer 13 (normaal)", WD.angel_prive_teksten())
       == ["13. niet meer na te gaan of dit privé was: zie het bord"])
 check("P45 de taak uit 'afgerond' van de staat staat er met haar tekst", regels[11] == "12. Proeftaak nummer 12 (normaal)",
       regels)
+
+# Codex-toets 2 (groep pagina): symlink op het bestand zelf, privé in wat, twintig soorten bijlagen, het oordeel zonder
+# overzicht.
+os.makedirs(os.path.join(INV, "2026-10-25 0900 Bestand elders"))
+os.symlink(os.path.join(INV, "2026-10-27 1000 Proefopname", "transcript.json"),
+           os.path.join(INV, "2026-10-25 0900 Bestand elders", "transcript.json"))
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+for uniek, bron, thema, link, archief in (
+        ("plaud:pw5", "plaud", "Proefonderwerp", "", "Data uit Mehdi/Plaud/2026-10-25 0900 Bestand elders/transcript.md"),
+        ("fathom:f5", "fathom", "Proef over een privé kwestie", "https://fathom.video/share/PROEF5", "")):
+    con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,thema,afdeling,prive,bron,link,archief,ts) VALUES("
+                "?,'2026-10-25','09:00',3,'Proef Persoon',?,'regie',0,?,?,?,'x')", (uniek, thema, bron, link, archief))
+con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,bijlagen,bijlagen_info,"
+            "opvolging,naar) VALUES('m41','mail-mch','proef@voorbeeld.test','INBOX','2026-10-25T09:00:00+00:00','2026-10-25',"
+            "'p@voorbeeld.test','Proef',?,'klant','x',25,?,'open',?)",
+            ("Proef " * 40, json.dumps([{"soort": f"soort{i:02d}abcde", "bytes": 1000} for i in range(20)]),
+             "INBOX.Een heel lange sorteermap voor de proef van vijftig tekens"))
+con.execute("INSERT INTO logboek(naam,onderwerp,stap,tekst,ts) VALUES('plaud-wacht','','bron','proefronde',"
+            "'2026-10-25T08:00:00+00:00')")
+con.commit()
+con.close()
+w25a = wachten("2026-10-25")
+check("P47 (Codex 2) een transcript.json dat een symlink is: geen link en 404",
+      not any(x.get("link") for x in w25a["plaud-wacht"]["items"]) and open_("plaud:pw5", "transcript").status_code == 404,
+      w25a["plaud-wacht"]["items"])
+check("P47 privé in het onderwerp van een werkgesprek: geen link (liever te veel verborgen)",
+      not any(x.get("link") for x in w25a["fathom-wacht"]["items"]), w25a["fathom-wacht"]["items"])
+lang = w25a["mail-mch"]["items"][0]["wat"]
+check("P48 (Codex 2) twintig soorten bijlagen: hoogstens vier bij naam, en opvolging en waarheen blijven heel",
+      "25 bijlagen (soort00abcde, soort01abcde, soort02abcde, soort03abcde, 21 andere), 20 kB" in lang
+      and lang.endswith("· op te volgen · naar Een heel lange sorteermap voor de proef van vijftig tekens")
+      and len(lang) <= WD.MAIL_KORT, lang)
+os.rename(MANIFEST, MANIFEST + ".weg")
+p25 = wachten("2026-10-25")["plaud-wacht"]
+os.rename(MANIFEST + ".weg", MANIFEST)
+os.rename(WD.ZOOM_ARCHIEF, WD.ZOOM_ARCHIEF + ".weg")
+z26 = wachten("2026-10-26")["zoom-archief"]
+os.rename(WD.ZOOM_ARCHIEF + ".weg", WD.ZOOM_ARCHIEF)
+check("P49 (Codex 2) zonder het eigen overzicht en zonder item is 'niets binnen' niet bewezen: 'wat er was is onbekend'",
+      (z26["kleur"], z26["oordeel"]) == ("oranje", "draaide, wat er was is onbekend") and z26["gelezen"]["stand"] == "onvolledig",
+      (z26["kleur"], z26["oordeel"]))
+check("P49 Plaud met een item uit de tabel maar zonder manifest: binnen, en het aantal is een ondergrens",
+      p25["oordeel"] == "binnen" and p25["gelezen"]["stand"] == "onvolledig", (p25["oordeel"], p25["gelezen"]))
 
 # P46 (Codex 1): bord en Dagboek samen, zoals op de VM: het Dagboek vraagt het echte bord (test client). Alleen in de repo
 # (de Docker-build kopieert alleen mijnagents/); daar staat 'overgeslagen'.

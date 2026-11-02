@@ -493,6 +493,10 @@ def wachten_dag(dag, naam=None, blad=None):
                 link = item_link(w, it)
                 if link:
                     it["open"] = link
+            # FOTO-5: de link naar de foto's per project bovenaan alleen op een dag met een werfgroep of kandidaat
+            # (Codex-toets 2: niet op een dag met alleen de telling van privé en mensen)
+            w["foto_link"] = any(str((it.get("open") or {}).get("href") or "").startswith("/fotos/")
+                                 for it in w.get("items") or [])
     alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
     gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
     gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)

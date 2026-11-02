@@ -403,6 +403,27 @@ html = C.get("/wachten/zoom-archief?dag=2026-10-05", headers=MET).get_data(as_te
 check("D44 (ARCH-2) De Zoomarchivaris zegt hoeveel bestanden gekopieerd en verdwenen zijn",
       "2 bestanden op deze dag gekopieerd naar je Dropbox, 1 verdwenen in Zoom" in html, html[-3000:])
 
+# Codex-toets 2: de fotolink bovenaan alleen op een dag met een werfgroep; 'minstens' ook in het vak Wat binnenkwam.
+html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 (Codex 2) een dag met een werfgroep: de link naar de foto's per project staat ook bovenaan",
+      '<a href="/fotos/2026-10-05">foto' in html, html[:1500])
+TEL = json.loads(json.dumps(PAGINA))
+for w in TEL["vakken"][0]["wachten"]:
+    if w["naam"] == "icloud-wacht":
+        w["items"] = [{"tijd": "21:00", "wie": "foto", "fout": False,
+                       "wat": "geen werk: privé 7, met mensen 2 (alleen geteld, geen plaats)"}]
+    if w["naam"] == "plaud-wacht":
+        w["gelezen"] = {"stand": "onvolledig", "tekst": "het manifest van de Mac is niet gelezen", "bewijs": ""}
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(TEL))
+html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 een dag met alleen de telling van privé en mensen: geen fotolink, geen plaats", "/fotos/" not in html
+      and "alleen geteld, geen plaats" in html, html[:1500])
+html = C.get("/wachten/plaud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 zonder het eigen overzicht is het aantal een ondergrens, bovenaan en in Wat binnenkwam",
+      "minstens 1</span> items binnen" in html and "Wat binnenkwam (minstens 1)" in html, html[:3000])
+html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D48 de tegel toont de ondergrens en het dagtotaal is minstens", "&ge; 1" in html and "minstens " in html)
+
 # De route naar een gesprek: het bord beslist, het Dagboek stuurt alleen naar fathom.video door.
 GEVRAAGD = []
 

@@ -420,6 +420,12 @@ def _grootte(n):
     return f"{max(1, round(n / 1024))} kB" if n < 1024 ** 2 else f"{n / 1024 ** 2:.1f} MB".replace(".", ",")
 
 
+BIJLAGE_SOORTEN = 4
+# Codex-toets 2: een mailregel mag langer zijn dan KORT, zodat bijlagen, soort, opvolging en waarheen er altijd heel
+# in staan; elk deel heeft zijn eigen grens, het onderwerp krijgt wat overblijft (minstens 30 tekens).
+MAIL_KORT = 280
+
+
 def bijlagen_tekst(aantal, info):
     """VOL-9 (contract van de groep mail): '2 bijlagen (pdf, dwg), 1,3 MB'. Alleen aantal, soort en grootte, zoals de
     wacht ze uit de BODYSTRUCTURE las; nooit een bestandsnaam, er wordt niets gedownload. Bij NULL (onbekend) of 0
@@ -433,9 +439,12 @@ def bijlagen_tekst(aantal, info):
     for x in lijst:
         s = re.sub(r"[^a-z0-9-]", "", str(x.get("soort") or "").lower())[:12] or "bestand"
         soorten[s] = soorten.get(s, 0) + 1
-    deel = [s if n == 1 else f"{n} {s}" for s, n in soorten.items()]
-    if deel and aantal > len(lijst):
-        deel[-1] += f" en nog {aantal - len(lijst)}"
+    # Codex-toets 2: hoogstens BIJLAGE_SOORTEN soorten bij naam, de rest als 'N andere' (ook wat niet in de lijst stond)
+    paren = list(soorten.items())
+    deel = [s if n == 1 else f"{n} {s}" for s, n in paren[:BIJLAGE_SOORTEN]]
+    andere = sum(n for _, n in paren[BIJLAGE_SOORTEN:]) + max(0, aantal - len(lijst))
+    if deel and andere:
+        deel.append(f"{andere} andere")
     groot = sum(x["bytes"] for x in lijst if isinstance(x.get("bytes"), int) and not isinstance(x.get("bytes"), bool)
                 and x["bytes"] > 0)
     return (f"{aantal} bijlage{'n' if aantal != 1 else ''}" + (f" ({', '.join(deel)})" if deel else "")
@@ -455,11 +464,12 @@ def lees_mail(conn, wacht, dag):
                 else f"in {_map_kort(r['map'])}" if r.get("map") and r["map"] != "INBOX" else "")
         # Codex-toets 1: bij een lang onderwerp viel de rest (bijlagen, opvolging, waarheen) weg na KORT tekens; nu wordt
         # het onderwerp korter, zodat de bijlagen en de rest altijd te zien zijn
-        rest = " · ".join(x for x in (bijlagen_tekst(r.get("bijlagen"), r.get("bijlagen_info")), r.get("soort") or "",
-                                      opv, waar) if x)
-        onderwerp = kort(r.get("onderwerp") or "(geen onderwerp)", max(30, KORT - len(rest) - 3))
-        items.append(_item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend",
-                           " · ".join(x for x in (onderwerp, rest) if x)))
+        rest = " · ".join(x for x in (bijlagen_tekst(r.get("bijlagen"), r.get("bijlagen_info")), kort(r.get("soort"), 20),
+                                      kort(opv, 30), kort(waar, 80)) if x)
+        onderwerp = kort(r.get("onderwerp") or "(geen onderwerp)", max(30, MAIL_KORT - len(rest) - 3))
+        it = _item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend", "")
+        it["wat"] = kort(" · ".join(x for x in (onderwerp, rest) if x), MAIL_KORT)
+        items.append(it)
     return items
 
 
@@ -547,8 +557,17 @@ def angel_prive_teksten():
         taken = list((staat.get("taken") or {}).values()) + list(staat.get("afgerond") or [])
     except (OSError, ValueError, AttributeError, TypeError):
         return None, None
-    teksten = [(bool(t.get("prive")), str(t.get("tekst") or "").strip()[:300]) for t in taken if isinstance(t, dict)]
-    return frozenset(x for p, x in teksten if p and x), frozenset(x for p, x in teksten if not p and x)
+    def weergave(t):
+        """De taak zoals mehdi_agent.lijst haar toont, zonder nummer en prioriteit: 'Naam: tekst' bij een collega of
+        agent met een naam, anders de tekst."""
+        tekst = str(t.get("tekst") or "")[:300].strip()
+        wie = str(t.get("wie") or "")
+        return f"{wie}: {tekst}" if t.get("voor") in ("collega", "agent") and wie else tekst
+    teksten = [(bool(t.get("prive")), weergave(t), str(t.get("tekst") or "")[:300].strip()) for t in taken
+               if isinstance(t, dict)]
+    # privé: de weergave en de kale tekst (liever te veel verborgen); werk: alleen de exacte weergave
+    return (frozenset(x for p, w, k in teksten if p for x in (w, k) if x),
+            frozenset(w for p, w, _ in teksten if not p and w))
 
 
 def angel_taken(inhoud, staat=(None, None)):
@@ -575,10 +594,9 @@ def angel_taken(inhoud, staat=(None, None)):
         # de tekst van de taak zoals de staat hem bewaart: zonder '(prioriteit)' achteraan en, bij een collega of een
         # agent, misschien met 'Naam: ' vooraan (mehdi_agent.lijst); exact vergeleken, nooit een stuk van een tekst
         kern = re.sub(r" \((?:hoog|normaal|laag)\)$", "", t["tekst"]).strip()
-        kandidaten = {kern[:300], kern.split(": ", 1)[-1].strip()[:300]}
-        if PRIVE_RE.search(" ".join(t["blok"])) or kandidaten & prive_teksten:
+        if PRIVE_RE.search(" ".join(t["blok"])) or {kern, kern.split(": ", 1)[-1].strip()} & prive_teksten:
             uit.append(f"{t['nr']}. privé")
-        elif kandidaten & werk_teksten:
+        elif kern in werk_teksten:              # Codex-toets 2: exact, met de naam ervoor zoals de staat hem kent
             uit.append(f"{t['nr']}. {kort(t['tekst'], 140)}")
         else:
             uit.append(f"{t['nr']}. niet meer na te gaan of dit privé was: zie het bord")
@@ -765,6 +783,10 @@ def per_wacht(conn, wacht, label, dag, status=None, noden=(), blad=None, cadans=
         oordeel, kleur = "geen ronde gepland", "rust"
     else:
         oordeel, kleur = "niets binnen, geen ronde", "grijs"
+    if kleur == "oranje" and not items and ((wacht == "plaud-wacht" and plaud is None)
+                                            or (wacht == "zoom-archief" and archief is None)):
+        # Codex-toets 2: zonder het eigen overzicht is 'niets binnen' niet bewezen
+        oordeel = "draaide, wat er was is onbekend"
     bladen = max(1, -(-len(log) // MAX_LOG))
     blad = bladen if blad is None else min(max(1, int(blad)), bladen)
     gelezen = gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout or logfout, cadans, rondes_geteld, plaud, archief)
