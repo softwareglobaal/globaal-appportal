@@ -1763,6 +1763,29 @@ def test_web3_safari_alleen_de_bezoeken_van_deze_mac():
         rijen = con.execute("SELECT browser, site FROM BEZOEK").fetchall()
         con.close()
         assert rijen == [("Safari", "proef-werk.test")], rijen
+        # Codex samen1 toets 3: een gegenereerde kolom Origin (hoofdletter) met een collatie die de helper niet kent: de
+        # gefilterde vraag faalt, maar de kolom bestaat wel. Geen terugval: Safari onverwacht, geen gsm-bezoek.
+        (safari / "History.db").unlink()
+        con = sqlite3.connect(safari / "History.db")
+        con.create_collation("proefcollatie", lambda a, b: (a > b) - (a < b))
+        con.executescript("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url);"
+                          "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item, visit_time, title, "
+                          "Origin INTEGER COLLATE proefcollatie GENERATED ALWAYS AS (1) VIRTUAL);")
+        con.execute("INSERT INTO history_items VALUES(1, 'https://proef-gsm.test/b')")
+        con.execute("INSERT INTO history_visits(id, history_item, visit_time, title) VALUES(1, 1, ?, 'gsm')",
+                    (nu - 1800 - 978307200,))
+        con.commit()
+        con.close()
+        status, uit, _ = _vraag(helper, str(thuis), "browser", "a" * 32)
+        assert status["extra"]["Safari"] == "onverwacht", status
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT browser, site FROM BEZOEK").fetchall()
+        con.close()
+        assert rijen == [], rijen
+        # toets 3: table_xinfo vraagt SQLite 3.26; de helper linkt de SQLite van macOS (-lsqlite3)
+        import ctypes
+        versie = ctypes.CDLL("/usr/lib/libsqlite3.dylib").sqlite3_libversion_number()
+        assert versie >= 3026000, versie
 
 
 def test_vol11_tijdgrens_ook_tijdens_het_kopieren():

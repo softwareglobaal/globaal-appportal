@@ -643,12 +643,15 @@ static void kopie_weg(int dirfd) {
 
 /* WEB-3: heeft de Safari-geschiedenis (als extra gekoppeld) de kolom history_visits.origin? 1 ja, 0 nee (een oudere
    Safari), -1 niet na te gaan. table_xinfo, niet table_info: die toont ook een gegenereerde of verborgen kolom (Codex
-   samen1 toets 2). */
+   samen1 toets 2); de naam zonder hoofdlettergevoel, zoals SQLite een kolomnaam leest (toets 3). table_xinfo vraagt
+   SQLite 3.26 (macOS 10.15 en later); bij een oudere is het -1: een Safari zonder kolom origin is dan onverwacht, nooit
+   ongefilterd. */
 static int oorsprong_kolom(sqlite3 *db) {
     sqlite3_stmt *stmt = NULL;
     int uit = -1;
-    if (sqlite3_prepare_v2(db, "SELECT count(*) FROM pragma_table_xinfo('history_visits', 'extra') WHERE name = 'origin'",
-                           -1, &stmt, NULL) == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
+    if (sqlite3_prepare_v2(db, "SELECT count(*) FROM pragma_table_xinfo('history_visits', 'extra') "
+                               "WHERE name = 'origin' COLLATE NOCASE", -1, &stmt, NULL) == SQLITE_OK &&
+        sqlite3_step(stmt) == SQLITE_ROW)
         uit = sqlite3_column_int(stmt, 0) > 0;
     sqlite3_finalize(stmt);
     return uit;
