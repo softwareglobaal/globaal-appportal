@@ -367,10 +367,19 @@ def test_nummer_vol_kent_het_land():
     with tempfile.TemporaryDirectory() as map_:
         pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
             ("H1", a(bxl(2026, 10, 22, 8, 0)), 60.0, 0, 1, "+32 (0)470 00 00 01", "com.apple.Telephony"),
-            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony")],
+            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony"),
+            ("H3", a(bxl(2026, 10, 22, 10, 0)), 60.0, 0, 1, "+32 (0)470 00 00 09", "com.apple.Telephony")],
             [(1, "Jan Proef", "", "", "+32470000001")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
         rijen, _ = M.telefoon_rijen(pad, DAGEN)
-    assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001"], rijen
+        # nazorg-mac: een onbekend nummer met (0) staat er zonder die nul, zodat het volle nummer klopt (TEL-6)
+        assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001",
+                                                                                     "+32470000009"], rijen
+        assert M.nummer_vol(sorted(rijen, key=lambda r: r["uniek"])[2]["personen"]) == "32470000009"
+        # en zo ook bij de sms: een afzender '+32 (0)470 00 00 09' buiten het adresboek
+        sms = maak_sms(os.path.join(map_, "sms.sqlite"), [(1, a(bxl(2026, 10, 22, 11, 0)), 0, "SMS")],
+                       [(1, "+32 (0)470 00 00 09", 45, "")], [(1, "+32 (0)470 00 00 09")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+        srijen, _ = M.sms_rijen(sms, DAGEN)
+    assert [r["personen"] for r in srijen] == ["+32470000009"], srijen
 
 
 # --------------------------------------------------------------------------------------------- dekking ---
