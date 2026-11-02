@@ -109,7 +109,7 @@ proef() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>$LABEL.proef</string>
-  <key>ProgramArguments</key><array><string>$STARTER</string><string>--droog</string></array>
+  <key>ProgramArguments</key><array><string>$STARTER</string><string>--proef</string></array>
   <key>RunAtLoad</key><false/>
   <key>StandardOutPath</key><string>$uit</string><key>StandardErrorPath</key><string>$uit</string>
 </dict></plist>
