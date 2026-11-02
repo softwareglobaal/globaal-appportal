@@ -159,10 +159,13 @@ def main():
     if not gelezen:
         # 02-11-2026 (T-0077): geen enkele browser gelezen (launchd zonder Full Disk Access) is onbekend, geen 0.
         # Dan geen klaarzet: het Dagboek houdt de dag op "onbekend" in plaats van "0 bezoeken op 0 sites".
-        bord("/api/logboek", {"regels": [
-            {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "bron",
-             "tekst": "gelezen: niets; niets klaargezet"
-                      + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")}]})
+        try:
+            bord("/api/logboek", {"regels": [
+                {"naam": NAAM, "onderwerp": f"dag {DAG}", "stap": "bron",
+                 "tekst": "gelezen: niets; niets klaargezet"
+                          + ("; onleesbaar: " + ", ".join(onleesbaar) if onleesbaar else "")}]})
+        except Exception as e:  # noqa: BLE001  Codex 02-11: een mislukt logboek houdt de foutstatus niet tegen
+            print("logboek mislukt:", e, file=sys.stderr)
         hartslag("fout", taak="geen browser gelezen", detail="niets klaargezet; geen Full Disk Access?", nood=nood)
         print(f"Websites {DAG}: geen browser gelezen, niets klaargezet")
         return

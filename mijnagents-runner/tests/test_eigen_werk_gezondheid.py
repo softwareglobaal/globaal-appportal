@@ -50,8 +50,9 @@ check("E03 geen gezondheid", "Health Auto Export stuurt nog niets" in t)
 src = open(os.path.join(RUNNER, "dagbundelaar.py"), encoding="utf-8").read()
 ns = {"json": __import__("json"), "os": os}
 start = src.index("def _inhoud(x):")
-eind = src.index("def lees_eigen(eerste):")
+eind = src.index("\ndef ", src.index("def lees_eigen(eerste):") + 1)
 exec(src[start:eind], ns)
+ns["WISPR_GEBRUIKER"] = "Mehdi"
 items = [{"uniek": "wispr:Mehdi:2026-10-29", "inhoud": '{"vandaag": {"dictaten": 3, "woorden": 40, "seconden": 30}}'},
          {"uniek": "wispr:Mehdi:2026-10-31", "inhoud": '{"vandaag": {"dictaten": 0}, "per_dag": {"2026-10-30": {"dictaten": 19}, "2026-10-31": {"dictaten": 0}}}'},
          {"uniek": "wispr:Mehdi:2026-10-30", "inhoud": '{"vandaag": {"dictaten": 7}}'}]
@@ -62,9 +63,20 @@ check("E02 oud item telt voor zijn dag", pd["2026-10-29"]["dictaten"] == 3, pd)
 wi = [{"uniek": "websites:2026-11-01", "inhoud": '{"browsers": {}, "per_dag": {"2026-11-01": {"bezoeken": 0, "sites": 0, "top": []}}}'},
       {"uniek": "websites:2026-11-02", "inhoud": '{"browsers": {"Chrome": 9}, "per_dag": {"2026-11-02": {"bezoeken": 0, "sites": 0, "top": []}}}'},
       {"uniek": "websites:2026-10-31", "inhoud": '{"per_dag": {"2026-10-31": {"bezoeken": 5, "sites": 1, "top": [["a.be", 5]]}}}'}]
-pw = ns["per_dag_uit"](ns["websites_gelezen"](wi), "websites:", lambda i: None)
-check("E08 zonder gelezen browser onbekend", "2026-11-01" not in pw and "2026-10-31" not in pw, pw)
-check("E08 gelezen browser met 0 bezoeken telt", pw.get("2026-11-02") == {"bezoeken": 0, "sites": 0, "top": []}, pw)
+
+
+class _Bord:
+    """Nagebootst bord voor lees_eigen: alleen websites-items, de rest leeg."""
+    def db_lees(self, sql, params):
+        return wi if "websites:" in sql else []
+
+
+ns["bord"] = _Bord()
+eigen = ns["lees_eigen"]("2026-10-31")
+check("E08 zonder gelezen browser onbekend", eigen("2026-11-01")["websites"] is None and eigen("2026-10-31")["websites"] is None,
+      [eigen(d) for d in ("2026-10-31", "2026-11-01")])
+check("E08 gelezen browser met 0 bezoeken telt", eigen("2026-11-02")["websites"] == {"bezoeken": 0, "sites": 0, "top": []},
+      eigen("2026-11-02"))
 
 g = ns["gezondheid_regels"]("Gezondheid op 2026-10-30\n========================\nGeen metingen in deze periode.")
 check("E03 geen metingen is None", g is None, g)
@@ -105,13 +117,32 @@ check("E06 oude aanroep zonder YouTube-regel", "YouTube" not in t2, t2)
 
 # E07 (T-0077, 02-11-2026): onder launchd zonder Full Disk Access leest de wacht niets; dan geen klaarzet met nullen.
 aanroepen = []
-B.bord = lambda pad, payload: aanroepen.append(pad) or {}
+B.bord = lambda pad, payload: aanroepen.append((pad, payload)) or {}
 B.BRONNEN = ()
 B.DROOG = False
 B.DAGEN = 3
 B.main()
-check("E07 niets gelezen: geen klaarzet", "/api/klaarzet" not in aanroepen, aanroepen)
-check("E07 niets gelezen: wel logboek en hartslag fout", aanroepen.count("/api/logboek") == 1 and "/agent-status" in aanroepen, aanroepen)
+paden = [p for p, _ in aanroepen]
+status = [p.get("status") for pad, p in aanroepen if pad == "/agent-status"]
+check("E07 niets gelezen: geen klaarzet", "/api/klaarzet" not in paden, paden)
+check("E07 niets gelezen: precies een logregel", paden.count("/api/logboek") == 1
+      and len(aanroepen[paden.index("/api/logboek")][1]["regels"]) == 1, aanroepen)
+check("E07 niets gelezen: hartslag eindigt op fout", status and status[-1] == "fout", status)
+
+
+def bord_faalt(pad, payload):
+    aanroepen.append((pad, payload))
+    if pad == "/api/logboek":
+        raise OSError("bord weg")
+    return {}
+
+
+aanroepen = []
+B.bord = bord_faalt
+B.main()
+status = [p.get("status") for pad, p in aanroepen if pad == "/agent-status"]
+check("E07 logboek mislukt: toch hartslag fout en geen klaarzet", status[-1] == "fout"
+      and "/api/klaarzet" not in [p for p, _ in aanroepen], aanroepen)
 
 oud = dag()
 check("E05 zonder eigen geen blok", "Eigen werk en gezondheid" not in oud)
