@@ -1826,6 +1826,43 @@ def test_vol11_tijdgrens_ook_tijdens_het_kopieren():
     assert duur < 4.5 and not rest, (duur, rest)
 
 
+def test_vol11_tijdgrens_ook_tijdens_een_trage_vraag():
+    """Codex 01-11 (toets 3, opmerking): de voortgangsfunctie breekt ook een trage SQL-vraag af na de tijdgrens, niet
+    alleen het kopieren. Een Chrome-profiel waarvan visits een view is die honderden miljoenen rijen maakt (geen enkele
+    in het venster: er komt niets in de uitvoer, het blijft rekenen): met een grens van een seconde stopt de set binnen
+    enkele seconden, Chrome is fout en van het andere profiel en van Safari komt niets mee."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_, "-DEXTRA_BUDGET=1")
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        chrome = thuis / "Library/Application Support/Google/Chrome"
+        traag = chrome / "A" / "History"
+        traag.parent.mkdir(parents=True)
+        con = sqlite3.connect(traag)
+        con.executescript("CREATE TABLE urls(id INTEGER PRIMARY KEY, url, title, visit_count);"
+                          "INSERT INTO urls VALUES(1, 'https://proef-traag.test/', 'x', 1);"
+                          "CREATE VIEW visits AS WITH RECURSIVE r(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM r "
+                          "WHERE i < 500000000) SELECT i AS id, 1 AS url, i AS visit_time, 0 AS visit_duration, "
+                          "0 AS from_visit FROM r;")
+        con.commit()
+        con.close()
+        _chrome(chrome / "B" / "History", [(time.time() - 60, "https://proef-snel.test/", "x", 1)]).close()
+        t0 = time.time()
+        status, uit, doel = _vraag(helper, str(thuis), "browser")
+        duur = time.time() - t0
+        rest = [n for n in os.listdir(doel) if n.startswith(".bron")]
+        con = sqlite3.connect(uit)
+        bronnen = con.execute("SELECT browser, uitkomst FROM BRON").fetchall()
+        con.close()
+    assert status["uitkomst"] == "ok" and status["extra"]["Chrome"] == "fout", status
+    assert duur < 4.5 and not rest, (duur, rest)
+    assert ("Chrome", "fout") in bronnen, bronnen
+
+
 def test_vol11_site_en_video_zoals_de_wachten():
     """De helper rekent site() en video() zoals browser_wacht.site en youtube_wacht.video: dezelfde uitkomst op een
     rij adressen (een adres zonder site komt niet in de uitvoer)."""
