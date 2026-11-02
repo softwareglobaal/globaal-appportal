@@ -1278,6 +1278,19 @@ for citaat, waarom in (("DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (
         compatibiliteit={"past op DDF484": {"oordeel": "ja", "citaat": citaat}})], VANDAAG, KOERSEN, ["past op DDF484"],
         paginas=pag)
     check(f"P09: geen aanbeveling met {waarom}", r["beste"] is None and r["goed"][0]["niet_bevestigd"] == ["past op DDF484"])
+for zin, beste, waarom in (
+        ("Gratis binnen Nederland vanaf €50; verzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie 'vanaf' is geen drempel voor gratis"),
+        ("Gratis verzending naar België € 0,00", True, "gratis naar Belgie met 0,00 telt")):
+    r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+        "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": zin})], VANDAAG, KOERSEN,
+        paginas={BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. " + zin)})
+    check(f"Codex 46: {waarom}", (r["beste"] is not None) == beste, str(r["goed"][0]["ontbreekt"] if r["goed"] else r))
+r = A.verwerk([aanbod(titel="Makita BL1850B 18V Li-Ion accu - 5.0Ah", url=FIXAMI, prijs=74.99, bewijs={
+    "prijs": "BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro", "verzending": "Gratis levering."},
+    compatibiliteit={"past op DDF484": {"oordeel": "ja", "citaat": "Ongeschikt voor DDF484"}})], VANDAAG, KOERSEN,
+    ["past op DDF484"], paginas={FIXAMI: FIXPAG[FIXAMI] + " Ongeschikt voor DDF484."})
+check("Codex 46: 'Ongeschikt voor DDF484' bewijst nooit de pasvorm", r["beste"] is None)
 with tempfile.TemporaryDirectory() as d:
     log = os.path.join(d, "gelezen.jsonl")
     with open(log, "w", encoding="utf-8") as f:

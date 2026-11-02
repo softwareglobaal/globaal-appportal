@@ -98,8 +98,9 @@ EIS_MODEL = "modelcode {}"
 EIS_PAST = "past op {}"
 PAST_IN_VRAAG = re.compile(r"\b(?:voor|op|bij|met)\s+(?:mijn|onze|ons|de|het|een)\s+(?:[A-Z][\w-]+\s+)?"
                            r"([A-Z]{2,6}-?\d{3,5}[A-Z0-9]*)\b")
-PASWOORD = re.compile(r"geschikt|past\b|passend|compatib|voor gebruik met|werkt met|suitable|fits|passt|kompatib|"
-                      r"convient|adapté", re.I)
+# Met een woordgrens ervoor: "ongeschikt" en "incompatible" zijn geen paswoord (Codex controle 46, punt 3).
+PASWOORD = re.compile(r"\b(?:geschikt|past\b|passend|compatib|voor gebruik met|werkt met|suitable|fits|passt|kompatib|"
+                      r"convient|adapté)", re.I)
 MODELCODE_IN_VRAAG = re.compile(r"\b(?:modelcode|typenummer|artikelnummer|fabrikantcode)\s*:?\s*([A-Za-z0-9][A-Za-z0-9./-]{3,}[A-Za-z0-9])")
 # Ook zonder dat woord: hoofdletters en cijfers met een streepje, zoals MOVA-RC-V70ULC-WHT of VX-200EU (Codex
 # controle 36, punt 2). Een te veel herkende code houdt een aanbeveling hoogstens tegen, ze kiest nooit verkeerd.
@@ -223,11 +224,23 @@ def gratis_verzending(tekst):
     return False
 
 
+# Een citaat in zinsdelen: een drempel telt alleen in een zinsdeel dat ook "gratis" zegt, zodat "verzendkosten naar
+# België vanaf €9,95" geen drempel is (Codex controle 46, punt 2).
+ZINSDEEL = re.compile(r"[;\n|]|(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
+GRATISWOORD = re.compile(r"gratis|free|kostenlos|gratuit|inbegrepen|inclusief|included", re.I)
+NUL_EURO = re.compile(r"(?:€|\beur(?:o|os)?\b)?\s*(?<![\d.,])0[.,]00(?!\d)\s*(?:€|\beur(?:o|os)?\b)?", re.I)
+
+
+def _drempels(citaat):
+    """De drempels (met, zonder, excl) uit de zinsdelen van het citaat die ook gratis zeggen."""
+    return [d for deel in ZINSDEEL.split(_schoon(citaat)) if GRATISWOORD.search(deel) for d in DREMPEL.findall(deel)]
+
+
 def boven_drempel(citaat, aanbod):
     """Haalt de prijs de drempel voor gratis verzending in het citaat? True zonder drempel. Een drempel zonder btw
     vergelijkt met de prijs zonder btw (een prijs met btw gedeeld door 1,21); een andere munt dan euro haalt hem nooit
     (overleg 44, B)."""
-    drempels = DREMPEL.findall(_schoon(citaat))
+    drempels = _drempels(citaat)
     if not drempels:
         return True
     prijs = _getal(aanbod.get("prijs"))
@@ -244,9 +257,8 @@ def boven_drempel(citaat, aanbod):
 def ander_bedrag(citaat):
     """Noemt het citaat een bedrag dat geen drempel en geen 0,00 is? Dan bewijst het geen gratis verzending naar Belgie:
     "gratis verzending binnen Nederland, naar België € 9,95" (Codex controle 45, punt 3)."""
-    rest = DREMPEL.sub(" ", _schoon(citaat))
-    rest = re.sub(r"(?<![\d.,])0[.,]00(?!\d)", " ", rest)
-    return bool(BEDRAG_TUSSEN.search(rest))
+    delen = [DREMPEL.sub(" ", d) if GRATISWOORD.search(d) else d for d in ZINSDEEL.split(_schoon(citaat))]
+    return bool(BEDRAG_TUSSEN.search(NUL_EURO.sub(" ", " ".join(delen))))
 
 
 def _zonder_gratis_verzending(tekst):
