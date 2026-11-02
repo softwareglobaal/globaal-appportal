@@ -222,5 +222,65 @@ g = functie("wispr_team_wacht.py", "def gebruik_per_persoon(", "def kruiscontrol
     sqlite3.connect(bord_db))
 check("C04 Wispr-teamrapport: nieuwste gebruiksdag, niet de laatste inhaal", g["proef"]["dag"] == "2026-11-01", g)
 
+# C05 (T-0120 nazorg-mac): de samenvoeging van computer-locatie (YT-2, WEB-2) en telefoon (YT-1, WEB-1, de leesweg via
+# de helper). Beide wachten lezen de browsers alleen via M.browser_kopie (geen eigen sqlite3, geen pad naar een
+# browserdatabank), en een mislukte ronde loopt in beide precies gelijk: niet_gelezen() als reden, een foutregel via
+# fout_in_werkverslag(), een foute hartslag, niets klaargezet (de vroege terugkeer) en exit 1. Een weigering is ook een
+# nood voor Mehdi (Full Disk Access voor de helper); tot nazorg-mac gaf alleen De Websitewacht die.
+import ast  # noqa: E402
+
+for naam in ("youtube_wacht", "browser_wacht"):
+    src = open(os.path.join(MAC, f"{naam}.py"), encoding="utf-8").read()
+    modules = {(a.name if isinstance(n, ast.Import) else n.module or "").split(".")[0]
+               for n in ast.walk(ast.parse(src)) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    check(f"C05 {naam}: geen eigen sqlite3 en geen pad naar een browserdatabank",
+          "sqlite3" not in modules and "browser_kopie" in src
+          and not any(p in src for p in ("History", "places.sqlite", "Library/Safari", "Google/Chrome", "Firefox/Profiles")),
+          modules)
+
+M_ = laad("browser_wacht").M
+echte_kopie = M_.browser_kopie
+middag = datetime(2026, 10, 30, 12, 0, tzinfo=ZoneInfo("Europe/Brussels")).timestamp()
+bezoek = ("Chrome", middag, "proef.test", "proefvideo1", "Proef - YouTube", 60.0)
+gevallen = {  # naam: (bronnen van de helper, bezoeken, deels gelezen, wie een nood krijgt)
+    "alles geweigerd": ([("Chrome", "geweigerd"), ("Safari", "geweigerd")], [], False, ["claude-code", "mehdi"]),
+    "geweigerd en kapot": ([("Chrome", "geweigerd"), ("Firefox", "fout")], [], False, ["claude-code", "mehdi"]),
+    "deels kapot": ([("Chrome", "ok"), ("Firefox", "fout")], [bezoek], True, ["claude-code"]),
+    "deels geweigerd": ([("Chrome", "ok"), ("Safari", "geweigerd")], [bezoek], True, ["mehdi"]),
+    "geen bron": ([], [], False, ["claude-code"]),
+}
+uitkomst = {}
+try:
+    for naam in ("youtube_wacht", "browser_wacht"):
+        for geval, (bronnen, bezoeken, deels, wie) in gevallen.items():
+            m = laad(naam)
+            gelezen = []
+            M_.browser_kopie = lambda sinds, vragen=None: gelezen.append(sinds) or echte_kopie(sinds, vragen)
+            rc, nep = ronde(m, kopie(bronnen, bezoeken))
+            log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+            st = nep.naar("/agent-status")[-1]
+            reden = m.niet_gelezen({b: u for b, u in bronnen if u != "ok"}, deels=deels)
+            check(f"C05 {naam} ({geval}): via de kopie, een foutregel met de reden, hartslag fout, niets klaargezet",
+                  rc == 1 and len(gelezen) == 1 and not nep.naar("/api/klaarzet") and [(r["stap"], r["tekst"]) for r in log]
+                  == [("fout", reden)] and st["status"] == "fout" and st["detail"] == reden
+                  and sorted(n["wie"] for n in st["nood"]) == wie, (rc, gelezen, log, st))
+            uitkomst[naam, geval] = (rc, [(r["onderwerp"], r["stap"], r["tekst"]) for r in log], st["taak"], st["detail"],
+                                     sorted((n["wie"], n["tekst"]) for n in st["nood"]))
+        # en een gelukte ronde: via de kopie, een klaarzet, geen foutregel
+        m = laad(naam)
+        gelezen = []
+        M_.browser_kopie = lambda sinds, vragen=None: gelezen.append(sinds) or echte_kopie(sinds, vragen)
+        rc, nep = ronde(m, kopie([("Chrome", "ok")], [bezoek]))
+        log = [r for p in nep.naar("/api/logboek") for r in p["regels"]]
+        check(f"C05 {naam} (alles gelezen): via de kopie klaargezet, geen foutregel",
+              rc == 0 and len(gelezen) == 1 and len(nep.naar("/api/klaarzet")) == 1
+              and [r["stap"] for r in log] == ["bron", "schrijf"], (rc, gelezen, log))
+finally:
+    M_.browser_kopie = echte_kopie
+for geval in gevallen:
+    check(f"C05 ({geval}): De YouTube-wacht en De Websitewacht geven dezelfde uitkomst",
+          uitkomst["youtube_wacht", geval] == uitkomst["browser_wacht", geval],
+          (uitkomst["youtube_wacht", geval], uitkomst["browser_wacht", geval]))
+
 print("wachten van de computer:", "alles ok" if not fout else f"{fout} fout")
 sys.exit(1 if fout else 0)
