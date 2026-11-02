@@ -1,0 +1,38 @@
+{% extends "basis.html" %}
+{% block titel %}Transcript · Wachten · Dagboek{% endblock %}
+{% block inhoud %}
+<header>
+  <h1>Transcript</h1>
+  {% if dag %}<a href="{{ url_for('wacht_pagina', naam='plaud-wacht', dag=dag) }}">De Plaudwacht van deze dag</a>{% endif %}
+  <span class="zacht klein">Een opname van Plaud, zoals de Mac ze op de server zette. Alleen een werkgesprek; een privégesprek heeft hier geen transcript.</span>
+</header>
+<main>
+  {% if not g %}
+    <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
+      <div class="zacht">Daardoor kan het Dagboek dit transcript nu niet tonen. Dat is onbekend, niet leeg.</div></div>
+  {% else %}
+  <div class="kaart">
+    <h2>{{ g['tijd'] or '' }} {{ g['wie'] }}</h2>
+    <div class="zacht">{% if g['minuten'] %}{{ g['minuten'] }} min{% endif %}{% if g['thema'] %} · {{ g['thema'] }}{% endif %}</div>
+    <p class="zacht klein">De audio staat alleen op de Mac: er is geen audiolink.</p>
+  </div>
+  <div class="kaart">
+    {% if g['regels'] %}
+    <table class="lijst">
+      {% for r in g['regels'] %}<tr><td class="tijd">{{ r['tijd'] }}</td><td class="wie">{{ r['wie'] }}</td><td>{{ r['tekst'] }}</td></tr>{% endfor %}
+    </table>
+    {% if g['meer'] %}<p class="zacht klein">En nog {{ g['meer'] }} uitingen, niet getoond.</p>{% endif %}
+    {% else %}
+    <p class="leeg">Het transcript is leeg.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</main>
+<style>
+  table.lijst{border-collapse:collapse;width:100%}
+  table.lijst td{padding:6px;border-top:1px solid var(--rand);vertical-align:top;overflow-wrap:anywhere}
+  td.tijd{white-space:nowrap;width:72px;color:var(--zacht)}
+  td.wie{white-space:nowrap;color:var(--zacht);width:140px}
+  @media (max-width:600px){td.wie{white-space:normal;width:auto} table.lijst td{font-size:14px;padding:5px 4px}}
+</style>
+{% endblock %}

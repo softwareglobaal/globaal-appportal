@@ -10,12 +10,13 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, render_template, request, url_for
+from flask import Flask, abort, redirect, render_template, request, url_for
 
 app = Flask(__name__)
 MAP = os.environ.get("DAGBOEK_MAP", "/dagboek")
@@ -411,8 +412,21 @@ BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/"
 BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
 # Mehdi, 01-11-2026: alleen de laatste dagen (vandaag en de drie dagen ervoor), niet meer.
 WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
+# T-0120 VOL-14 en overleg X4 (3-0): de knoppen blijven op WACHT_DAGEN dagen; ?dag=JJJJ-MM-DD werkt als archieflink terug
+# tot 01-10-2026 (Mehdi, 01-11-2026: "kan je deze doen vanaf 01/10"). Ouder is 404. Privé blijft ook dan verborgen: het
+# bord maskeert per item, welke dag ook.
+WACHT_VANAF = date.fromisoformat(os.environ.get("WACHT_VANAF", "2026-10-01"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde",
                "rust": "geen ronde gepland"}       # rust: T-0120 CL-4, een werkdagwacht in het weekend
+# T-0120 VOL-19 en DB-5: een link op de wachtenpagina gaat altijd naar een route van het Dagboek zelf (achter Authentik)
+# of naar het bord (ook achter Authentik), nooit naar een gedeelde Dropbox-link. Nooit bij privé en nooit bij de
+# berichten en oproepen van de Mac en Xelion; het bord zegt dat al (wachten_dag.GEEN_LINK), het Dagboek kijkt het na.
+BORD_PUBLIEK = os.environ.get("MIJNAGENTS_PUBLIEK", "https://mijnagents.globaal.be").rstrip("/")
+GEEN_LINK = ("whatsapp-wacht", "sms-wacht", "belwacht", "xelion-wacht")
+GESPREK_WAT = {"fathom": "fathom:", "transcript": "plaud:"}
+GESPREK_UNIEK = re.compile(r"(?:fathom|plaud):[A-Za-z0-9_.-]{1,80}")
+FATHOM_LINK = re.compile(r"https://fathom\.video/[A-Za-z0-9/_.~%?=&+-]{1,400}")
+BORD_PAD = re.compile(r"/agent/[a-z0-9-]{1,40}")
 
 
 def haal_wachten(dag, naam=None, blad=None):
@@ -463,15 +477,69 @@ def wachten_dag(dag, naam=None, blad=None):
                     w.update(items=items, aantal=len(items),
                              oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
                              kleur="groen" if w.get("kleur") != "rood" else "rood")
+                    if (w.get("gelezen") or {}).get("stand") in (None, "niet", "items"):
+                        w["gelezen"] = {"stand": "items", "tekst": "plekken en ritten uit het Locatie-dashboard",
+                                        "bewijs": "de dagindeling van het Locatie-dashboard"}
             w["stand_fout"] = stand_fout(w, dag)
             w["kort"] = wacht_kort(w)
             w["fouten_kort"] = fouten_kort(w.get("fouten") or [])
+            # VOL-13: geen items en niet gelezen (of niet te lezen) is onbekend, nooit 0
+            w["onbekend"] = bool(w.get("leesfout")) or (not w.get("aantal") and (w.get("gelezen") or {}).get("stand")
+                                                        in ("niet", "onbekend"))
+            for it in w.get("items") or []:
+                link = item_link(w, it)
+                if link:
+                    it["open"] = link
     alle = [w for v in gegevens["vakken"] for w in v.get("wachten") or []]
     gegevens["telling"] = {k: sum(1 for w in alle if w.get("kleur") == k) for k in KLEUR_UITLEG}
     gegevens["items"] = sum(w.get("aantal") or 0 for w in alle)
     # Eén wacht niet gelezen: dan is het dagtotaal niet volledig (Codex 01-11): "minstens" in plaats van een vol getal.
-    gegevens["onvolledig"] = any(w.get("leesfout") for w in alle)
+    gegevens["onvolledig"] = any(w.get("leesfout") or w.get("onbekend") for w in alle)
     return gegevens
+
+
+def item_link(w, it):
+    """VOL-19: de route bij de link die het bord bij een item zette ({'href', 'tekst', 'nieuw'}), of None. Alleen deze
+    soorten, alleen naar een route van het Dagboek of naar het bord (beide achter Authentik), nooit een adres uit het
+    item zelf. Geen link bij privé, bij een privégesprek of bij een Mac-kanaal en Xelion, ook als het bord er een gaf."""
+    link = it.get("link")
+    if not isinstance(link, dict) or w.get("naam") in GEEN_LINK or it.get("wie") == "privégesprek" \
+            or it.get("label") == "privé":
+        return None
+    soort, tekst = link.get("soort"), str(link.get("tekst") or "openen")[:60]
+    if soort in ("dag", "fotos"):
+        try:
+            d = date.fromisoformat(str(link.get("dag") or ""))
+        except ValueError:
+            return None
+        if soort == "dag":
+            return {"href": url_for("dag_pagina", dag=d.isoformat()), "tekst": tekst, "nieuw": False}
+        # de foto's per project (FOTO-5, dagboek/fotos.py) bestaan vanaf 01-10
+        return {"href": url_for("fotos_dag", dag=d.isoformat()), "tekst": tekst, "nieuw": False} \
+            if WACHT_VANAF <= d <= vandaag() else None
+    if soort in GESPREK_WAT:
+        uniek = str(link.get("uniek") or "")
+        if GESPREK_UNIEK.fullmatch(uniek) and uniek.startswith(GESPREK_WAT[soort]):
+            return {"href": url_for("gesprek_pagina", uniek=uniek, wat=soort), "tekst": tekst, "nieuw": soort == "fathom"}
+        return None
+    if soort == "bord" and BORD_PAD.fullmatch(str(link.get("pad") or "")):
+        return {"href": BORD_PUBLIEK + link["pad"], "tekst": tekst, "nieuw": True}
+    return None
+
+
+def haal_gesprek(uniek, wat):
+    """Wat het bord van één gesprek laat openen (VOL-19, /api/wachten/gesprek): het antwoord, {} als het bord nee zegt
+    (404: privé, een andere bron of niets), of None als het bord niet antwoordt. Niet bewaard."""
+    try:
+        req = urllib.request.Request(BORD + "/api/wachten/gesprek?" + urllib.parse.urlencode({"uniek": uniek, "wat": wat}),
+                                     headers={"X-Agents-Token": BORD_TOKEN})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+    except urllib.error.HTTPError as e:
+        return {} if e.code == 404 else None
+    except Exception:  # noqa: BLE001
+        return None
+    return d if isinstance(d, dict) else None
 
 
 def fouten_kort(fouten):
@@ -523,9 +591,13 @@ def wacht_kort(w):
 
 
 def dagkeuze(d, naam=None):
-    """De knoppen voor de laatste WACHT_DAGEN dagen; vandaag heet vandaag. Met naam: naar die wacht op die dag."""
+    """De knoppen voor de laatste WACHT_DAGEN dagen; vandaag heet vandaag. Met naam: naar die wacht op die dag. Een oudere
+    dag (de archieflink van VOL-14) staat vooraan als eigen knop, aan."""
     eerste = vandaag() - timedelta(days=WACHT_DAGEN - 1)
     uit = []
+    if d < eerste:
+        pad = url_for("wacht_pagina", naam=naam, dag=d.isoformat()) if naam else url_for("wachten_pagina", dag=d.isoformat())
+        uit.append({"dag": d.isoformat(), "naam": "archief, " + dagnaam(d, True), "actief": True, "pad": pad})
     for i in range(WACHT_DAGEN):
         x = eerste + timedelta(days=i)
         tekst = dagnaam(x, True)
@@ -537,15 +609,22 @@ def dagkeuze(d, naam=None):
 
 
 def wacht_dag_uit_vraag():
-    """De gevraagde dag, alleen binnen de laatste WACHT_DAGEN dagen (Mehdi 01-11: alleen die dagen); anders 404."""
+    """De gevraagde dag: vandaag tot en met WACHT_VANAF (01-10-2026, de archieflink van VOL-14); ouder of later is 404."""
     dag = request.args.get("dag") or vandaag().isoformat()
     try:
         d = date.fromisoformat(dag)
     except ValueError:
         abort(404)
-    if not vandaag() - timedelta(days=WACHT_DAGEN - 1) <= d <= vandaag():
+    if not WACHT_VANAF <= d <= vandaag():
         abort(404)
     return d
+
+
+def archief(d):
+    """De archieflinks (VOL-14): de dag ervoor en erna binnen WACHT_VANAF tot vandaag, en de grenzen voor de dagkiezer."""
+    return {"vorige": (d - timedelta(days=1)).isoformat() if d > WACHT_VANAF else None,
+            "volgende": (d + timedelta(days=1)).isoformat() if d < vandaag() else None,
+            "vanaf": WACHT_VANAF.isoformat(), "tot": vandaag().isoformat()}
 
 
 @app.route("/wachten")
@@ -556,7 +635,7 @@ def wachten_pagina():
     d = wacht_dag_uit_vraag()
     gegevens = wachten_dag(d.isoformat())
     return render_template("wachten.html", g=gegevens, naam=dagnaam(d), dag=d.isoformat(), keuze=dagkeuze(d),
-                           uitleg=KLEUR_UITLEG)
+                           uitleg=KLEUR_UITLEG, archief=archief(d))
 
 
 @app.route("/wachten/<naam>")
@@ -577,7 +656,39 @@ def wacht_pagina(naam):
         if w is None:
             abort(404)
     return render_template("wacht.html", g=gegevens, w=w, vak=vak, naam=naam, dagnaam_=dagnaam(d), dag=d.isoformat(),
-                           keuze=dagkeuze(d, naam), uitleg=KLEUR_UITLEG, is_vandaag=d == vandaag())
+                           keuze=dagkeuze(d, naam), uitleg=KLEUR_UITLEG, is_vandaag=d == vandaag(), archief=archief(d))
+
+
+@app.route("/wachten/gesprek/<uniek>/<wat>")
+def gesprek_pagina(uniek, wat):
+    """T-0120 VOL-19: de enige weg van de wachtenpagina naar een gesprek, achter Authentik. wat 'fathom': door naar de
+    link van Fathom (FATHOM-3, de deellink van een werkgesprek); wat 'transcript': het transcript van een Plaud-opname
+    (PLAUD-7). Het bord beslist (404 bij privé, bij een andere bron of als er niets is); de link zelf staat nooit in de
+    pagina en nooit in Dropbox."""
+    if not mag():
+        abort(403)
+    if wat not in GESPREK_WAT or not GESPREK_UNIEK.fullmatch(uniek) or not uniek.startswith(GESPREK_WAT[wat]):
+        abort(404)
+    d = haal_gesprek(uniek, wat)
+    if d is None:
+        return render_template("gesprek.html", g=None, uniek=uniek, dag=""), 503
+    if not d:
+        abort(404)
+    if wat == "fathom":
+        link = str(d.get("link") or "")
+        if not FATHOM_LINK.fullmatch(link):
+            abort(404)
+        antwoord = redirect(link)
+        antwoord.headers["Referrer-Policy"] = "no-referrer"
+        antwoord.headers["Cache-Control"] = "no-store"
+        return antwoord
+    try:
+        dag = date.fromisoformat(str(d.get("dag") or "")).isoformat()
+    except ValueError:
+        dag = ""
+    antwoord = app.make_response(render_template("gesprek.html", g=d, uniek=uniek, dag=dag))
+    antwoord.headers["Cache-Control"] = "private, no-store"
+    return antwoord
 
 
 @app.route("/healthz")
@@ -619,7 +730,9 @@ def dag_pagina(dag):
                                   "onderweg_min": sum(x.get("minuten") or 0 for x in rit)}
     return render_template("dag.html", d=dag_gegevens(dag, lc), vorige=vorige.isoformat(), ritten=ritten,
                            auto=auto_spoor(lb), buiten=bool((lb or {}).get("buiten_reeks")),
-                           volgende=volgende.isoformat() if volgende < vandaag() else None)
+                           volgende=volgende.isoformat() if volgende < vandaag() else None,
+                           # VOL-14: de archieflink naar wat de wachten die dag kregen, vanaf 01-10
+                           wachten_link=WACHT_VANAF <= d <= vandaag())
 
 
 __import__("fotos").registreer(app, mag)  # T-0120 FOTO-5: de foto's per project, in een eigen module (fotos.py)

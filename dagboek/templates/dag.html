@@ -6,6 +6,7 @@
   <a href="{{ url_for('overzicht') }}">alle dagen</a>
   <a href="{{ url_for('dag_pagina', dag=vorige) }}">← vorige dag</a>
   {% if volgende %}<a href="{{ url_for('dag_pagina', dag=volgende) }}">volgende dag →</a>{% endif %}
+  {% if wachten_link %}<a href="{{ url_for('wachten_pagina', dag=d['dag']) }}">wat de wachten kregen</a>{% endif %}
 </header>
 <main>
   {% if not d['er'] %}
