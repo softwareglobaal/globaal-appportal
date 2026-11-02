@@ -33,7 +33,10 @@ LIMIET_BESTAND = os.path.expanduser(os.environ.get("PRIJS_LIMIET_BESTAND", "~/.c
 MAX_ZOEKEN = int(os.environ.get("PRIJS_MAX_ZOEKEN", "6"))
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))   # geslaagde lezingen, foutpagina's tellen niet (overleg 29, X1)
 MAX_PAGINA_TOKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000"))
-MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "30"))   # assistentberichten; --max-turns bestaat niet (K4)
+MAX_BEURTEN = int(os.environ.get("PRIJS_MAX_BEURTEN", "40"))   # assistentberichten; --max-turns bestaat niet (K4)
+# P01 stopte na 31 beurten zonder verslag; nu 40, en de leestool zegt het model vanaf 8 beurten voor het plafond dat het
+# moet afronden (overleg 44, E en X7). De stand staat in het bestand "beurten" in de werkmap.
+BEURTEN_BESTAND = "beurten"
 # Boven dit deel van een limietvenster van het abonnement stopt de vraag, zodat ze nooit in betaald extra verbruik
 # loopt en Mehdi zijn eigen gebruik houdt (Codex controle 15, punt 1).
 GRENS_GEBRUIK = float(os.environ.get("PRIJS_GRENS_GEBRUIK", "0.9"))
@@ -103,13 +106,16 @@ VORM = """Lever na je zoekwerk precies een JSON-object tussen ```json en ```, me
 Regels voor de JSON: prijs exact zoals op de pagina, als getal in de munt van de pagina; btw_inbegrepen false als de
 pagina een prijs zonder btw toont, null als je het niet weet; staat de verzending niet op de aanbodpagina, lees dan de
 verzendpagina van dezelfde winkel en kopieer het tarief naar Belgie met het woord Belgie erin (of de zin dat het voor
-alle bestellingen geldt), anders telt het niet; verzending null als geen van beide het zegt; bij een
+alle bestellingen geldt), anders telt het niet; een verzendpagina van een winkel waarvan je al een pagina las, kost geen
+leesbeurt (hoogstens vier, ook na de leesgrens); bij een winkel buiten Belgie moet ook het citaat van de aanbodpagina
+zeggen dat het voor Belgie geldt; verzending null als geen van beide het zegt; bij een
 veiling opgeld_pct en veilingkosten uit de veilingvoorwaarden (veilingkosten 0 als de voorwaarden geen vaste kosten
 noemen, null als je het niet weet); douane alleen buiten de EU, als je schatting in dezelfde munt (de code rekent de
 btw zelf), anders null. Geef alleen aanbiedingen waarvan je de pagina zelf met lees_pagina las en de prijs daar zag.
 Elk citaat in bewijs en compatibiliteit kopieer je letterlijk van een pagina die je met lees_pagina las; zonder citaat
 telt een bedrag of een "ja" niet. Beoordeel in compatibiliteit elke eis, met precies dezelfde tekst als sleutel; een
-eis over de koper of de prijs hoort niet in eisen. Een
+eis over de koper of de prijs hoort niet in eisen. Een eis "past op <code>" bewijs je met een zin van de aanbodpagina die
+zegt dat het product geschikt is voor dat toestel, met de code erin. Een
 eis die voor dit product niet geldt (bijvoorbeeld netfrequentie bij iets zonder netstroom), beoordeel je met ja en
 citeer je de tekst waaruit dat blijkt. Netspanning en netfrequentie staan zelden op een winkelpagina: zoek en lees dan
 een pagina van de fabrikant, de handleiding of het specificatieblad van precies die modelcode, en geef die pagina als
@@ -119,7 +125,8 @@ als een andere gelezen winkelpagina met dezelfde EAN-code dat document linkt. Le
 specificatieblad dat een winkelpagina van dit product linkt. In niet_nagekeken
 komen aanbiedingen die je alleen in een zoekresultaat zag of waarvan de pagina niet leesbaar was; die worden nooit
 aanbevolen. Wat de vraag uitdrukkelijk vraagt na te zoeken (een handleiding, een verzendpagina), lees je in deze
-ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Een
+ronde; vraag nooit toestemming om te lezen, en maak alleen van echt ontbrekende beslisinformatie een vervolgvraag. Zegt
+de leestool dat je bijna aan het plafond van de beurten zit, zoek en lees dan niets meer en lever meteen je JSON. Een
 pagina die niet leesbaar is (HTTP 403, een viewer zonder tekst), kost geen leesbeurt: zoek dan een andere bron voor
 dezelfde modelcode, zoals de fabrikant, een PDF of een specificatieblad. Vind je geen leesbare handleiding, zoek dan op
 de EAN-code of de modelcode met het woord handleiding of manual, en lees een winkelpagina met dezelfde EAN die een
@@ -396,6 +403,7 @@ class _Stand:
         self.soort = None                   # het abonnement volgens claude auth status
         self.config = None                  # de eigen configuratiemap van claude -p
         self.vensters = {}                  # {venster: {utilization, resetsAt}} uit de stream
+        self.beurtenbestand = None          # waar de leestool de stand van de beurten leest (overleg 44, X7)
 
 
 def verwerk_regel(st, d):
@@ -426,6 +434,12 @@ def verwerk_regel(st, d):
             return "vol"                  # voor de limiet stoppen, nooit erover (Codex controle 15, punt 1)
     elif soort == "assistant":
         st.beurten += 1
+        if st.beurtenbestand:
+            try:
+                with open(st.beurtenbestand, "w", encoding="utf-8") as f:
+                    f.write(f"{st.beurten} {MAX_BEURTEN}")
+            except OSError:
+                pass
         for b in (d.get("message") or {}).get("content") or []:
             if b.get("type") == "tool_use" and b.get("name") == ZOEK:
                 st.zoekvragen += 1
@@ -539,6 +553,7 @@ def onderzoek(vraag, werkwijze, vandaag="", vaste_eisen=(), deadline=None, token
     try:
         st.soort = voor_de_start(token, werkmap)
         st.config = os.path.join(werkmap, "claude-config")
+        st.beurtenbestand = os.path.join(werkmap, BEURTEN_BESTAND)
         reden = _draai(opdrachtregel(werkmap, systeem), omgeving(token, werkmap), werkmap, gebruiker, deadline, st)
         gelezen, leesbeurten = gelezen_uit(os.path.join(werkmap, "gelezen.jsonl"))
         fout = _fouttekst(werkmap, st.einde)

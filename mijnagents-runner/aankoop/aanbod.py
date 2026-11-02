@@ -58,6 +58,19 @@ GRATIS_VERZENDING = re.compile(r"(?:gratis|free|kostenlos\w*|gratuite?)\s+(?:ver
 LEVERING_DAN_GRATIS = re.compile(r"(?:verzending|levering|shipping|delivery|versand|lieferung|livraison)(.{0,50}?)"
                                  r"(?:gratis|free|kostenlos|gratuite?)", re.I | re.S)
 BEDRAG_TUSSEN = re.compile(r"€|\beur(?:o|os)?\b|\d+[.,]\d{2}", re.I)
+# "morgen gratis geleverd", "delivered tomorrow for free", "Verzending inbegrepen" (coolblue.be, refurbed.be; overleg 44, A)
+_GELEVERD = r"(?:geleverd|bezorgd|verzonden|verstuurd|delivered|shipped|geliefert|versandt|livr[ée]e?s?)"
+GELEVERD_GRATIS = re.compile(rf"(?:gratis|free|kostenlos\w*|gratuite?)\W+(?:\w+\W+){{0,3}}?{_GELEVERD}\b"
+                             rf"|\b{_GELEVERD}\W+(?:\w+\W+){{0,3}}?(?:for free|gratis|kostenlos|gratuitement)", re.I)
+INBEGREPEN = re.compile(r"(?:verzending|verzendkosten|levering|bezorging|shipping|versand\w*|livraison)\s*(?:is\s+|zijn\s+)?"
+                        r"(?:inbegrepen|inclusief|included|inklusive|inbegriffen|incluse?)\b"
+                        r"|\b(?:incl\.?|inclusief|including|inkl\.?|y compris)\s+(?:verzending|verzendkosten|levering|"
+                        r"bezorging|shipping|versand\w*|livraison)", re.I)
+# Een drempel voor gratis verzending: "boven de € 75,00 excl. btw", "vanaf € 99" (overleg 44, B). Alleen met een munt
+# ernaast, zodat "vanaf di. 03 november" geen drempel is.
+DREMPEL = re.compile(r"(?:vanaf|boven|from|over|above|ab|à partir de|dès)\s+(?:de\s+|een bedrag van\s+)?"
+                     r"(?:€\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:€|eur\b|euro))"
+                     r"(\s*(?:excl|exkl|hors|zonder btw|ht\b|ex\.? vat|net))?", re.I)
 ANDERE_LEVERWIJZE = re.compile(r"afhal|click|collect|pick.?up|abhol|retrait|retour|return|terug|rücksend|renvoi", re.I)
 RETOUR = re.compile(r"retour|return|terug|rücksend|renvoi", re.I)
 # Een winkel die zegt dat bedragen zonder btw zijn: dan erft de verzending de btw niet (overleg 33, X5).
@@ -80,6 +93,14 @@ EIS_HZ = "netfrequentie {} Hz"
 EIS_V = "netspanning {} V"
 # Een modelcode die de vraag zelf noemt, is bindend: een andere kleur of variant wordt nooit aanbevolen (overleg 35, X1).
 EIS_MODEL = "modelcode {}"
+# "Accu voor mijn Makita DDF484": het product moet op dat toestel passen (overleg 44, F). Bewezen door een citaat van de
+# aanbodpagina met de code en een woord als "geschikt voor"; alleen de code ergens noemen is te weinig (X6).
+EIS_PAST = "past op {}"
+PAST_IN_VRAAG = re.compile(r"\b(?:voor|op|bij|met)\s+(?:mijn|onze|ons|de|het|een)\s+(?:[A-Z][\w-]+\s+)?"
+                           r"([A-Z]{2,6}-?\d{3,5}[A-Z0-9]*)\b")
+# Met een woordgrens ervoor: "ongeschikt" en "incompatible" zijn geen paswoord (Codex controle 46, punt 3).
+PASWOORD = re.compile(r"\b(?:geschikt|past\b|passend|compatib|voor gebruik met|werkt met|suitable|fits|passt|kompatib|"
+                      r"convient|adapté)", re.I)
 MODELCODE_IN_VRAAG = re.compile(r"\b(?:modelcode|typenummer|artikelnummer|fabrikantcode)\s*:?\s*([A-Za-z0-9][A-Za-z0-9./-]{3,}[A-Za-z0-9])")
 # Ook zonder dat woord: hoofdletters en cijfers met een streepje, zoals MOVA-RC-V70ULC-WHT of VX-200EU (Codex
 # controle 36, punt 2). Een te veel herkende code houdt een aanbeveling hoogstens tegen, ze kiest nooit verkeerd.
@@ -127,6 +148,8 @@ def eisen_uit_vraag(vraag):
         eisen.append(EIS_HZ.format(h))
     for v in dict.fromkeys(re.findall(r"\b(1[01]\d|12[07]|2[234]0)\s?v(?:olt)?\b", tekst)):
         eisen.append(EIS_V.format(v))
+    for code in dict.fromkeys(PAST_IN_VRAAG.findall(vraag or "")):
+        eisen.append(EIS_PAST.format(code))
     codes = MODELCODE_IN_VRAAG.findall(vraag or "") + MODELCODE_ZONDER_LABEL.findall(vraag or "")
     for code in dict.fromkeys(c for c in codes if any(t.isdigit() for t in c) and any(t.isalpha() for t in c)
                               and sum(t.isalnum() for t in c) >= 5):
@@ -160,6 +183,12 @@ def _verzendkop(citaat, tekst):
     return bool(laatste) and not RETOUR.search(ervoor[laatste[-1].end():] + " " + _schoon(citaat))
 
 
+def belgische_winkel(aanbod):
+    """Verkoopt de winkel vanuit Belgie: land BE of een .be-adres."""
+    from aankoop.onderzoek import schoon_url
+    return str(aanbod.get("land") or "").upper() == "BE" or urlparse(schoon_url(aanbod.get("url"))).netloc.endswith(".be")
+
+
 def voor_dit_product(citaat, aanbod):
     """Noemt een verzendtarief een model, dan moet elk genoemd model dit aanbod zijn (titel of modelcode): "P70
     gratis; V70 39,95 euro" bewijst niets voor de V70. Een tarief zonder modelnaam is algemeen (Codex-controle 30 en
@@ -181,11 +210,58 @@ def gratis_verzending(tekst):
     tekst = tekst or ""
     if any(not NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]) for m in GRATIS_VERZENDING.finditer(tekst)):
         return True
+    for patroon in (GELEVERD_GRATIS, INBEGREPEN):
+        for m in patroon.finditer(tekst):
+            na = tekst[m.end():m.end() + 25]
+            if not (NEGATIE.search(tekst[max(0, m.start() - 15):m.start()]) or BEDRAG_TUSSEN.search(m.group(0))
+                    or ANDERE_LEVERWIJZE.search(m.group(0)) or ONTKENNING.search(m.group(0))
+                    or (BEDRAG_TUSSEN.search(na) and not DREMPEL.search(tekst[m.end():m.end() + 40]))):
+                return True
     for m in LEVERING_DAN_GRATIS.finditer(tekst):
         tussen = m.group(1)
         if not (BEDRAG_TUSSEN.search(tussen) or ANDERE_LEVERWIJZE.search(tussen) or ONTKENNING.search(tussen)):
             return True
     return False
+
+
+# Een citaat in zinsdelen: een drempel telt alleen in een zinsdeel dat ook "gratis" zegt, zodat "verzendkosten naar
+# België vanaf €9,95" geen drempel is (Codex controle 46, punt 2).
+# Op de ruwe tekst, voor de spaties gelijk worden gemaakt: een regelovergang of een komma met spatie erna scheidt ook
+# ("9,95" niet). Codex controle 47.
+ZINSDEEL = re.compile(r"[;\n|]|,\s+|(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
+GRATISWOORD = re.compile(r"gratis|free|kostenlos|gratuit|inbegrepen|inclusief|included", re.I)
+NUL_EURO = re.compile(r"(?:€|\beur(?:o|os)?\b)?\s*(?<![\d.,])0[.,]00(?!\d)\s*(?:€|\beur(?:o|os)?\b)?", re.I)
+
+
+def _drempels(citaat):
+    """De drempels (met, zonder, excl) uit de zinsdelen van het citaat die ook gratis zeggen."""
+    return [d for deel in map(_schoon, ZINSDEEL.split(str(citaat or ""))) if GRATISWOORD.search(deel)
+            for d in DREMPEL.findall(deel)]
+
+
+def boven_drempel(citaat, aanbod):
+    """Haalt de prijs de drempel voor gratis verzending in het citaat? True zonder drempel. Een drempel zonder btw
+    vergelijkt met de prijs zonder btw (een prijs met btw gedeeld door 1,21); een andere munt dan euro haalt hem nooit
+    (overleg 44, B)."""
+    drempels = _drempels(citaat)
+    if not drempels:
+        return True
+    prijs = _getal(aanbod.get("prijs"))
+    if prijs is None or str(aanbod.get("munt") or "EUR").upper() != "EUR":
+        return False
+    for met, zonder, excl in drempels:
+        grens = _getal((met or zonder).replace(",", "."))
+        netto = prijs / 1.21 if excl and aanbod.get("btw_inbegrepen") is not False else prijs
+        if grens is None or netto < grens:
+            return False
+    return True
+
+
+def ander_bedrag(citaat):
+    """Noemt het citaat een bedrag dat geen drempel en geen 0,00 is? Dan bewijst het geen gratis verzending naar Belgie:
+    "gratis verzending binnen Nederland, naar België € 9,95" (Codex controle 45, punt 3)."""
+    delen = [DREMPEL.sub(" ", d) if GRATISWOORD.search(d) else d for d in map(_schoon, ZINSDEEL.split(str(citaat or "")))]
+    return bool(BEDRAG_TUSSEN.search(NUL_EURO.sub(" ", " ".join(delen))))
 
 
 def _zonder_gratis_verzending(tekst):
@@ -356,6 +432,10 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
             if not (op_eigen or (verzendtekst and citaat_op_pagina(citaat, verzendtekst)
                                  and voor_belgie(citaat) and voor_dit_product(citaat, aanbod))):
                 return False
+            # Een winkel buiten Belgie: ook een citaat van de eigen pagina moet zeggen dat het voor Belgie geldt
+            # (beamerexpert.nl, P07; overleg 44, C).
+            if op_eigen and not belgische_winkel(aanbod) and not voor_belgie(citaat):
+                return False
             # In een tarieftabel staat het verzendwoord alleen in de kop: "Land | Verzendkost | België | 12,50 €"
             # (overleg 33, M3). Dat mag dan in de VERZENDKOP tekens ervoor op de verzendpagina staan.
             woord = bool(VERZENDWOORDEN.search(citaat)) or (not op_eigen and _verzendkop(citaat, verzendtekst))
@@ -366,9 +446,9 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
         if veld == "verzending":
             if waarde:
                 return woord and bedrag_op_pagina(waarde, citaat)
-            # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3)
-            return gratis_verzending(_schoon(citaat)) or bool(
-                woord and not NEGATIE.search(citaat) and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat)))
+            # "gratis retourneren" bewijst geen gratis verzending (Codex X12, ronde 3); een drempel moet gehaald zijn
+            return boven_drempel(citaat, aanbod) and not ander_bedrag(citaat) and (gratis_verzending(_schoon(citaat)) or bool(
+                woord and not NEGATIE.search(citaat) and re.search(r"(?<![\d.,])0[.,]00(?!\d)", _schoon(citaat))))
         return bedrag_op_pagina(waarde, citaat)
 
     def euro_veld(veld, waarde):
@@ -435,12 +515,13 @@ def totaal(aanbod, koersen, alle_tekst=None, eigen_tekst=None, verzendtekst=None
 # Eisen die de code uit de vraag haalt, met wat een citaat moet bevatten om "ja" te bewijzen.
 _EIS_BEWIJS = re.compile(r"^(netfrequentie|netspanning) (\d+) (Hz|V)$")
 _EIS_MODEL = re.compile(r"^modelcode (\S+)$")
+_EIS_PAST = re.compile(r"^past op (\S+)$")
 
 
 def bindend(eis):
     """Houdt deze eis zonder bevestiging een aanbeveling tegen? Netspanning, netfrequentie en de modelcode uit de vraag;
     een eigen eis van het model niet, die sluit alleen uit met "nee" (overleg 35, A en X1)."""
-    return bool(_EIS_BEWIJS.match(str(eis)) or _EIS_MODEL.match(str(eis)))
+    return bool(_EIS_BEWIJS.match(str(eis)) or _EIS_MODEL.match(str(eis)) or _EIS_PAST.match(str(eis)))
 _ANDERE_HZ = {"60": "50", "50": "60"}
 # Een spanningsbereik zoals 220-240 V of 100~240V; specificatiebladen schrijven het zo (overleg 9, X1).
 _SPANNING_BEREIK = re.compile(r"(?<![\d.,])(\d{2,3})\s?v?\s?(?:-|–|~|/|tot|to|bis|à)\s?(\d{2,3})\s?v(?:olts?)?\b")
@@ -618,6 +699,15 @@ def oordeel_per_eis(aanbod, eisen, alle_tekst=None, eigen_tekst=None, paginas=No
             code = mc.group(1)
             gevonden = modelcode_op(code, eigen_tekst or "") or ean_pagina(eigen_tekst, paginas, aanbod,
                                                                           lambda t: modelcode_op(code, t))
+            waarden.append("ja" if gevonden else "nee" if oordeel == "nee" else "onbekend")
+            continue
+        mp = _EIS_PAST.match(eis)
+        if mp and alle_tekst is not None:
+            # Het citaat staat op de aanbodpagina en verbindt het toestel met een paswoord (overleg 44, F en X6).
+            c = str(citaat or "")
+            gevonden = (oordeel == "ja" and citaat_op_pagina(c, eigen_tekst or "") and modelcode_op(mp.group(1), c)
+                        and PASWOORD.search(c) and not ONTKENNING.search(c)          # "Niet geschikt voor" (Codex 45)
+                        and not _accessoire_ervoor(c, eigen_tekst or ""))
             waarden.append("ja" if gevonden else "nee" if oordeel == "nee" else "onbekend")
             continue
         if oordeel == "ja" and alle_tekst is not None:

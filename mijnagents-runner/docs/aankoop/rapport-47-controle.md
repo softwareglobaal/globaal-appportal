@@ -1,0 +1,5 @@
+**Nee, nog niet live zetten of de hele reeks opnieuw draaien.**
+
+1. De drie gemelde voorbeelden slagen via `verwerk`, maar punt 2 is onvolledig. Een regelovergang verdwijnt vóór het opdelen van het citaat; een komma deelt het citaat evenmin op ([aanbod.py:229](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:229), [236](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:236), [260](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/aankoop/aanbod.py:260)).
+2. **Hoog:** bij “Gratis verzending binnen Nederland vanaf €50” gevolgd op een nieuwe regel door “Verzendkosten naar België vanaf €9,95” beveelt `verwerk` de beamer toch aan met €0 verzending. Hetzelfde gebeurt met een komma tussen de tarieven.
+3. Eerst dit herstellen en als `verwerk`-proef vastzetten. Alleen gelezen en in geheugen getest; niets gewijzigd of gepusht.

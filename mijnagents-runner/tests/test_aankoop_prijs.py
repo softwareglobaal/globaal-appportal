@@ -1142,8 +1142,13 @@ for stop in ("fout", "limiet", "plafond"):
     klaar.clear()
     r = NepRonde()
     PO.werk(r, None)
-    check(f"bij stop '{stop}' geen verslag en blijft de bordvraag klaarstaan (Codex 22, punt 3)",
-          opgepakt == [] and not klaar and "2 wachten" in r.detail, r.detail)
+    # Op een grens (plafond) een noodverslag "Onvolledig", geen aanbeveling (overleg 44, K5); de vraag blijft staan.
+    verslag_ok = (not klaar) if stop != "plafond" else (len(klaar) == 1 and "**Onvolledig:**" in klaar[0]["inhoud"]
+                                                        and "Aanbevolen" not in klaar[0]["inhoud"])
+    check(f"bij stop '{stop}' {'een noodverslag' if stop == 'plafond' else 'geen verslag'} en blijft de bordvraag "
+          f"klaarstaan (Codex 22, punt 3; overleg 44, K5)", opgepakt == [] and verslag_ok and "2 wachten" in r.detail,
+          r.detail)
+klaar.clear()
 PO.open_vragen = oud_open
 noden.clear()
 PO.O.onderzoek = lambda *a, **k: {"gegevens": {"aanbiedingen": []}, "gelezen": {}, "zoekresultaten": {}, "tekst": "",
@@ -1183,6 +1188,123 @@ check("het werkverslag telt sleutels die geen eis zijn, zonder hun tekst (overle
 bron = open(Path(PO.__file__), encoding="utf-8").read()
 check("de runner zet geen API-sleutel klaar voor de prijsvraag (overleg 14)", "sleutelbron" not in bron
       and "zet_anthropic" not in bron and "anthropic" not in bron.lower().replace("claude-abonnement", ""))
+
+print("Overleg 44: herstel na de twintig proeven, met de echte citaten")
+check("A: gratis geleverd, delivered for free en verzending inbegrepen tellen (coolblue.be, refurbed.be)",
+      A.gratis_verzending("Voor 23.59 uur besteld, morgen gratis geleverd")
+      and A.gratis_verzending("Ordered before 23:59, delivered tomorrow for free")
+      and A.gratis_verzending("Verzending inbegrepen:"))
+check("A: een ontkenning, een bedrag of retourneren blijft geweigerd",
+      not A.gratis_verzending("geen gratis geleverd") and not A.gratis_verzending("Gratis bezorgd voor € 4,95 extra")
+      and not A.gratis_verzending("30 dagen Gratis retourneren garantie")
+      and not A.gratis_verzending("gratis afhalen, geleverd voor 5,95"))
+DREMPELZIN = "Alle bestellingen boven de € 75,00 excl. btw worden GRATIS bezorgd."
+check("B: een drempel zonder btw telt vanaf 75 maal 1,21 euro met btw, niet eronder",
+      A.boven_drempel(DREMPELZIN, {"prijs": 90.75, "munt": "EUR", "btw_inbegrepen": True})
+      and not A.boven_drempel(DREMPELZIN, {"prijs": 90.0, "munt": "EUR", "btw_inbegrepen": True})
+      and A.boven_drempel("Gratis bezorgd en retour (vanaf € 99 excl. btw)", {"prijs": 169, "munt": "EUR"})
+      and not A.boven_drempel("Gratis verzending vanaf € 200", {"prijs": 169, "munt": "EUR"})
+      and A.boven_drempel("Levering aan huis : vanaf di. 03 november Gratis", {"prijs": 10, "munt": "EUR"}))
+NLURL = "https://beamer.voorbeeld.nl/eb-fh08"
+NLPAG = {NLURL: pagina("Epson EB-FH08 nu 599,00 euro. Gratis levering. Gratis levering in Nederland en België.")}
+nl = aanbod(titel="Epson EB-FH08", url=NLURL, land="NL", prijs=599, bewijs={"prijs": "Epson EB-FH08 nu 599,00 euro"})
+r_zonder = A.verwerk([dict(nl, bewijs=dict(nl["bewijs"], verzending="Gratis levering."))], VANDAAG, KOERSEN, paginas=NLPAG)
+r_met = A.verwerk([dict(nl, bewijs=dict(nl["bewijs"], verzending="Gratis levering in Nederland en België."))], VANDAAG,
+                  KOERSEN, paginas=NLPAG)
+check("C: een winkel buiten Belgie moet ook op de eigen pagina Belgie noemen (beamerexpert.nl, P07)",
+      r_zonder["beste"] is None and "verzending niet bewezen" in r_zonder["goed"][0]["ontbreekt"]
+      and r_met["beste"] is not None, str(r_zonder["goed"][0]["ontbreekt"]))
+r_be = A.verwerk([dict(nl, url="https://winkel.voorbeeld.be/eb", land="BE", bewijs=dict(nl["bewijs"], verzending="Gratis levering."))],
+                 VANDAAG, KOERSEN, paginas={"https://winkel.voorbeeld.be/eb": NLPAG[NLURL]})
+check("C: een Belgische winkel hoeft Belgie niet te noemen", r_be["beste"] is not None)
+with tempfile.TemporaryDirectory() as d:
+    log = os.path.join(d, "gelezen.jsonl")
+    with open(log, "w", encoding="utf-8") as f:
+        for u in ["https://w.voorbeeld.be/product"] + [f"https://w.voorbeeld.be/verzending-{i}" for i in range(5)] + [
+                  "https://ander.voorbeeld.be/levering"]:
+            f.write(json.dumps({"url": u, "ok": True}) + "\n")
+    geslaagd, pogingen = L._gelezen_tot_nu(log)
+    check("D: hoogstens vier verzendpagina's van een al gelezen winkel kosten geen leesbeurt", geslaagd == 3 and pogingen == 7,
+          f"{geslaagd} {pogingen}")
+    with open(os.path.join(d, "beurten"), "w") as f:
+        f.write("33 40")
+    tekst, _ = L.lees("http://127.0.0.1/x", log, ophalen=lambda u: (u, "text/html", b"<p>Voorbeeld pagina tekst</p>"))
+    check("E: acht beurten voor het plafond leest de leestool niets meer en zegt het model af te ronden (Codex 45)",
+          "lever nu je JSON-verslag" in tekst and not _ and O.MAX_BEURTEN == 40, tekst[-120:])
+check("E: het noodverslag op een grens raadt niets aan en noemt de gelezen pagina's",
+      "**Onvolledig:**" in V.onvolledig("beurten", ["https://w.voorbeeld.be/p"]) and "https://w.voorbeeld.be/p" in
+      V.onvolledig("beurten", ["https://w.voorbeeld.be/p"]))
+check("F: 'voor mijn Makita DDF484' wordt een bindende eis", A.eisen_uit_vraag("Accu voor mijn Makita DDF484, 18 V") ==
+      ["past op DDF484"] and A.bindend("past op DDF484"))
+ACCU = "https://gereedschap.voorbeeld.be/bl1850b"
+ACCUPAG = {ACCU: pagina("Makita BL1850B 18V accu 5,0 Ah nu 74,99 euro. Gratis levering. "
+                        "Geschikt voor alle Makita LXT machines, zoals de DDF484 en DHP482. Klanten bekeken ook: DDF485.")}
+accu = aanbod(titel="Makita BL1850B 18V accu", url=ACCU, prijs=74.99,
+              bewijs={"prijs": "BL1850B 18V accu 5,0 Ah nu 74,99 euro", "verzending": "Gratis levering."})
+past = lambda c: {"past op DDF484": {"oordeel": "ja", "citaat": c}}  # noqa: E731
+r = A.verwerk([dict(accu, compatibiliteit=past("Geschikt voor alle Makita LXT machines, zoals de DDF484"))], VANDAAG,
+              KOERSEN, ["past op DDF484"], paginas=ACCUPAG)
+check("F: een citaat van de aanbodpagina met paswoord en code bewijst de pasvorm (P09)", r["beste"] is not None)
+for c, waarom in (("Klanten bekeken ook: DDF485.", "een andere code"), ("zoals de DDF484 en DHP482.", "zonder paswoord"),
+                  ("Geschikt voor de DDF484 schroefmachine", "niet op de pagina")):
+    r = A.verwerk([dict(accu, compatibiliteit=past(c))], VANDAAG, KOERSEN, ["past op DDF484"], paginas=ACCUPAG)
+    check(f"F: geen aanbeveling met een pasvormcitaat {waarom}", r["beste"] is None
+          and r["goed"][0]["niet_bevestigd"] == ["past op DDF484"])
+
+# Echte citaten uit de uitslag van 02-11 (Codex controle 45, K7) en de twee functieproeven van Codex.
+BEAMER = "https://beamerexpert.nl/epson-eb-fh08.html"
+BEAMERPAG = {BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. Al 20 jaar met recht dé expert en nr. 1 beamer winkel. "
+                            "Uitstekende service en altijd gratis verzendingKlanten beoordelen ons met een 9,1.")}
+r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+    "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": "Uitstekende service en altijd gratis verzending"})],
+    VANDAAG, KOERSEN, paginas=BEAMERPAG)
+check("P07 echt: 'altijd gratis verzending' van beamerexpert.nl bewijst geen gratis levering naar Belgie",
+      r["beste"] is None and "verzending niet bewezen" in r["goed"][0]["ontbreekt"])
+NLGRATIS = "Gratis verzending binnen Nederland, naar België € 9,95."
+r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+    "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": NLGRATIS})], VANDAAG, KOERSEN,
+    paginas={BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. " + NLGRATIS)})
+check("Codex 45: gratis binnen Nederland met 9,95 naar Belgie is geen gratis verzending", r["beste"] is None
+      and "verzending niet bewezen" in r["goed"][0]["ontbreekt"])
+FIXAMI = "https://fixami.be/makita-bl1850b-18v-li-ion-accu-5ah.html"
+FIXPAG = {FIXAMI: pagina("Makita BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro. Gratis levering. Klanten kochten ook: "
+                         "DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (2 st), snellader, in Mbox")}
+for citaat, waarom in (("DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (2 st), snellader, in Mbox",
+                        "het echte citaat van P09 (een andere set, geen paswoord)"),
+                       ("Niet geschikt voor DDF484", "een ontkenning (Codex 45)")):
+    pag = FIXPAG if "DDF484RTJ" in citaat else {FIXAMI: FIXPAG[FIXAMI] + " Niet geschikt voor DDF484."}
+    r = A.verwerk([aanbod(titel="Makita BL1850B 18V Li-Ion accu - 5.0Ah", url=FIXAMI, prijs=74.99, bewijs={
+        "prijs": "BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro", "verzending": "Gratis levering."},
+        compatibiliteit={"past op DDF484": {"oordeel": "ja", "citaat": citaat}})], VANDAAG, KOERSEN, ["past op DDF484"],
+        paginas=pag)
+    check(f"P09: geen aanbeveling met {waarom}", r["beste"] is None and r["goed"][0]["niet_bevestigd"] == ["past op DDF484"])
+for zin, beste, waarom in (
+        ("Gratis binnen Nederland vanaf €50; verzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie 'vanaf' is geen drempel voor gratis"),
+        ("Gratis verzending binnen Nederland vanaf €50\nVerzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie op een nieuwe regel is geen drempel (Codex 47)"),
+        ("Gratis verzending binnen Nederland vanaf €50, verzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie na een komma is geen drempel (Codex 47)"),
+        ("Gratis verzending naar België € 0,00", True, "gratis naar Belgie met 0,00 telt")):
+    r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
+        "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": zin})], VANDAAG, KOERSEN,
+        paginas={BEAMER: pagina("Epson EB-FH08 nu 599,00 euro. " + zin)})
+    check(f"Codex 46: {waarom}", (r["beste"] is not None) == beste, str(r["goed"][0]["ontbreekt"] if r["goed"] else r))
+r = A.verwerk([aanbod(titel="Makita BL1850B 18V Li-Ion accu - 5.0Ah", url=FIXAMI, prijs=74.99, bewijs={
+    "prijs": "BL1850B 18V Li-Ion accu - 5.0Ah nu 74,99 euro", "verzending": "Gratis levering."},
+    compatibiliteit={"past op DDF484": {"oordeel": "ja", "citaat": "Ongeschikt voor DDF484"}})], VANDAAG, KOERSEN,
+    ["past op DDF484"], paginas={FIXAMI: FIXPAG[FIXAMI] + " Ongeschikt voor DDF484."})
+check("Codex 46: 'Ongeschikt voor DDF484' bewijst nooit de pasvorm", r["beste"] is None)
+with tempfile.TemporaryDirectory() as d:
+    log = os.path.join(d, "gelezen.jsonl")
+    with open(log, "w", encoding="utf-8") as f:
+        for i in range(6):
+            f.write(json.dumps({"url": f"https://w.voorbeeld.be/p{i}", "ok": True}) + "\n")
+    nep = lambda u: (u, "text/html", b"<p>Verzendkosten naar Belgie: 4,95 euro voor elke bestelling.</p>")  # noqa: E731
+    tekst, gelukt = L.lees("https://w.voorbeeld.be/verzending", log, ophalen=nep)
+    tekst2, gelukt2 = L.lees("https://w.voorbeeld.be/p9", log, ophalen=nep)
+    check("D: na zes lezingen mag een verzendpagina van dezelfde winkel nog, een gewone pagina niet (Codex 45)",
+          gelukt and not gelukt2 and "Leesgrens" in tekst2, tekst[:80])
 
 print("Proefbank: prijsvragen zonder het bord (overleg 39)")
 from aankoop import proefbank as PB  # noqa: E402
