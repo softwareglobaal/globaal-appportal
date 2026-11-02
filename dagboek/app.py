@@ -10,11 +10,12 @@ import json
 import os
 import re
 import time
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, abort, render_template, request, url_for
+from flask import Flask, abort, redirect, render_template, request, url_for
 
 app = Flask(__name__)
 MAP = os.environ.get("DAGBOEK_MAP", "/dagboek")
@@ -399,10 +400,10 @@ def bronnen_pagina():
 
 # Per wacht wat er binnenkwam (Mehdi, 01-11-2026: "ik wil dat ik alle wachten hier zie, zodat ik weet per wacht wat
 # binnengekomen is en dat ik het kan controleren"). Het bord (app-mijnagents) heeft de databank; het Dagboek vraagt het
-# over het interne netwerk met het token van het bord, alleen lezend. Voorlopig alleen de laatste dagen (WACHT_DAGEN).
+# over het interne netwerk met het token van het bord, alleen lezend. De dagknoppen tonen de laatste dagen (WACHT_DAGEN).
 BORD = os.environ.get("MIJNAGENTS_URL", "http://app-mijnagents:3022").rstrip("/")
 BORD_TOKEN = os.environ.get("AGENTS_TOKEN", "")
-# Mehdi, 01-11-2026: alleen de laatste dagen (vandaag en de drie dagen ervoor), niet meer.
+# Mehdi, 01-11-2026: de knoppen voor vandaag en de drie dagen ervoor; een oudere dag blijft via vorige dag bereikbaar.
 WACHT_DAGEN = int(os.environ.get("WACHT_DAGEN", "4"))
 KLEUR_UITLEG = {"groen": "kwam binnen", "oranje": "draaide, niets binnen", "rood": "fout", "grijs": "geen ronde"}
 
@@ -425,10 +426,21 @@ def haal_wachten(dag):
     return d
 
 
-def locatie_items(dag):
-    """De Locatiewacht schrijft haar dag in het Locatie-dashboard, niet op het bord: haar plekken en ritten als items."""
-    lb = haal_locatie(f"/api/dagboek/{dag}")
-    lb = lb if isinstance(lb, dict) and lb.get("datum") == dag else None
+def haal_tekst(uniek):
+    """De volledige tekst van één gesprek uit het bord, of None als het bord niet antwoordt."""
+    try:
+        req = urllib.request.Request(BORD + "/api/wachten/tekst?" + urllib.parse.urlencode({"uniek": uniek}),
+                                     headers={"X-Agents-Token": BORD_TOKEN})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            d = json.load(r)
+    except Exception:  # noqa: BLE001
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def locatie_items(dag, lb):
+    """De Locatiewacht schrijft haar dag in het Locatie-dashboard, niet op het bord: haar plekken en ritten als items.
+    lb is de dagindeling die de dagpagina al ophaalde (één keer per pagina, Codex 02-11)."""
     ritten = verplaatsingen(lb)
     if ritten is None:
         return None
@@ -436,15 +448,15 @@ def locatie_items(dag):
              "fout": False} for r in ritten if r["soort"] != "gat"]
 
 
-def wachten_dag(dag):
-    """Alle wachten van één dag uit het bord, met de Locatiewacht uit het Locatie-dashboard erbij, of None."""
+def wachten_dag(dag, lb=None):
+    """Alle wachten van één dag uit het bord, met de Locatiewacht uit het Locatie-dashboard (lb) erbij, of None."""
     gegevens = haal_wachten(dag)
     if not gegevens:
         return None
     for vak in gegevens["vakken"]:
         for w in vak.get("wachten") or []:
             if w.get("naam") == "locatie-wacht" and not w.get("items"):
-                li = locatie_items(dag)
+                li = locatie_items(dag, lb)
                 if li:
                     w.update(items=li, aantal=len(li), oordeel="binnen" if w.get("kleur") != "rood" else w["oordeel"],
                              kleur="groen" if w.get("kleur") != "rood" else "rood")
@@ -500,8 +512,8 @@ def wacht_kort(w):
     return str(w.get("oordeel") or "")
 
 
-def dagkeuze(d, naam=None):
-    """De knoppen voor de laatste WACHT_DAGEN dagen; vandaag heet vandaag. Met naam: naar die wacht op die dag."""
+def dagkeuze(d):
+    """De knoppen voor de laatste WACHT_DAGEN dagen op de dagpagina; vandaag heet vandaag."""
     eerste = vandaag() - timedelta(days=WACHT_DAGEN - 1)
     uit = []
     for i in range(WACHT_DAGEN):
@@ -509,52 +521,58 @@ def dagkeuze(d, naam=None):
         tekst = dagnaam(x, True)
         if x == vandaag():
             tekst = "vandaag, " + tekst
-        pad = url_for("wacht_pagina", naam=naam, dag=x.isoformat()) if naam else url_for("wachten_pagina", dag=x.isoformat())
-        uit.append({"dag": x.isoformat(), "naam": tekst, "actief": x == d, "pad": pad})
+        uit.append({"dag": x.isoformat(), "naam": tekst, "actief": x == d, "pad": url_for("dag_pagina", dag=x.isoformat())})
     return uit
 
 
-def wacht_dag_uit_vraag():
-    """De gevraagde dag, alleen binnen de laatste WACHT_DAGEN dagen (Mehdi 01-11: alleen die dagen); anders 404."""
-    dag = request.args.get("dag") or vandaag().isoformat()
+def dag_uit_tekst(dag):
+    """Een dag uit de URL; onleesbaar, voor 2000 of na vandaag is 404 (0001-01-01 heeft geen vorige dag)."""
     try:
         d = date.fromisoformat(dag)
     except ValueError:
         abort(404)
-    if not vandaag() - timedelta(days=WACHT_DAGEN - 1) <= d <= vandaag():
+    if d.year < 2000 or d > vandaag():
         abort(404)
     return d
 
 
+def wacht_dag_uit_vraag():
+    """De gevraagde dag (?dag=), anders vandaag; onleesbaar is 404."""
+    return dag_uit_tekst(request.args.get("dag") or vandaag().isoformat())
+
+
 @app.route("/wachten")
 def wachten_pagina():
-    """Alle wachten van één dag als tegels (Mehdi, 01-11-2026: "per dag alle wachten zien"). Tik op een tegel: de wacht."""
+    """De oude pagina Wachten (T-0099): de wachten staan nu op de dagpagina zelf (T-0138)."""
     if not mag():
         abort(403)
-    d = wacht_dag_uit_vraag()
-    gegevens = wachten_dag(d.isoformat())
-    return render_template("wachten.html", g=gegevens, naam=dagnaam(d), dag=d.isoformat(), keuze=dagkeuze(d),
-                           uitleg=KLEUR_UITLEG)
+    return redirect(url_for("dag_pagina", dag=wacht_dag_uit_vraag().isoformat()))
 
 
 @app.route("/wachten/<naam>")
 def wacht_pagina(naam):
-    """Eén wacht op één dag: zijn fouten, open meldingen, alle items en het werkverslag (Mehdi, 01-11-2026: "hun data
-    lezen per dag in de wacht zelf"). De dagknoppen blijven bij deze wacht."""
+    """De oude pagina van één wacht: nu de rij van die wacht, opengeklapt, op de dagpagina."""
     if not mag():
         abort(403)
     d = wacht_dag_uit_vraag()
-    gegevens = wachten_dag(d.isoformat())
-    w, vak = None, ""
-    if gegevens:
-        for v in gegevens["vakken"]:
-            for x in v.get("wachten") or []:
-                if x.get("naam") == naam:
-                    w, vak = x, v.get("vak") or ""
-        if w is None:
-            abort(404)
-    return render_template("wacht.html", g=gegevens, w=w, vak=vak, naam=naam, dagnaam_=dagnaam(d), dag=d.isoformat(),
-                           keuze=dagkeuze(d, naam), uitleg=KLEUR_UITLEG, is_vandaag=d == vandaag())
+    g = haal_wachten(d.isoformat())
+    if not re.fullmatch(r"[a-z0-9-]{1,40}", naam) or (g and naam not in {w.get("naam") for v in g["vakken"] for w in v.get("wachten") or []}):
+        abort(404)
+    return redirect(url_for("dag_pagina", dag=d.isoformat(), open=naam) + "#" + naam)
+
+
+@app.route("/dag/<dag>/tekst")
+def tekst_pagina(dag):
+    """De volledige tekst van één gesprek (?gesprek=<uniek>), zoals de wacht hem bewaarde (Mehdi, 02-11-2026: "als Zoom
+    privé staat, wil ik de tekst lezen en zien hoe we het kunnen verbeteren")."""
+    if not mag():
+        abort(403)
+    d = dag_uit_tekst(dag)
+    uniek = request.args.get("gesprek") or ""
+    if not uniek:
+        abort(404)
+    t = haal_tekst(uniek)
+    return render_template("tekst.html", t=t, dag=d.isoformat(), dagnaam_=dagnaam(d), uniek=uniek)
 
 
 @app.route("/healthz")
@@ -579,12 +597,12 @@ def overzicht():
 
 @app.route("/dag/<dag>")
 def dag_pagina(dag):
+    """Eén dag: elke wacht en agent van De Dagbundelaar als rij (Mehdi, 02-11-2026: "ik wil elke wacht en agent hier op
+    zien, elke dag per dag controleren"). Tik op de rij: alles wat die wacht die dag kreeg; tik op een item: alles wat
+    de wacht erover weet. Het dagbestand van De Dagbundelaar staat onder zijn eigen rij."""
     if not mag():
         abort(403)
-    try:
-        d = date.fromisoformat(dag)
-    except ValueError:
-        abort(404)
+    d = dag_uit_tekst(dag)
     vorige, volgende = d - timedelta(days=1), d + timedelta(days=1)
     lb = haal_locatie(f"/api/dagboek/{dag}")
     lb = lb if isinstance(lb, dict) and lb.get("datum") == dag else None
@@ -596,4 +614,6 @@ def dag_pagina(dag):
                                   "onderweg_min": sum(x.get("minuten") or 0 for x in rit)}
     return render_template("dag.html", d=dag_gegevens(dag, lc), vorige=vorige.isoformat(), ritten=ritten,
                            auto=auto_spoor(lb), buiten=bool((lb or {}).get("buiten_reeks")),
-                           volgende=volgende.isoformat() if volgende < vandaag() else None)
+                           volgende=volgende.isoformat() if volgende <= vandaag() else None,
+                           g=wachten_dag(dag, lb), keuze=dagkeuze(d), dag_=dag, uitleg=KLEUR_UITLEG, is_vandaag=d == vandaag(),
+                           open=request.args.get("open") or "")

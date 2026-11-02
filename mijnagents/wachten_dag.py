@@ -4,14 +4,25 @@ binnengekomen is en dat ik het kan controleren ... ik wil het als mens zien en b
 Alleen lezen uit de databank van het bord. Per wacht uit de groep Dagbundelaar: hoeveel items, de items zelf (tijd, van
 wie of wat, kort), de rondes van die dag uit het werkverslag, en of er een fout was. Een wacht die die dag niets meldde,
 staat als "niets binnen", nooit als nul. Nooit de tekst van een bericht: de wachten bewaren die ook niet.
+
+Per item ook alles wat de wacht erover weet (detail: wie, firma, afdeling, thema, waarom dit oordeel, zekerheid, link
+naar opname of archief), zodat Mehdi het oordeel kan nakijken (02-11-2026: "ik wil de tekst lezen en zien hoe we het
+kunnen verbeteren"). Een privégesprek draagt het label "privé" en blijft leesbaar: deze pagina is alleen voor Mehdi, en
+hij wil juist zien wat er op privé staat (02-11-2026: "te veel staat op privé, zo begrijp ik de agent niet").
 """
+import glob
+import hashlib
 import json
+import os
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 BRUSSEL = ZoneInfo("Europe/Brussels")
+# De gegevensmap van het bord (op de VM /data = ~/appportal/mijnagents-data): daar staan de teksten van de gesprekken
+# (zoom-data, fathom-data, plaud-invoer), naast de databank.
+DATA = os.environ.get("MIJNAGENTS_DATA") or os.path.dirname(os.path.abspath(os.environ.get("AGENTS_DB", "mijnagents.db")))
 # Mehdi leest de wacht per dag in het Dagboek: niets wegkappen wat hij daar wil zien (Codex 01-11). Een dag heeft hoogstens
 # enkele honderden rondes (de Fotowacht 435 op 30-10).
 MAX_ITEMS = 2000
@@ -71,50 +82,151 @@ def _telling_tekst(t):
     return kort(", ".join(delen))
 
 
-def _item(tijd, wie, wat, fout=False):
-    return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout)}
+DETAIL_MAX = 600
+# klaarzet.inhoud mag 60.000 tekens zijn (Codex 02-11): die staat er helemaal en letterlijk (regeleinden blijven), de
+# rest van het detail kort.
+DETAIL_LANG = ("inhoud",)
+
+
+def _item(tijd, wie, wat, fout=False, label="", detail=None, tekst=""):
+    """Eén item: tijd, van wie of wat, kort, een label (bv. privé), het detail (alles wat de wacht erover weet, als
+    lijst van (naam, waarde) in een vaste volgorde; lege waarden blijven weg) en tekst: de sleutel waarmee de volledige
+    tekst van het gesprek te lezen is (/api/wachten/tekst), of leeg als er geen tekst bewaard is."""
+    d = [(k, str(v) if k in DETAIL_LANG else kort(v, DETAIL_MAX)) for k, v in (detail or [])
+         if v not in (None, "", 0, False)]
+    return {"tijd": tijd, "wie": kort(wie, 80), "wat": kort(wat), "fout": bool(fout), "label": label, "detail": d,
+            "tekst": tekst}
 
 
 def is_prive_gesprek(r):
-    """De privéregel van De Regisseur (RZ3-01, zoals De Dagbundelaar en De Communicatiebundelaar): afdeling prive of privé.
-    De vlag prive=1 alleen betekent "van de Mac van Mehdi, alleen voor Mehdi" (WhatsApp, sms, telefoon: elke rij); die
-    rijen dragen naam en aantal, nooit tekst, en deze pagina is alleen voor Mehdi: die blijven leesbaar."""
-    return str(r["afdeling"] or "").strip().casefold() in ("prive", "privé")
+    """Privé zoals De Dagbundelaar het telt (dagvaststelling, prive_gezien): de vlag prive of de afdeling prive/privé.
+    Hier alleen een label, geen masker: de pagina is alleen voor Mehdi en hij kijkt juist na of dat oordeel klopt
+    (02-11-2026: "te veel staat op privé"). Het veld 'waarom dit oordeel' in het detail zegt waarom de wacht dat vond."""
+    return bool(r.get("prive")) or str(r.get("afdeling") or "").strip().casefold() in ("prive", "privé")
+
+
+def tekst_pad(r):
+    """Waar de tekst van dit gesprek op de schijf van het bord staat, of leeg. Zoom: zoom-data/<dag uur Zoom ...>
+    [sha1(uuid)[:8]]/transcript.json (de mapnaam van de Zoomwacht); Fathom: het archief van de Fathomwacht
+    (fathom-data/<map>/transcript.md); Plaud: plaud-invoer/<map>/transcript.json (het archief wijst naar Dropbox)."""
+    uniek, bron, archief = str(r.get("uniek") or ""), str(r.get("bron") or ""), str(r.get("archief") or "")
+    paden = []
+    if bron == "zoom" and uniek.startswith("zoom:meeting:"):
+        kenmerk = hashlib.sha1(uniek[len("zoom:meeting:"):].encode()).hexdigest()[:8]
+        # De haken in de mapnaam zijn letters, geen glob-klasse: escape.
+        paden = sorted(glob.glob(os.path.join(glob.escape(DATA), "zoom-data", "* " + glob.escape(f"[{kenmerk}]"),
+                                              "transcript.json")))
+    elif bron == "fathom" and "mijnagents-data/" in archief:
+        rest = archief.split("mijnagents-data/", 1)[1].rstrip("/")
+        # Zonder transcript schrijft de Fathomwacht toch een transcript.md met alleen een kop, en daarnaast
+        # geen-transcript.txt (fathom_wacht.bewaar): dan is er geen tekst (Codex 02-11).
+        if os.path.isfile(os.path.join(DATA, rest, "geen-transcript.txt")):
+            return ""
+        paden = [os.path.join(DATA, rest, "transcript.md"), os.path.join(DATA, rest, "transcript.json")]
+    elif bron == "plaud" and "/Plaud/" in archief:
+        mapnaam = archief.split("/Plaud/", 1)[1].split("/", 1)[0]
+        paden = [os.path.join(DATA, "plaud-invoer", mapnaam, "transcript.json")]
+    for pad in paden:
+        if os.path.isfile(pad):
+            return pad
+    return ""
+
+
+def _tijd_ms(ms):
+    try:
+        s_ = int(ms) // 1000
+    except (TypeError, ValueError):
+        return ""
+    return f"{s_ // 3600:02d}:{s_ % 3600 // 60:02d}:{s_ % 60:02d}"
+
+
+def tekst(conn, uniek):
+    """De volledige tekst van één gesprek voor Mehdi (02-11-2026: "als Zoom privé staat, wil ik de tekst lezen"):
+    {'wie','wat','bron','md'} (Fathom, de tekst van de Fathomwacht met kop) of {'regels':[{tijd, wie, tekst}]}
+    (Zoom en Plaud uit transcript.json), of {'fout': ...} als er geen tekst bewaard is."""
+    r = conn.execute("SELECT * FROM gesprek_log WHERE uniek=?", (uniek,)).fetchone()
+    if r is None:
+        return {"fout": "onbekend gesprek"}
+    r = dict(r)
+    kop = {"uniek": uniek, "wie": r.get("personen") or "onbekend", "wat": kort(r.get("thema"), 200), "bron": r.get("bron"),
+           "datum": r.get("datum"), "tijd": uur(r.get("start")), "label": "privé" if is_prive_gesprek(r) else ""}
+    pad = tekst_pad(r)
+    if not pad:
+        return dict(kop, fout="geen tekst bewaard: dit gesprek heeft geen opname of transcript op het bord")
+    try:
+        with open(pad, encoding="utf-8", errors="replace") as f:
+            inhoud = f.read()
+    except OSError as e:
+        return dict(kop, fout=f"tekst niet leesbaar ({type(e).__name__})")
+    if pad.endswith(".md"):
+        return dict(kop, md=inhoud)
+    data = _json(inhoud)
+    if not isinstance(data, list):
+        return dict(kop, fout="tekst niet leesbaar (geen lijst)")
+    regels = []
+    for x in data:
+        if not isinstance(x, dict):
+            continue
+        spreker = x.get("speaker")
+        wie = spreker.get("display_name") if isinstance(spreker, dict) else (x.get("speaker") or x.get("original_speaker"))
+        regels.append({"tijd": x.get("timestamp") or _tijd_ms(x.get("start_time")), "wie": str(wie or ""),
+                       "tekst": str(x.get("text") or x.get("content") or "")})
+    return dict(kop, regels=regels)
+
+
+GESPREK_VELDEN = (("personen", "wie"), ("bedrijf", "firma"), ("afdeling", "afdeling"), ("thema", "thema"),
+                  ("project", "project"), ("minuten", "minuten"), ("zekerheid", "zekerheid"),
+                  ("waarom", "waarom dit oordeel"), ("opgenomen_door", "opgenomen door"), ("bron", "bron"),
+                  ("link", "link"), ("archief", "archief"), ("dubbel_van", "dubbel van"), ("uniek", "nummer"))
 
 
 def lees_gesprekken(conn, bron, dag):
-    rijen = conn.execute("SELECT uniek, start, minuten, personen, thema, bron, COALESCE(dubbel_van,'') AS dubbel_van, "
-                         "COALESCE(afdeling,'') AS afdeling FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') "
-                         "ORDER BY start", (dag, bron)).fetchall()
+    rijen = conn.execute("SELECT * FROM gesprek_log WHERE datum=? AND bron IN (?, 'dekking') ORDER BY start",
+                         (dag, bron)).fetchall()
     items, gedekt = [], False
     for r in rijen:
         if r["bron"] == "dekking":
             if str(r["uniek"] or "").startswith(f"dekking:{bron}:"):
                 gedekt = True
             continue
-        if is_prive_gesprek(r):
-            # RZ2-01: van een privégesprek alleen "privégesprek, N min", zonder naam of onderwerp.
-            wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "",
-                                        "dubbel, telt niet" if r["dubbel_van"] else "") if x)
-            items.append(_item(uur(r["start"]), "privégesprek", wat))
-            continue
-        wat = ", ".join(x for x in (f"{r['minuten']} min" if r["minuten"] else "", kort(r["thema"], 100),
-                                    "dubbel, telt niet" if r["dubbel_van"] else "") if x)
-        items.append(_item(uur(r["start"]), r["personen"] or "onbekend", wat))
+        r = dict(r)
+        dubbel = r.get("dubbel_van")
+        wat = ", ".join(x for x in (f"{r['minuten']} min" if r.get("minuten") else "", kort(r.get("thema"), 100),
+                                    "dubbel, telt niet" if dubbel else "") if x)
+        detail = [(label, r.get(k)) for k, label in GESPREK_VELDEN]
+        items.append(_item(uur(r.get("start")), r.get("personen") or "onbekend", wat,
+                           label="privé" if is_prive_gesprek(r) else "", detail=detail,
+                           tekst=r.get("uniek") if tekst_pad(r) else ""))
     return items, gedekt
 
 
+MAIL_VELDEN = (("van_naam", "van"), ("van", "adres"), ("onderwerp", "onderwerp"), ("soort", "soort"),
+               ("waarom", "waarom dit oordeel"), ("opvolging", "opvolging"), ("stap", "stap"), ("besluit", "besluit"),
+               ("besluit_door", "besluit door"), ("antwoord_door", "beantwoord door"), ("antwoord_ts", "beantwoord op"),
+               ("antwoord_naar", "beantwoord naar"), ("naar", "gesorteerd naar"), ("postvak", "postvak"), ("map", "map"),
+               ("datum", "datum"), ("uniek", "nummer"))
+
+
 def lees_mail(conn, wacht, dag):
-    rijen = conn.execute("SELECT datum, van, van_naam, onderwerp, soort, map FROM mailbericht WHERE wacht=? AND dag=? "
-                         "ORDER BY datum LIMIT ?", (wacht, dag, MAX_ITEMS)).fetchall()
-    return [_item(uur(r["datum"]), r["van_naam"] or r["van"] or "onbekend",
-                  " · ".join(x for x in (r["onderwerp"] or "(geen onderwerp)", r["soort"] or "") if x)) for r in rijen]
+    rijen = conn.execute("SELECT * FROM mailbericht WHERE wacht=? AND dag=? ORDER BY datum LIMIT ?",
+                         (wacht, dag, MAX_ITEMS)).fetchall()
+    uit = []
+    for r in rijen:
+        r = dict(r)
+        detail = [(label, r.get(k)) for k, label in MAIL_VELDEN]
+        detail += [("dringend", "ja" if r.get("dringend") else ""), ("mailinglijst", "ja" if r.get("mailinglijst") else ""),
+                   ("beantwoord", "ja" if r.get("beantwoord") else ""), ("opgeruimd", "ja" if r.get("opgeruimd") else "")]
+        uit.append(_item(uur(r.get("datum")), r.get("van_naam") or r.get("van") or "onbekend",
+                         " · ".join(x for x in (r.get("onderwerp") or "(geen onderwerp)", r.get("soort") or "") if x),
+                         detail=detail))
+    return uit
 
 
 def lees_klaarzet(conn, wacht, dag, van, tot):
     """Wat de wacht die dag klaarzette, of wat over die dag gaat (sleutel, uniek of titel met de dag)."""
     rijen = conn.execute(
-        "SELECT ts, soort, titel, inhoud, uniek, sleutel FROM klaarzet WHERE van=? AND status!='vervallen' AND "
+        "SELECT ts, soort, titel, inhoud, uniek, sleutel, status, voor, verwijzing, opgepakt_door, opgepakt_ts "
+        "FROM klaarzet WHERE van=? AND status!='vervallen' AND "
         "((ts>=? AND ts<?) OR sleutel=? OR uniek LIKE ? OR uniek LIKE ? OR titel LIKE ?) ORDER BY ts LIMIT ?",
         (wacht, van, tot, dag, f"%:{dag}", f"%:{dag}:%", f"{dag} %", MAX_ITEMS)).fetchall()
     items = []
@@ -136,7 +248,13 @@ def lees_klaarzet(conn, wacht, dag, van, tot):
                 tijd, wat = m.group(1), wat[m.end():].strip()
                 if m.group(2) and m.group(2) != m.group(1):
                     wat = f"{wat} ({m.group(1)} tot {m.group(2)})"
-        items.append(_item(tijd, r["soort"] or "item", wat))
+        inhoud_tekst = r["inhoud"] or ""   # letterlijk zoals bewaard, nooit opnieuw opgemaakt of afgekapt
+        detail = [("soort", r["soort"]), ("titel", r["titel"]), ("voor", r["voor"]), ("status", r["status"]),
+                  ("opgepakt door", r["opgepakt_door"]), ("opgepakt op", uur(r["opgepakt_ts"])), ("sleutel", r["sleutel"]),
+                  ("verwijzing", r["verwijzing"]), ("nummer", r["uniek"]), ("klaargezet", uur(r["ts"])), ("inhoud", inhoud_tekst)]
+        # Een klaargezet item dat zichzelf privé noemt (inhoud.prive) draagt hetzelfde label als een gesprek.
+        prive = isinstance(inhoud, dict) and bool(inhoud.get("prive"))
+        items.append(_item(tijd, r["soort"] or "item", wat, label="privé" if prive else "", detail=detail))
     return items
 
 

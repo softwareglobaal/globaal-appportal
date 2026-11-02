@@ -8,79 +8,137 @@
   {% if volgende %}<a href="{{ url_for('dag_pagina', dag=volgende) }}">volgende dag →</a>{% endif %}
 </header>
 <main>
-  {% if not d['er'] %}
-    <div class="kaart"><span class="leeg">Nog niet vastgesteld. De Dagbundelaar legt elke dag 's nachts vast.</span></div>
+  <nav class="dagkeuze">
+    {% for k in keuze %}<a class="{{ 'aan' if k['actief'] }}" href="{{ k['pad'] }}">{{ k['naam'] }}</a>{% endfor %}
+  </nav>
+  {% if not g %}
+    <div class="kaart"><span class="stip rood"></span> <b>Het bord antwoordt niet.</b>
+      <div class="zacht">Daardoor weet het Dagboek nu niet wat de wachten op {{ d['naam'] }} kregen. Dat is onbekend, niet leeg.</div></div>
+    <h3 class="vak">Dagbestand van De Dagbundelaar</h3>
+    <div class="kaart">{% include "dagbestand.html" %}</div>
   {% else %}
-  {% if d['tegels'] %}<div class="kaart">{% with tegels=d['tegels'] %}{% include "tegels.html" %}{% endwith %}</div>{% endif %}
-
-  <div class="kaart">
-    <h2>Gepland</h2>
-    <table class="lijst gepland">
-    {% for a in d['gepland'] %}
-      <tr><td class="tijd">{{ a['tijd'] }}</td>
-        <td><span class="stip {{ a['kleur'] }}"></span></td>
-        <td><b>{{ a['titel'] }}</b>{% if a['label'] %} <span class="zacht">{{ a['label'] }}</span>{% endif %}
-          {% if a['grond'] %}<div class="zacht klein">{{ a['grond'] }}</div>{% endif %}</td></tr>
-    {% else %}<tr><td class="leeg">Geen afspraken.</td></tr>{% endfor %}
-    </table>
+  <div class="kaart samen">
+    <div class="cijfers">
+      <div><span class="groot">{{ 'minstens ' if g['onvolledig'] }}{{ g['items'] }}</span> items binnen</div>
+      {% for kleur in ('groen', 'oranje', 'rood', 'grijs') %}<div><span class="stip {{ kleur }}"></span> <span class="groot">{{ g['telling'][kleur] }}</span> {{ uitleg[kleur] }}</div>{% endfor %}
+    </div>
+    <p class="zacht klein" style="margin:8px 0 0">Elke wacht is een rij. Tik op de rij: alles wat die wacht op deze dag kreeg. Tik op een item: alles wat de wacht erover weet.</p>
   </div>
-
-  <div class="kaart">
-    <h2>Gesprekken in Zoom, Fathom en Plaud</h2>
-    <table class="lijst">
-    {% for g in d['gesprekken'] %}
-      <tr><td class="tijd">{{ g['tijd'] }}</td>
-        <td><b>{{ g['wie'] }}</b> <span class="zacht">{{ g['bron'] }}, {{ g['min'] }} min</span></td></tr>
-    {% else %}<tr><td class="leeg">Geen gesprekken gevonden.</td></tr>{% endfor %}
-    </table>
-  </div>
-
-  <div class="kaart">
-    <h2>Niet gepland</h2>
-    <table class="lijst">
-    {% for g in d['niet_gepland'] %}
-      <tr><td class="tijd">{{ g['tijd'] }}</td>
-        <td><b>{{ g['wat'] }}</b> {% if g['kanaal'] %}<span class="zacht">{{ g['kanaal'] }}{% if g['min'] is not none %}, {{ g['min'] }} min{% endif %}</span>{% endif %}</td></tr>
-    {% else %}<tr><td class="leeg">Niets gevonden.</td></tr>{% endfor %}
-    </table>
-  </div>
-
-  <div class="kaart">
-    <h2>Waar was ik</h2>
-    {% if ritten is none %}<span class="leeg">Het Locatie-dashboard is nu niet bereikbaar.</span>
-    {% elif buiten %}<span class="leeg">Deze dag valt voor de start van de meting.</span>
-    {% elif not ritten %}<span class="leeg">Geen meting op deze dag.</span>
-    {% else %}
-    <table class="lijst">
-    {% for r in ritten %}
-      <tr class="{{ r['soort'] }}"><td class="tijd">{{ r['van'] }}</td>
-        <td>{% if r['soort'] == 'plek' %}<b>{{ r['wat'] }}</b>{% else %}<span class="zacht">{{ r['wat'] }}</span>{% endif %}
-          <span class="zacht">tot {{ r['tot'] }}, {{ r['duur'] }}{% if r['extra'] %}, {{ r['extra'] }}{% endif %}</span></td></tr>
-    {% endfor %}
-    </table>
-    {% if auto %}<p class="zacht klein">Gemeten door de tracker in de auto: dit is waar de auto stond.</p>{% endif %}
-    {% endif %}
-  </div>
-
-  <div class="kaart">
-    <h2>Communicatie</h2>
-    {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
-  </div>
-
-  <div class="kaart">
-    <h2>Eigen werk en gezondheid</h2>
-    {% for r in d['eigen'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
-    {% if not d['eigen'] %}<p class="zacht">Nog niet in dit dagbestand: Wispr, websites en gezondheid komen bij de volgende ronde van de Dagbundelaar.</p>{% endif %}
-  </div>
-
-  {% if d['versie'] %}<p class="zacht klein">Dagbestand {{ d['versie'] }}.</p>{% endif %}
+  {% for vak in g['vakken'] %}
+  <h3 class="vak">{{ vak['vak'] }}</h3>
+  {% for w in vak['wachten'] %}
+  <details class="wacht kleur-{{ w['kleur'] }}" id="{{ w['naam'] }}"{% if w['naam'] == open %} open{% endif %}>
+    <summary>
+      <span class="stip {{ w['kleur'] }}"></span>
+      <span class="label">{{ w['label'] }}</span>
+      <span class="aantal">{{ '?' if w['leesfout'] else w['aantal'] }}</span>
+      {% if w['noden'] %}<span class="open">{{ w['noden']|length }} open nu</span>{% endif %}
+      <span class="kort {{ 'rood-tekst' if w['kleur'] == 'rood' }}">{{ w['kort'] }}</span>
+    </summary>
+    <div class="binnen">
+      {% if w['naam'] == 'dagbundelaar' %}
+      <h4>Dagbestand van De Dagbundelaar</h4>
+      {% include "dagbestand.html" %}
+      {% endif %}
+      <div class="cijfers klein zacht">
+        <span>{{ d['naam'] }}: {{ uitleg[w['kleur']] }}</span>
+        <span>{{ 'onbekend' if w['leesfout'] else w['aantal'] }} items binnen</span>
+        <span>{{ 'onbekend' if w['logfout'] else w['rondes'] }} {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</span>
+        {% if is_vandaag and w['status'] and w['status']['laatste'] %}<span>laatste ronde {{ w['status']['laatste'] }}</span>{% endif %}
+        {% if w['gedekt'] is not none %}<span>dag {{ 'helemaal gelezen' if w['gedekt'] else 'nog niet helemaal gelezen' }}</span>{% endif %}
+      </div>
+      {% if w['leesfout'] or w['logfout'] or w['fouten'] or w['stand_fout'] %}
+      <h4 class="rood-tekst">Fout</h4>
+      {% if w['leesfout'] %}<p class="foutregel">Kon niet lezen: {{ w['leesfout'] }}</p>{% endif %}
+      {% if w['logfout'] %}<p class="foutregel">Kon niet lezen: {{ w['logfout'] }}</p>{% endif %}
+      {% if w['stand_fout'] %}<p class="foutregel">{{ w['stand_fout'] }}</p>{% endif %}
+      {% for f in w['fouten_kort'] %}<p class="foutregel">{{ f['tijd'] }} {{ f['tekst'] }}{% if f['aantal'] > 1 %} <span class="zacht">({{ f['aantal'] }} keer)</span>{% endif %}</p>{% endfor %}
+      {% endif %}
+      {% if w['noden'] %}
+      <h4 class="oranje-tekst">Open meldingen nu ({{ w['noden']|length }})</h4>
+      <p class="zacht klein">Wat deze wacht op dit moment nodig heeft; dat hoort niet bij één dag.</p>
+      {% for n in w['noden'] %}<p class="nood">{{ n }}</p>{% endfor %}
+      {% endif %}
+      <h4>Wat binnenkwam ({{ 'onbekend' if w['leesfout'] else w['aantal'] }})</h4>
+      {% if w['leesfout'] %}
+      <p class="leeg">Onbekend: het bord kon deze wacht niet lezen ({{ w['leesfout'] }}). Dat is niet hetzelfde als leeg.</p>
+      {% elif w['items'] %}
+      <div class="items">
+        {% for it in w['items'] %}
+        <details class="item{% if it['fout'] %} fout{% endif %}">
+          <summary><span class="tijd">{{ it['tijd'] or '-' }}</span> <b>{{ it['wie'] }}</b>{% if it.get('label') %} <span class="etiket">{{ it['label'] }}</span>{% endif %} <span class="zacht">{{ it['wat'] }}</span></summary>
+          {% if it.get('tekst') %}<p class="tekstlink"><a href="{{ url_for('tekst_pagina', dag=dag_, gesprek=it['tekst']) }}">de volledige tekst lezen</a></p>{% endif %}
+          {% if it.get('detail') %}
+          <dl>{% for k, v in it['detail'] %}<dt>{{ k }}</dt><dd>{% if v.startswith('http://') or v.startswith('https://') %}<a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>{% endfor %}</dl>
+          {% else %}<p class="leeg klein">Meer weet de wacht hier niet over.</p>{% endif %}
+        </details>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="leeg">Niets binnengekomen op deze dag.</p>
+      {% endif %}
+      <h4>Werkverslag van deze dag ({{ 'onbekend' if w['logfout'] else w['rondes'] }})</h4>
+      {% if w['logfout'] %}
+      <p class="leeg">Onbekend: het bord kon het werkverslag niet lezen ({{ w['logfout'] }}). Dat is niet hetzelfde als geen ronde.</p>
+      {% elif w['log'] %}
+      <table class="lijst">
+        {% for r in w['log'] %}<tr{% if r['fout'] %} class="fout"{% endif %}><td class="tijd">{{ r['tijd'] }}</td><td class="zacht klein">{{ r['stap'] }}</td><td class="klein">{{ r['tekst'] }}</td></tr>{% endfor %}
+      </table>
+      {% else %}
+      <p class="leeg">Geen ronde op deze dag.</p>
+      {% endif %}
+    </div>
+  </details>
+  {% endfor %}
+  {% endfor %}
   {% endif %}
+  <p class="zacht klein">Groen: er kwam iets binnen. Oranje: de wacht draaide, maar er kwam niets binnen. Rood: fout. Grijs: de wacht draaide niet op deze dag.</p>
 </main>
 <style>
+  .dagkeuze{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .dagkeuze a{padding:8px 14px;border:1px solid var(--rand);border-radius:20px;color:var(--tekst);text-decoration:none}
+  .dagkeuze a.aan{background:var(--accent);border-color:var(--accent);color:#0f1115;font-weight:700}
+  .samen .cijfers{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .samen .groot{font-size:22px;font-weight:700}
+  h3.vak{margin:18px 0 8px;font-size:13px;color:var(--zacht);text-transform:uppercase;letter-spacing:.08em}
+  details.wacht{background:var(--paper);border:1px solid var(--rand);border-radius:12px;margin-bottom:6px}
+  details.wacht.kleur-rood{border-color:var(--rood)}
+  details.wacht.kleur-grijs summary{color:var(--zacht)}
+  details.wacht>summary{display:flex;gap:10px;align-items:baseline;padding:11px 14px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  details.wacht>summary::-webkit-details-marker{display:none}
+  details.wacht>summary .stip{width:12px;height:12px;align-self:center}
+  details.wacht>summary .label{font-weight:700;min-width:200px}
+  details.wacht>summary .aantal{font-size:20px;font-weight:700;min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+  details.wacht>summary .open{color:var(--oranje);font-size:13px;white-space:nowrap}
+  details.wacht>summary .kort{color:var(--zacht);flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
+  details.wacht[open]>summary{border-bottom:1px solid var(--rand)}
+  .binnen{padding:6px 14px 14px}
+  .binnen h4{margin:14px 0 6px;font-size:15px}
+  .binnen .cijfers{display:flex;gap:14px;flex-wrap:wrap}
+  .rood-tekst{color:var(--rood)}
+  .oranje-tekst{color:var(--oranje)}
+  details.item{border-top:1px solid var(--rand)}
+  details.item>summary{padding:6px 4px;cursor:pointer;list-style:none;overflow-wrap:anywhere}
+  details.item>summary::-webkit-details-marker{display:none}
+  details.item>summary::before{content:"▸";color:var(--zacht);margin-right:6px;font-size:12px}
+  details.item[open]>summary::before{content:"▾"}
+  details.item.fout>summary{color:var(--rood)}
+  details.item .tijd{color:var(--zacht);font-variant-numeric:tabular-nums;display:inline-block;min-width:46px}
+  .tekstlink{margin:6px 0 2px 24px}
+  .tekstlink a{color:var(--accent);font-weight:700}
+  .etiket{background:#2b2f3a;color:var(--oranje);border-radius:8px;padding:0 7px;font-size:12px}
+  details.item dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:4px 0 10px 24px;font-size:14px}
+  details.item dt{color:var(--zacht)}
+  details.item dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+  details.item dd a{color:var(--accent)}
   table.lijst{border-collapse:collapse;width:100%}
-  table.lijst td{padding:7px 6px;border-top:1px solid var(--rand);vertical-align:top}
-  table.lijst tr:first-child td{border-top:0}
-  td.tijd{width:58px;color:var(--zacht);font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.lijst td{padding:6px;border-top:1px solid var(--rand);vertical-align:top;overflow-wrap:anywhere}
+  td.tijd{white-space:nowrap;width:52px;color:var(--zacht);font-variant-numeric:tabular-nums}
   table.gepland td:nth-child(2){width:18px;padding-top:12px}
+  tr.fout td{color:var(--rood)}
+  .foutregel{color:var(--rood);margin:4px 0}
+  .nood{color:var(--oranje);margin:4px 0}
+  .dagbestand h2{font-size:15px;margin:14px 0 6px}
+  @media (max-width:600px){details.wacht>summary .label{min-width:0;flex:1 1 60%} details.item dl{grid-template-columns:1fr;margin-left:12px} table.lijst td{font-size:14px;padding:5px 4px}}
 </style>
 {% endblock %}

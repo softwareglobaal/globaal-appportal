@@ -1,0 +1,65 @@
+{# Het dagbestand van De Dagbundelaar (de nachtelijke vaststelling), als deel van de dagpagina. #}
+<div class="dagbestand">
+  {% if not d['er'] %}
+    <div class="deel"><span class="leeg">Nog niet vastgesteld. De Dagbundelaar legt elke dag 's nachts vast.</span></div>
+  {% else %}
+  {% if d['tegels'] %}<div class="deel">{% with tegels=d['tegels'] %}{% include "tegels.html" %}{% endwith %}</div>{% endif %}
+
+  <div class="deel">
+    <h2>Gepland</h2>
+    <table class="lijst gepland">
+    {% for a in d['gepland'] %}
+      <tr><td class="tijd">{{ a['tijd'] }}</td>
+        <td><span class="stip {{ a['kleur'] }}"></span></td>
+        <td><b>{{ a['titel'] }}</b>{% if a['label'] %} <span class="zacht">{{ a['label'] }}</span>{% endif %}
+          {% if a['grond'] %}<div class="zacht klein">{{ a['grond'] }}</div>{% endif %}</td></tr>
+    {% else %}<tr><td class="leeg">Geen afspraken.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="deel">
+    <h2>Gesprekken in Zoom, Fathom en Plaud</h2>
+    <table class="lijst">
+    {% for g in d['gesprekken'] %}
+      <tr><td class="tijd">{{ g['tijd'] }}</td>
+        <td><b>{{ g['wie'] }}</b> <span class="zacht">{{ g['bron'] }}, {{ g['min'] }} min</span></td></tr>
+    {% else %}<tr><td class="leeg">Geen gesprekken gevonden.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="deel">
+    <h2>Niet gepland</h2>
+    <table class="lijst">
+    {% for g in d['niet_gepland'] %}
+      <tr><td class="tijd">{{ g['tijd'] }}</td>
+        <td><b>{{ g['wat'] }}</b> {% if g['kanaal'] %}<span class="zacht">{{ g['kanaal'] }}{% if g['min'] is not none %}, {{ g['min'] }} min{% endif %}</span>{% endif %}</td></tr>
+    {% else %}<tr><td class="leeg">Niets gevonden.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="deel">
+    <h2>Waar was ik</h2>
+    {% if ritten is none %}<span class="leeg">Het Locatie-dashboard is nu niet bereikbaar.</span>
+    {% elif buiten %}<span class="leeg">Deze dag valt voor de start van de meting.</span>
+    {% elif not ritten %}<span class="leeg">Geen meting op deze dag.</span>
+    {% else %}
+    <table class="lijst">
+    {% for r in ritten %}
+      <tr class="{{ r['soort'] }}"><td class="tijd">{{ r['van'] }}</td>
+        <td>{% if r['soort'] == 'plek' %}<b>{{ r['wat'] }}</b>{% else %}<span class="zacht">{{ r['wat'] }}</span>{% endif %}
+          <span class="zacht">tot {{ r['tot'] }}, {{ r['duur'] }}{% if r['extra'] %}, {{ r['extra'] }}{% endif %}</span></td></tr>
+    {% endfor %}
+    </table>
+    {% if auto %}<p class="zacht klein">Gemeten door de tracker in de auto: dit is waar de auto stond.</p>{% endif %}
+    {% endif %}
+  </div>
+  <div class="deel">
+    <h2>Communicatie</h2>
+    {% for r in d['communicatie'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
+  </div>
+  <div class="deel">
+    <h2>Eigen werk en gezondheid</h2>
+    {% for r in d['eigen'] %}<div class="{{ 'klein zacht' if r.startswith('-') or r.startswith(' ') else '' }}" style="margin:3px 0">{{ r }}</div>{% endfor %}
+    {% if not d['eigen'] %}<p class="zacht">Nog niet in dit dagbestand: Wispr, websites en gezondheid komen bij de volgende ronde van de Dagbundelaar.</p>{% endif %}
+  </div>
+
+  {% if d['versie'] %}<p class="zacht klein">Dagbestand {{ d['versie'] }}.</p>{% endif %}
+  {% endif %}
+</div>

@@ -115,6 +115,11 @@ DAGBUNDELAAR_VAKKEN = (
     ("Computer en online", ("browser-wacht", "youtube-wacht", "wispr-wacht")),
     ("Gezondheid", ("gezondheid-wacht",)),
 )
+# Op de dagpagina van het Dagboek (T-0138) staan ook de twee die op het organogram bij De Dagbundelaar horen maar in
+# een andere groep zitten (Codex 02-11): De Mailregisseur boven de mailwachten, De Levenscoach bovenaan.
+DAGBOEK_BOVEN = DAGBUNDELAAR_BOVEN + ("levenscoach",)
+DAGBOEK_VAKKEN = tuple((v, (("mail-regisseur",) + tuple(w)) if v == "Mail" else tuple(w)) for v, w in DAGBUNDELAAR_VAKKEN)
+DAGBOEK_AGENTS = dict(DAGBUNDELAAR_AGENTS, **{"mail-regisseur": "De Mailregisseur", "levenscoach": "De Levenscoach"})
 # Mehdi, 31-10-2026, op het voorstel: De Levenscoach staat naast Ai Angel, met het vak Gezondheid eronder; De
 # Mailregisseur staat boven de mailwachten. Alleen de plek op het organogram verandert, niet de groep van de agent.
 ORGANOGRAM_NAAST_ANGEL = "levenscoach"
@@ -2062,7 +2067,20 @@ def api_wachten_dag():
         datetime.strptime(dag, "%Y-%m-%d")
     except ValueError:
         abort(400)
-    return jsonify(WD.dag(db(), dag, DAGBUNDELAAR_AGENTS, DAGBUNDELAAR_VAKKEN, DAGBUNDELAAR_BOVEN))
+    return jsonify(WD.dag(db(), dag, DAGBOEK_AGENTS, DAGBOEK_VAKKEN, DAGBOEK_BOVEN))
+
+
+@app.route("/api/wachten/tekst")
+def api_wachten_tekst():
+    """De volledige tekst van één gesprek (uniek uit gesprek_log) voor het Dagboek (Mehdi, 02-11-2026: "ik wil de tekst
+    lezen en zien hoe we het kunnen verbeteren"). Alleen lezen, met het token van het bord."""
+    if not TOKEN or request.headers.get("X-Agents-Token") != TOKEN:
+        abort(403)
+    import wachten_dag as WD  # noqa: PLC0415
+    uniek = request.args.get("uniek") or ""
+    if not uniek:
+        abort(400)
+    return jsonify(WD.tekst(db(), uniek))
 
 
 @app.route("/bronnen")
