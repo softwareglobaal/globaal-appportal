@@ -449,13 +449,16 @@ def test_rz4_04_planning_zonder_eigen_regel_voor_de_dagbundelaar():
 
 
 def test_nachtketen():
-    """Codex F9 (ontwerp dagvaststelling v1.2): keten.py --nacht draait De Zoomwacht en daarna De Dagbundelaar --nacht,
-    ook als De Zoomwacht faalt; ze schrijft nacht.json (met einde null tot het einde, zodat De Dagbundelaar ziet dat hij
-    in een lopende nachtketen draait) en raakt keten.json nooit aan. Het startuur van de keten slaat de nachtregel over."""
+    """Codex F9 (ontwerp dagvaststelling v1.2) en FATHOM-2 (T-0120): keten.py --nacht draait De Fathomwacht, De Zoomwacht
+    en daarna De Dagbundelaar --nacht, in die volgorde, ook als een wacht faalt; geslaagd (exit 0) alleen als alle drie
+    met 0 eindigden. Ze schrijft nacht.json (met einde null tot het einde, zodat De Dagbundelaar ziet dat hij in een
+    lopende nachtketen draait, met de exit van beide wachten) en raakt keten.json nooit aan. Het startuur van de keten
+    slaat de nachtregel over."""
     import sys as _sys  # noqa: PLC0415
     _sys.path.insert(0, os.path.join(RUNNER, "koppelingen"))
     import ochtend  # noqa: PLC0415
-    for gedrag, verwacht in (({}, 0), ({"zoom_wacht.py": {"exit": 3}}, 1)):
+    for gedrag, verwacht in (({}, 0), ({"zoom_wacht.py": {"exit": 3}}, 1), ({"fathom_wacht.py": {"exit": 2}}, 1),
+                             ({"dagbundelaar.py": {"exit": 1}}, 1)):
         p = Proef(gedrag)
         nachtpad = os.path.join(p.map, "data", "nacht.json")
         zie = ("import json as _j; _d = _j.load(open(os.environ['KETEN_NACHT']))\n"
@@ -472,16 +475,32 @@ def test_nachtketen():
         finally:
             K.HIER, K.KETEN, K.NACHT, K.LOGMAP, K.PYTHON, K.NADRUK, K.nu = oud
         assert code == verwacht, (gedrag, code)
-        assert p.spoorregels() == ["zoom_wacht.py start", "dagbundelaar.py start"], p.spoorregels()
+        assert p.spoorregels() == ["fathom_wacht.py start", "zoom_wacht.py start", "dagbundelaar.py start"], p.spoorregels()
         assert not os.path.exists(p.keten), "de nachtketen schrijft geen keten.json"
         zag = json.load(open(p.zag, encoding="utf-8"))
         assert zag["argv"] == ["--nacht"] and zag["nacht"]["einde"] is None, zag
         assert zag["nacht"]["stappen"]["zoom-wacht"]["exit"] == gedrag.get("zoom_wacht.py", {}).get("exit", 0), zag
+        assert zag["nacht"]["stappen"]["fathom-wacht"]["exit"] == gedrag.get("fathom_wacht.py", {}).get("exit", 0), zag
         n = json.load(open(nachtpad, encoding="utf-8"))
-        assert n["einde"] and list(n["stappen"]) == ["zoom-wacht", "dagbundelaar"], n
+        assert n["einde"] and list(n["stappen"]) == ["fathom-wacht", "zoom-wacht", "dagbundelaar"], n
     cron = open(CRON_ECHT, encoding="utf-8").read()
     assert "keten.py --nacht" in cron and ochtend.ketenstart(cron) == (7, 0), "het startuur blijft 07:00"
     assert ochtend.ketenstart("30 23 * * * x keten.py --nacht\n0 7,13 * * * x keten.py\n") == (7, 0), "ook als de nacht eerst staat"
+
+
+def test_fathom2_nachtketen_met_dezelfde_stappen_slot_en_time_outs():
+    """FATHOM-2 (T-0120): de nachtketen draait De Fathomwacht voor De Zoomwacht, met dezelfde time-outs en logboeken als
+    de ochtendketen, en de nachtregel in de planning houdt haar slot en wachttijd (de cron verandert niet). Hoogstens
+    2700 + 1200 + 1800 + 3 x 30 = 5790 seconden."""
+    assert [s[:4] for s in K.NACHTSTAPPEN] == [("fathom-wacht", "fathom_wacht.py", 2700, "fathom_wacht.log"),
+                                                ("zoom-wacht", "zoom_wacht.py", 1200, "zoom_wacht.log")]
+    assert K.NACHTSTAPPEN == K.STAPPEN
+    assert K.NACHTBUNDELAAR == ("dagbundelaar", ("dagbundelaar.py", "--nacht"), 1800, "dagbundelaar.log")
+    totaal = sum(s[2] for s in K.NACHTSTAPPEN) + K.NACHTBUNDELAAR[2] + (len(K.NACHTSTAPPEN) + 1) * K.NADRUK
+    assert totaal == 5790, totaal
+    assert "5790" in open(os.path.join(RUNNER, "keten.py"), encoding="utf-8").read()
+    nacht = [r for r in open(CRON_ECHT, encoding="utf-8").read().splitlines() if "keten.py --nacht" in r and not r.startswith("#")]
+    assert len(nacht) == 1 and nacht[0].startswith("30 23 * * * /usr/bin/flock -w 1800 -E 75 /tmp/gesprekken.lock "), nacht
 
 
 def test_bron():

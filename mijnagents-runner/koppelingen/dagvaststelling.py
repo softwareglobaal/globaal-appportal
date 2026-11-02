@@ -42,7 +42,19 @@ STOP = {"mehdi", "chegini", "zoom", "meeting", "impromptu", "fathom", "overleg",
 GESPREKSBRONNEN = ("zoom", "fathom", "plaud", "whatsapp", "telefoon", "sms", "xelion")
 CHAT_VOORVOEGSELS = ("zoom:chat:", "whatsapp:", "sms:")
 OPROEP_VOORVOEGSELS = ("whatsapp-oproep:", "telefoon:", "xelion:")
-SECTIES = ("Gepland", "Niet gepland", "Communicatie", "Eigen werk en gezondheid")
+SECTIES = ("Gepland", "Niet gepland", "Werkgesprekken", "Communicatie", "Gemist zonder terugbellen", "Mail wacht op antwoord",
+           "Morgen", "Eigen werk en gezondheid")
+# T-0120 (ANGEL-2, DB-6): de blokken van de bundel voor Ai Angel. Een kop begint met zijn naam (Morgen draagt de datum).
+BUNDELKOPPEN = ("Werkgesprekken", "Gemist zonder terugbellen", "Mail wacht op antwoord", "Morgen")
+WERKBRONNEN = ("fathom", "plaud", "zoom")  # de opgenomen gesprekken met een samenvatting en actiepunten (ANGEL-2)
+GEMIST = "buiten:gemist"               # dubbel_van van een oproep zonder gesprek (mac_gesprekken.GEMIST, xelion_wacht)
+MAX_PUNTEN = 30                        # zoveel actiepunten per gesprek staan er bij naam; de rest als aantal
+MAX_TEKST = 300                        # tekens per titel, samenvatting, actiepunt of onderwerp in de bundel
+MAX_LIJST = 40                         # zoveel gemiste oproepen of mails per dag staan er; de rest als aantal
+# Het begin van een actiepuntregel in het blok Werkgesprekken (contract met mehdi_agent.actiepunten, ANGEL-2):
+#   "  - actiepunt [<uniek>; <dossier>; wie: ...; tegen: ...; voor: ...; op UU:MM:SS; klaar in Fathom]: <wat>"
+ACTIEPUNT = "actiepunt ["
+ONBEKENDE_BELLER = {"", "onbekend", "onbekend nummer", "nummer verborgen"}
 
 
 # ------------------------------------------------------------------------------------------------- dagen ---
@@ -190,16 +202,21 @@ def gesprek_tekst(g):
 
 def gesprekken_van_dag(dag, rijen):
     """De leidende gesprekken en oproepen van de dag, zonder Plaud-dubbels van een Zoom- of Fathom-gesprek. Een Zoom-rij
-    met zo'n Plaud-dubbel krijgt 'opname': 'plaud' (F6): het gesprek telt een keer, en wel als gesprek met opname."""
+    met zo'n Plaud-dubbel krijgt 'opname': 'plaud' (F6): het gesprek telt een keer, en wel als gesprek met opname. Is die
+    Plaud-opname privé, dan is het gesprek privé (Codex-toets 2, T-0120): anders stond de naam van de Zoom- of Fathom-rij
+    erbij."""
     praat = [dict(g) for g in rijen if str(g.get("datum") or "")[:10] == dag and is_leidend(g)
              and soort(g) in ("gesprek", "oproep")]
     vast = [g for g in praat if g.get("bron") in ("zoom", "fathom")]
     uit = []
     for g in praat:
         if g.get("bron") == "plaud":
-            z = next((z for z in vast if _samen(gesprek_venster(g), gesprek_venster(z)) >= PLAUD_SAMEN), None)
-            if z is not None:
-                z["opname"] = "plaud"
+            samen = [z for z in vast if _samen(gesprek_venster(g), gesprek_venster(z)) >= PLAUD_SAMEN]
+            if samen:
+                samen[0]["opname"] = "plaud"
+                if is_prive(g):
+                    for z in samen:            # Codex-toets 3: elk gesprek waarin de privé-opname valt, niet alleen het eerste
+                        z["prive"] = 1
                 continue
         uit.append(g)
     return uit
@@ -236,7 +253,7 @@ def bewijs(a, gesprekken, locatie=None):
 
 # ------------------------------------------------------------------------------------------- vaststelling ---
 def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken, zoomstand, mail, kanalen,
-                prive_afspraak, locatiestand="", chatstand=None, eigen=None, fotos=None):
+                prive_afspraak, locatiestand="", chatstand=None, eigen=None, fotos=None, bundel=None):
     """De vaststelling van een dag als gewone gegevens.
 
     afspraken: de afspraken van die dag, met de archiefagenda's (zonder fout, hele dag of rit); ongelezen: de agenda's die
@@ -254,16 +271,31 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
     'websites': {bezoeken, sites, top} of None, 'gezondheid': [regels] of None}; None is onbekend, nooit nul. Zonder
     eigen (oude aanroep) blijft het blok weg.
     kanalen kent sinds 31-10-2026 ook 'sms' (De Sms-wacht) en 'xelion' (De Belwacht Xelion). fotos: {'aantal', 'plekken'}
-    van De Fotowacht voor die dag, of None als ze die dag niet las (onbekend, nooit nul)."""
+    van De Fotowacht voor die dag, of None als ze die dag niet las (onbekend, nooit nul).
+    bundel (T-0120, ANGEL-2 en DB-6, de inhoud voor Ai Angel): {'inhoud_van': rij -> inhoud (zie werkgesprekken),
+    'morgen': de afspraken van de dag erna (zoals afspraken), 'mail_open': de open mailpunten van /api/mail/open of None
+    (niet gelezen)}. gesprekken draagt dan ook de rijen van de dagen erna, tot vandaag (voor het terugbellen). Zonder
+    bundel (oude aanroep) blijven de blokken Werkgesprekken, Gemist zonder terugbellen, Mail wacht op antwoord en Morgen
+    weg."""
+    if bundel is not None:
+        # Codex-toets 1 (T-0120): wat De Gespreksanalist of het label van De Archivaris privé noemt, is privé in de hele
+        # dagtekst, ook onder Gepland en Niet gepland; anders stond de naam daar naast 'privégesprek' in Werkgesprekken.
+        gesprekken = prive_volgens_inhoud(dag, gesprekken, bundel.get("inhoud_van") or (lambda g: None))
+    alle_rijen = gesprekken                # 'gesprekken' wordt hieronder de telling
     praat = gesprekken_van_dag(dag, gesprekken)
     agenda_stand = "onbekend" if ongelezen is None else ("onvolledig" if ongelezen else "volledig")
     gepland, gebruikt = [], set()
+    # Codex-toets 2 (T-0120): een afspraak die bevestigd wordt door een opgenomen gesprek dat privé is, toont haar titel
+    # niet (die kan de naam dragen); alleen met de bundel, zoals de rest van de inhoud voor Ai Angel
+    prive_opname = ({g["uniek"] for g in praat if g.get("bron") in WERKBRONNEN and is_prive(g)
+                     and int(g.get("minuten") or 0) >= MIN_GESPREK} if bundel is not None else set())
     for a in sorted(afspraken, key=lambda x: x.get("start") or ""):
         loc = (locatie_per_id or {}).get(a.get("id"))
         b = bewijs(a, praat, loc)
         gebruikt.update(b["gesprekken"])
         gepland.append({"id": a.get("id"), "tijd": str(a.get("start") or "")[11:16], "titel": a.get("titel") or "",
-                        "prive": bool(prive_afspraak(a)), "uitkomst": b["uitkomst"], "grond": b["grond"]})
+                        "prive": bool(prive_afspraak(a)) or any(u in prive_opname for u in b["gesprekken"]),
+                        "uitkomst": b["uitkomst"], "grond": b["grond"]})
     ongepland = [g for g in sorted(praat, key=lambda g: gesprek_venster(g)[0])
                  if g["uniek"] not in gebruikt and int(g.get("minuten") or 0) >= MIN_GESPREK]
     leidend = [g for g in gesprekken if str(g.get("datum") or "")[:10] == dag and is_leidend(g)]
@@ -280,6 +312,16 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
                   "alleen_zoom": len(vergaderd) - len(met_opname), "met_opname": len(met_opname)}
     kanalen = kanalen or {}
     wa = [g for g in leidend if g.get("bron") == "whatsapp"]
+    extra = {}
+    if bundel is not None:
+        volgende = (datetime.fromisoformat(dag).date() + timedelta(days=1)).isoformat()
+        extra = {"werkgesprekken": werkgesprekken(dag, alle_rijen, bundel.get("inhoud_van") or (lambda g: None)),
+                 "gemist_open": gemist_open(dag, alle_rijen),
+                 "mail_open": mail_open(dag, bundel.get("mail_open"), bundel.get("prive_postvakken") or ()),
+                 "morgen": {"dag": volgende, "stand": agenda_stand,
+                            "afspraken": [{"tijd": str(a.get("start") or "")[11:16], "titel": a.get("titel") or "",
+                                           "prive": bool(prive_afspraak(a))}
+                                          for a in sorted(bundel.get("morgen") or [], key=lambda x: x.get("start") or "")]}}
     tel = [g for g in praat if g.get("bron") == "telefoon"]
     sms = [g for g in leidend if g.get("bron") == "sms" and soort(g) == "chat"]
     xel = [g for g in praat if g.get("bron") == "xelion"]
@@ -295,6 +337,8 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
                      "gesprekken": len([g for g in wa if soort(g) == "chat"]),
                      "berichten": sum(_berichten(g) for g in wa if soort(g) == "chat"),
                      "oproepen": len([g for g in wa if soort(g) == "oproep"]),
+                     # WA-3: een inkomende oproep die WhatsApp niet gemist noemt, maar zonder duur (op de gsm opgenomen)
+                     "zonder_duur": len([g for g in wa if soort(g) == "oproep" and "duur onbekend" in str(g.get("thema") or "")]),
                      "minuten": sum(int(g.get("minuten") or 0) for g in wa if soort(g) == "oproep")},
         "telefoon": {"stand": kanalen.get("telefoon") or "niet aangesloten", "oproepen": len(tel),
                      "minuten": sum(int(g.get("minuten") or 0) for g in tel), "gemist": len(tel_gemist)},
@@ -304,8 +348,189 @@ def vaststellen(dag, afspraken, ongelezen, gesprekken, locatie_per_id, bezoeken,
                    "minuten": sum(int(g.get("minuten") or 0) for g in xel), "gemist": len(xel_gemist)},
         "fotos": fotos,
         "mail": mail,
+        **extra,
         **({"eigen": eigen} if eigen is not None else {}),
     }
+
+
+# ------------------------------------------------------------------------- de bundel voor Ai Angel (T-0120) ---
+def _een_regel(t, n=MAX_TEKST):
+    """Een tekst op een regel van hoogstens n tekens, op een woordgrens ingekort."""
+    t = re.sub(r"\s+", " ", str(t or "")).strip()
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + " (ingekort)"
+
+
+def _veld(t, n=120):
+    """Een waarde in de haken van een actiepuntregel: zonder [, ] of ; (die scheiden de velden)."""
+    return _een_regel(re.sub(r"[\[\];]", " ", str(t or "")), n)
+
+
+def prive_regel(minuten):
+    """Het enige wat een privégesprek in de bundel geeft (zoals De Gespreksanalist en De Plaudwacht)."""
+    try:
+        m = int(float(minuten or 0))
+    except (TypeError, ValueError):
+        m = 0
+    return f"privégesprek, {m} min" if m > 0 else "privégesprek, duur onbekend"
+
+
+def prive_volgens_inhoud(dag, rijen, inhoud_van):
+    """De rijen, met prive 1 voor elk opgenomen gesprek van de dag (leidend, Fathom, Plaud of Zoom, niet al privé) dat
+    volgens zijn inhoud privé is (inhoud_van(rij)['prive']: het record van De Gespreksanalist of het label Prive van De
+    Archivaris). Zo is zo'n gesprek overal in de dagtekst privé: nooit een naam, ook niet onder Gepland of Niet gepland."""
+    uit = []
+    for g in rijen:
+        if str(g.get("datum") or "")[:10] == dag and is_leidend(g) and g.get("bron") in WERKBRONNEN \
+                and soort(g) == "gesprek" and not is_prive(g) and (inhoud_van(g) or {}).get("prive"):
+            g = dict(g, prive=1)
+        uit.append(g)
+    return uit
+
+
+def werkgesprekken(dag, rijen, inhoud_van):
+    """ANGEL-2 en VOL-5 (T-0120): per opgenomen gesprek van de dag (de leidende Fathom-, Plaud- en Zoom-rijen, zonder de
+    Plaud-dubbel van een Zoom- of Fathom-gesprek, minstens MIN_GESPREK minuten) de titel, firma en dossier, samenvatting,
+    actiepunten en de verwijzing (de uniek: fathom:<id>, plaud:<id>, zoom:meeting:<uuid>).
+    Privé (is_prive van de rij) geeft alleen 'privégesprek, N min'; dan wordt inhoud_van niet gevraagd, zodat er niets
+    gelezen wordt. inhoud_van(rij) geeft (de runner leest, dagbundelaar.gespreksinhoud) een dict:
+      prive: True als De Gespreksanalist of het label van De Archivaris het gesprek privé noemt (dan ook alleen de regel);
+      firma, soort, dossier, dossier_bewijs: zoals De Gespreksanalist (herkomst), '' als onbekend;
+      samenvatting: tekst, of None (onbekend); van: 'Fathom' of 'De Gespreksanalist';
+      actiepunten: lijst van {wat, wie, tegen, voor, tijd, klaar}, [] (er is er geen), of None (onbekend);
+      reden: waarom samenvatting of actiepunten onbekend zijn ('nog niet geanalyseerd', ...).
+    Onbekend is nooit 'geen actiepunten'."""
+    uit = []
+    for g in sorted((g for g in gesprekken_van_dag(dag, rijen) if g.get("bron") in WERKBRONNEN),
+                    key=lambda g: gesprek_venster(g)[0]):
+        tijd, minuten = f"{gesprek_venster(g)[0].astimezone(BRUSSEL):%H:%M}", int(g.get("minuten") or 0)
+        if minuten < MIN_GESPREK:
+            continue
+        if is_prive(g):
+            uit.append({"uniek": g["uniek"], "tijd": tijd, "prive": True, "minuten": minuten})
+            continue
+        i = inhoud_van(g) or {}
+        if i.get("prive"):
+            uit.append({"uniek": g["uniek"], "tijd": tijd, "prive": True, "minuten": minuten})
+            continue
+        uit.append({"uniek": g["uniek"], "tijd": tijd, "prive": False, "minuten": minuten, "bron": bron_label(g),
+                    "titel": g.get("thema") or "", "personen": g.get("personen") or "", "opname": g.get("opname") or "",
+                    **{k: i.get(k) or "" for k in ("firma", "soort", "dossier", "dossier_bewijs", "van", "reden")},
+                    "samenvatting": i.get("samenvatting"), "actiepunten": i.get("actiepunten")})
+    return uit
+
+
+def dossier_label(w):
+    """Het dossier van een werkgesprek zoals het bij elk actiepunt staat: 'UNABO 2405', 'HA, zonder dossier', 'zonder
+    dossier'."""
+    firma = _veld(w.get("firma"), 40)
+    if w.get("dossier"):
+        return _veld(f"{firma} {w['dossier']}".strip(), 60)
+    return f"{firma}, zonder dossier" if firma else "zonder dossier"
+
+
+def actiepunt_regel(w, p):
+    """Een actiepunt op een regel, met de verwijzing en het dossier vooraan (contract met mehdi_agent.actiepunten)."""
+    velden = [_veld(w["uniek"], 160), dossier_label(w)]
+    for sleutel, kop in (("wie", "wie: "), ("tegen", "tegen: "), ("voor", "voor: ")):
+        waarde = _veld(p.get(sleutel), 80)
+        if waarde and not (sleutel == "voor" and waarde == "onbekend"):
+            velden.append(kop + waarde)
+    if _veld(p.get("tijd"), 12):
+        velden.append(f"op {_veld(p.get('tijd'), 12)}")
+    if p.get("klaar"):
+        velden.append("klaar in Fathom")
+    return f"  - {ACTIEPUNT}{'; '.join(velden)}]: {_een_regel(p.get('wat'))}"
+
+
+def werkgesprek_regels(w):
+    """De regels van een werkgesprek in het blok Werkgesprekken."""
+    if w["prive"]:
+        return [f"- {w['tijd']} {prive_regel(w['minuten'])}"]
+    titel = _een_regel(w.get("titel") or "zonder onderwerp", 120)
+    wie = _een_regel(w.get("personen"), 120)
+    r = [f"- {w['tijd']} {w['bron']}, {w['minuten']} min: {titel}" + (f", met {wie}" if wie else "")
+         + (" (ook opgenomen met Plaud)" if w.get("opname") == "plaud" else "") + f" [{_veld(w['uniek'], 160)}]"]
+    firma = " ".join(x for x in (w.get("firma"), w.get("soort")) if x) or "onbekend"
+    dossier = (f"{w['dossier']}" + (f" ({w['dossier_bewijs']})" if w.get("dossier_bewijs") else "")) if w.get("dossier") \
+        else "onbekend"
+    r.append(f"  - firma: {_een_regel(firma, 60)}; dossier: {_een_regel(dossier, 80)}")
+    van = w.get("van") or "Fathom"
+    reden = w.get("reden") or "onbekend"
+    if w["samenvatting"] is None and w["actiepunten"] is None:
+        r.append(f"  - samenvatting en actiepunten: {reden}")
+        return r
+    r.append(f"  - samenvatting ({van}): {_een_regel(w['samenvatting'], 2 * MAX_TEKST)}" if w["samenvatting"]
+             else f"  - samenvatting: {reden if w['samenvatting'] is None else 'geen'}")
+    punten = w["actiepunten"]
+    if punten is None:
+        r.append(f"  - actiepunten: {reden}")
+    elif not punten:
+        r.append(f"  - actiepunten: geen ({van} vond er geen)")
+    else:
+        r += [actiepunt_regel(w, p) for p in punten[:MAX_PUNTEN]]
+        if len(punten) > MAX_PUNTEN:
+            r.append(f"  - en {len(punten) - MAX_PUNTEN} actiepunten meer (zie de bron)")
+    return r
+
+
+def _beller(g):
+    return re.sub(r"\s+", " ", str(g.get("personen") or "")).strip().casefold()
+
+
+def gemist_open(dag, rijen):
+    """DB-6 (T-0081): de gemiste inkomende oproepen van de dag (telefoon, WhatsApp en Xelion: dubbel_van buiten:gemist,
+    inkomend) zonder een latere oproep met dezelfde persoon: geen uitgaande oproep (ook een die niet beantwoord werd telt
+    als poging) en geen gesprek. rijen: ook de dagen erna, tot vandaag. Alles van die kanalen is privé: alleen het uur en
+    het kanaal, nooit een naam of een bericht (X8). Een verborgen of onbekend nummer: terugbellen onbekend."""
+    oproepen = [g for g in rijen if str(g.get("uniek") or "").startswith(OPROEP_VOORVOEGSELS)]
+    uit = []
+    for g in sorted(oproepen, key=lambda g: gesprek_venster(g)[0]):
+        thema = str(g.get("thema") or "")
+        if str(g.get("datum") or "")[:10] != dag or str(g.get("dubbel_van") or "") != GEMIST \
+                or "inkomend" not in thema or "gemist" not in thema or "niet gemist" in thema:
+            continue
+        wie, begin = _beller(g), gesprek_venster(g)[0]
+        if wie in ONBEKENDE_BELLER:
+            stand = "terugbellen onbekend (nummer onbekend of verborgen)"
+        else:
+            def contact(x):
+                dv = str(x.get("dubbel_van") or "")
+                return "uitgaand" in str(x.get("thema") or "") or not dv or not dv.startswith("buiten:")
+            if any(gesprek_venster(x)[0] > begin and _beller(x) == wie and contact(x) for x in oproepen):
+                continue
+            stand = "geen terugbelpoging gezien"
+        uit.append({"tijd": f"{begin.astimezone(BRUSSEL):%H:%M}", "kanaal": bron_label(g), "stand": stand})
+    return uit
+
+
+def mail_open(dag, punten, prive_postvakken=()):
+    """DB-6 (T-0081): de mails van die dag die nog op opvolging wachten, uit /api/mail/open: dezelfde lijst als De
+    Mailregisseur, /mail en het werkverslag van de mailwachten. None: niet gelezen (onbekend, nooit 'niets'). Alleen wat
+    gelijk blijft tot de mail beantwoord is: postvak, soort, afzender en onderwerp; nooit het aantal werkdagen (dat
+    verandert elke dag en gaf elke nacht een nieuwe versie van elke dag) en nooit de tekst. Een privépostvak alleen als
+    aantal."""
+    if punten is None:
+        return None
+    van_dag = []
+    for p in punten:
+        try:
+            if brusselse_dag(p.get("datum_iso") or p.get("datum") or "") == dag:
+                van_dag.append(p)
+        except (TypeError, ValueError):
+            continue
+    uit, prive = [], {}
+    def orde(p):
+        o = p.get("orde")
+        return o if isinstance(o, int) and not isinstance(o, bool) else 9
+    for p in sorted(van_dag, key=lambda p: (str(p.get("postvak") or ""), orde(p), str(p.get("datum_iso") or ""))):
+        pv = str(p.get("postvak") or "")
+        if pv in prive_postvakken:
+            prive[pv] = prive.get(pv, 0) + 1
+            continue
+        uit.append({"postvak": pv, "soort": str(p.get("soort_label") or p.get("soort") or ""),
+                    "van": str(p.get("van_naam") or p.get("van") or ""), "onderwerp": str(p.get("onderwerp") or ""),
+                    "onzeker": p.get("opvolging") == "onzeker"})
+    return {"mails": uit, "prive": prive}
 
 
 def eigen_regels(e):
@@ -426,12 +651,89 @@ def _naam(adresregel):
 
 
 # ----------------------------------------------------------------------------------------------- tekst ---
-def tekst(v, prive_postvakken=(), over=None):
+def _en(delen):
+    return delen[0] if len(delen) == 1 else ", ".join(delen[:-1]) + " en " + delen[-1]
+
+
+def kanaalregel(naam, stand, delen):
+    """Een regel van een Mac- of belkanaal. delen: [(getal, tekst, naam als het onbekend is)]. Onbekend is nooit 0 (WA-6,
+    T-0120): op een dag die de wacht niet als gelezen meldt, is een nul onbekend, en wat wel gezien is, blijft een
+    ondergrens. Een gelezen dag ('aangesloten') toont elk getal, ook 0."""
+    if stand == "aangesloten":
+        return f"- {naam}: " + ", ".join(t for _, t, _ in delen) + " gezien"
+    gezien = [t for n, t, _ in delen if n]
+    if not gezien:
+        return f"- {naam}: onbekend ({stand})"
+    onbekend = [o for n, _, o in delen if not n]
+    return f"- {naam}: gezien " + ", ".join(gezien) + (f"; {_en(onbekend)} onbekend" if onbekend else "") + f" ({stand})"
+
+
+def bundel_regels(v, prive_postvakken=()):
+    """T-0120: de blokken voor Ai Angel, per kop: Werkgesprekken (ANGEL-2) gaat voor Communicatie, de andere (DB-6)
+    erna. Alleen als vaststellen ze kreeg (bundel)."""
+    blokken = {}
+    if "werkgesprekken" in v:
+        r = ["## Werkgesprekken", "",
+             "Samenvatting en actiepunten van Fathom of De Gespreksanalist, niet als bron voor contract of verslag (het "
+             "transcript telt); tussen haken de verwijzing naar het gesprek.", ""]
+        for w in v["werkgesprekken"]:
+            r += werkgesprek_regels(w)
+        if not v["werkgesprekken"]:
+            r.append("- geen opgenomen gesprek van minstens 2 min gezien")
+        blokken["Werkgesprekken"] = r
+    if "gemist_open" in v:
+        r = ["## Gemist zonder terugbellen", ""]
+        ongelezen = [naam for naam, k in (("telefoon", "telefoon"), ("WhatsApp", "whatsapp"), ("Xelion", "xelion"))
+                     if (v.get(k) or {}).get("stand") != "aangesloten"]
+        for x in v["gemist_open"][:MAX_LIJST]:
+            r.append(f"- {x['tijd']} {x['kanaal']} (privé): {x['stand']}")
+        if len(v["gemist_open"]) > MAX_LIJST:
+            r.append(f"- en {len(v['gemist_open']) - MAX_LIJST} meer")
+        if not v["gemist_open"]:
+            r.append("- onbekend (telefoon, WhatsApp en Xelion niet gelezen voor deze dag)" if len(ongelezen) == 3
+                     else "- geen gezien" + (f" ({_en(ongelezen)} niet gelezen voor deze dag)" if ongelezen else ""))
+        elif ongelezen:
+            r.append(f"- onvolledig: {_en(ongelezen)} niet gelezen voor deze dag")
+        blokken["Gemist zonder terugbellen"] = r
+    if "mail_open" in v:
+        r = ["## Mail wacht op antwoord", ""]
+        m = v["mail_open"]
+        if m is None:
+            r.append("- niet gelezen (de lijst van de mailwachten was niet te lezen)")
+        else:
+            for x in m["mails"][:MAX_LIJST]:
+                r.append(f"- {x['postvak']}: {_een_regel(x['soort'], 30) or 'open'}, van {_een_regel(x['van'], 80) or 'onbekend'}: "
+                         f"{_een_regel(x['onderwerp'], 160) or 'zonder onderwerp'}" + (" (mogelijk al beantwoord)" if x["onzeker"] else ""))
+            if len(m["mails"]) > MAX_LIJST:
+                r.append(f"- en {len(m['mails']) - MAX_LIJST} meer")
+            for pv, n in sorted(m["prive"].items()):
+                r.append(f"- {pv}: {n} {'mail' if n == 1 else 'mails'} (privé)")
+            if not m["mails"] and not m["prive"]:
+                r.append("- geen mail van deze dag wacht nog")
+        blokken["Mail wacht op antwoord"] = r
+    if "morgen" in v:
+        mo = v["morgen"]
+        kop = f"## Morgen, {mo['dag']}"
+        if mo["stand"] == "onbekend":
+            kop += " (agenda niet gelezen: onbekend)"
+        elif mo["stand"] == "onvolledig":
+            kop += " (agenda onvolledig)"
+        r = [kop, ""]
+        for a in mo["afspraken"]:
+            r.append(f"- {a['tijd']} (privé)" if a["prive"] else f"- {a['tijd']} {_een_regel(a['titel'], 200)}")
+        if not mo["afspraken"]:
+            r.append("- geen afspraken" if mo["stand"] == "volledig" else "- geen afspraken gelezen")
+        blokken["Morgen"] = r
+    return blokken
+
+
+def tekst(v, prive_postvakken=(), over=None, voorlopig=None):
     """Het overzicht als markdown, zonder privénamen of privétitels: dezelfde tekst gaat naar het bord, het bestand en
     Dropbox (E6). over: regels voor het blok 'Over deze vaststelling' (versie, tijd, bronnen); dat blok telt niet mee in
-    de hash."""
+    de hash. voorlopig (ANGEL-7): het uur van een voorlopige bundel van vandaag ('10:00'); die gaat nooit naar Dropbox."""
     d = v["dag"]
-    r = [f"# Dag {d} vastgesteld", ""]
+    r = [f"# Dag {d} voorlopig (stand {voorlopig})" if voorlopig else f"# Dag {d} vastgesteld", ""]
+    blokken = bundel_regels(v, prive_postvakken)
     ag = v["agenda"]
     kop = "## Gepland"
     if ag["stand"] == "onbekend":
@@ -459,6 +761,8 @@ def tekst(v, prive_postvakken=(), over=None):
             r.append(f"- {b.get('van')} tot {b.get('tot')} ({b.get('minuten')} min) {_plek(b)}")
     if not ng["gesprekken"] and ng["bezoeken"] == []:
         r.append("- niets gevonden")
+    if "Werkgesprekken" in blokken:
+        r += [""] + blokken["Werkgesprekken"]
     r += ["", "## Communicatie", ""]
     z, g = v["zoom"], v["gesprekken"]
     # L1 en L2 (ontwerp v1.9): een volledig aantal is met deze bronnen niet te bewijzen: De Fathomwacht schrijft tot
@@ -478,23 +782,26 @@ def tekst(v, prive_postvakken=(), over=None):
     else:
         r.append(f"- Zoom-chat: {z['chats']} chatgesprek(ken) gezien")
     w = v["whatsapp"]
-    if w["stand"] == "niet aangesloten":
+    # Codex-toets 1: een wacht die nu niet aangesloten is, verbergt nooit wat al gezien is (ondergrens); alleen zonder
+    # een enkele rij is het kanaal 'nog niet aangesloten'
+    if w["stand"] == "niet aangesloten" and not (w["gesprekken"] or w["oproepen"]):
         r.append("- WhatsApp: nog niet aangesloten")
-    elif w["stand"] != "aangesloten" and not (w["gesprekken"] or w["oproepen"]):
-        r.append(f"- WhatsApp: onbekend ({w['stand']})")
     else:
-        r.append(f"- WhatsApp: {w['berichten']} berichten in {w['gesprekken']} gesprekken, {w['oproepen']} oproepen, "
-                 f"{w['minuten']} min gezien" + ("" if w["stand"] == "aangesloten" else f" ({w['stand']})"))
+        # WA-3: de oproepen die WhatsApp niet gemist noemt maar zonder duur, staan apart (ze tellen als oproep, 0 min)
+        k = int(w.get("zonder_duur") or 0)
+        r.append(kanaalregel("WhatsApp", w["stand"], [
+            (w["gesprekken"], f"{w['berichten']} berichten in {w['gesprekken']} gesprekken", "berichten"),
+            (w["oproepen"], f"{w['oproepen']} oproepen" + (f" (waarvan {k} zonder gekende duur)" if k else ""), "oproepen"),
+            (w["minuten"], f"{w['minuten']} min", "minuten")]))
     t = v["telefoon"]
-    if t["stand"] == "niet aangesloten":
+    if t["stand"] == "niet aangesloten" and not (t["oproepen"] or t.get("gemist")):
         r.append("- telefoon: nog niet aangesloten")
-    elif t["stand"] != "aangesloten" and not (t["oproepen"] or t.get("gemist")):
-        r.append(f"- telefoon: onbekend ({t['stand']})")
     else:
-        r.append(f"- telefoon: {t['oproepen']} oproepen, {t['minuten']} min, {t.get('gemist', 0)} gemist gezien"
-                 + ("" if t["stand"] == "aangesloten" else f" ({t['stand']})"))
+        r.append(kanaalregel("telefoon", t["stand"], [(t["oproepen"], f"{t['oproepen']} oproepen", "oproepen"),
+                                                      (t["minuten"], f"{t['minuten']} min", "minuten"),
+                                                      (t.get("gemist", 0), f"{t.get('gemist', 0)} gemist", "gemiste oproepen")]))
     sm = v.get("sms") or {"stand": "niet aangesloten", "gesprekken": 0, "berichten": 0}
-    if sm["stand"] == "niet aangesloten":
+    if sm["stand"] == "niet aangesloten" and not sm["gesprekken"]:
         r.append("- sms en iMessage: nog niet aangesloten")
     elif sm["stand"] != "aangesloten" and not sm["gesprekken"]:
         r.append(f"- sms en iMessage: onbekend ({sm['stand']})")
@@ -502,13 +809,12 @@ def tekst(v, prive_postvakken=(), over=None):
         r.append(f"- sms en iMessage: {sm['berichten']} berichten in {sm['gesprekken']} gesprekken gezien"
                  + ("" if sm["stand"] == "aangesloten" else f" ({sm['stand']})"))
     x = v.get("xelion") or {"stand": "niet aangesloten", "oproepen": 0, "minuten": 0, "gemist": 0}
-    if x["stand"] == "niet aangesloten":
+    if x["stand"] == "niet aangesloten" and not (x["oproepen"] or x["gemist"]):
         r.append("- Xelion: nog niet aangesloten")
-    elif x["stand"] != "aangesloten" and not (x["oproepen"] or x["gemist"]):
-        r.append(f"- Xelion: onbekend ({x['stand']})")
     else:
-        r.append(f"- Xelion: {x['oproepen']} oproepen, {x['minuten']} min, {x['gemist']} gemist gezien"
-                 + ("" if x["stand"] == "aangesloten" else f" ({x['stand']})"))
+        r.append(kanaalregel("Xelion", x["stand"], [(x["oproepen"], f"{x['oproepen']} oproepen", "oproepen"),
+                                                    (x["minuten"], f"{x['minuten']} min", "minuten"),
+                                                    (x["gemist"], f"{x['gemist']} gemist", "gemiste oproepen")]))
     f = v.get("fotos")
     if f is None:
         r.append("- foto's: onbekend (De Fotowacht las deze dag niet)")
@@ -533,6 +839,9 @@ def tekst(v, prive_postvakken=(), over=None):
                 naar = list(dict.fromkeys(p["naar"]))
                 regel += "; naar " + ", ".join(naar[:MAX_NAAR]) + (f" en {len(naar) - MAX_NAAR} meer" if len(naar) > MAX_NAAR else "")
             r.append(regel)
+    for kop in ("Gemist zonder terugbellen", "Mail wacht op antwoord", "Morgen"):
+        if kop in blokken:
+            r += [""] + blokken[kop]
     if "eigen" in v:
         r += ["", "## Eigen werk en gezondheid", ""] + eigen_regels(v["eigen"])
     r += ["", "## Over deze vaststelling", ""]
@@ -576,7 +885,8 @@ def wijzigingen(oud, nieuw):
         for regel in kern(t or "").split("\n"):
             if regel.startswith("## "):
                 # 'Niet gepland' eerst: anders valt het onder 'Gepland' niet, maar wel een kop als 'Gepland (agenda ...)'
-                naam = next((s for s in ("Niet gepland", "Gepland", "Communicatie") if regel[3:].startswith(s)), regel[3:])
+                naam = next((s for s in ("Niet gepland", "Gepland", "Communicatie") + BUNDELKOPPEN
+                             if regel[3:].startswith(s)), regel[3:])
             uit[naam] = uit.get(naam, "") + regel + "\n"
         return uit
     a, b = secties(oud), secties(nieuw)
