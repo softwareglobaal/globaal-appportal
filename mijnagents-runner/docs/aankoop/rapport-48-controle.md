@@ -1,0 +1,3 @@
+1. **Ja.** Punt 2 is hersteld. De twee nieuwe scenario’s staan als `verwerk`-tests in [test_aankoop_prijs.py](/Users/mehdichegini/dev/_aankoopagents/mijnagents-runner/tests/test_aankoop_prijs.py:1284).
+2. **Nee.** Geen nieuwe fout van ernst hoog gevonden. Zes gerichte `verwerk`-gevallen slagen.
+3. **Ja.** Klaar om live te zetten en de hele reeks opnieuw te draaien. Die reeks heb ik in deze leescontrole niet gedraaid. Niets gewijzigd of gepusht.

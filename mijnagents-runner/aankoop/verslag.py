@@ -74,6 +74,15 @@ def _gezien(x):
     return f"- [{_kort(x['titel'], 100)}]({x['url']}): {prijs}{reden}"
 
 
+def onvolledig(reden, gelezen):
+    """Het noodverslag als de agent op een grens stopte voor hij een verslag had (overleg 44, K5)."""
+    regels = [f"**Onvolledig:** ik stopte op een grens ({reden or 'onbekend'}) voor ik een verslag had. De vraag blijft "
+              "klaarstaan voor de volgende ronde; ik raad niets aan."]
+    if gelezen:
+        regels += ["", "Gelezen pagina's:"] + [f"- {u}" for u in gelezen]
+    return "\n".join(regels)
+
+
 def titel(gegevens, resultaat):
     """Korte titel voor het bord. Het verslag gaat als soort 'prijsverslag': De Bode stuurt het niet vanzelf door
     (overleg X2: het antwoord komt via De Regisseur in de chat, De Bode alleen op uitdrukkelijk verzoek)."""

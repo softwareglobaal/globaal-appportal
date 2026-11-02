@@ -59,7 +59,7 @@ def _beste(res):
                                  "kandidaat": res.get("kandidaat"), "soort": res.get("soort"),
                                  "bewezen": sorted(res.get("context") or {})}
 # Zonder aanbeveling moet het verslag zeggen waarom (overleg 39, X1: B).
-REDEN = re.compile(r"niet bevestigd|niet bewezen|## Niet gevonden|\*\*Vraag aan jou:\*\*|niet verstuurd|persoonsgegevens"
+REDEN = re.compile(r"niet bevestigd|niet bewezen|## Niet gevonden|\*\*Vraag aan jou:\*\*|niet verstuurd|persoonsgegevens|\*\*Onvolledig:\*\*"
                    r"|geen aanbod dat compatibel is en een volledige totaalprijs heeft", re.I)     # verslag.maak (Codex 41)
 
 
@@ -77,7 +77,7 @@ def keur(proef, uit):
 
     # Altijd: de aanbeveling is een kandidaat van de code, met elke bindende eis bevestigd, en elk aanbod in het
     # verslag komt van een gelezen pagina; nooit een kost via de API.
-    from aankoop.leesserver import MAX_LEZEN
+    from aankoop.leesserver import MAX_LEZEN  # noqa: F401  ook in de regel hieronder
     eisen = uit.get("eisen") or []
     for naam, rij in (("aanbeveling", beste), ("reserve", keuze.get("reserve"))):
         if not rij:
@@ -90,7 +90,10 @@ def keur(proef, uit):
         toets("prijs" in (rij.get("bewezen") or []), f"de prijs van de {naam} staat letterlijk op de gelezen pagina")
         if rij.get("soort") == "veiling":
             toets("opgeld" in (rij.get("bewezen") or []), f"het opgeld van de {naam} staat in de veilingvoorwaarden")
-    toets(len(uit.get("gelezen") or []) <= MAX_LEZEN, f"hoogstens {MAX_LEZEN} pagina's gelezen")
+    from aankoop.leesserver import MAX_VERZEND, verzendpagina
+    verzend = [u for u in uit.get("gelezen") or [] if verzendpagina(u)]
+    toets(len(uit.get("gelezen") or []) - min(len(verzend), MAX_VERZEND) <= MAX_LEZEN,
+          f"hoogstens {MAX_LEZEN} pagina's gelezen, plus {MAX_VERZEND} verzendpagina's")
     gelezen = {_url(u) for u in uit.get("gelezen") or []}
     toets(all(_url(u) in gelezen for u in keuze.get("urls") or []), "elk aanbod in het verslag komt van een gelezen pagina")
     toets(uit.get("bron") in (None, "none"), "geen API-sleutel gebruikt (bron none)")

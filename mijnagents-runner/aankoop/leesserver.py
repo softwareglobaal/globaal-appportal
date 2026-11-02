@@ -25,6 +25,33 @@ from urllib.parse import urljoin, urlsplit
 
 MAX_LEZEN = int(os.environ.get("PRIJS_MAX_LEZEN", "6"))
 MAX_POGINGEN = 2 * MAX_LEZEN                     # geslaagd en mislukt samen: geen eindeloze lus op foutpagina's
+# Een verzendpagina kost geen leesbeurt, hoogstens MAX_VERZEND per vraag: 16 van de 20 proeven misten de verzending
+# omdat de zes leesbeurten naar winkel- en productpagina's gingen (overleg 44, D).
+VERZENDPAD = re.compile(r"verzend|levering|bezorg|shipping|delivery|versand|lieferung|livraison", re.I)
+MAX_VERZEND = 4
+
+
+AFRONDEN = 8        # zoveel beurten voor het plafond zegt de leestool het model af te ronden (overleg 44, X7)
+
+
+def bijna_plafond(log):
+    """Staat het model volgens het bestand "beurten" naast het leeslog minder dan AFRONDEN beurten van het plafond?"""
+    try:
+        with open(os.path.join(os.path.dirname(log), "beurten"), encoding="utf-8") as f:
+            beurten, plafond = (int(x) for x in f.read().split()[:2])
+        return beurten >= plafond - AFRONDEN
+    except (OSError, ValueError):
+        return False
+
+
+def _host(url):
+    host = urlsplit(str(url or "")).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def verzendpagina(url):
+    """Is dit volgens het pad van de url een verzendpagina?"""
+    return bool(VERZENDPAD.search(urlsplit(str(url or "")).path))
 MAX_TEKENS = int(os.environ.get("PRIJS_MAX_PAGINA_TOKENS", "10000")) * 4     # ongeveer vier tekens per token
 MAX_BYTES = 8_000_000
 MAX_FOTOS = 8
@@ -209,27 +236,45 @@ def pdf_tekst(data):
 
 
 def _gelezen_tot_nu(log):
-    """(geslaagd, pogingen) in het leeslog."""
-    geslaagd = pogingen = 0
+    """(geslaagd, pogingen) in het leeslog; zie _stand."""
+    return _stand(log)[:2]
+
+
+def _stand(log):
+    """(geslaagd, pogingen, verzend, hosts) in het leeslog. De eerste MAX_VERZEND geslaagde verzendpagina's van een
+    winkel waarvan al een pagina gelezen is, tellen niet als geslaagd (overleg 44, D en X4)."""
+    geslaagd = pogingen = verzend = 0
+    hosts = set()
     try:
         with open(log, encoding="utf-8") as f:
             for r in f:
                 if r.strip():
                     pogingen += 1
                     try:
-                        geslaagd += bool(json.loads(r).get("ok"))
+                        d = json.loads(r)
+                        if (d.get("ok") and verzend < MAX_VERZEND and verzendpagina(d.get("url"))
+                                and _host(d.get("url")) in hosts):
+                            verzend += 1
+                        else:
+                            geslaagd += bool(d.get("ok"))
+                        if d.get("ok"):
+                            hosts.add(_host(d.get("url")))
                     except (ValueError, AttributeError):
                         pass
     except OSError:
         pass
-    return geslaagd, pogingen
+    return geslaagd, pogingen, verzend, hosts
 
 
 def lees(url, log, ophalen=haal):
     """(tekst voor het model, geslaagd). Schrijft elke poging, ook een mislukte, in het leeslog."""
     url = str(url or "").strip()
-    geslaagd, pogingen = _gelezen_tot_nu(log)
-    if geslaagd >= MAX_LEZEN or pogingen >= MAX_POGINGEN:
+    geslaagd, pogingen, verzend, hosts = _stand(log)
+    if bijna_plafond(log):
+        # Verplicht afronden voor het plafond, zodat het werk niet verloren gaat (overleg 44, X7; Codex 45).
+        return "Bijna aan het plafond van de beurten: lees en zoek niets meer en lever nu je JSON-verslag.", False
+    vrije_verzend = verzendpagina(url) and _host(url) in hosts and verzend < MAX_VERZEND    # ook na de leesgrens (Codex 45)
+    if (geslaagd >= MAX_LEZEN and not vrije_verzend) or pogingen >= MAX_POGINGEN:
         return f"Leesgrens bereikt ({geslaagd} pagina's gelezen, {pogingen} pogingen): rond af met wat je las.", False
     regel = {"url": url, "eind_url": url, "ok": False, "tekst": "", "fout": ""}
     try:
