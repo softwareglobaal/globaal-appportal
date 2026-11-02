@@ -2192,6 +2192,24 @@ def test_r6_drie_uitrollen_en_terug():
         bron_c.write_text("ander\n")
         assert "eerst" in uitrol("aan", ok=False)
         git("checkout", "-q", "--", ".", cwd=werk)
+        # nazorg-mac (Codex toets 1): een git die faalt (een kapotte .git van de worktree) is geen schone worktree: stempel
+        # faalt, en met hetzelfde bewijs mag aan dan niet
+        echte_git = werk / ".git"
+        kapot = werk / ".git.proef"
+        echte_git.rename(kapot)
+        echte_git.write_text("gitdir: /bestaat/niet\n")
+        try:
+            functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_geldig()/,/^}}/p' '{script}'); HELPER='{helper}' "
+                        f"WERK='{werk}' CODESIGN='{stub / 'codesign'}'; ")
+            r = subprocess.run(["zsh", "-c", functies + "stempel"], capture_output=True, text=True)
+            assert r.returncode != 0 and not r.stdout and "niet te lezen" in r.stderr, (r.returncode, r.stdout, r.stderr)
+            r = subprocess.run(["zsh", "-c", functies + f"proef_geldig '{basis / 'mac-gesprekken' / 'PROEF'}'"],
+                               capture_output=True, text=True)
+            assert r.returncode != 0, r.stderr
+            assert "eerst" in uitrol("aan", ok=False)
+        finally:
+            echte_git.unlink()
+            kapot.rename(echte_git)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
