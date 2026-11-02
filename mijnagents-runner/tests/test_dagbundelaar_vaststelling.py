@@ -608,7 +608,8 @@ def test_g7_vrije_archiefnaam():
 
 def test_f9_nachtketen_noden():
     """F9: in de nacht leest De Dagbundelaar de exit van De Zoomwacht uit nacht.json; faalde ze, dan een nood en is Zoom
-    van gisteren hoogstens een ondergrens. Overdag: een nachtketen die niet liep, is een nood."""
+    van gisteren hoogstens een ondergrens. Overdag: een nachtketen die niet liep, is een nood. FATHOM-2: ook de exit van
+    De Fathomwacht, in de nacht en overdag."""
     import ochtend
     uit = {}
 
@@ -633,9 +634,21 @@ def test_f9_nachtketen_noden():
     # op de Mac en in CI slaagde omdat het bord er niet bereikbaar is (gezien 27-10-2026, sinds PR 103).
     D.ag.open_noden = lambda: []
     try:
+        F0 = {"fathom-wacht": {"exit": 0}}
         for nacht, nachtbestand, nood_deel, ok in (
-                (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}}, None, True),
-                (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 124}}}, "Zoomwacht faalde", False),
+                (True, {"start": NU.isoformat(), "einde": None, "stappen": {**F0, "zoom-wacht": {"exit": 0}}}, None, True),
+                (True, {"start": NU.isoformat(), "einde": None, "stappen": {**F0, "zoom-wacht": {"exit": 124}}}, "Zoomwacht faalde", False),
+                # FATHOM-2 (T-0120): De Fathomwacht loopt 's nachts voor De Zoomwacht; faalde ze of ontbreekt haar stap, een nood
+                (True, {"start": NU.isoformat(), "einde": None, "stappen": {"fathom-wacht": {"exit": 2}, "zoom-wacht": {"exit": 0}}},
+                 "De Fathomwacht faalde in de nachtketen", True),
+                (True, {"start": NU.isoformat(), "einde": None, "stappen": {"zoom-wacht": {"exit": 0}}},
+                 "De Fathomwacht faalde in de nachtketen", True),
+                # overdag: een nachtketen met een falende Fathomwacht is een nood; een van voor de uitrol (zonder stap) niet
+                (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
+                         "stappen": {"fathom-wacht": {"exit": 124}, "zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}},
+                 "nachtketen van de dagvaststelling faalde", None),
+                (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
+                         "stappen": {**F0, "zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}}, None, None),
                 (True, {}, "buiten de nachtketen", None),
                 (False, {"start": (NU - timedelta(hours=40)).isoformat()}, "nachtketen van de dagvaststelling liep niet", None),
                 (False, {"start": (NU - timedelta(hours=8)).isoformat(), "einde": (NU - timedelta(hours=7)).isoformat(),
@@ -759,6 +772,8 @@ def test_vaststelling_noden_staan_in_de_lijst():
     assert len(eigen) >= 5, eigen
     for tekst in eigen:
         assert tekst.startswith(D.KETEN_NODEN), tekst
+    # FATHOM-2: de nood over De Fathomwacht in de nachtketen staat als constante in main()
+    assert "r.nood(FATHOM_NACHTNOOD" in inspect.getsource(D.main) and D.FATHOM_NACHTNOOD.startswith(D.KETEN_NODEN)
 
 def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=(), handmatig=False):
     """Een ronde van main() door de echte gedeelde Ronde (bord.py) met een nagebootst bord. open_noden: wat /api/nood
@@ -782,7 +797,7 @@ def _echte_ronde(nacht, open_noden, vastleggen, bundelnood=(), handmatig=False):
     oud = (bord.call, D.NACHT, D.DAG_GEGEVEN, D.HANDMATIG, D.lees_nacht, D.vastleggen, D.bundelen)
     bord.call, D.NACHT, D.DAG_GEGEVEN, D.HANDMATIG = call, nacht, True, handmatig
     nu = datetime.now(timezone.utc).isoformat()
-    D.lees_nacht = lambda: ({"start": nu, "stappen": {"zoom-wacht": {"exit": 0}}} if nacht else
+    D.lees_nacht = lambda: ({"start": nu, "stappen": {"fathom-wacht": {"exit": 0}, "zoom-wacht": {"exit": 0}}} if nacht else
                             {"start": nu, "einde": nu, "stappen": {"zoom-wacht": {"exit": 0}, "dagbundelaar": {"exit": 0}}})
     D.vastleggen = vastleggen
     D.bundelen = lambda dag=None: {"detail": "", "nood": [dict(n) for n in bundelnood], "bronnen": 0}

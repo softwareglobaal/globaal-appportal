@@ -332,17 +332,24 @@ def main():
             # deze ronde, en bundelen() blijft voor de ochtendronde
             pass
         elif NACHT:
-            # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Zoomwacht
+            # F9: de nachtketen (keten.py --nacht) schrijft nacht.json voor ze mij start, met de exit van De Fathomwacht en
+            # De Zoomwacht (FATHOM-2, T-0120: Fathom loopt sinds dan ook 's nachts, voor Zoom). Die keten komt uit dezelfde
+            # checkout als ik: ontbreekt de stap van De Fathomwacht, dan liep ze niet, en dat is ook een nood.
             begin = ochtend.tijdstip(nacht.get("start"))
-            zoom = (nacht.get("stappen") or {}).get("zoom-wacht") or {}
+            stappen = nacht.get("stappen") or {}
+            zoom = stappen.get("zoom-wacht") or {}
+            fathom = stappen.get("fathom-wacht") or {}
             if begin is None or nacht.get("einde") or nu - begin > timedelta(hours=3):
-                r.nood("Nachtronde buiten de nachtketen: De Zoomwacht liep niet vooraf", wie="claude-code")
-            elif zoom.get("exit") != 0:
-                zoom_gelezen = False
-                r.nood("De Zoomwacht faalde in de nachtketen: de Zoom-gesprekken van gisteravond kunnen ontbreken",
-                       wie="claude-code")
+                r.nood("Nachtronde buiten de nachtketen: De Fathomwacht en De Zoomwacht liepen niet vooraf", wie="claude-code")
             else:
-                zoom_gelezen = True
+                if fathom.get("exit") != 0 or isinstance(fathom.get("exit"), bool):
+                    r.nood(FATHOM_NACHTNOOD, wie="claude-code")
+                if zoom.get("exit") != 0:
+                    zoom_gelezen = False
+                    r.nood("De Zoomwacht faalde in de nachtketen: de Zoom-gesprekken van gisteravond kunnen ontbreken",
+                           wie="claude-code")
+                else:
+                    zoom_gelezen = True
         else:
             # DB-3 (T-0120): met --dag die dag; uit de keten gisteren en de dagen ervoor zonder Dagverslag (bundeldagen)
             bdagen = [DAG] if DAG_GEGEVEN else bundeldagen(nu)
@@ -365,7 +372,7 @@ def main():
             if begin is None or nu - begin > timedelta(hours=NACHT_UREN):
                 # F9: een bezet slot of een cron die niet liep, zegt keten.log; hier wordt het een nood
                 r.nood("De nachtketen van de dagvaststelling liep niet, zie keten.log", wie="claude-code")
-            elif not nacht.get("einde") or any((stappen.get(n) or {}).get("exit") != 0 for n in ("zoom-wacht", "dagbundelaar")):
+            elif not nacht.get("einde") or any((stappen.get(n) or {}).get("exit") != 0 for n in nachtstappen(stappen)):
                 # G3: ze liep, maar stopte halverwege of een stap faalde
                 r.nood("De nachtketen van de dagvaststelling faalde, zie keten.log en dagbundelaar.log", wie="claude-code")
             # G3: in de ochtendketen zegt keten.json of De Zoomwacht net slaagde; faalde ze, dan is Zoom een ondergrens
@@ -425,6 +432,14 @@ def main():
             # over een oudere dag van het nachtvenster gaan; die kijkt alleen de nacht na.
             behoud(r, alleen_nacht)
         r.detail = "; ".join(d for d in delen if d)
+
+
+def nachtstappen(stappen):
+    """De stappen van de laatste nachtketen die overdag met exit 0 moeten staan: De Zoomwacht en De Dagbundelaar, en De
+    Fathomwacht (FATHOM-2, T-0120) zodra die erin staat. Een nachtketen van voor die uitrol had haar niet; de eerste
+    ochtend na de uitrol leest nog zo'n nacht.json, en die is dan geen vals alarm. Een nieuwe nachtketen schrijft elke stap
+    zodra hij gedaan is: stopte ze voor De Fathomwacht, dan ontbreekt ook De Zoomwacht (een nood)."""
+    return ("fathom-wacht",) * ("fathom-wacht" in stappen) + ("zoom-wacht", "dagbundelaar")
 
 
 def bundeldagen(nu):
@@ -885,7 +900,8 @@ VASTSTELLING_NODEN = ("Dagboek nog niet bevestigd in Dropbox", "Agenda niet voll
                       "Telefoon: de Belwacht leest", MAIL_NIET_GELEZEN, MAILNOOD)
 # Het begin van de noden die main() zelf geeft over de nacht- en ochtendketen. Samen met VASTSTELLING_NODEN is dat wat de
 # nachtronde nakijkt; de rest (de bundels) laat ze open (Codex-controle 4).
-KETEN_NODEN = ("Nachtronde buiten de nachtketen", "De Zoomwacht faalde in de nachtketen",
+FATHOM_NACHTNOOD = "De Fathomwacht faalde in de nachtketen: de Fathom-gesprekken van de namiddag kunnen ontbreken"
+KETEN_NODEN = ("Nachtronde buiten de nachtketen", "De Zoomwacht faalde in de nachtketen", "De Fathomwacht faalde in de nachtketen",
                "De nachtketen van de dagvaststelling", "Dagvaststelling mislukt in de ochtendronde")
 # Fase 2 (overleg 27-10-2026, K3): alleen de nachtronde maakt het weekoverzicht, dus alleen zij sluit deze nood; de
 # ochtend en een ronde met de hand laten hem open.

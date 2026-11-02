@@ -37,7 +37,8 @@ Een stap die te lang loopt, krijgt eerst SIGTERM (De Fathomwacht en De Zoomwacht
 na dertig seconden SIGKILL; zijn exit is dan 124, zoals bij /usr/bin/timeout.
 
 De keten duurt zo hoogstens de som van de time-outs plus de nadruk per stap: 2700 + 1200 + 900 + 3 x 30 = 4890 seconden
-(tests/test_keten.py rekent het na).
+(tests/test_keten.py rekent het na). De nachtketen (--nacht) draait sinds FATHOM-2 (T-0120) dezelfde twee stappen en dan
+De Dagbundelaar --nacht: 2700 + 1200 + 1800 + 3 x 30 = 5790 seconden; ze schrijft nacht.json, nooit keten.json.
 """
 import json
 import os
@@ -57,12 +58,15 @@ STAPPEN = (("fathom-wacht", "fathom_wacht.py", 2700, "fathom_wacht.log"),
            ("zoom-wacht", "zoom_wacht.py", 1200, "zoom_wacht.log"))
 # RZ4-04: de laatste stap van de ochtendketen op een werkdag. Een ronde duurt gewoonlijk enkele seconden; 900 s is ruim.
 DAGBUNDELAAR = ("dagbundelaar", "dagbundelaar.py", 900, "dagbundelaar.log")
-# De nachtketen (keten.py --nacht, ontwerp dagvaststelling v1.2, Codex F9): elke nacht om 23:30 UTC De Zoomwacht, zodat de
-# gesprekken van de avond in de tabel staan, en daarna De Dagbundelaar --nacht, die de dagvaststelling maakt. Ze schrijft
-# nacht.json, nooit keten.json: het ochtendbericht en het inhalen van de ochtendketen kijken er niet naar. De Dagbundelaar
-# leest in nacht.json de exit van De Zoomwacht. Een ronde over veertien dagen duurt minuten; 1800 s is ruim.
+# De nachtketen (keten.py --nacht, ontwerp dagvaststelling v1.2, Codex F9): elke nacht om 23:30 UTC De Fathomwacht en
+# daarna De Zoomwacht, zodat de gesprekken van de namiddag en de avond in de tabel staan, en daarna De Dagbundelaar --nacht,
+# die de dagvaststelling maakt. FATHOM-2 (T-0120): tot dan liep alleen De Zoomwacht 's nachts; een Fathom-gesprek na de
+# ronde van 13:00 UTC kwam pas de volgende ochtend in de tabel, dus nooit in het dagbestand van 00:30 (wel een nacht later,
+# als nieuwe versie). Zelfde volgorde, time-outs en logboeken als de ochtendketen. Ze schrijft nacht.json, nooit
+# keten.json: het ochtendbericht en het inhalen van de ochtendketen kijken er niet naar. De Dagbundelaar leest in
+# nacht.json de exit van De Fathomwacht en De Zoomwacht. Een ronde over veertien dagen duurt minuten; 1800 s is ruim.
 NACHT = os.path.expanduser("~/appportal/mijnagents-data/nacht.json")
-NACHTSTAPPEN = (("zoom-wacht", "zoom_wacht.py", 1200, "zoom_wacht.log"),)
+NACHTSTAPPEN = STAPPEN
 NACHTBUNDELAAR = ("dagbundelaar", ("dagbundelaar.py", "--nacht"), 1800, "dagbundelaar.log")
 # Het startmoment staat op een plek: de regel met keten.py in de planning. Een proef zet CRON op een eigen bestand.
 CRON = os.path.join(HIER, "planning", "gesprekken.cron")
@@ -187,9 +191,9 @@ def voer_uit(keten, naam, runner, tijdslimiet, logboek, pad=None):
 
 
 def nachtketen():
-    """De nachtketen (Codex F9): De Zoomwacht en daarna De Dagbundelaar --nacht, ook als De Zoomwacht faalde (hij meldt
-    dat zelf, uit nacht.json). Schrijft nacht.json met einde null tot het einde; De Dagbundelaar ziet zo dat hij in een
-    lopende nachtketen draait. Exit 0 alleen als beide stappen met 0 eindigden."""
+    """De nachtketen (Codex F9, FATHOM-2): De Fathomwacht, De Zoomwacht en daarna De Dagbundelaar --nacht, ook als een
+    wacht faalde (hij meldt dat zelf, uit nacht.json). Schrijft nacht.json met einde null tot het einde; De Dagbundelaar
+    ziet zo dat hij in een lopende nachtketen draait. Exit 0 alleen als alle stappen met 0 eindigden."""
     start = nu()
     nacht = {"start": stempel(start), "einde": None, "stappen": {}}
     schrijf(nacht, NACHT)
