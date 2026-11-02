@@ -1018,6 +1018,21 @@ def test_plaud12_een_geleverde_kopie_geeft_geen_reden_als_de_deal_daarna_sluit()
                              {"firma": "HARC", "projectnummer": "2531", "kopie_toegestaan": True}, [], "tekst") is None
 
 
+def test_plaud12_een_ingetrokken_kopie_telt_niet_als_geleverd():
+    """Nazorg Codex-toets 3: een kopie die een nieuwe beslissing introk (staat.trek_in: het bestand blijft staan, met een
+    herstelvoorstel), is geen geleverde kopie meer. Dan zegt de regel waarom er geen dossierkopie is, zoals voor de
+    levering; een niet ingetrokken kopie blijft zonder reden."""
+    S = P.staat                                           # dezelfde module als de wacht (import staat)
+    deals = [{"id": 777, "titel": "2531 Fictiva", "nummer": "2531"}]
+    b = {"firma": "HARC", "projectnummer": "2531", "kopie_toegestaan": False, "zekerheid": "laag", "conflict": False}
+    st = {"opdrachten": [{"soort": "dossierkopie", "gedaan": True, "fout": "", "resultaat": {"pad": "/Sales/2531/x.txt"}}]}
+    assert P.reden_uit_staat(st, {"afdeling": "h-architects"}, dict(b, kopie_toegestaan=True), deals, "tekst") is None
+    S.trek_in(st, "nieuwe beslissing staat geen zakelijke kopie toe: proef")
+    assert st["opdrachten"][0].get("ingetrokken"), st
+    assert P.reden_uit_staat(st, {"afdeling": "h-architects"}, b, deals, "tekst") == \
+        "de beslissing staat geen zakelijke kopie toe (zekerheid laag)"
+
+
 def test_plaud12_barsten_en_scheuren_zonder_reden_en_met_dezelfde_levering():
     """VOL-18: een opname van de keten barsten en scheuren (UNAB) krijgt geen reden erbij en wordt geleverd als voordien."""
     w = Wereld()
