@@ -1073,6 +1073,14 @@ check("een naam met aanspreking", P.gevonden("droger voor mevrouw Proefnaam") ==
 check("Mr. met een naam blijft tegengehouden, Mr. Proper niet (Codex X10, ronde 3)", P.gevonden("cadeau voor Mr. John") == ["naam"]
       and P.gevonden("Mr Proper allesreiniger 5 liter") == [])
 check("een klant met voor- en achternaam", P.gevonden("klant Jan Proefnaam wil een droger") == ["naam"])
+check("een naam zonder aanspreking houdt de vraag tegen (overleg 39, K4)",
+      P.gevonden("Zoek lasklemmen, te leveren aan Lotte Proefnaam in Mechelen") == ["naam"]
+      and P.gevonden("stofzuiger voor Jan Peeters") == ["naam"])
+check("een naam met tussenvoegsel houdt de vraag tegen (Codex controle 40)", all(P.gevonden(t) == ["naam"] for t in (
+      "voor Lotte de Proefnaam", "Jan van der Proef wil een droger", "Kim Van den Proefnaam")))
+check("een merk met een voornaam gaat door (overleg 39, K4)", all(P.gevonden(t) == [] for t in (
+      "Herman Miller Aeron bureaustoel tweedehands", "Tommy Hilfiger jas", "Seat Leon Cupra velgen",
+      "Stanley Black and Decker boor", "iPhone 15 Pro Max", "Sonos Era 100 wit", "Jan 2026 levering")))
 check("het korte verslag zegt wat het zag, niet de gegevens zelf",
       "e-mailadres" in V.tegengehouden(["e-mailadres"]) and "@" not in V.tegengehouden(["e-mailadres"]))
 
@@ -1175,6 +1183,63 @@ check("het werkverslag telt sleutels die geen eis zijn, zonder hun tekst (overle
 bron = open(Path(PO.__file__), encoding="utf-8").read()
 check("de runner zet geen API-sleutel klaar voor de prijsvraag (overleg 14)", "sleutelbron" not in bron
       and "zet_anthropic" not in bron and "anthropic" not in bron.lower().replace("claude-abonnement", ""))
+
+print("Proefbank: prijsvragen zonder het bord (overleg 39)")
+from aankoop import proefbank as PB  # noqa: E402
+
+X1URL = "https://winkel.voorbeeld.com/x1"
+PB_PAG = {X1URL: pagina("Vloerwasser X1 nu 500,00 euro. Gratis verzending naar België.")}
+PO.O.onderzoek = lambda *a, **k: {
+    "gegevens": {"vraag_kort": "vloerwasser", "eisen": [], "aanbiedingen": [aanbod(bewijs={
+        "prijs": "X1 nu 500,00 euro", "verzending": "Gratis verzending naar België."})]},
+    "gelezen": PB_PAG, "zoekresultaten": {}, "tekst": "", "tokens": 10, "tellers": [], "leesbeurten": (1, 0),
+    "zoekopdrachten": 1, "stop": "klaar", "model": "m", "bron": "none"}
+voor_log, voor_klaar, echte_log = len(logboek), len(klaar), PO.ag.log
+uit = PB.een_proef(PO, {"id": "T1", "vraag": "vloerwasser X1 voor thuis"}, "2026-10-30", KOERSEN, "werkwijze")
+check("de proefbank schrijft niets op het bord en zet het bord daarna terug",
+      len(logboek) == voor_log and len(klaar) == voor_klaar and PO.ag.log is echte_log and uit["logboek"]
+      and "**Aanbevolen:**" in uit["verslag"], str(uit.get("fout")))
+check("de proefbank bewaart de keuze van de code", uit["keuze"]["beste"]["url"] == X1URL and uit["model_vragen"] == 1)
+check("een geslaagde proef doorstaat de keuring", all(ok for ok, _ in PB.keur(
+      {"uitkomst": "M", "automatisch": {"verslag_moet": ["Aanbevolen"], "beste_nooit": ["veiling"],
+                                         "beste_max_eur": 600, "model": True}}, uit)), str(PB.keur({}, uit)))
+check("een verkeerde aanbeveling valt op in de keuring", not all(ok for ok, _ in PB.keur(
+      {"uitkomst": "N", "automatisch": {"beste_nooit": ["x1"]}}, uit)))
+kort = dict(uit, eisen=["netfrequentie 60 Hz", "netspanning 220 V"],
+            keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], per_eis=["ja"])))
+check("een ontbrekend oordeel over een bindende eis valt op in de keuring (Codex controle 40, K3)",
+      not all(ok for ok, _ in PB.keur({}, kort)))
+vijftig = dict(uit, eisen=["netfrequentie 60 Hz"],
+               keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], per_eis=["onbekend"])))
+check("een aanbevolen toestel zonder bewezen 60 Hz valt op in de keuring", not all(ok for ok, _ in PB.keur({}, vijftig)))
+check("een aanbeveling zonder bewezen prijs valt op in de keuring", not all(ok for ok, _ in PB.keur(
+      {}, dict(uit, keuze=dict(uit["keuze"], beste=dict(uit["keuze"]["beste"], bewezen=[]))))))
+check("te veel gelezen pagina's vallen op in de keuring", not all(ok for ok, _ in PB.keur(
+      {}, dict(uit, gelezen=uit["gelezen"] + [f"https://x.voorbeeld.com/{i}" for i in range(7)]))))
+check("een aanbeveling boven het budget valt op in de keuring", not all(ok for ok, _ in PB.keur(
+      {"automatisch": {"beste_max_eur": 150}}, uit)))
+check("een aanbod zonder gelezen pagina valt op in de keuring", not all(ok for ok, _ in PB.keur(
+      {}, dict(uit, gelezen=[]))))
+uit = PB.een_proef(PO, {"id": "T2", "vraag": "stofzuiger, bel Jan Proefnaam op 0478 12 34 56"}, "2026-10-30", KOERSEN, "w")
+check("een vraag met persoonsgegevens gaat in de proefbank ook niet naar het model", uit["model_vragen"] == 0
+      and all(ok for ok, _ in PB.keur({"uitkomst": "N", "automatisch": {"model": False}}, uit)),
+      str(PB.keur({"uitkomst": "N", "automatisch": {"model": False}}, uit)))
+check("zonder aanbeveling en zonder reden in het verslag faalt een B-proef", not all(ok for ok, _ in PB.keur(
+      {"uitkomst": "B"}, dict(uit, verslag="**Geen aanbeveling:** niets."))))
+check("de vaste reden van het verslag zonder aanbieding telt als reden (Codex controle 41)", all(ok for ok, _ in PB.keur(
+      {"uitkomst": "B"}, dict(uit, verslag=V.maak("v", {}, {"goed": [], "niet_compatibel": [], "afgewezen": []},
+                                                    "2026-10-30", "2026-10-30")))))
+reeks = json.load(open(os.path.join(PB.HIER, "docs", "aankoop", "proeven", "prijsonderzoeker.json"), encoding="utf-8"))
+check("de reeks van overleg 39 heeft twintig proeven P01 tot P20, zonder echte persoonsgegevens buiten P18 en P19",
+      [p["id"] for p in reeks] == [f"P{i:02d}" for i in range(1, 21)]
+      and [p["id"] for p in reeks if P.gevonden(p["vraag"])] == ["P18", "P19"]
+      and all(p["uitkomst"] in "MNB" for p in reeks) and [p["id"] for p in reeks if p["uitkomst"] == "N"] == ["P18", "P19"])
+try:
+    PB.draai("onbestaand.json", os.path.join(PB.HIER, "proeven"))
+    binnen = False
+except SystemExit as e:
+    binnen = "buiten de repo" in str(e)
+check("de proefmap mag nooit in de repo liggen", binnen)
 
 print("Koersen van de ECB")
 XML = """<gesmes:Envelope><Cube><Cube time='2026-10-30'>
