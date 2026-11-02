@@ -226,14 +226,17 @@ def gratis_verzending(tekst):
 
 # Een citaat in zinsdelen: een drempel telt alleen in een zinsdeel dat ook "gratis" zegt, zodat "verzendkosten naar
 # België vanaf €9,95" geen drempel is (Codex controle 46, punt 2).
-ZINSDEEL = re.compile(r"[;\n|]|(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
+# Op de ruwe tekst, voor de spaties gelijk worden gemaakt: een regelovergang of een komma met spatie erna scheidt ook
+# ("9,95" niet). Codex controle 47.
+ZINSDEEL = re.compile(r"[;\n|]|,\s+|(?<=[.!?])\s+(?=[A-ZÀ-Ý])")
 GRATISWOORD = re.compile(r"gratis|free|kostenlos|gratuit|inbegrepen|inclusief|included", re.I)
 NUL_EURO = re.compile(r"(?:€|\beur(?:o|os)?\b)?\s*(?<![\d.,])0[.,]00(?!\d)\s*(?:€|\beur(?:o|os)?\b)?", re.I)
 
 
 def _drempels(citaat):
     """De drempels (met, zonder, excl) uit de zinsdelen van het citaat die ook gratis zeggen."""
-    return [d for deel in ZINSDEEL.split(_schoon(citaat)) if GRATISWOORD.search(deel) for d in DREMPEL.findall(deel)]
+    return [d for deel in map(_schoon, ZINSDEEL.split(str(citaat or ""))) if GRATISWOORD.search(deel)
+            for d in DREMPEL.findall(deel)]
 
 
 def boven_drempel(citaat, aanbod):
@@ -257,7 +260,7 @@ def boven_drempel(citaat, aanbod):
 def ander_bedrag(citaat):
     """Noemt het citaat een bedrag dat geen drempel en geen 0,00 is? Dan bewijst het geen gratis verzending naar Belgie:
     "gratis verzending binnen Nederland, naar België € 9,95" (Codex controle 45, punt 3)."""
-    delen = [DREMPEL.sub(" ", d) if GRATISWOORD.search(d) else d for d in ZINSDEEL.split(_schoon(citaat))]
+    delen = [DREMPEL.sub(" ", d) if GRATISWOORD.search(d) else d for d in map(_schoon, ZINSDEEL.split(str(citaat or "")))]
     return bool(BEDRAG_TUSSEN.search(NUL_EURO.sub(" ", " ".join(delen))))
 
 

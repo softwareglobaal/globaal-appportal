@@ -1281,6 +1281,10 @@ for citaat, waarom in (("DDF484RTJ\nLXT 18 V Boor-/schroefmachine\n5,0 Ah accu (
 for zin, beste, waarom in (
         ("Gratis binnen Nederland vanaf €50; verzendkosten naar België vanaf €9,95", False,
          "een tarief naar Belgie 'vanaf' is geen drempel voor gratis"),
+        ("Gratis verzending binnen Nederland vanaf €50\nVerzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie op een nieuwe regel is geen drempel (Codex 47)"),
+        ("Gratis verzending binnen Nederland vanaf €50, verzendkosten naar België vanaf €9,95", False,
+         "een tarief naar Belgie na een komma is geen drempel (Codex 47)"),
         ("Gratis verzending naar België € 0,00", True, "gratis naar Belgie met 0,00 telt")):
     r = A.verwerk([aanbod(titel="Epson EB-FH08", url=BEAMER, land="NL", prijs=599, bewijs={
         "prijs": "Epson EB-FH08 nu 599,00 euro", "verzending": zin})], VANDAAG, KOERSEN,
