@@ -286,8 +286,11 @@ git -C "$REPO" fetch -q origin
 sha=$(git -C "$REPO" rev-parse "$REF^{commit}")
 mkdir -p -m 700 "$BASIS" "$HMAP"
 if [[ -d "$WERK" ]]; then
-    [[ -z "$(git -C "$WERK" status --porcelain)" ]] || { print -u2 "$WERK heeft eigen wijzigingen; niets gedaan"; exit 1; }
-    [[ "$(git -C "$WERK" rev-parse HEAD)" == "$sha" ]] || bewaar_vorige
+    # nazorg-mac (Codex toets 2): een git die faalt, is geen schone worktree; anders ging een kapotte .git door als schoon
+    werk_stand=$(git -C "$WERK" status --porcelain) || { print -u2 "Git-stand van $WERK niet te lezen; niets gedaan"; exit 1; }
+    [[ -z $werk_stand ]] || { print -u2 "$WERK heeft eigen wijzigingen; niets gedaan"; exit 1; }
+    werk_kop=$(git -C "$WERK" rev-parse --verify -q HEAD) || { print -u2 "Geen commit in $WERK; niets gedaan"; exit 1; }
+    [[ $werk_kop == "$sha" ]] || bewaar_vorige
     git -C "$WERK" checkout -q --detach "$sha"
 else
     git -C "$REPO" worktree add -q --detach "$WERK" "$sha"

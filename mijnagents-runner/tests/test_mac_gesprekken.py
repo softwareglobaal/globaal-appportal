@@ -2207,9 +2207,23 @@ def test_r6_drie_uitrollen_en_terug():
                                capture_output=True, text=True)
             assert r.returncode != 0, r.stderr
             assert "eerst" in uitrol("aan", ok=False)
+            # Codex toets 2: ook een nieuwe uitrol leest de kapotte .git niet als schoon: niets gewisseld of bewaard
+            assert "niet te lezen" in uitrol(ref=shas[0], ok=False)
         finally:
             echte_git.unlink()
             kapot.rename(echte_git)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[1] and (vorige / "COMMIT").read_text().strip() == shas[1]
+        assert not (basis / "mac-gesprekken" / "vorige.nieuw").exists()
+        (basis / "mac-gesprekken" / "PROEF").write_text(stempel)        # de mislukte uitrol zette de wachten uit
+        # Codex toets 2: een worktree zonder commit: git status slaagt, rev-parse niet; proef_schrijf laat geen bewijs
+        leeg = m / "zonder commit"
+        leeg.mkdir()
+        git("init", "-q", cwd=leeg)
+        functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_schrijf()/,/^}}/p' '{script}'); HELPER='{helper}' "
+                    f"WERK='{leeg}' CODESIGN='{stub / 'codesign'}'; ")
+        bewijs = m / "PROEF_ZONDER_COMMIT"
+        r = subprocess.run(["zsh", "-c", functies + f"proef_schrijf '{bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0 and not bewijs.exists() and "Geen commit" in r.stderr, (r.returncode, r.stderr)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())
