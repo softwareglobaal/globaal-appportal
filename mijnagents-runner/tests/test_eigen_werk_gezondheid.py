@@ -126,7 +126,28 @@ check("E09 profiel op account, hoofdletters gelijk", B.profiel_van(ls, "werk@exa
 check("E09 profielnaam telt niet, onbekend account geen profiel", B.profiel_van(ls, "niemand@example.com") is None)
 B.account = lambda: ""
 check("E09 zonder account geen bron", B.bronnen() == ([], "geen account in " + B.ACCOUNT_BESTAND), B.bronnen())
-check("E09 geen Firefox of Safari meer", not hasattr(B, "BRONNEN") and "Safari" not in open(B.__file__).read().split('"""', 2)[2])
+code = open(B.__file__).read().split('"""', 2)[2]
+check("E09 geen Firefox, Safari of Edge meer", not hasattr(B, "BRONNEN") and not any(w in code for w in ("Firefox", "Safari", "Edge", "places.sqlite", "History.db")))
+import tempfile as _tf
+_thuis = _tf.mkdtemp()
+_map = os.path.join(_thuis, B.CHROME)
+os.makedirs(_map)
+with open(os.path.join(_map, "Local State"), "w") as _f:
+    _f.write('{"profile": {"info_cache": {"Profile 1": {"name": "werk@example.com", "user_name": "ander@example.com"}}}}')
+_oud_thuis = B.THUIS
+B.THUIS = _thuis
+B.account = lambda: "werk@example.com"
+check("E09 account zonder aangemeld profiel: geen bron", B.bronnen() == ([], "geen Chrome-profiel aangemeld met het account"), B.bronnen())
+aanroepen = []
+B.bord = lambda pad, payload: aanroepen.append((pad, payload)) or {}
+B.DROOG = False
+B.DAGEN = 2
+B.main()
+_statussen = [p for pad, p in aanroepen if pad == "/agent-status"]
+check("E09 geen profiel: niets klaargezet, hartslag fout met nood", "/api/klaarzet" not in [p for p, _ in aanroepen]
+      and _statussen[-1]["status"] == "fout" and _statussen[-1]["nood"] and "geen Chrome-profiel aangemeld" in _statussen[-1]["nood"][0]["tekst"],
+      _statussen)
+B.THUIS = _oud_thuis
 
 # E07 (T-0077, 02-11-2026): onder launchd zonder Full Disk Access leest de wacht niets; dan geen klaarzet met nullen.
 aanroepen = []
