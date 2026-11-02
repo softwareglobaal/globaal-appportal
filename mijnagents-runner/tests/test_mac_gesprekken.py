@@ -1743,6 +1743,26 @@ def test_web3_safari_alleen_de_bezoeken_van_deze_mac():
         rijen = con.execute("SELECT browser, site FROM BEZOEK").fetchall()
         con.close()
         assert rijen == [], rijen
+        # Codex samen1 toets 2: een gegenereerde kolom origin (table_info toont ze niet) filtert ook
+        (safari / "History.db").unlink()
+        con = sqlite3.connect(safari / "History.db")
+        con.executescript("CREATE TABLE history_items(id INTEGER PRIMARY KEY, url);"
+                          "CREATE TABLE history_visits(id INTEGER PRIMARY KEY, history_item, visit_time, title, "
+                          "origin INTEGER GENERATED ALWAYS AS (CASE WHEN title = 'gsm' THEN 1 ELSE 0 END) VIRTUAL);")
+        con.execute("INSERT INTO history_items VALUES(1, 'https://proef-werk.test/a')")
+        con.execute("INSERT INTO history_items VALUES(2, 'https://proef-gsm.test/b')")
+        con.execute("INSERT INTO history_visits(id, history_item, visit_time, title) VALUES(1, 1, ?, 'werk')",
+                    (nu - 2000 - 978307200,))
+        con.execute("INSERT INTO history_visits(id, history_item, visit_time, title) VALUES(2, 2, ?, 'gsm')",
+                    (nu - 1900 - 978307200,))
+        con.commit()
+        con.close()
+        status, uit, _ = _vraag(helper, str(thuis), "browser", "f" * 32)
+        assert status["extra"]["Safari"] == "ok", status
+        con = sqlite3.connect(uit)
+        rijen = con.execute("SELECT browser, site FROM BEZOEK").fetchall()
+        con.close()
+        assert rijen == [("Safari", "proef-werk.test")], rijen
 
 
 def test_vol11_tijdgrens_ook_tijdens_het_kopieren():

@@ -642,11 +642,12 @@ static void kopie_weg(int dirfd) {
 }
 
 /* WEB-3: heeft de Safari-geschiedenis (als extra gekoppeld) de kolom history_visits.origin? 1 ja, 0 nee (een oudere
-   Safari), -1 niet na te gaan. */
+   Safari), -1 niet na te gaan. table_xinfo, niet table_info: die toont ook een gegenereerde of verborgen kolom (Codex
+   samen1 toets 2). */
 static int oorsprong_kolom(sqlite3 *db) {
     sqlite3_stmt *stmt = NULL;
     int uit = -1;
-    if (sqlite3_prepare_v2(db, "SELECT count(*) FROM pragma_table_info('history_visits', 'extra') WHERE name = 'origin'",
+    if (sqlite3_prepare_v2(db, "SELECT count(*) FROM pragma_table_xinfo('history_visits', 'extra') WHERE name = 'origin'",
                            -1, &stmt, NULL) == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
         uit = sqlite3_column_int(stmt, 0) > 0;
     sqlite3_finalize(stmt);
@@ -708,11 +709,15 @@ static const char *extra_een(sqlite3 *db, const char *home, int dirfd, const cha
             } else {
                 /* Een vraag die faalt, wijst op een ander schema: onverwacht, en van deze bron komt dan niets mee. */
                 stmt = NULL;
-                /* WEB-3: de vraag zonder oorsprong alleen als de kolom aantoonbaar ontbreekt (Codex samen1 toets 1:
-                   nooit bij een ander schemaprobleem; is het niet na te gaan, dan de gewone vraag, en die faalt dan) */
-                const char *vraag = x->zonder_oorsprong != NULL && oorsprong_kolom(db) == 0 ? x->zonder_oorsprong
-                                                                                           : x->vraag;
-                rc = sqlite3_prepare_v2(db, vraag, -1, &stmt, NULL);
+                rc = sqlite3_prepare_v2(db, x->vraag, -1, &stmt, NULL);
+                if (rc != SQLITE_OK && x->zonder_oorsprong != NULL && oorsprong_kolom(db) == 0) {
+                    /* WEB-3: eerst de vraag met de filter; de vraag zonder oorsprong alleen als die faalt en de kolom
+                       aantoonbaar ontbreekt (Codex samen1 toets 1 en 2: nooit bij een ander schemaprobleem, en is het
+                       niet na te gaan, dan blijft de fout: onverwacht) */
+                    sqlite3_finalize(stmt);
+                    stmt = NULL;
+                    rc = sqlite3_prepare_v2(db, x->zonder_oorsprong, -1, &stmt, NULL);
+                }
                 if (rc == SQLITE_OK) {
                     int i;
                     if ((i = sqlite3_bind_parameter_index(stmt, ":begin")) > 0)
