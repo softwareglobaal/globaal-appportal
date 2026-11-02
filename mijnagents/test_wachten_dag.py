@@ -609,6 +609,35 @@ check("P49 (Codex 2) zonder het eigen overzicht en zonder item is 'niets binnen'
 check("P49 Plaud met een item uit de tabel maar zonder manifest: binnen, en het aantal is een ondergrens",
       p25["oordeel"] == "binnen" and p25["gelezen"]["stand"] == "onvolledig", (p25["oordeel"], p25["gelezen"]))
 
+# Codex-toets 3 (groep pagina): de route opent nooit meer dan de pagina toont; een dekkingsrij zonder manifest; Ai Angel
+# voor een agent; de grensproef van een mailregel.
+check("P50 (Codex 3) privé in het onderwerp: ook de directe route naar Fathom geeft 404",
+      open_("fathom:f5", "fathom").status_code == 404 and open_("fathom:f1", "fathom").status_code == 200)
+con = sqlite3.connect(os.environ["AGENTS_DB"])
+con.execute("INSERT INTO gesprek_log(uniek,datum,start,minuten,personen,prive,bron,dubbel_van,ts) "
+            "VALUES('dekking:plaud:2026-10-25','2026-10-25','',0,'',1,'dekking','buiten:dekking','x')")
+con.execute("INSERT INTO mailbericht(uniek,wacht,postvak,map,datum,dag,van,van_naam,onderwerp,soort,ts,bijlagen,bijlagen_info,"
+            "opvolging,besluit,naar) VALUES('m42','mail-mch','proef@voorbeeld.test','INBOX','2026-10-25T10:00:00+00:00',"
+            "'2026-10-25','p@voorbeeld.test','Proef',?,?,'x',999,?,'open',?,?)",
+            ("Lang " * 80, "s" * 40, json.dumps([{"soort": f"{chr(97 + i % 4) * 12}", "bytes": 10 ** 7} for i in range(20)]),
+             "b" * 60, "INBOX." + "m" * 120))
+con.commit()
+con.close()
+os.rename(MANIFEST, MANIFEST + ".weg")
+p25 = wachten("2026-10-25")["plaud-wacht"]
+os.rename(MANIFEST + ".weg", MANIFEST)
+check("P50 een dekkingsrij maar geen manifest: onvolledig, niet 'helemaal gelezen'", p25["gelezen"]["stand"] == "onvolledig",
+      p25["gelezen"])
+m42 = [x["wat"] for x in wachten("2026-10-25")["mail-mch"]["items"] if x["wat"].startswith("Lang ")][0]
+check("P51 (Codex 3) grensproef: 999 bijlagen en alle velden op hun langst: de regel past en het eind blijft heel",
+      len(m42) <= WD.MAIL_KORT and "999 bijlagen (5 aaaaaaaaaaaa, 5 bbbbbbbbbbbb, 5 cccccccccccc, 5 dddddddddddd, 979 andere)" in m42
+      and m42.endswith("· naar " + "m" * 74 + "…") and " · " + "s" * 19 + "…" in m42 and "b" * 29 + "…" in m42, m42)
+AGENT = "## Voor een agent\n\n1. De Proefwacht: Proeftaak voor de agent (normaal)\n2. Proeftaak voor de agent (normaal)\n"
+staat_a = (frozenset(), frozenset({"De Proefwacht: Proeftaak voor de agent"}))
+check("P52 (Codex 3) Ai Angel voor een agent: alleen de exacte weergave 'Naam: tekst' telt als werktaak",
+      WD.angel_taken(AGENT, staat_a) == ["1. De Proefwacht: Proeftaak voor de agent (normaal)",
+                                         "2. niet meer na te gaan of dit privé was: zie het bord"])
+
 # P46 (Codex 1): bord en Dagboek samen, zoals op de VM: het Dagboek vraagt het echte bord (test client). Alleen in de repo
 # (de Docker-build kopieert alleen mijnagents/); daar staat 'overgeslagen'.
 DAGBOEK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dagboek")

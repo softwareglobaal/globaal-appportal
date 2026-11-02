@@ -405,8 +405,9 @@ check("D44 (ARCH-2) De Zoomarchivaris zegt hoeveel bestanden gekopieerd en verdw
 
 # Codex-toets 2: de fotolink bovenaan alleen op een dag met een werfgroep; 'minstens' ook in het vak Wat binnenkwam.
 html = C.get("/wachten/icloud-wacht?dag=2026-10-05", headers=MET).get_data(as_text=True)
-check("D48 (Codex 2) een dag met een werfgroep: de link naar de foto's per project staat ook bovenaan",
-      '<a href="/fotos/2026-10-05">foto' in html, html[:1500])
+check("D48 (Codex 2 en 3) een werfgroep: de link naar de foto's per project staat ook bovenaan, naar de dag van het item",
+      '<a href="/fotos/2026-10-27">foto\'s per project van 27-10</a>' in html and 'href="/fotos/2026-10-05"' not in html,
+      html[:1500])
 TEL = json.loads(json.dumps(PAGINA))
 for w in TEL["vakken"][0]["wachten"]:
     if w["naam"] == "icloud-wacht":
@@ -423,6 +424,20 @@ check("D48 zonder het eigen overzicht is het aantal een ondergrens, bovenaan en 
       "minstens 1</span> items binnen" in html and "Wat binnenkwam (minstens 1)" in html, html[:3000])
 html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
 check("D48 de tegel toont de ondergrens en het dagtotaal is minstens", "&ge; 1" in html and "minstens " in html)
+# Codex-toets 3: een ronde maar geen eigen overzicht en geen item: de pagina zegt 'wat er was is onbekend', nooit 'niets'
+for w in TEL["vakken"][0]["wachten"]:
+    if w["naam"] == "zoom-archief":
+        w.update(kleur="oranje", oordeel="draaide, wat er was is onbekend", items=[], aantal=0, archief=None, rondes=1,
+                 log=[{"tijd": "07:00", "stap": "bron", "tekst": "proefronde", "fout": False}],
+                 gelezen={"stand": "onvolledig", "tekst": "het overzicht van De Zoomarchivaris is niet gelezen", "bewijs": ""})
+A.haal_wachten = lambda dag, *a: json.loads(json.dumps(TEL))
+html = C.get("/wachten/zoom-archief?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D49 (Codex 3) zonder overzicht en zonder item: de kop zegt 'wat er was is onbekend', het vak 'onbekend'",
+      "ma 5 okt 2026: draaide, wat er was is onbekend</h2>" in html and "Wat binnenkwam (onbekend)" in html
+      and "Onbekend: het eigen overzicht van deze wacht is niet gelezen" in html and "niets binnen" not in html.split("<main>")[1]
+      .split("Groen:")[0], html[-4000:])
+html = C.get("/wachten?dag=2026-10-05", headers=MET).get_data(as_text=True)
+check("D49 de tegel is dan een vraagteken", "draaide, wat er was is onbekend" in html and '<div class="groot">?' in html)
 
 # De route naar een gesprek: het bord beslist, het Dagboek stuurt alleen naar fathom.video door.
 GEVRAAGD = []

@@ -223,7 +223,9 @@ def gesprek_open(conn, uniek, wat):
     if r is None:
         return None
     r = _gesprek_rij(r)
-    if is_prive_gesprek(r):
+    # Codex-toets 3: dezelfde grens als de link op de pagina (het tweede slot in per_wacht): ook het woord privé in wie of
+    # onderwerp geeft niets, zodat de route nooit meer opent dan de pagina toont
+    if is_prive_gesprek(r) or PRIVE_RE.search(f"{r['personen']} {r['thema']}"):
         return None
     bron = privegrens.bron(r)
     if wat == "fathom" and bron == "fathom" and FATHOM_LINK.fullmatch(r["link"] or ""):
@@ -670,6 +672,13 @@ def gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout, cadans, rondes_g
     laatste = rondes[-1] if rondes else ""
     geteld = f", {rondes_geteld} rondes" if rondes_geteld else ""
     leeg = "" if items else ", niets gebeurd"
+    if (wacht == "plaud-wacht" and plaud is None) or (wacht == "zoom-archief" and archief is None):
+        # Codex-toets 1 en 3: zonder het eigen overzicht (manifest van de Mac, overzicht van De Zoomarchivaris) is niet
+        # te zeggen wat er die dag was, ook niet met een ronde of een dekkingsrij: onvolledig, nooit 0
+        return uit("onvolledig", ("het manifest van de Mac" if wacht == "plaud-wacht" else
+                                  "het overzicht van De Zoomarchivaris") + " is niet gelezen: wat er op deze dag was, is "
+                   "onbekend" + (f" (laatste ronde {laatste})" if laatste else ""),
+                   "niet te lezen, ontbreekt of is van voor deze dag")
     if gedekt:
         return uit("gelezen", "helemaal gelezen" + leeg,
                    "de dagregel van De Zoomwacht" if wacht == "zoom-wacht" else "de dekkingsrij van de wacht")
@@ -679,13 +688,6 @@ def gelezen_tot(conn, wacht, dag, items, log, gedekt, leesfout, cadans, rondes_g
     if isinstance(archief, dict) and archief.get("na_de_dag"):
         return uit("gelezen", "alle kopieën van deze dag bekend" + leeg,
                    f"het overzicht van De Zoomarchivaris van {_moment(archief.get('overzicht_van'))}")
-    if (wacht == "plaud-wacht" and plaud is None) or (wacht == "zoom-archief" and archief is None):
-        # Codex-toets 1: zonder het eigen overzicht (manifest van de Mac, overzicht van De Zoomarchivaris) is niet te
-        # zeggen wat er die dag was, ook niet met een ronde in het werkverslag: onvolledig, nooit 0
-        return uit("onvolledig", ("het manifest van de Mac" if wacht == "plaud-wacht" else
-                                  "het overzicht van De Zoomarchivaris") + " is niet gelezen: wat er op deze dag was, is "
-                   "onbekend" + (f" (laatste ronde {laatste})" if laatste else ""),
-                   "niet te lezen, ontbreekt of is van voor deze dag")
     if wacht == "dagbundelaar":
         try:
             r = conn.execute("SELECT ts FROM klaarzet WHERE van='dagbundelaar' AND uniek=? AND status!='vervallen' "

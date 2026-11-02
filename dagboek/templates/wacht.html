@@ -5,7 +5,8 @@
   <h1>{{ w['label'] if w else naam }}</h1>
   <a href="{{ url_for('wachten_pagina', dag=dag) }}">alle wachten van {{ dagnaam_ }}</a>
   {% if vak %}<span class="zacht klein">vak {{ vak }}</span>{% endif %}
-  {% if naam == 'icloud-wacht' and (not w or w['foto_link']) %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
+  {% if naam == 'icloud-wacht' and not w %}<a href="/fotos/{{ dag }}">foto's per project</a>{% endif %}
+  {% if naam == 'icloud-wacht' and w %}{% for f in w['foto_link'] %}<a href="{{ f['href'] }}">foto's per project{% if f['andere'] %} van {{ f['dag'] }}{% endif %}</a>{% endfor %}{% endif %}
 </header>
 <main>
   <nav class="dagkeuze">
@@ -24,7 +25,7 @@
       <div class="zacht">Daardoor weet het Dagboek nu niet wat deze wacht op {{ dagnaam_ }} kreeg. Dat is onbekend, niet leeg.</div></div>
   {% else %}
   <div class="kaart samen">
-    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ uitleg[w['kleur']] }}</h2>
+    <h2><span class="stip {{ w['kleur'] }}"></span> {{ dagnaam_ }}: {{ w['oordeel'] if w['oordeel'] in ('draaide, wat er was is onbekend', 'gelezen, niets gebeurd', 'postvak gelezen, 0 nieuwe mails') else uitleg[w['kleur']] }}</h2>
     <div class="cijfers">
       <div><span class="groot">{{ 'onbekend' if w['leesfout'] or w['onbekend'] else ('minstens ' if w['minstens'] else '') ~ w['aantal'] }}</span> items binnen</div>
       <div><span class="groot">{{ 'onbekend' if w['logfout'] else w['rondes'] }}</span> {{ 'regel' if w['rondes'] == 1 and not w['logfout'] else 'regels' }} in het werkverslag</div>
@@ -70,7 +71,7 @@
       {% endfor %}
     </table>
     {% else %}
-    <p class="leeg">{{ 'Postvak gelezen, 0 nieuwe mails op deze dag.' if w['oordeel'] == 'postvak gelezen, 0 nieuwe mails' else 'Onbekend: deze wacht las deze dag niet. Dat is niet hetzelfde als leeg.' if w['onbekend'] else 'Niets binnengekomen op deze dag.' }}</p>
+    <p class="leeg">{{ 'Postvak gelezen, 0 nieuwe mails op deze dag.' if w['oordeel'] == 'postvak gelezen, 0 nieuwe mails' else 'Onbekend: het eigen overzicht van deze wacht is niet gelezen. Dat is niet hetzelfde als leeg.' if w['onbekend'] and w['gelezen'] and w['gelezen']['stand'] == 'onvolledig' else 'Onbekend: deze wacht las deze dag niet. Dat is niet hetzelfde als leeg.' if w['onbekend'] else 'Niets binnengekomen op deze dag.' }}</p>
     {% endif %}
   </div>
   <div class="kaart">
