@@ -2,18 +2,21 @@
 """De Browserwacht (Privé, alleen voor Mehdi) - draait op de Mac, niet op de VM: alleen daar staat de geschiedenis van
 de browsers. Mehdi, 31-10-2026: "alle websites dat ik bekeken heb" in het Dagboek.
 
-Leest per dag (Brusselse tijd) uit een kopie van de geschiedenis van Chrome (alle profielen), Firefox (alle profielen)
-en Safari: het aantal bezoeken, het aantal verschillende sites en de sites met de meeste bezoeken. Alleen de naam van
-de site (bijvoorbeeld monday.com), nooit het volledige adres, nooit een zoekopdracht, nooit de paginatitel. Een privaat
-venster laat geen geschiedenis na en telt dus nooit mee.
+Mehdi, 02-11-2026 (beslissing): alleen Chrome, en alleen het profiel dat is aangemeld met zijn Google-account voor de
+werkagenda; geen Firefox, geen Safari, geen andere Chrome-profielen. Het account staat niet in de repo maar in
+~/.config/mijnagents/browser_account (een regel, het e-mailadres); de wacht zoekt het profiel op in Chrome's Local State.
+
+Leest per dag (Brusselse tijd) uit een kopie van de geschiedenis van dat ene Chrome-profiel: het aantal bezoeken, het
+aantal verschillende sites en de sites met de meeste bezoeken. Alleen de naam van de site (bijvoorbeeld monday.com),
+nooit het volledige adres, nooit een zoekopdracht, nooit de paginatitel. Een privaat venster laat geen geschiedenis na en
+telt dus nooit mee.
 
 Zet een item 'websites:<dag>' klaar voor Mehdi met de tellingen van de laatste DAGEN dagen; De Dagbundelaar neemt ze
-op in het dagbestand. Een browser die niet te lezen is (Safari zonder Full Disk Access), staat bij 'onleesbaar'.
-Is geen enkele browser gelezen, dan zet de wacht niets klaar: onbekend is geen 0 (T-0077, 02-11-2026). macOS 27
-beschermt ook de mappen van Chrome en Firefox; onder launchd heeft alleen een programma met Full Disk Access toegang.
+op in het dagbestand. Is het profiel niet te lezen, dan staat het bij 'onleesbaar' en zet de wacht niets klaar: onbekend
+is geen 0 (T-0077, 02-11-2026). macOS 27 beschermt de map van Chrome; onder launchd heeft alleen een programma met
+Full Disk Access toegang.
 Token: ~/.config/mijnagents/token. Gebruik: browser_wacht.py [--dag JJJJ-MM-DD] [--dagen N] [--droog]
 """
-import glob
 import json
 import os
 import shutil
@@ -30,6 +33,8 @@ NAAM = "browser-wacht"
 BORD = os.environ.get("MIJNAGENTS_URL", "https://mijnagents.globaal.be")
 BRUSSEL = ZoneInfo("Europe/Brussels")
 THUIS = os.path.expanduser(os.environ.get("BROWSER_THUIS", "~"))
+ACCOUNT_BESTAND = os.path.expanduser("~/.config/mijnagents/browser_account")
+CHROME = "Library/Application Support/Google/Chrome"
 TOP = 10
 DAGEN = 14
 DAG = None
@@ -41,19 +46,42 @@ for i, a in enumerate(sys.argv):
         DAGEN = int(sys.argv[i + 1])
 DAG = DAG or datetime.now(BRUSSEL).date().isoformat()
 
-# (browser, glob van de databank, query die (epoch-seconden, adres) geeft)
 CHROME_EPOCH = 11644473600      # Chrome: microseconden sinds 1601-01-01
-SAFARI_EPOCH = 978307200        # Safari: seconden sinds 2001-01-01
-BRONNEN = (
-    ("Chrome", "Library/Application Support/Google/Chrome/*/History",
-     f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
-    ("Edge", "Library/Application Support/Microsoft Edge/*/History",
-     f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"),
-    ("Firefox", "Library/Application Support/Firefox/Profiles/*/places.sqlite",
-     "SELECT v.visit_date / 1000000.0, p.url FROM moz_historyvisits v JOIN moz_places p ON p.id = v.place_id"),
-    ("Safari", "Library/Safari/History.db",
-     f"SELECT v.visit_time + {SAFARI_EPOCH}, i.url FROM history_visits v JOIN history_items i ON i.id = v.history_item"),
-)
+CHROME_QUERY = f"SELECT v.visit_time / 1000000.0 - {CHROME_EPOCH}, u.url FROM visits v JOIN urls u ON u.id = v.url"
+
+
+def account():
+    """Het Google-account van het ene Chrome-profiel dat telt, uit ~/.config/mijnagents/browser_account; leeg = geen."""
+    try:
+        return open(ACCOUNT_BESTAND).read().strip().lower()
+    except OSError:
+        return ""
+
+
+def profiel_van(local_state, acc):
+    """De profielmap (Default, Profile 1 ...) die in Chrome's Local State is aangemeld met acc; None als die er niet is.
+    local_state: de geladen JSON. Alleen 'user_name' telt (het aangemelde account), nooit de profielnaam."""
+    cache = (local_state.get("profile") or {}).get("info_cache") or {}
+    for d, p in cache.items():
+        if isinstance(p, dict) and str(p.get("user_name") or "").strip().lower() == acc:
+            return d
+    return None
+
+
+def bronnen():
+    """[(browser, pad naar History)] voor precies het ene profiel; [] met een reden als dat niet kan."""
+    acc = account()
+    if not acc:
+        return [], "geen account in " + ACCOUNT_BESTAND
+    try:
+        with open(os.path.join(THUIS, CHROME, "Local State")) as f:
+            local_state = json.load(f)
+    except (OSError, ValueError) as e:
+        return [], f"Local State van Chrome niet te lezen ({type(e).__name__})"
+    d = profiel_van(local_state, acc)
+    if d is None:
+        return [], "geen Chrome-profiel aangemeld met het account"
+    return [("Chrome", os.path.join(THUIS, CHROME, d, "History"))], ""
 
 
 def token():
@@ -131,24 +159,22 @@ def main():
     sinds = datetime.combine(eind - timedelta(days=DAGEN), datetime.min.time(), BRUSSEL).timestamp()
     hartslag("actief", taak=f"geschiedenis van {DAGEN} dagen lezen")
     bezoeken, gelezen, onleesbaar = [], defaultdict(int), {}
-    for browser, patroon, query in BRONNEN:
-        for pad in glob.glob(os.path.join(THUIS, patroon)):
-            try:
-                rijen = lees_bestand(pad, query, sinds)
-            except (OSError, sqlite3.Error) as e:
-                onleesbaar[browser] = type(e).__name__
-                continue
-            gelezen[browser] += 1
-            bezoeken += [(browser, t, s) for t, s in rijen]
+    paden, reden = bronnen()
+    for browser, pad in paden:
+        try:
+            rijen = lees_bestand(pad, CHROME_QUERY, sinds)
+        except (OSError, sqlite3.Error) as e:
+            onleesbaar[browser] = type(e).__name__
+            continue
+        gelezen[browser] += 1
+        bezoeken += [(browser, t, s) for t, s in rijen]
     per_dag = tel(bezoeken, dagen)
     nood = []
-    if "Safari" in onleesbaar:
+    if not gelezen:
         # Overleg 02-11-2026 K2: geen verzoek om Python Full Disk Access te geven; de toestemming hoort bij een eigen
         # vast programma (de starter van de Browserwacht), niet bij Python.
-        nood.append({"tekst": "Safari is niet te lezen: de Browserwacht heeft een eigen programma met Full Disk Access nodig",
+        nood.append({"tekst": "Chrome-profiel niet gelezen: " + (reden or "geen toegang (Full Disk Access)"),
                      "wie": "claude-code"})
-    if not gelezen:
-        nood.append({"tekst": "Geen browsergeschiedenis gevonden op deze Mac", "wie": "claude-code"})
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]

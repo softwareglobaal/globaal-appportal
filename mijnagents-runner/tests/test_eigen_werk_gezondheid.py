@@ -7,6 +7,8 @@
 - E05: zonder eigen (oude aanroep) blijft het blok weg en de tekst gelijk; geen gedachtestreepje.
 - E07: leest de Browserwacht geen enkele browser (geen Full Disk Access), dan zet ze niets klaar, geen nullen.
 - E08: De Dagbundelaar laat een websites-item zonder gelezen browser weg (onbekend); een gelezen browser met 0 bezoeken telt.
+- E09 (Mehdi, 02-11-2026): alleen het Chrome-profiel dat is aangemeld met zijn account telt; andere profielen, een
+  profiel met alleen dezelfde naam, of geen account geven geen bron.
 """
 import importlib.util
 import os
@@ -116,10 +118,20 @@ check("E06 onbekend zonder wacht", "- YouTube: onbekend (YouTube-wacht las deze 
 t2 = dag({"wispr": None, "websites": None, "gezondheid": None})
 check("E06 oude aanroep zonder YouTube-regel", "YouTube" not in t2, t2)
 
+# E09: het ene Chrome-profiel, gekozen op het aangemelde account (user_name), niet op naam.
+ls = {"profile": {"info_cache": {"Default": {"name": "werk", "user_name": "Werk@Example.com"},
+                                 "Profile 1": {"name": "werk@example.com", "user_name": "ander@example.com"},
+                                 "Profile 2": {"name": "x", "user_name": ""}}}}
+check("E09 profiel op account, hoofdletters gelijk", B.profiel_van(ls, "werk@example.com") == "Default")
+check("E09 profielnaam telt niet, onbekend account geen profiel", B.profiel_van(ls, "niemand@example.com") is None)
+B.account = lambda: ""
+check("E09 zonder account geen bron", B.bronnen() == ([], "geen account in " + B.ACCOUNT_BESTAND), B.bronnen())
+check("E09 geen Firefox of Safari meer", not hasattr(B, "BRONNEN") and "Safari" not in open(B.__file__).read().split('"""', 2)[2])
+
 # E07 (T-0077, 02-11-2026): onder launchd zonder Full Disk Access leest de wacht niets; dan geen klaarzet met nullen.
 aanroepen = []
 B.bord = lambda pad, payload: aanroepen.append((pad, payload)) or {}
-B.BRONNEN = ()
+B.bronnen = lambda: ([], "geen toegang")
 B.DROOG = False
 B.DAGEN = 3
 B.main()
