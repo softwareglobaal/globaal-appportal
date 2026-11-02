@@ -159,7 +159,8 @@ def main():
     eind = datetime.fromisoformat(DAG).date()
     dagen = [(eind - timedelta(days=i)).isoformat() for i in range(DAGEN)]
     sinds = datetime.combine(eind - timedelta(days=DAGEN), datetime.min.time(), BRUSSEL).timestamp()
-    hartslag("actief", taak=f"geschiedenis van {DAGEN} dagen lezen")
+    if not PROEF:   # de proef van de uitrol raakt het bord niet (Codex 02-11)
+        hartslag("actief", taak=f"geschiedenis van {DAGEN} dagen lezen")
     bezoeken, gelezen, onleesbaar = [], defaultdict(int), {}
     paden, reden = bronnen()
     for browser, pad in paden:

@@ -99,6 +99,7 @@ proef() {
     /usr/bin/codesign --verify --strict "$APP" || fout "handtekening van $APP klopt niet"
     cd_voor=$(cdhash "$APP")
     [[ -n "$cd_voor" ]] || fout "geen cdhash"
+    rm -f "$BASIS/PROEF"   # een oud bewijs geldt niet meer zodra een nieuwe proef begint (Codex 02-11)
     # Codex 02-11, punt 3: de uitvoer in een verse privemap, en het bewijs alleen als de app voor en na de proef
     # dezelfde cdhash heeft.
     proefmap=$(mktemp -d "$BASIS/proef.XXXXXX"); chmod 700 "$proefmap"
