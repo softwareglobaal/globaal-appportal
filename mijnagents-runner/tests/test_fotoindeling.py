@@ -112,9 +112,11 @@ class Regels(unittest.TestCase):
                  foto("klein-gezicht", "10:25", *a, gezicht=True), foto("gezicht-onbekend", "10:30", *a, gezicht=None, mensen=None)]
         ind = FI.indeel("2026-10-29", fotos, [P1], [afspraak("HARC", "9001", "2026-10-29", "10:00", "11:00", (P1["lat"], P1["lon"]))], [])
         g = ind["werf"][0]
-        # Codex 3: onbekend en een klein gezicht apart: geteld, zonder id, tijd of voorvertoning
+        # Codex 3: onbekend en een klein gezicht apart: geteld, zonder id, tijd of voorvertoning. nazorg-mac: het kleine
+        # gezicht telt bij 'met mensen', niet bij 'met een onbekende vlag van Photos'.
         self.assertEqual([(f["id"], f["voorbeeld"]) for f in g["fotos"]], [("zeker", True)])
-        self.assertEqual((g["aantal"], g["onbekend"], g["met_mensen"], g["van"], g["tot"]), (5, 4, 0, "10:10", "10:10"))
+        self.assertEqual((g["aantal"], g["onbekend"], g["met_mensen"], g["van"], g["tot"]), (5, 3, 1, "10:10", "10:10"))
+        self.assertIn("1 met mensen (niet getoond), 3 met een onbekende vlag van Photos", FI._groeptitel("2026-10-29", g))
         for x in ("scherm-onbekend", "app-onbekend", "klein-gezicht", "10:25"):
             self.assertNotIn(x, json.dumps(ind))
 

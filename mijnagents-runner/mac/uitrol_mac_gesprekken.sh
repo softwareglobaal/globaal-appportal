@@ -91,13 +91,18 @@ met_rondesloten() {
 stempel() {
     # waaraan het proefbewijs hoort: de cdhash van de helper en de commit van de code. TEL-7 (T-0067): -dv toont geen
     # CDHash, pas -dvvv; ^CDHash= laat de regels CandidateCDHash staan. Zonder cdhash faalt stempel (Codex 01-11)
-    local h
+    local h st kop
     h=$("$CODESIGN" -dvvv "$HELPER" 2>&1 | grep -m1 '^CDHash=' | cut -d= -f2) || true
     [[ $h =~ '^[0-9a-f]{8,64}$' ]] || { print -u2 "Geen CDHash voor $HELPER: geen proefbewijs"; return 1; }
-    # Codex 01-11 (toets 3): code die na de proef in de worktree veranderde, hoort niet bij het bewijs
-    [[ -z "$(git -C "$WERK" status --porcelain 2>/dev/null)" ]] ||
-        { print -u2 "Eigen wijzigingen in $WERK: geen proefbewijs"; return 1; }
-    print "$h $(git -C "$WERK" rev-parse HEAD)"
+    # Codex 01-11 (toets 3): code die na de proef in de worktree veranderde, hoort niet bij het bewijs. nazorg-mac
+    # (Codex toets 1): een git die faalt (kapotte .git), is ook geen bewijs; een lege uitvoer betekende dan "schoon".
+    st=$(git -C "$WERK" status --porcelain 2>/dev/null) ||
+        { print -u2 "Git-stand van $WERK niet te lezen: geen proefbewijs"; return 1; }
+    [[ -z $st ]] || { print -u2 "Eigen wijzigingen in $WERK: geen proefbewijs"; return 1; }
+    kop=$(git -C "$WERK" rev-parse --verify -q HEAD 2>/dev/null) ||
+        { print -u2 "Geen commit in $WERK: geen proefbewijs"; return 1; }
+    [[ $kop =~ '^[0-9a-f]{40,64}$' ]] || { print -u2 "Geen commit in $WERK: geen proefbewijs"; return 1; }
+    print "$h $kop"
 }
 
 proef_schrijf() {
@@ -281,8 +286,11 @@ git -C "$REPO" fetch -q origin
 sha=$(git -C "$REPO" rev-parse "$REF^{commit}")
 mkdir -p -m 700 "$BASIS" "$HMAP"
 if [[ -d "$WERK" ]]; then
-    [[ -z "$(git -C "$WERK" status --porcelain)" ]] || { print -u2 "$WERK heeft eigen wijzigingen; niets gedaan"; exit 1; }
-    [[ "$(git -C "$WERK" rev-parse HEAD)" == "$sha" ]] || bewaar_vorige
+    # nazorg-mac (Codex toets 2): een git die faalt, is geen schone worktree; anders ging een kapotte .git door als schoon
+    werk_stand=$(git -C "$WERK" status --porcelain) || { print -u2 "Git-stand van $WERK niet te lezen; niets gedaan"; exit 1; }
+    [[ -z $werk_stand ]] || { print -u2 "$WERK heeft eigen wijzigingen; niets gedaan"; exit 1; }
+    werk_kop=$(git -C "$WERK" rev-parse --verify -q HEAD) || { print -u2 "Geen commit in $WERK; niets gedaan"; exit 1; }
+    [[ $werk_kop == "$sha" ]] || bewaar_vorige
     git -C "$WERK" checkout -q --detach "$sha"
 else
     git -C "$REPO" worktree add -q --detach "$WERK" "$sha"

@@ -136,18 +136,19 @@ def main(vragen=None):
         print(f"ronde mislukt: {e}", file=sys.stderr)
         return 1
     bezoeken = [(browser, t, s) for browser, t, s, *_ in rijen]
-    per_dag = tel(bezoeken, dagen)
-    nood = M.browser_nood(onleesbaar)
     if not gelezen or onleesbaar:
         # Codex 01-11 (onbekend is nooit 0) en WEB-2: zonder alle browsers geen telling klaarzetten; de vorige blijft
-        # staan. YT-2: de reden noemt geweigerd of onleesbaar, en de mislukte ronde staat in het werkverslag.
+        # staan. YT-2: de reden noemt geweigerd of onleesbaar, en de mislukte ronde staat in het werkverslag. Precies
+        # zoals youtube_wacht.py (nazorg-mac, test_computer_wachten.py C05).
         tekst = niet_gelezen(onleesbaar, deels=bool(gelezen))
-        if not gelezen:
-            nood.append({"tekst": tekst, "wie": "claude-code"})
+        nood = ([{"tekst": tekst, "wie": "claude-code"}] + [n for n in M.browser_nood(onleesbaar) if n["wie"] == "mehdi"]
+                if not gelezen else M.browser_nood(onleesbaar))
         fout_in_werkverslag(tekst)
-        hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", detail=tekst, nood=nood)
+        hartslag("fout", taak="browsergeschiedenis niet " + ("volledig " if gelezen else "") + "gelezen", detail=tekst,
+                 nood=nood)
         print(tekst, file=sys.stderr)
         return 1
+    per_dag = tel(bezoeken, dagen)
     inhoud = {"stand": DAG, "gemaakt": datetime.now(BRUSSEL).isoformat(timespec="minutes"),
               "browsers": dict(gelezen), "onleesbaar": onleesbaar, "per_dag": per_dag}
     v = per_dag[DAG]

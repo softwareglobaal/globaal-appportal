@@ -367,10 +367,19 @@ def test_nummer_vol_kent_het_land():
     with tempfile.TemporaryDirectory() as map_:
         pad = maak_telefoon(os.path.join(map_, "tel.sqlite"), [
             ("H1", a(bxl(2026, 10, 22, 8, 0)), 60.0, 0, 1, "+32 (0)470 00 00 01", "com.apple.Telephony"),
-            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony")],
+            ("H2", a(bxl(2026, 10, 22, 9, 0)), 60.0, 0, 1, "+31 470 00 00 01", "com.apple.Telephony"),
+            ("H3", a(bxl(2026, 10, 22, 10, 0)), 60.0, 0, 1, "+32 (0)470 00 00 09", "com.apple.Telephony")],
             [(1, "Jan Proef", "", "", "+32470000001")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
         rijen, _ = M.telefoon_rijen(pad, DAGEN)
-    assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001"], rijen
+        # nazorg-mac: een onbekend nummer met (0) staat er zonder die nul, zodat het volle nummer klopt (TEL-6)
+        assert [r["personen"] for r in sorted(rijen, key=lambda r: r["uniek"])] == ["Jan Proef", "+31470000001",
+                                                                                     "+32470000009"], rijen
+        assert M.nummer_vol(sorted(rijen, key=lambda r: r["uniek"])[2]["personen"]) == "32470000009"
+        # en zo ook bij de sms: een afzender '+32 (0)470 00 00 09' buiten het adresboek
+        sms = maak_sms(os.path.join(map_, "sms.sqlite"), [(1, a(bxl(2026, 10, 22, 11, 0)), 0, "SMS")],
+                       [(1, "+32 (0)470 00 00 09", 45, "")], [(1, "+32 (0)470 00 00 09")], nieuwste=a(bxl(2026, 10, 23, 7, 0)))
+        srijen, _ = M.sms_rijen(sms, DAGEN)
+    assert [r["personen"] for r in srijen] == ["+32470000009"], srijen
 
 
 # --------------------------------------------------------------------------------------------- dekking ---
@@ -1817,6 +1826,43 @@ def test_vol11_tijdgrens_ook_tijdens_het_kopieren():
     assert duur < 4.5 and not rest, (duur, rest)
 
 
+def test_vol11_tijdgrens_ook_tijdens_een_trage_vraag():
+    """Codex 01-11 (toets 3, opmerking): de voortgangsfunctie breekt ook een trage SQL-vraag af na de tijdgrens, niet
+    alleen het kopieren. Een Chrome-profiel waarvan visits een view is die honderden miljoenen rijen maakt (geen enkele
+    in het venster: er komt niets in de uitvoer, het blijft rekenen): met een grens van een seconde stopt de set binnen
+    enkele seconden, Chrome is fout en van het andere profiel en van Safari komt niets mee."""
+    with tempfile.TemporaryDirectory() as map_:
+        map_ = os.path.realpath(map_)
+        helper = _bouw_helper(map_, "-DEXTRA_BUDGET=1")
+        if helper is None:
+            print("   (overgeslagen: geen Mac met cc)")
+            return
+        thuis = Path(map_, "thuis")
+        Path(thuis, "Library/Caches").mkdir(parents=True, mode=0o700)
+        chrome = thuis / "Library/Application Support/Google/Chrome"
+        traag = chrome / "A" / "History"
+        traag.parent.mkdir(parents=True)
+        con = sqlite3.connect(traag)
+        con.executescript("CREATE TABLE urls(id INTEGER PRIMARY KEY, url, title, visit_count);"
+                          "INSERT INTO urls VALUES(1, 'https://proef-traag.test/', 'x', 1);"
+                          "CREATE VIEW visits AS WITH RECURSIVE r(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM r "
+                          "WHERE i < 500000000) SELECT i AS id, 1 AS url, i AS visit_time, 0 AS visit_duration, "
+                          "0 AS from_visit FROM r;")
+        con.commit()
+        con.close()
+        _chrome(chrome / "B" / "History", [(time.time() - 60, "https://proef-snel.test/", "x", 1)]).close()
+        t0 = time.time()
+        status, uit, doel = _vraag(helper, str(thuis), "browser")
+        duur = time.time() - t0
+        rest = [n for n in os.listdir(doel) if n.startswith(".bron")]
+        con = sqlite3.connect(uit)
+        bronnen = con.execute("SELECT browser, uitkomst FROM BRON").fetchall()
+        con.close()
+    assert status["uitkomst"] == "ok" and status["extra"]["Chrome"] == "fout", status
+    assert duur < 4.5 and not rest, (duur, rest)
+    assert ("Chrome", "fout") in bronnen, bronnen
+
+
 def test_vol11_site_en_video_zoals_de_wachten():
     """De helper rekent site() en video() zoals browser_wacht.site en youtube_wacht.video: dezelfde uitkomst op een
     rij adressen (een adres zonder site komt niet in de uitvoer)."""
@@ -2146,6 +2192,54 @@ def test_r6_drie_uitrollen_en_terug():
         bron_c.write_text("ander\n")
         assert "eerst" in uitrol("aan", ok=False)
         git("checkout", "-q", "--", ".", cwd=werk)
+        # nazorg-mac (Codex toets 1): een git die faalt (een kapotte .git van de worktree) is geen schone worktree: stempel
+        # faalt, en met hetzelfde bewijs mag aan dan niet
+        echte_git = werk / ".git"
+        kapot = werk / ".git.proef"
+        echte_git.rename(kapot)
+        echte_git.write_text("gitdir: /bestaat/niet\n")
+        try:
+            functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_geldig()/,/^}}/p' '{script}'); HELPER='{helper}' "
+                        f"WERK='{werk}' CODESIGN='{stub / 'codesign'}'; ")
+            r = subprocess.run(["zsh", "-c", functies + "stempel"], capture_output=True, text=True)
+            assert r.returncode != 0 and not r.stdout and "niet te lezen" in r.stderr, (r.returncode, r.stdout, r.stderr)
+            r = subprocess.run(["zsh", "-c", functies + f"proef_geldig '{basis / 'mac-gesprekken' / 'PROEF'}'"],
+                               capture_output=True, text=True)
+            assert r.returncode != 0, r.stderr
+            assert "eerst" in uitrol("aan", ok=False)
+            # Codex toets 2: ook een nieuwe uitrol leest de kapotte .git niet als schoon: niets gewisseld of bewaard
+            assert "niet te lezen" in uitrol(ref=shas[0], ok=False)
+        finally:
+            echte_git.unlink()
+            kapot.rename(echte_git)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[1] and (vorige / "COMMIT").read_text().strip() == shas[1]
+        assert not (basis / "mac-gesprekken" / "vorige.nieuw").exists()
+        (basis / "mac-gesprekken" / "PROEF").write_text(stempel)        # de mislukte uitrol zette de wachten uit
+        # Codex toets 2: een worktree zonder commit: git status slaagt, rev-parse niet; proef_schrijf laat geen bewijs
+        leeg = m / "zonder commit"
+        leeg.mkdir()
+        git("init", "-q", cwd=leeg)
+        functies = (f"source <(sed -n '/^stempel()/,/^}}/p;/^proef_schrijf()/,/^}}/p' '{script}'); HELPER='{helper}' "
+                    f"WERK='{leeg}' CODESIGN='{stub / 'codesign'}'; ")
+        bewijs = m / "PROEF_ZONDER_COMMIT"
+        r = subprocess.run(["zsh", "-c", functies + f"proef_schrijf '{bewijs}'"], capture_output=True, text=True)
+        assert r.returncode != 0 and not bewijs.exists() and "Geen commit" in r.stderr, (r.returncode, r.stderr)
+        # Codex toets 3: en een uitrol op een geldige, maar commitloze worktree: niets bewaard of gewisseld
+        apart = m / "werk apart"
+        werk.rename(apart)
+        werk.mkdir()
+        git("init", "-q", cwd=werk)
+        try:
+            assert "Geen commit" in uitrol(ref=shas[0], ok=False)
+            assert (vorige / "COMMIT").read_text().strip() == shas[1]
+            assert not (basis / "mac-gesprekken" / "vorige.nieuw").exists()
+            assert subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], cwd=werk,
+                                  capture_output=True).returncode != 0          # niets uitgecheckt
+        finally:
+            shutil.rmtree(werk)
+            apart.rename(werk)
+        assert git("rev-parse", "HEAD", cwd=werk) == shas[1]
+        (basis / "mac-gesprekken" / "PROEF").write_text(stempel)
         uitrol("aan")
         assert "bootstrap" in log.read_text().splitlines()[-1]
         assert not any("mijnagents.browser.plist" in r for r in log.read_text().splitlines())

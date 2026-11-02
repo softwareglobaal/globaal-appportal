@@ -63,7 +63,7 @@ for i, a in enumerate(sys.argv):
     if a == "--dag" and i + 1 < len(sys.argv):
         DAG = sys.argv[i + 1]
 DAG_GEGEVEN = DAG is not None
-DAG = DAG or datetime.now().date().isoformat()
+DAG = DAG or datetime.now(ZoneInfo("Europe/Brussels")).date().isoformat()   # nazorg-mac: de Brusselse dag, ook op een Mac elders
 # T-0120 FOTO-2: inhalen vanaf 01-10 (Mehdi, 01-11: "vanaf 01/10"), hoogstens 35 dagen terug.
 INHAAL_VANAF = "2026-10-01"
 INHAAL_DAGEN = 35
@@ -136,8 +136,10 @@ def fotos_van(dag):
         gezicht = "NULL, NULL"
         if {"ZASSETFORFACE", "ZSIZE"} <= df and "Z_PK" in za:
             zichtbaar = " AND COALESCE(f.ZHIDDEN, 0) = 0" if "ZHIDDEN" in df else ""
+            # T-0120 nazorg-mac: de grootte (mensen) telt alleen de zichtbare gezichten, zoals FOTO-4; het aantal (gezicht,
+            # nooit een voorvertoning) elk gezicht, ook een verborgen: een verborgen gezicht staat nog op de foto.
             gezicht = (f"(SELECT MAX(f.ZSIZE) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK{zichtbaar}), "
-                       f"(SELECT COUNT(*) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK{zichtbaar})")
+                       "(SELECT COUNT(*) FROM ZDETECTEDFACE f WHERE f.ZASSETFORFACE = a.Z_PK)")
         velden = ["a.ZUUID", "a.ZFILENAME", "a.ZDATECREATED", "a.ZLATITUDE", "a.ZLONGITUDE", "a.ZKIND",
                   kol(aa, "ZORIGINALFILENAME", "aa"), kol(za, "ZISDETECTEDSCREENSHOT", "a"), kol(aa, "ZIMPORTEDBY", "aa"),
                   kol(aa, "ZFACEANALYSISVERSION", "aa"), kol(aa, "ZHASPEOPLESCENEMIDORGREATERCONFIDENCE", "aa"), gezicht]
@@ -152,9 +154,11 @@ def fotos_van(dag):
     for uuid, naam, t, lat, lon, kind, origineel, scherm, door, analyse, mensvlag, gezicht, gezichten in rijen:
         gps = lat is not None and lon is not None and lat > -180 and lon > -180
         schermnaam = re.match(r"(?i)^(?:screenshot|screen shot|schermafbeelding)(?:[\s_.-]|$)", os.path.basename(str(origineel or "")))
+        # gezichten is None als deze Photos geen leesbare gezichtentabel heeft: dan is 'geen gezicht' niet gekend
+        # (nazorg-mac), en 'geen mensen' alleen als Photos' eigen vlag er is.
         if (gezicht is not None and gezicht >= MENSEN_GEZICHT) or mensvlag == 1:
             mensen = True
-        elif analyse:
+        elif analyse and (gezichten is not None or mensvlag is not None):
             mensen = False
         else:
             mensen = None
@@ -164,8 +168,10 @@ def fotos_van(dag):
                     "lat": round(lat, 5) if gps else None, "lon": round(lon, 5) if gps else None, "video": kind == 1,
                     "scherm": True if scherm == 1 or schermnaam else (None if scherm is None else False),
                     "app": None if door is None else door in APP_IMPORT, "mensen": mensen,
-                    # Voor een voorvertoning telt elk zichtbaar gezicht, ook een klein (Codex 3); onbekend zolang niet geanalyseerd.
-                    "gezicht": True if (gezichten or 0) > 0 or mensvlag == 1 else (False if analyse else None)})
+                    # Voor een voorvertoning telt elk gezicht, ook een klein of verborgen (Codex 3, nazorg-mac); onbekend zolang
+                    # niet geanalyseerd of als de gezichtentabel ontbreekt.
+                    "gezicht": True if (gezichten or 0) > 0 or mensvlag == 1
+                    else (False if analyse and gezichten is not None else None)})
     return uit
 
 
@@ -392,7 +398,8 @@ def koppel_werk(fotos, afspraken):
         f["werk"] = ""
         # T-0120 (Codex 1 en 2): alleen een foto waarvan Photos zeker zegt dat er geen mensen op staan en die geen
         # schermafbeelding of app-foto is, gaat als werkfoto naar Dropbox; onbekend is nooit 'nee'. De rest telt mee.
-        if f["lat"] is None or f.get("mensen") is not False or f.get("scherm") is not False or f.get("app") is not False:
+        # nazorg-mac (FOTO-8): ook geen gezicht, hoe klein ook; een foto van mensen gaat nooit naar Dropbox.
+        if f["lat"] is None or any(f.get(k) is not False for k in ("mensen", "gezicht", "scherm", "app")):
             continue
         for a in afspraken:
             if not a.get("coord") or not a["start"]:

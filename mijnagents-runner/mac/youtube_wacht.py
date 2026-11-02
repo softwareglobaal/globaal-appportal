@@ -161,19 +161,16 @@ def main(vragen=None):
         print(f"ronde mislukt: {e}", file=sys.stderr)
         return 1
     bekeken = [(browser, t, vid, titel_schoon(titel), sec) for browser, t, _site, vid, titel, sec in rijen if vid]
-    if not gelezen:
-        tekst = niet_gelezen(onleesbaar)
+    if not gelezen or onleesbaar:
+        # YT-2 en Codex 01-11 (onbekend is nooit 0): zonder alle browsers niets klaarzetten; de reden noemt geweigerd of
+        # onleesbaar en de mislukte ronde staat in het werkverslag. Precies zoals browser_wacht.py (nazorg-mac,
+        # test_computer_wachten.py C05): een weigering is ook een nood voor Mehdi (Full Disk Access voor de helper).
+        tekst = niet_gelezen(onleesbaar, deels=bool(gelezen))
+        nood = ([{"tekst": tekst, "wie": "claude-code"}] + [n for n in M.browser_nood(onleesbaar) if n["wie"] == "mehdi"]
+                if not gelezen else M.browser_nood(onleesbaar))
         fout_in_werkverslag(tekst)
-        hartslag("fout", taak="browsergeschiedenis niet gelezen", detail=tekst,
-                 nood=[{"tekst": tekst, "wie": "claude-code"}])
-        print(tekst, file=sys.stderr)
-        return 1
-    if onleesbaar:
-        # Codex 01-11 (onbekend is nooit 0): een onleesbare browser maakt de telling onvolledig: niets klaarzetten
-        tekst = niet_gelezen(onleesbaar, deels=True)
-        fout_in_werkverslag(tekst)
-        hartslag("fout", taak="browsergeschiedenis niet volledig gelezen", detail=tekst,
-                 nood=M.browser_nood(onleesbaar))
+        hartslag("fout", taak="browsergeschiedenis niet " + ("volledig " if gelezen else "") + "gelezen", detail=tekst,
+                 nood=nood)
         print(tekst, file=sys.stderr)
         return 1
     per_dag = tel(bekeken, dagen)

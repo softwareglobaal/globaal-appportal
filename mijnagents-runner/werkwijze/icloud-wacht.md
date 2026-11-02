@@ -1,7 +1,9 @@
 # Werkwijze van De iCloud-wacht (Privé)
 
-Versie 4 (01-11-2026, T-0120: indeling per project, inhalen, voorvertoningen; v3 22-10-2026 root-eigen app en
-wachtrondes voor TKN; v2 21-10-2026, v1 09-09-2026).
+Versie 4.1 (02-11-2026, T-0120 nazorg-mac: elk gezicht, ook een klein of verborgen, houdt een foto uit Dropbox en uit
+de voorvertoningen; zonder gezichtentabel is een gezicht onbekend; de dag van de avondronde is de Brusselse; v4
+01-11-2026 indeling per project, inhalen, voorvertoningen; v3 22-10-2026 root-eigen app en wachtrondes voor TKN; v2
+21-10-2026, v1 09-09-2026).
 Ik ben de bronnen-agent voor Mehdi's foto's. Ik draai op
 zijn Mac (de fotobibliotheek staat alleen daar; de VM ziet haar niet) en meld
 aan het bord. Elke avond zet ik de foto's van de dag klaar: tijd, plaats,
@@ -113,17 +115,19 @@ elke foto en elke file van wachter kunnen zien en begrijpen".
   metadata: geen export van originelen, niets in Dropbox.
 - **Alleen metadata naar de VM** (FOTO-4): per dag `/api/fotometadata` met per foto tijd, GPS, soort en de vlaggen van
   Photos: schermafbeelding, bewaard uit een app, mensen (een gezicht van 10% of meer van het beeld, of de vlag "mensen in
-  beeld"; niet geanalyseerd is onbekend). Nooit een beeld of bestandsnaam. Het bord bewaart dat als bestand
+  beeld"; niet geanalyseerd is onbekend) en gezicht (er staat een gezicht op, hoe klein ook, ook een dat in Photos
+  verborgen is; zonder leesbare gezichtentabel onbekend). Nooit een beeld of bestandsnaam. Het bord bewaart dat als bestand
   (`mijnagents-data/fotometadata/<dag>.json`, alleen voor de VM-gebruiker), niet in zijn databank en niet in Dropbox; op
   het bord staat per dag alleen een merkteken met aantallen. Lukte het lezen van de werkafspraken niet, dan is dat
   onbekend: geen export, en de dag komt later opnieuw volledig.
-- **Een foto met mensen** wordt nooit als werkfoto naar Dropbox geëxporteerd en nooit geopend; een privé- of online
-  afspraak maakt geen werkfoto.
+- **Een foto met mensen** (ook met een klein gezicht, of als Photos het niet weet) wordt nooit als werkfoto naar
+  Dropbox geëxporteerd en nooit geopend; een privé- of online afspraak maakt geen werkfoto. De dag van de avondronde
+  en de tijd per foto zijn die van Brussel, ook op een Mac in een andere tijdzone.
 - **De indeling gebeurt op de VM** (`koppelingen/fotoindeling.py`, planning `planning/foto.cron`): werf zeker (binnen
   150 m van een buitenafspraak met firmacode of van de auto bij een project), werkkandidaat (alleen bij een projectplek),
   mensen, privé, scherm of app, onbeslist. Per werfgroep en kandidaat een item voor Mehdi; wat geen werk is alleen als
   telling, zonder plaats. Welke firma's projectplekken krijgen, kiest Mehdi (LOC-3, VOL-8).
-- **Voorvertoningen** (FOTO-5): alleen van een werkfoto zonder mensen, uit het lokale beeld (nooit uit iCloud gehaald),
+- **Voorvertoningen** (FOTO-5): alleen van een werkfoto zonder mensen en zonder gezicht, uit het lokale beeld (nooit uit iCloud gehaald),
   hoogstens 480 px, naar de VM (`/api/fotovoorbeeld`), nooit naar Dropbox. Mehdi ziet ze op dagboek.globaal.be/fotos/<dag>.
   Een foto van mensen open ik nooit.
 - **Fototaken** (FOTO-1, FOTO-6): een taak die op gegevens van de voorbereider wacht, is een melding (hoogstens één per

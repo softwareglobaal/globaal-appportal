@@ -230,6 +230,12 @@ def nummer_vol(nummer):
     return "32" + cijfers if len(cijfers) <= 9 else cijfers
 
 
+def nummer_tekst(adres):
+    """Een nummer zoals het op het bord staat: alleen cijfers, +, * en #, zonder de (0) van '+32 (0)470 ...' (nazorg-mac:
+    met die nul werd '+32 (0)470' '+320470', een ander vol nummer, en vond De Xelionwacht het paar niet, TEL-6)."""
+    return re.sub(r"[^\d+*#]", "", str(adres or "").replace("(0)", ""))
+
+
 def nummer_van_jid(jid):
     """Het nummer in een klassiek WhatsApp-adres (32475...@s.whatsapp.net); een LID-adres draagt geen nummer."""
     m = re.fullmatch(r"(\d{6,15})@s\.whatsapp\.net", str(jid or ""))
@@ -411,7 +417,7 @@ def telefoon_rijen(pad, dagenlijst, onbekend_als_nummer=True):
         if soort is None or not ident:
             overgeslagen += 1
             continue
-        nummer = re.sub(r"[^\d+*#]", "", str(adres or ""))
+        nummer = nummer_tekst(adres)
         # Codex 01-11 (toets 3): de naam op het nummer zoals het binnenkwam, want nummer_vol haalt ook (0) weg
         persoon = (boek.bij_nummer(adres) or (nummer if onbekend_als_nummer else "onbekend nummer")) if nummer \
             else "nummer verborgen"
@@ -451,7 +457,7 @@ def sms_rijen(pad, dagenlijst, onbekend_als_nummer=True):
             return "onbekend"
         # TEL-3: een afzender in letters (een firmanaam) blijft als tekst; van een nummer alleen de cijfers
         tekst = "@" in adres or any(c.isalpha() for c in adres)
-        return schoon(adres if tekst else re.sub(r"[^\d+*#]", "", adres)) or "onbekend"
+        return schoon(adres if tekst else nummer_tekst(adres)) or "onbekend"
 
     def gespreksnaam(pk):
         ident, soort, naam = gesprekken.get(pk, ("", None, ""))

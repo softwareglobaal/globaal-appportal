@@ -205,6 +205,12 @@ def test_tel6_xelion_en_iphone_tellen_een_keer():
     assert X.ontdubbel(r8, iphone, X.nummers_van(twee)) == 2
     assert {r["uniek"]: r["dubbel_van"] for r in r8 if r["bron"] == "xelion"} == {"xelion:31": "telefoon:E-5",
                                                                                   "xelion:32": "telefoon:F-6"}, r8
+    # nazorg-mac: een iPhone-oproep '+32 (0)470 00 00 01' buiten het adresboek staat er zoals M.telefoon_rijen hem
+    # schrijft (M.nummer_tekst) en vormt een paar met dezelfde Xelion-oproep; met de (0) als cijfer niet
+    r9, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(r9, [dict(telefoon[0], personen=M.nummer_tekst("+32 (0)470 00 00 01"))], nummers) == 1
+    r9, _ = X.rijen_van(spiegel(), M.dagen(NU))
+    assert X.ontdubbel(r9, [dict(telefoon[0], personen="+320470000001")], nummers) == 0
     # Codex 01-11 (toets 2): +31 en +32 met dezelfde laatste negen cijfers zijn twee bellers
     sp = spiegel()
     sp["rijen"][1]["extern_nummer"] = "+31470000002"
